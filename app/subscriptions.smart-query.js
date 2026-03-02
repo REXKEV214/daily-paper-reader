@@ -846,6 +846,262 @@ window.SubscriptionsSmartQuery = (function () {
     };
   };
 
+  const getEditableMeta = (kind) => {
+    if (kind === 'intent') {
+      return {
+        primary: 'query',
+        secondary: 'query_cn',
+        primaryPlaceholder: '（英文 Intent）',
+        secondaryPlaceholder: '（可选中文意图）',
+      };
+    }
+    return {
+      primary: 'keyword',
+      secondary: 'keyword_cn',
+      primaryPlaceholder: '（英文关键词）',
+      secondaryPlaceholder: '（可选中文直译）',
+    };
+  };
+
+  const createDraftSlot = (kind) => {
+    const meta = getEditableMeta(kind);
+    const item = {
+      _isDraftSlot: true,
+      _selected: true,
+      source: kind === 'intent' ? 'generated' : 'manual',
+      enabled: true,
+    };
+    item[meta.primary] = '';
+    item[meta.secondary] = '';
+    return item;
+  };
+
+  const isDraftSlot = (item) => item && item._isDraftSlot;
+
+  const ensureDraftSlot = (items, kind) => {
+    const list = Array.isArray(items) ? items : [];
+    const next = list.filter((item) => item && !isDraftSlot(item));
+    return [createDraftSlot(kind)].concat(next);
+  };
+
+  const getCandidatesByKind = (state, kind) => {
+    if (!state) return [];
+    return kind === 'intent' ? state.intent_queries : state.keywords;
+  };
+
+  const getCandidatesByKindForState = (state, kind) => {
+    return Array.isArray(getCandidatesByKind(state, kind)) ? getCandidatesByKind(state, kind) : [];
+  };
+
+  const getSelectedItemsForSave = (items) => {
+    return (Array.isArray(items) ? items : [])
+      .filter((item) => item && !isDraftSlot(item) && item._selected)
+      .map((item) => item);
+  };
+
+  const normalizeCandidateKind = (kind) => (kind === 'intent' ? 'intent' : 'keyword');
+
+  const buildDraftItemFromSlot = (kind, slot) => {
+    const meta = getEditableMeta(kind);
+    if (!slot) return null;
+    const primaryValue = normalizeText(slot[meta.primary]);
+    const secondaryValue = normalizeText(slot[meta.secondary]);
+    if (!primaryValue && !secondaryValue) return null;
+    const item = {
+      ...slot,
+      [meta.primary]: primaryValue,
+      [meta.secondary]: secondaryValue,
+      _selected: true,
+      _isDraftSlot: false,
+    };
+    if (kind !== 'intent' && !normalizeText(item.query)) {
+      item.query = primaryValue;
+    }
+    return item;
+  };
+
+  const appendDraftSlotItem = (kind, state = modalState) => {
+    const realKind = normalizeCandidateKind(kind);
+    const list = getCandidatesByKindForState(state, realKind);
+    const meta = getEditableMeta(realKind);
+    if (!Array.isArray(list) || !list.length) return false;
+
+    const slot = list[0];
+    if (!slot || !isDraftSlot(slot)) return false;
+
+    const primaryValue = normalizeText(slot[meta.primary]);
+    if (!primaryValue) {
+      setMessage(`请先填写${meta.primaryPlaceholder || '英文'}。`, '#c00');
+      return false;
+    }
+
+    const key = primaryValue.toLowerCase();
+    const existedIndex = list.findIndex(
+      (item, idx) => idx > 0 && !isDraftSlot(item) && normalizeText(item[meta.primary]).toLowerCase() === key,
+    );
+    if (existedIndex >= 0) {
+      list[existedIndex]._selected = true;
+      list[0] = createDraftSlot(realKind);
+      if (realKind === 'intent') {
+        state.intent_queries = list;
+      } else {
+        state.keywords = list;
+      }
+      return true;
+    }
+
+    const created = buildDraftItemFromSlot(realKind, slot);
+    if (!created) return false;
+    const next = list.slice();
+    next[0] = createDraftSlot(realKind);
+    next.splice(1, 0, created);
+    if (realKind === 'intent') {
+      state.intent_queries = next;
+    } else {
+      state.keywords = next;
+    }
+    return true;
+  };
+
+  const applyDraftSlotValue = (kind, index, field, value, state = modalState) => {
+    const realKind = normalizeCandidateKind(kind);
+    const candidates = getCandidatesByKindForState(state, realKind);
+    const meta = getEditableMeta(realKind);
+    if (!Array.isArray(candidates) || index < 0 || index >= candidates.length) return;
+    if (field !== meta.primary && field !== meta.secondary) return;
+    const item = candidates[index];
+    if (!item) return;
+    item[field] = normalizeText(value);
+    if (realKind !== 'intent' && field === meta.primary && !normalizeText(item.query)) {
+      item.query = normalizeText(value);
+    }
+    candidates[index] = item;
+  };
+
+  const startInlineEditField = (target, state = modalState) => {
+    if (!target || !state || !target.matches('.dpr-inline-field')) return;
+
+    const kind = normalizeCandidateKind(target.getAttribute('data-kind') || '');
+    const index = Number(target.getAttribute('data-index'));
+    const field = target.getAttribute('data-field') || '';
+    const candidates = getCandidatesByKindForState(state, kind);
+    if (!Array.isArray(candidates) || index < 0 || index >= candidates.length) return;
+    const item = candidates[index];
+    if (!item) return;
+
+    const meta = getEditableMeta(kind);
+    if (field !== meta.primary && field !== meta.secondary) return;
+
+    const current = normalizeText(item[field] || '');
+    const editor = document.createElement('input');
+    editor.type = 'text';
+    editor.className = 'dpr-inline-editor';
+    editor.value = current;
+
+    let finished = false;
+    const end = (save) => {
+      if (finished) return;
+      finished = true;
+      if (save) {
+        applyDraftSlotValue(kind, index, field, editor.value, state);
+      }
+      if (state.type === 'add') {
+        renderAddModal();
+      } else if (state.type === 'chat') {
+        renderChatModal();
+      }
+    };
+
+    editor.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        end(true);
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        end(false);
+      }
+      e.stopPropagation();
+    });
+    editor.addEventListener('blur', () => {
+      end(true);
+    });
+    target.classList.add('dpr-inline-field-editing');
+    target.innerHTML = '';
+    target.appendChild(editor);
+    editor.focus();
+    editor.select();
+  };
+
+  const escapeValueForRender = (value, fallback) => {
+    const normalized = normalizeText(value);
+    return normalized || fallback || '';
+  };
+
+  const renderEditableField = (kind, idx, field, value, placeholder) => {
+    const text = normalizeText(value);
+    const cls = text ? '' : ' is-empty';
+    return `
+      <div
+        class="dpr-inline-field${cls}"
+        data-action="edit-inline-field"
+        data-kind="${escapeHtml(kind)}"
+        data-index="${idx}"
+        data-field="${escapeHtml(field)}"
+      >
+        <span class="dpr-inline-text">${escapeHtml(escapeValueForRender(value, placeholder))}</span>
+        <span class="dpr-inline-pencil" aria-hidden="true">✎</span>
+      </div>
+    `;
+  };
+
+  const renderEditableSlot = (kind, idx, item, isChat) => {
+    const meta = getEditableMeta(kind);
+    const wrapperClass = isChat ? 'dpr-cloud-item dpr-inline-slot' : 'dpr-pick-card dpr-inline-slot';
+    return `
+      <div class="${wrapperClass}">
+        <div class="dpr-cloud-item-body">
+          ${renderEditableField(kind, idx, meta.primary, item[meta.primary], meta.primaryPlaceholder)}
+          ${renderEditableField(kind, idx, meta.secondary, item[meta.secondary], meta.secondaryPlaceholder)}
+        </div>
+        <button
+          type="button"
+          class="dpr-inline-slot-add"
+          data-action="append-draft-slot"
+          data-kind="${kind}"
+          data-index="${idx}"
+        >
+          +
+        </button>
+      </div>
+    `;
+  };
+
+  const renderPickCards = (items, kind) => {
+    const realKind = normalizeCandidateKind(kind);
+    const meta = getEditableMeta(realKind);
+    return (items || [])
+      .map((item, idx) => {
+        if (isDraftSlot(item)) {
+          return renderEditableSlot(realKind, idx, item, false);
+        }
+        const action = realKind === 'intent' ? 'toggle-intent-query-card' : 'toggle-kw-card';
+        const selected = !!item._selected;
+        return `
+          <div
+            class="dpr-pick-card ${selected ? 'selected' : ''}"
+            data-action="${action}"
+            data-kind="${realKind}"
+            data-index="${idx}"
+          >
+            ${renderEditableField(realKind, idx, meta.primary, item[meta.primary], meta.primaryPlaceholder)}
+            ${renderEditableField(realKind, idx, meta.secondary, item[meta.secondary], meta.secondaryPlaceholder)}
+          </div>
+        `;
+      })
+      .join('');
+  };
+
   const mergeCandidatesForNextRound = (existingItems, incomingItems, keyField) => {
     const normalizeKey = (item, field) =>
       normalizeText(item && item[field]).toLowerCase().trim();
@@ -905,8 +1161,12 @@ window.SubscriptionsSmartQuery = (function () {
     const descField = options.descField || 'logic_cn';
     const descFallbackField = options.descFallbackField || 'logic_cn';
     const defaultDesc = options.defaultDesc || '';
+    const realKind = normalizeCandidateKind(kind);
     return (items || [])
       .map((item, idx) => {
+        if (isDraftSlot(item)) {
+          return renderEditableSlot(realKind, idx, item, true);
+        }
         const text = normalizeText(item[textField] || '');
         const desc = normalizeText(
           item[descField] || item[descFallbackField] || defaultDesc || '',
@@ -923,8 +1183,20 @@ window.SubscriptionsSmartQuery = (function () {
             ${checked}
           />
           <span class="dpr-cloud-item-body">
-            <span class="dpr-cloud-item-title">${escapeHtml(text)}</span>
-            <span class="dpr-cloud-item-desc">${escapeHtml(desc || '（无说明）')}</span>
+            ${renderEditableField(
+              kind,
+              idx,
+              textField,
+              text,
+              options.defaultPrimaryPlaceholder || '（英文）',
+            )}
+            ${renderEditableField(
+              kind,
+              idx,
+              descField,
+              desc || item[descFallbackField] || item.source || '',
+              defaultDesc || '（无说明）',
+            )}
           </span>
         </label>
       `;
@@ -1027,10 +1299,11 @@ window.SubscriptionsSmartQuery = (function () {
       type: 'add',
       tag: suggestedTag,
       description: suggestedDesc,
-      keywords: normalizedCandidates.keywords,
-      intent_queries: (normalizedCandidates.intent_queries || []),
+      keywords: ensureDraftSlot(normalizedCandidates.keywords, 'keyword'),
+      intent_queries: ensureDraftSlot((normalizedCandidates.intent_queries || []), 'intent'),
       customKeyword: '',
       customKeywordLogic: '',
+      customQuery: '',
     };
     renderAddModal();
     openModal();
@@ -1042,11 +1315,17 @@ window.SubscriptionsSmartQuery = (function () {
     modalState = {
       type: 'chat',
       editProfileId: options.editProfileId || '',
-      keywords: normalizedCandidates.map((item) => ({ ...item, _selected: item._selected !== false })),
-      intent_queries: normalizedIntentQueries.map((item) => ({
-        ...item,
-        _selected: item._selected !== false,
-      })),
+      keywords: ensureDraftSlot(
+        normalizedCandidates.map((item) => ({ ...item, _selected: item._selected !== false })),
+        'keyword',
+      ),
+      intent_queries: ensureDraftSlot(
+        normalizedIntentQueries.map((item) => ({
+          ...item,
+          _selected: item._selected !== false,
+        })),
+        'intent',
+      ),
       requestHistory: [],
       inputTag: normalizeText(options.tag || ''),
       inputDesc: normalizeText(options.description || ''),
@@ -1059,26 +1338,8 @@ window.SubscriptionsSmartQuery = (function () {
 
   const renderAddModal = () => {
     if (!modalPanel || !modalState || modalState.type !== 'add') return;
-    const kwHtml = (modalState.keywords || [])
-      .map(
-      (k, idx) => `
-      <button type="button" class="dpr-pick-card ${k._selected ? 'selected' : ''}" data-action="toggle-kw-card" data-index="${idx}">
-        <div class="dpr-pick-title">${escapeHtml(k.keyword || k.text || '')}</div>
-        <div class="dpr-pick-desc">${escapeHtml(k.keyword_cn || '（待补充中文直译）')}</div>
-      </button>
-        `,
-      )
-      .join('');
-    const intentHtml = (modalState.intent_queries || [])
-      .map(
-        (item, idx) => `
-      <button type="button" class="dpr-pick-card ${item._selected ? 'selected' : ''}" data-action="toggle-intent-query-card" data-index="${idx}">
-        <div class="dpr-pick-title">${escapeHtml(item.query || item.text || '')}</div>
-        <div class="dpr-pick-desc">${escapeHtml(item.query_cn || item.note || item.source || '（意图检索句）')}</div>
-      </button>
-        `,
-      )
-      .join('');
+    const kwHtml = renderPickCards(modalState.keywords || [], 'keyword');
+    const intentHtml = renderPickCards(modalState.intent_queries || [], 'intent');
     const hasKeywords = (modalState.keywords || []).length > 0;
     const hasIntentQueries = (modalState.intent_queries || []).length > 0;
     const keywordBlock =
@@ -1143,8 +1404,8 @@ window.SubscriptionsSmartQuery = (function () {
     modalState.tag = nextTag;
     modalState.description = nextDesc;
 
-    const selectedKeywords = (modalState.keywords || []).filter((x) => x._selected);
-    const selectedIntentQueries = (modalState.intent_queries || []).filter((x) => x._selected);
+    const selectedKeywords = getSelectedItemsForSave(modalState.keywords || []);
+    const selectedIntentQueries = getSelectedItemsForSave(modalState.intent_queries || []);
     const isEditMode = !!(modalState && modalState.editProfileId);
     const ok = isEditMode
       ? replaceProfileFromSelection(
@@ -1187,18 +1448,21 @@ window.SubscriptionsSmartQuery = (function () {
       descFallbackField: 'note',
       defaultDesc: '（待补充中文直译）',
     });
-    const hasKeywords = Array.isArray(modalState.keywords) && modalState.keywords.length > 0;
-    const hasIntentQueries = Array.isArray(modalState.intent_queries) && modalState.intent_queries.length > 0;
+    const hasKeywordSection = Array.isArray(modalState.keywords) && modalState.keywords.length > 0;
+    const hasIntentSection = Array.isArray(modalState.intent_queries) && modalState.intent_queries.length > 0;
+    const hasKeywords = hasKeywordSection && modalState.keywords.some((item) => !isDraftSlot(item));
+    const hasIntentQueries =
+      hasIntentSection && modalState.intent_queries.some((item) => !isDraftSlot(item));
     const hasCandidates = hasKeywords || hasIntentQueries;
     const isFirstRound = !(Array.isArray(modalState.requestHistory) && modalState.requestHistory.length);
     const actionLabel = isFirstRound ? '生成候选' : '新增候选';
-    const kwSection = hasKeywords
+    const kwSection = hasKeywordSection
       ? `<div class="dpr-chat-result-block">
            <div class="dpr-modal-group-title">关键词（用于召回）</div>
            <div class="dpr-cloud-grid dpr-cloud-grid-keywords">${kwHtml}</div>
          </div>`
       : '';
-    const intentSection = hasIntentQueries
+    const intentSection = hasIntentSection
       ? `<div class="dpr-chat-result-block">
            <div class="dpr-modal-group-title">意图Query（用于意图召回与最终打分）</div>
            <div class="dpr-cloud-grid dpr-cloud-grid-intent">${intentHtml}</div>
@@ -1260,8 +1524,8 @@ window.SubscriptionsSmartQuery = (function () {
 
   const applyChatSelection = () => {
     let hasSelection = false;
-    const selectedKeywords = (modalState.keywords || []).filter((x) => x._selected);
-    const selectedIntentQueries = (modalState.intent_queries || []).filter((x) => x._selected);
+    const selectedKeywords = getSelectedItemsForSave(modalState.keywords || []);
+    const selectedIntentQueries = getSelectedItemsForSave(modalState.intent_queries || []);
     const hasItems = selectedKeywords.length || selectedIntentQueries.length;
     const desc = normalizeText(document.getElementById('dpr-chat-required-desc')?.value || '');
     const tag = normalizeText(document.getElementById('dpr-chat-tag-input')?.value || modalState.inputTag || '');
@@ -1351,14 +1615,14 @@ window.SubscriptionsSmartQuery = (function () {
         newIntentQueries: nextCandidates.intent_queries.length,
         createdAt: new Date().toISOString(),
       });
-      modalState.keywords = nextKeywords;
-      modalState.intent_queries = nextIntentQueries;
+      modalState.keywords = ensureDraftSlot(nextKeywords, 'keyword');
+      modalState.intent_queries = ensureDraftSlot(nextIntentQueries, 'intent');
       modalState.chatTag = finalTag;
       modalState.inputTag = finalTag;
       modalState.lastTag = finalTag;
       modalState.lastDesc = finalDesc;
       modalState.requestHistory = history;
-      modalState.chatStatus = `已生成候选（关键词 ${nextKeywords.length} 条，意图 ${nextIntentQueries.length} 条）。`;
+      modalState.chatStatus = `已生成候选（关键词 ${nextCandidates.keywords.length} 条，意图 ${nextCandidates.intent_queries.length} 条）。`;
       if (document.getElementById('dpr-chat-desc-input')) {
         document.getElementById('dpr-chat-desc-input').value = '';
       }
@@ -1414,15 +1678,38 @@ window.SubscriptionsSmartQuery = (function () {
     if (!target || !target.closest) return;
     const actionEl = target.closest('[data-action]');
     const action = actionEl ? actionEl.getAttribute('data-action') : '';
+    if (!actionEl) return;
     if (action === 'close') {
       closeModal();
+      return;
+    }
+    if (action === 'edit-inline-field') {
+      if (!actionEl) return;
+      e.preventDefault();
+      e.stopPropagation();
+      startInlineEditField(actionEl, modalState);
+      return;
+    }
+    if (action === 'append-draft-slot') {
+      e.preventDefault();
+      e.stopPropagation();
+      const kind = actionEl ? actionEl.getAttribute('data-kind') : '';
+      const appended = appendDraftSlotItem(kind, modalState);
+      if (appended) {
+        if (modalState && modalState.type === 'add') renderAddModal();
+        if (modalState && modalState.type === 'chat') renderChatModal();
+      }
       return;
     }
 
     if (modalState && modalState.type === 'add') {
       if (action === 'toggle-kw-card') {
         const idx = Number(actionEl.getAttribute('data-index'));
-        if (idx >= 0 && idx < (modalState.keywords || []).length) {
+        if (
+          idx >= 0 &&
+          idx < (modalState.keywords || []).length &&
+          !isDraftSlot(modalState.keywords[idx])
+        ) {
           modalState.keywords[idx]._selected = !modalState.keywords[idx]._selected;
           renderAddModal();
         }
@@ -1430,7 +1717,11 @@ window.SubscriptionsSmartQuery = (function () {
       }
       if (action === 'toggle-intent-query-card') {
         const idx = Number(actionEl.getAttribute('data-index'));
-        if (idx >= 0 && idx < (modalState.intent_queries || []).length) {
+        if (
+          idx >= 0 &&
+          idx < (modalState.intent_queries || []).length &&
+          !isDraftSlot(modalState.intent_queries[idx])
+        ) {
           modalState.intent_queries[idx]._selected = !modalState.intent_queries[idx]._selected;
           renderAddModal();
         }
@@ -1491,7 +1782,14 @@ window.SubscriptionsSmartQuery = (function () {
     const kind = target.getAttribute('data-kind');
     const idx = Number(target.getAttribute('data-index'));
     const list = kind === 'intent' ? modalState.intent_queries : modalState.keywords;
-    if (!Array.isArray(list) || idx < 0 || idx >= list.length) return;
+    if (
+      !Array.isArray(list) ||
+      idx < 0 ||
+      idx >= list.length ||
+      isDraftSlot(list[idx])
+    ) {
+      return;
+    }
     const selected = !!target.checked;
     const card = target.closest('.dpr-cloud-item');
     if (card) {
