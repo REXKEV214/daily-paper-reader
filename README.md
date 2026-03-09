@@ -65,13 +65,18 @@
 
 ## ✨ Why Daily Paper Reader?
 
-- **🎓 个人论文雷达**：持续追踪自己研究方向的新论文
-- **📚 日常阅读工作台**：把发现、阅读、问答、总结集中到一个入口
 - **🔎 Daily Paper Radar**：每日自动抓取 arXiv / OpenReview 新论文，持续追踪研究前沿。
 - **🎯 Personalized Feed**：基于关键词、研究方向与兴趣生成个性化推荐流。
-- **💬 Read + Ask in One Place**：支持沉浸式阅读与 AI 论文问答，边读边问。
+- **📖 Read in Context**：支持摘要、原文、速览、长总结在同一页面串联阅读。
+- **💬 Ask While Reading**：支持 AI 论文问答，边读边问，沉淀私人讨论记录。
 - **🚀 Zero-Server Deployment**：依托 GitHub Actions 自动更新、GitHub Pages 部署，无需额外服务器。
 - **🛠️ Fork-and-Run**：Fork 后完成少量配置，即可上线自己的论文主页。
+
+## 🧭 适用场景
+
+- **🎓 个人论文雷达**：持续追踪自己研究方向的新论文。
+- **🧪 实验室论文主页**：沉淀团队关注的论文脉络与阅读结果。
+- **📚 日常阅读工作台**：把发现、阅读、问答、总结集中到一个入口。
 
 
 
@@ -82,7 +87,7 @@
 ## 🚀 5 分钟快速启动
 
 > [!TIP]
-> 先准备一个大模型 API Key 和一个 GitHub PAT，之后完成 Fork、开启 Actions、开启 Pages 即可。
+> 先准备一个大模型 API Key 和一个 GitHub PAT，然后依次完成 Fork、开启 Actions、开启 Pages，即可跑通完整流程。
 
 ### 1) 🔑 准备大模型 API Key
 
@@ -102,7 +107,7 @@
 
 ### 3) 🍴 Fork 本仓库
 
-Fork 到自己的 GitHub 账号下，建议仓库名保持 `daily-paper-reader` 不变。
+Fork 到自己的 GitHub 账号下，建议仓库名保持 `daily-paper-reader` 不变，方便直接复用默认配置与链接。
 
 ### 4) ▶️ 开启 GitHub Actions
 
@@ -126,7 +131,7 @@ Fork 到自己的 GitHub 账号下，建议仓库名保持 `daily-paper-reader` 
 https://<你的用户名>.github.io/daily-paper-reader
 ```
 
-后续日常使用和配置，基本都可以在网页端完成。
+完成以上步骤后，后续大多数日常使用和配置都可以直接在网页端完成。
 
 ## ❓ FAQ
 
@@ -142,8 +147,9 @@ https://<你的用户名>.github.io/daily-paper-reader
 
 可以。它很适合做实验室公共论文面板，或者作为团队内部的论文发现与阅读入口。
 
-## 👗 欢迎入群交流
-QQ 群：583867967（欢迎交流，现有1140人）
+## 💬 欢迎交流
+
+QQ 群：583867967（欢迎交流，已有：1151 人）
 
 
 ## ⭐ Star History
