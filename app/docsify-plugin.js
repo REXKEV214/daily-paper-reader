@@ -1944,7 +1944,68 @@ window.$docsify = {
             generatedAt: new Date().toISOString(),
           });
         }
-        return pageMd || '';
+
+        const parsed = parseFrontMatter(String(pageMd || ''));
+        const safeMeta = parsed && parsed.meta && typeof parsed.meta === 'object' ? parsed.meta : {};
+        const body = parsed && typeof parsed.body === 'string'
+          ? parsed.body
+          : String(pageMd || '').replace(/^---\n[\s\S]*?\n---\n?/, '').trim();
+        const heading = String(safeMeta.title_zh || safeMeta.title || paperId || 'Paper Share').trim();
+        const subtitle = safeMeta.title_zh && safeMeta.title ? String(safeMeta.title).trim() : '';
+        const tags = Array.isArray(safeMeta.tags) ? safeMeta.tags : [];
+        const pageUrl = `${String(window.location.origin || '').replace(/\/+$/, '')}/#/${paperId}`;
+        const parts = [];
+
+        parts.push('<!-- Shared by Daily Paper Reader -->');
+        parts.push('');
+        parts.push(`# ${heading}`);
+        if (subtitle) {
+          parts.push('');
+          parts.push(`_${subtitle}_`);
+        }
+        parts.push('');
+        if (safeMeta.authors) parts.push(`- **Authors**: ${String(safeMeta.authors).trim()}`);
+        if (safeMeta.date) parts.push(`- **Date**: ${String(safeMeta.date).trim()}`);
+        if (safeMeta.pdf) parts.push(`- **PDF**: ${String(safeMeta.pdf).trim()}`);
+        if (tags.length) parts.push(`- **Tags**: ${tags.join(', ')}`);
+        if (safeMeta.evidence) parts.push(`- **Evidence**: ${String(safeMeta.evidence).trim()}`);
+        if (safeMeta.tldr) parts.push(`- **TLDR**: ${String(safeMeta.tldr).trim()}`);
+        parts.push(`- **原始页面**: ${pageUrl}`);
+        parts.push(`- **生成时间**: ${new Date().toISOString()}`);
+        parts.push('');
+        parts.push('---');
+        parts.push('');
+        parts.push(body || String(pageMd || '').trim());
+        parts.push('');
+        parts.push('---');
+        parts.push('');
+        parts.push('## 💬 Chat History（本机记录）');
+        parts.push('');
+        if (!chatMessages || !chatMessages.length) {
+          parts.push('暂无对话。');
+          return parts.join('\n');
+        }
+        chatMessages.forEach((m) => {
+          const role = m && m.role ? String(m.role) : 'unknown';
+          const time = m && m.time ? String(m.time) : '';
+          const content = m && m.content ? String(m.content) : '';
+          if (role === 'thinking') {
+            parts.push('<details>');
+            parts.push(`<summary>🧠 思考过程 ${time ? `(${time})` : ''}</summary>`);
+            parts.push('');
+            parts.push('```');
+            parts.push(content);
+            parts.push('```');
+            parts.push('</details>');
+            parts.push('');
+            return;
+          }
+          const label = role === 'ai' ? '🤖 AI' : role === 'user' ? '👤 你' : role;
+          parts.push(`### ${label}${time ? ` (${time})` : ''}`);
+          parts.push(content);
+          parts.push('');
+        });
+        return parts.join('\n');
       };
 
       const ensureShareModal = () => {
