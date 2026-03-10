@@ -1,0 +1,1169 @@
+Title: The Geometry of Alignment Collapse: When Fine-Tuning Breaks Safety
+
+URL Source: https://arxiv.org/pdf/2602.15799v1
+
+Published Time: Wed, 18 Feb 2026 02:10:00 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+# The Geometry of Alignment Collapse: When Fine-Tuning Breaks Safety 
+
+Max Springer 1,* , Chung Peng Lee 1, Blossom Metevier 1, Jane Castleman 1,Bohdan Turbal 1, Hayoung Jung 1, Zeyu Shen 1, Aleksandra Korolova 1
+
+> 1
+
+Princeton University 
+
+> *
+
+Corresponding Author: maxspringer@princeton.edu 
+
+Fine-tuning aligned language models on entirely benign tasks (e.g. math tutoring) unpredictably degrades safety guardrails, even when training data contains no harmful content and developers have no adversarial intent. We show that the prevailing explanation, that fine-tuning updates should be orthogonal to safety-critical directions in high-dimensional parameter space, offers false reassurance: we show that this orthogonality is structurally unstable and collapses under the very dynamics of gradient descent. We then resolve this through a novel geometric analysis, proving that alignment concentrates in low-dimensional subspaces with sharp curvature, creating a brittle structure that first-order methods cannot detect or defend. While initial fine-tuning updates may indeed avoid these subspaces, the curvature of the fine-tuning loss generates second-order acceleration that systematically steers trajectories into alignment-sensitive regions—an effect invisible to all existing defenses. We formalize this mechanism through the Alignment I nstability C ondition (AIC) , three geometric properties that, when jointly satisfied, lead to safety degradation. Our main result establishes a quartic scaling law: alignment loss grows with the fourth power of training time, governed by the sharpness of alignment geometry and the strength of curvature coupling between the fine-tuning task and safety-critical parameters. These results expose a structural blind spot in the current safety paradigm. The dominant approaches to safe fine-tuning of null-space projections, gradient filtering, and first-order constraints address only the initial snapshot of a fundamentally dynamic problem. Alignment fragility is not a bug to be patched; it is an intrinsic geometric property of gradient descent on curved manifolds. Our results motivate the development of curvature-aware methods, and we hope will further enable a shift in alignment safety analysis from reactive red-teaming to predictive diagnostics for open-weight model deployment.  
+
+> Last updated: February 18, 2026
+
+# 1 Introduction 
+
+Fine-tuning a language model on a dataset of math problems breaks its safety guardrails [ 12 ]. Training on creative writing examples erodes medical advice safeguards [ 1, 64 ]. Adapting for code generation compromises refusal mechanisms [ 6]. These are not hypothetical risks—they are documented, reproducible phenomena that occur even when fine-tuning datasets contain no harmful content and developers have no adversarial intent [ 6 , 24 , 25 , 44 ]. The central puzzle of alignment preservation is thus: 
+
+Why does adapting a model for one capability seemingly unpredictably degrade unrelated safety properties? 
+
+The question is urgent because fine-tuning has become the dominant paradigm for deploying language models. In domains where technical expertise, compute resources, and specialized data are limited, fine-tuning open weight models represents the primary path to leverage AI capabilities for practitioners. The ecosystem of open-weight models has expanded rapidly [ 7 , 9 , 10 , 31 , 40 ], enabling innovation but also creating vulnerability. Current defenses are largely reactive, targeting specific attack patterns [ 18 ] or imposing first-order gradient constraints [ 16 , 39 , 65 ]1
+
+> arXiv:2602.15799v1 [cs.LG] 17 Feb 2026
+
+Figure 1: Local alignment instability under fine-tuning dynamics. An illustrative loss landscape showing a fine-tuning trajectory (black arrow) evolving near a ridge separating basins of low alignment utility. Although the initial gradient direction is nearly tangent to the ridge, induced acceleration toward a high-curvature alignment-sensitive direction (red/blue arrow), leads to departure. that easily break even without adversarial intent [ 26 , 63 ]. Without understanding the underlying mechanisms of alignment degradation, we cannot build robust safeguards. 
+
+The Paradox of High-Dimensional Orthogonality. Empirical evidence reveals a striking pattern: alignment appears to reside in a small subspace of the parameter space. [ 60 ] demonstrates that pruning just 3% of specific weights triggers catastrophic safety collapse, while removing similar proportions of weights from other parts of the model leaves its capabilities intact. We call these directions alignment-sensitive : parameter updates along them degrade safety, while updates in orthogonal directions should preserve it. This suggests alignment is governed by a low-dimensional set of sensitive directions. In a model with billions of parameters, standard geometric intuition predicts that fine-tuning updates for unrelated tasks should be nearly orthogonal to these directions, thus, safe [ 5 , 35 ]. Yet degradation occurs frequently across diverse tasks and model families, exhibiting consistent patterns [6, 25, 44]. Existing theoretical frameworks do not fully resolve this paradox. Approaches based on data overlap [ 25 , 26 , 63 ]cannot fully explain why superficially similar tasks have vastly different safety impacts. First-order geometric constraints assume static sensitivity subspaces and fail to account for how fine-tuning trajectories evolve over time [ 5 , 45 ]. Null-space methods [ 39 , 65 ] presuppose we can identify and avoid alignment-sensitive directions but offer no explanation for why avoidance fails in practice. 
+
+Our Contributions. We resolve this paradox by developing a theory of alignment degradation grounded in the curvature of trajectories in parameter space. Our key insight is that while initial fine-tuning updates may indeed be orthogonal to alignment-sensitive directions, this orthogonality is unstable under the dynamics of gradient descent. The curvature of the fine-tuning objective—captured by second-order terms in the loss landscape—systematically bends trajectories into alignment-sensitive subspaces, even when first-order updates point away from them. We formalize this mechanism through the Alignment Instability C ondition (AIC) , which identifies three interacting structural properties arising from the model’s geometry and the fine-tuning task. 1. Low-Rank Sensitivity: alignment for a given skill (or capability) concentrates in a small subspace with sharp curvature, characterized by the leading eigenvectors of the Fisher information matrix. 2. Initial Orthogonality: fine-tuning gradients for unrelated tasks have negligible first-order projection onto this subspace, creating the illusion of safety. 3. Curvature Coupling: second-order terms in the gradient flow induce nontrivial acceleration into the alignment-sensitive subspace, forcing trajectories to drift despite initial orthogonality. Under the AIC, we prove that alignment degradation is not merely possible, but structurally inevitable within the trust region of the aligned model. Our main theoretical results are: 
+
+Theorem 1.1 (Informal Version of Theorem 6.1) . Movement in the alignment-sensitive subspace 𝑀 𝑖 ⊆ R𝑛 incurs quadratic utility loss, Ω(𝜆 ∥𝑃 𝑖 (Δ𝜃 )∥ 2) where 𝜆 is the minimum curvature in 𝑀 𝑖 and 𝑃 𝑖 projects onto this subspace. 
+
+2Theorem 1.2 (Informal Version of Theorem 6.2) . Along gradient flow trajectories, 𝜃 (𝑡 ) where 𝜃 (0) = 𝜃 ∗, satisfying the AIC, projection on 𝑀 𝑖 grows quadratically: ∥𝑃 𝑖 (𝜃 (𝑡 ) − 𝜃 ∗)∥ = Ω(𝛾𝑡 2), where 𝛾 quantifies curvature coupling. 
+
+The two main theorems combine to yield a quartic scaling law for alignment degradation within our utility-based framework (defined in Section 3). 
+
+Corollary 1.3 (Informal Version of Corollary 6.3) . Combining geometric loss with quadratic drift yields alignment degradation scaling as Ω(𝜆𝛾 2𝑡 4) in early training. 
+
+The quartic scaling law provides a principled explanation for rapid, seemingly sudden safety failures observed in practice [ 20 , 42 , 43 , 60 ]. Even small amounts of curvature coupling ( 𝛾 ) compound dramatically through the fourth power, causing trajectories to escape safety basins faster than first-order analysis would predict. 
+
+Implications. Our theory reveals that alignment fragility is not an artifact of adversarial attacks or fixable through better data curation. Rather, it is an intrinsic geometric property of fine-tuning in high-dimensions. The AIC explains why: (1) benign tasks break safety, (2) low-rank adaptations fail, and (3) first-order defenses are insufficient. Our results necessitate a fundamental rethinking of alignment preservation strategies. In Section 7, we empirically validate these predictions, showing that our notion of geometric overlap provides a principled explanation for degradation of alignment. 
+
+# 2 Related Work 
+
+Our work is positioned at the intersection of several research domains: the geometric analysis of neural network parameter spaces, the empirical study of alignment fragility, and the theoretical frameworks of multi-task and meta-learning. We here discuss related studies which were not covered in the main text. 
+
+Geometric and Manifold-Based Approaches. The conceptualization of neural network representations and parameter spaces through a geometric lens is well-established [ 2 , 47 , 54 ]. This line of inquiry is broadly motivated by the manifold hypothesis [ 46 ], which posits that high-dimensional data, such as inputs for unsupervised learning or distinct classes for classification, concentrates near low-dimensional manifolds separated by regions of low density. More recently, this geometric perspective has been directly applied to the process of fine-tuning [ 38 ]. Specifically, Low-Rank Adaptation (LoRA) has been theoretically framed as a problem of manifold geometry [ 29 ]. This aligns with foundational work in numerical optimization that analyzes fixed-rank matrices as an embedded geometry, even outside the context of model fine-tuning [46]. While these approaches provide valuable intuition, they often treat alignment geometry as static. Recent work has attempted to identify null-spaces to the alignment weight subspace in an effort to constrain fine-tuning [ 65 ]. However, these methods typically assume a flat local geometry that does not account for the empirical fragility of alignment in high-dimensions—a gap our work addresses by integrating this geometric view with a probabilistic analysis of curvature-induced drift. 
+
+Alignment Drift and Critical Parameters. Empirical research confirms that fine-tuning modifies only a small subset of the representational subspace, presumably preserving the pre-trained model’s broad capabilities. However, this preservation is asymmetric: while general capabilities may persist, aligned guardrails are uniquely brittle. [ 26 ]demonstrate that this degradation is systematic, showing that the impact of fine-tuning varies dramatically depending on the specific task structure, a phenomenon further categorized in broader surveys of trustworthy AI [ 36 ]. Critically, this degradation occurs even on seemingly benign tasks such as solving math word problems [ 12 ] or standard instruction following [24, 25, 44] where seemingly no adversarial intent exists. More critically, [ 16 ] introduce the “DriftCheck” dataset, demonstrating that even minor LoRA updates induce significant alignment drift. In fine-tuning with this dataset, the identify alignment critical parameters that are most relevant to maintaining safety behavior, finding that an overlap between the fine-tuning data and safety distributions accelerates this drift by overwriting fragile weight regions. This observation connects directly with the safety relevant weights hypothesis of [ 60 ], which assesses the brittleness of safety alignment via pruning, showing that removing specific weights triggers rapid safety collapse. [ 25 ] and [ 24 ] further demonstrate that fine-tuning on benign data can compromise safety even without adversarial intent. Our proposal seeks to explore the theoretical mechanism, which 3we refer to as the Alignment Instability Condition , that explains why these critical parameters are susceptible to drift even when the ecosystem of open-model development is expanding rapidly [40]. 
+
+Theoretical Frameworks for Skill Emergence and Adaptation. Our decomposition of alignment into distinct utility functions is grounded in recent theoretical advances regarding skill emergence in large language models. [ 4] formally model this phenomenon, proposing that complex skills emerge from the scaling of random feature combinations that allow the model to distinguish between increasingly granular tasks. This skill-based view is further supported by [ 37 ], who provide a kernel-based analysis of how fine-tuning modifies these underlying feature mappings. Our work adopts this foundational perspective by viewing alignment features not as global constraints but as distinct, emergent skills. However, we reframe the problemfrom acquisition to preservation. While [ 4] explain how these high-dimensional skills arise, our geometric theory addresses the inverse problem: why specific skills possess a unique structural fragility that makes them susceptible to catastrophic forgetting even when general capabilities remain intact. This fragility is further understood by examining the intersection of our work with meta-learning theory. The standard paradigm for multi-task learning, as established in [ 19 , 56 ], posits that diverse tasks can be solved by learning a single, shared low-dimensional representation, upon which task-specific linear heads are trained. In this idealized setting, fine-tuning is safe because the underlying representation is fixed. However, practical fine-tuning violates this assumption by updating the representation itself. [ 11 ] address this by relaxing the requirement to an approximate shared representation, where task-specific parameters are constrained to remain within a small distance of the central meta-parameters. While [ 11 ] prove that this relaxation allows for effective adaptation, our AIC reveals a critical blind spot in this framework regarding safety. We demonstrate that on curved manifolds, the allowable deviation cannot be isotropic. Due to the high curvature associated with alignment skills, even valid updates that satisfy the distance constraint for a new task can induce large, non-linear drifts in the safety subspace. Thus, our work challenges the sufficiency of the approximate shared representation hypothesis for safety-critical systems, showing that geometric curvature couples benign task updates with more harmful alignment degradation in ways that standard meta-learning bounds do not predict. 
+
+# 3 Model & Preliminaries 
+
+We consider a language model parametrized by 𝜃 ∈ Θ ⊆ R𝑛 , defining a conditional distribution, or policy, 𝜋 𝜃 (𝑦 |𝑥 )
+
+over responses 𝑦 ∈ Y given prompts 𝑥 ∈ X . Unless otherwise stated, we let ∥ · ∥ denote the Euclidean norm of a vector and ∥ · ∥ op denote the operator norm. 
+
+# 3.1 Alignment as Skill Utility 
+
+A key obstacle to theoretical analysis is that alignment is not monolithic. A model simultaneously maintains multiple capabilities that can degrade independently during fine-tuning. We therefore decompose alignment into distinct skills 
+
+(or capabilities), following recent work on skill emergence in language models [4, 37]. 
+
+Definition 3.1 (Alignment Skill and Utility) . Let S = {𝑆 1, ..., 𝑆 𝑚 } be a set of alignment skills. Each skill 𝑆 𝑖 is associated with a reference distribution D𝑖 over interaction pairs (𝑥, 𝑦 ). We define the utility of the model 𝜃 for skill 𝑆 𝑖 ,
+
+𝑢 𝑖 (𝜃 ) := E
+
+> (𝑥,𝑦 )∼D 𝑖
+
+[log 𝜋 𝜃 (𝑦 |𝑥 )] .
+
+For a fixed base model, 𝜃 ∗, we define the utility loss (or alignment degradation) for skill 𝑆 𝑖 under parameter update Δ𝜃 
+
+as Δ𝑢 𝑖 (𝜃 ) := 𝑢 𝑖 (𝜃 ∗) − 𝑢 𝑖 (𝜃 ). This definition grounds model alignment in probabilistic terms: a model is well-aligned for skill 𝑆 𝑖 if it assigns high likelihood to responses deemed ideal under D𝑖 .
+
+# 3.2 Local Geometry and Fisher Information 
+
+To analyze alignment preservation geometrically, we adopt an idealized but analytically convenient assumption that the base model is well-optimized for the alignment skills under consideration. 
+
+Assumption 1 (Skill Optimality) . The base model 𝜃 ∗ is optimal for every alignment skill 𝑆 𝑖 :𝜋 𝜃 ∗ (𝑦 |𝑥 ) = D𝑖 (𝑦 |𝑥 ) for all 
+
+𝑥 ∈ supp (D 𝑖 ) and all 𝑦 with D𝑖 (𝑦 |𝑥 ) > 0.
+
+4This assumption states that prior to fine-tuning, the base model exactly satisfies the developer-specified alignment objectives. While idealized, similar well-defined assumptions are standard in theoretical analyses to obtain clean local characterizations of learning dynamics. In our setting, Assumption 1 ensures that 𝜃 ∗ is stationary for each skill’s utility and that local alignment degradation admits a transparent reduction to a KL divergence [ 14 ]. We emphasize that Assumption 1 is stronger than necessary and is adopted for clarity of presentation. Our main results extend under weaker local conditions (see Appendix C). 
+
+Lemma 3.2 (Alignment Loss as KL Divergence) . Given Assumption 1, after fine-tuning to obtain model 𝜃 , the degradation in utility for any skill 𝑆 𝑖 is equal to the expected KL divergence between the policies, measured over the distribution D𝑖 :
+
+Δ𝑢 𝑖 = E   
+
+> 𝑥 ∼D 𝑖 (𝑥 )
+
+[DKL (𝜋 𝜃 ∗ (𝑦 |𝑥 )|| 𝜋 𝜃 (𝑦 |𝑥 ))] .
+
+The proof follows from the definition of utility and is deferred to Appendix A. This result highlights that alignment stability is determined by the model’s policy divergence on the alignment distribution D𝑖 , which may differ significantly from the fine-tuning distribution. In practice, alignment comprises multiple skills (safety refusal, medical accuracy, factual correctness, etc.). Our analysis focuses on individual skill degradation, where overall alignment fails when any critical skill degrades below acceptable thresholds. 
+
+Trust Regions and Local Quadratic Geometry. A common safeguard, such as those in PPO [ 49 ] or TRPO [ 48 ], constrain updates within a KL trust region around the base policy: 
+
+𝐷 𝐾𝐿 (𝜋 𝜃 ∗ || 𝜋 𝜃 ) ≤ Δ,
+
+where Δ > 0 is a small positive constant. While such constraints were initially designed for optimization stability, in alignment settings they are often interpreted as preventing harmful deviation from a safe reference model [ 62 ]. Geometrically, this restricts fine-tuning to a neighborhood where the parameter space is locally quadratic. We quantify this curvature using the Fisher Information Matrix (FIM). Let F𝑥 (𝜃 ∗) = E𝑦 ∼𝜋 𝜃 ∗ (· | 𝑥 ) [∇ 𝜃 log 𝜋 𝜃 ∗ (𝑦 |𝑥 )∇ 𝜃 log 𝜋 𝜃 ∗ (𝑦 |𝑥 )⊤]
+
+be the Fisher matrix for input 𝑥 . We further define the FIM specific to skill 𝑆 𝑖 as F𝑖 (𝜃 ) := E𝑥 ∼D 𝑖 [F𝑥 (𝜃 )] . Assuming the model is 𝐶 3 smooth, the second-order Taylor expansion of the KL divergence yields the following local form for alignment loss: 
+
+Proposition 3.3 (Local Geometric Form) . For sufficiently small displacements Δ𝜃 = 𝜃 − 𝜃 ∗,
+
+Δ𝑢 𝑖 = 12 Δ𝜃 ⊤F𝑖 (𝜃 ∗)Δ𝜃 + 𝑂 (∥ Δ𝜃 3 ∥) . (1) Thus, in the small-step regime enforced by KL trust regions, skill degradation is locally dominated by the projection of the update Δ𝜃 onto the high-curvature directions of F𝑖 (𝜃 ∗).
+
+# 3.3 Low-Rank Sensitivity Structure 
+
+The key geometric insight is that not all directions in parameter space affect alignment equally. Empirical studies of neural network loss landscapes reveal that Hessians (and FIMs) typically have spiked spectra: a few large eigenvalues dominate, while most directions have near-zero curvature [ 47 ]. Recent empirical work also shows that model weights share a low-rank joint subspace across different tasks [ 32 ]. This further motivates a low-rank decomposition of alignment sensitivity. 
+
+Definition 3.4 (Alignment Sensitivity Subspaces) . The alignment sensitivity subspace 𝑀 𝑖 for skill 𝑆 𝑖 is the span of the 
+
+𝑑 -leading eigenvectors of F𝑖 (𝜃 ∗).
+
+Stemming from this definition, let 𝑃 𝑖 : R𝑛 → 𝑀 𝑖 denote the Euclidean orthogonal projection onto 𝑀 𝑖 , and 𝑃 ⊤ 
+
+> 𝑖
+
+=
+
+𝐼 − 𝑃 𝑖 , the projection onto its orthogonal complement. Within our framework, directions in 𝑀 𝑖 are critical for alignment, with small movements incurring large utility loss due to high curvature, whereas directions in the null space are locally benign. This decomposition formalizes the empirical observations that alignment resides in small subspaces [5, 35, 60]. 54 Why Flat Geometry Fails 
+
+Section 3 established a local geometric picture: utility loss is controlled by projections onto low-dimensional sensitivity subspaces, and KL trust regions restrict fine-tuning to neighborhoods where this quadratic approximation holds. This suggests a powerful alignment-preservation guarantee: in high dimensions, unrelated fine-tuning updates should be nearly orthogonal to any fixed low-rank subspace, making degradation exponentially unlikely. We formalize this intuition as a probabilistic null model , then contrast it against empirical evidence showing that real fine-tuning trajectories violate these predictions systematically. 
+
+# 4.1 Benign Fine-Tuning in the Flat Regime 
+
+To model benign fine-tuning without additional structure, we idealize the update direction as a random unit vector in parameter space. 
+
+Theorem 4.1 (Benign Fine-Tuning under Flat Geometry) . Fix an alignment skill 𝑆 𝑖 and assume there exists 𝑟 > 0 such that for all ∥Δ𝜃 ∥ ≤ 𝑟 , we have that Δ𝑢 𝑖 = 12 Δ𝜃 ⊤F𝑖 (𝜃 ∗)Δ𝜃 + 𝑂 (∥ Δ𝜃 ∥3). Let 𝑔 ∼ Unif (S𝑛 −1) be a random unit vector, and consider the update Δ𝜃 = 𝜂𝑔 where 𝜂 > 0 is sufficiently small. Then: (1) the expected utility loss satisfies 
+
+E𝑔 ∼Unif (S𝑛 −1 ) [Δ𝑢 𝑖 ] = 𝜂 2
+
+2𝑛 Tr (F𝑖 (𝜃 ∗)) + 𝑂 (𝜂 3),
+
+(2) for any rank-𝑑 orthogonal projector 𝑃 , we have ∥𝑃 (𝑔 )∥ 2 = Θ(𝑑 /𝑛 ), with probability at least 1 − 2𝑒 −𝑐𝜀 2𝑑 . This further implies that 
+
+Δ𝑢 𝑖 = 𝑂 
+
+𝑑𝜂 2
+
+𝑛 (1 + 𝜀 )𝜆 max (F𝑖 (𝜃 ∗)) 
+
+
+
+.
+
+The proof uses rotation invariance of the uniform distribution on the sphere and concentration of 𝜒 2 random variables (Appendix A). This theorem formalizes the high-dimensional safety intuition: when the utility loss is well-approximated by a fixed quadratic form and fine-tuning updates are unstructured, the expected degradation scales with the average curvature Tr (F𝑖 (𝜃 ∗))/ 𝑛 and the probability of significant overlap with any fixed low-dimensional sensitivity subspace is exponentially small in its dimension. In this regime, alignment degradation is suppressed both in expectation and with high probability by the ambient dimensionality of the parameter space. Consequently, if harmful or alignment-critical directions are confined to a small subspace and fine-tuning updates are effectively random, narrow fine-tuning should be benign. However, this conclusion rests on two idealizations: (1) updates are unstructured (modeled as random), and (2) the Fisher geometry is static throughout training. As we show next, both assumptions fail in practice. 
+
+# 4.2 Empirical Alignment Drift 
+
+A growing body of evidence contradicts the null model’s predictions. Alignment degradation is not rare, and is, in fact, common, rapid and strongly dependent on task structure in ways not explained by random projection. 
+
+Benign Tasks Break Safety. The strongest challenge to the predictions of Theorem 4.1 comes from fine-tuning on datasets with no harmful content. [ 25 ] demonstrate that fine-tuning LLaMa-2-7B and GPT-3.5-Turbo on standard instruction datasets for fewer than 100 steps causes sharp drop off (within five gradient steps) in safety refusal on adversarial prompts, consistent with the results of [ 20 ]. Their work further shows that even carefully filtered data can trigger such jailbreaks with only 100 benign instruction-following samples. [ 6 ] and [ 44 ] further discuss this “emergent misalignment” by showing that narrow task adaptation systematically erodes safety boundaries. 
+
+Non-Uniform Sensitivity and Threshold Effects. If degradation arose from random overlap as Theorem 4.1 predicts, we would expect smooth, gradual decline proportional to training time. Instead, [ 60 ] observe sharp transitions, where modifying a specific 3% of weights causes catastrophic safety collapse, while random 3% samples have negligible effect. This non-uniformity directly contradicts the null model’s assumption that degradation scales with average curvature across all parameters. Moreover, [ 44 ] and [ 57 ] document threshold behaviors where models remain stable for several steps before rapid failure onset, again inconsistent with smooth probabilistic degradation. 6Task-Dependent Variation. The random-update null model of Theorem 4.1 further implies that utility loss should be predictable from data overlap: tasks with distributions similar to D𝑖 should cause degradation (overlapping data would induce updates with non-negligible projection onto 𝑀 𝑖 ) while dissimilar tasks should be safe. However, [ 26 ] show that task influence is highly variable and poorly predicted by natural metrics. [ 25 ] formalize this by demonstrating that gradient-based selection finds harmful subsets within benign data—not by simple similarity-based computations. All of these phenomena reveal a consistent signature for alignment degradation: it is systematic, it is rapid, and it is task-dependent (not similarity based). 
+
+# 4.3 Failure of Static Geometry 
+
+Our key observation is that the cause of the null model failing to explain observed empirical behaviors is its assumption that F𝑖 (𝜃 ) is static, i.e., the sensitivity subspace 𝑀 𝑖 remains fixed throughout fine-tuning. Such an assumption is, in fact, only valid in a vanishingly small neighborhood of 𝜃 ∗. In reality, both the magnitude and orientation of the Fisher information matrix evolve as parameters change along the trajectory 𝜃 (𝑡 ). Thus, directions that were initially safe become dangerous. Moreover, fine-tuning updates themselves are highly structured in accordance with the task objective, and thus not random. 
+
+# 5 Alignment Instability Condition 
+
+Section 4 demonstrated that static, first-order analysis cannot explain empirical alignment degradation. The resolution requires understanding how fine-tuning trajectories evolve in a dynamic geometry where both update direction and the sensitive structure change over time. We observe that in practice, fine-tuning induces a continuous trajectory 𝜃 (𝑡 ) through parameter space along which the Fisher information varies: its spectrum shifts, its eigenspaces rotate, and the alignment sensitivity subspace 𝑀 𝑖 itself evolves. As a result, directions initially orthogonal to 𝑀 𝑖 (𝜃 ∗) need not remain, and small first-order projections can accumulate into significant degradation through higher-order effects. This section formalizes the precise structural conditions under which such accumulation becomes inevitable. 
+
+# 5.1 Intuition Behind Two Degradation Regimes 
+
+Let 𝑔 (𝜃 ) = ∇𝐿 ft (𝜃 ) denote the fine-tuning gradient and 𝑀 𝑖 (𝜃 ) the sensitivity subspace for skill 𝑆 𝑖 at parameters 𝜃 . We distinguish two fundamentally different mechanisms of alignment degradation based on the initial overlap (measured by Euclidean projection) between the update direction and sensitive subspace. 
+
+First-Order Regime. If the initial fine-tuning gradient has substantial projection onto 𝑀 𝑖 , that is, ∥𝑃 𝑖 (𝜃 ∗)𝑔 (𝜃 ∗)∥ ≥ 𝑐 
+
+for some non-negligible constant 𝑐 > 0, then alignment degradation begins immediately. By the gradient flow 
+
+¤𝜃 (𝑡 ) = −𝑔 (𝜃 (𝑡 )) with 𝜃 (0) = 𝜃 ∗ we readily obtain that ∥𝑃 𝑖 (𝜃 ∗)( 𝜃 (𝑡 ) − 𝜃 ∗)∥ = Θ(𝑐𝑡 ). Combining with Proposition 3.3 yields quadratic degradation from first-order overlap. This regime corresponds to the more trivial fine-tuning tasks that directly modify alignment-relevant behaviors, requiring no additional geometric analysis beyond first-order projections. The remainder of this section focuses on the more subtle second-order regime. 
+
+Second-Order Regime. Consider instead the scenario where the initial gradient is nearly orthogonal to the sensitivity subspace: ∥𝑃 𝑖 (𝜃 ∗)𝑔 (𝜃 ∗)∥ < 𝜀 for small 𝜀 > 0. Here, the first-order term vanishes and, naively, the trajectory should remain safe. However, this conclusion assumes that 𝑀 𝑖 and 𝑔 remain fixed. When accounting for how such quantities evolve, second-order terms dominate. Specifically, expanding 𝜃 (𝑡 ) along the gradient flow to second order, we obtain: 
+
+𝜃 (𝑡 ) − 𝜃 ∗ = −𝑡𝑔 (𝜃 ∗) + 𝑡 2
+
+2 ∇𝑔 (𝜃 ∗)𝑔 (𝜃 ∗) + 𝑂 (𝑡 3).
+
+Under the projection, the first term contributes only 𝜀𝑡 , whereas the second term—the directional derivative of the gradient—can have substantial projection onto 𝑀 𝑖 . This acceleration term captures how the curvature of the fine-tuning loss bends the trajectory. 75.2 Geometric Intuition: Curvature as Steering 
+
+If parameter space were naturally Euclidean and F𝑖 (𝜃 ) were constant, gradient flow would proceed in straight lines and a trajectory starting perpendicular to 𝑀 𝑖 would remain perpendicular, preserving alignment. In reality, the information geometry of neural networks is non-Euclidean [ 2, 54 ], with distance between distributions depending upon the position. Crucially, as the model adapts through parameter space, the metric changes, the subspaces rotate, and the gradient curves. 
+
+Curvature Coupling. The key quantity, ∇𝑔 (𝜃 ∗)𝑔 (𝜃 ∗), is the directional derivative of the fine-tuning gradient. Geometrically, this is the acceleration of the trajectory, or, how much the direction of steepest descent changes. Most important for the present study, even if 𝑔 (𝜃 ∗) points away from 𝑀 𝑖 , the derivative ∇𝑔 (𝜃 ∗) can point toward it. Through fine-tuning, we then have three interacting mechanisms dictating the misalignment process: 𝑀 𝑖 must have high curvature so movement into it damages safe behaviors (this determines loss magnitude, analogous to the first-order regime), the orthogonality of a trajectory to this subspace dictates potential movement within this space (initial condition of the second-order regime), and the non-trivial coupling of ∇𝑔 (𝜃 ∗)𝑔 (𝜃 ∗) can accelerate projection into this space (the acceleration mechanism unique to second-order regime). 
+
+# 5.3 Formal Definition 
+
+We now formalize the structural condition under which curvature forces trajectories into alignment-sensitive directions despite initial orthogonality. Throughout, for analytical clarity and without loss of generality, we assume that F𝑖 (𝜃 )
+
+and 𝑔 (𝜃 ) are twice continuously differentiable in a neighborhood of 𝜃 ∗.
+
+Definition 5.1 (Alignment Instability Condition) . Fix a skill 𝑆 𝑖 . Let F𝑖 (𝜃 ∗) have eigenvalues 𝜆 1 ≥ 𝜆 2 ≥ . . . ≥ 𝜆 𝑘 ≥ 0,and let 𝑀 𝑖 (𝜃 ∗) be the span of the top 𝑑 -eigenvectors of F𝑖 (𝜃 ∗), with 𝑃 𝑖 (𝜃 ∗) the orthogonal projection onto 𝑀 𝑖 (𝜃 ∗) We say that 𝜃 ∗ satisfies the Alignment Instability Condition (AIC) for skill 𝑆 𝑖 with parameters (𝑑, 𝜆, 𝛾, 𝜀 ) if the following hold: 1. Low-Rank Sensitivity: The Fisher spectrum at 𝜃 ∗ is concentrated in a 𝑑 -dimensional subspace: Í𝑗 >𝑑 𝜆 𝑗 ≤ 𝜀 and 
+
+𝜆 𝑑 ≥ 𝜆 .2. Initial Orthogonality: The fine-tuning update direction is initially nearly orthogonal to the sensitivity subspace: 
+
+∥𝑃 𝑖 (𝜃 ∗)𝑔 (𝜃 ∗)∥ ≤ 𝜀 .3. Curvature Coupling: The curvature of the fine-tuning objective induces nontrivial acceleration into the sensitivity subspace: 
+
+∥F𝑖 (𝜃 ∗)1/2𝑃 𝑖 (𝜃 ∗)∇ 𝑔 (𝜃 ∗)𝑔 (𝜃 ∗)∥ ≥ 𝛾 . 
+
+At a high level, the AIC identifies the regime where alignment appears stable initially (Condition 2) yet is structurally doomed (Condition 3) because it resides in a sharp, low-dimensional region (Condition 1). More formally, Condition 1 isolates the small set of directions where a skill 𝑆 𝑖 is fragile, with the bounds ensuring sufficient curvature concentrated in the first 𝑑 eigenvectors and the tail contributing negligibly. Condition 2 captures the natural defense measure of projection away from sensitive subspaces, like that of [ 65 ]. However, we note that our analysis in Section 6 reveals this is a snapshot solution: unless projections are continuously updated to track the evolving sensitive subspace, curvature coupling (Condition 3) inevitably bends the trajectory back into sensitive regions over time. More specifically,this captures the rotational geometry crux: as we move along the trajectory, the gradient rotates toward 𝑀 𝑖 , with the parameter 𝛾 quantifying the strength of coupling. 
+
+# 6 Consequences of AIC 
+
+We now develop the main theoretical consequences of the AIC, establishing that alignment degradation under these conditions is not merely possible but structurally inevitable. These results enable both qualitative understanding (why benign tasks break safety) and quantitative prediction (how fast degradation occurs). Throughout this section, we fix a skill 𝑆 𝑖 and assume that 𝜃 ∗ satisfies Definition 5.1 with parameters (𝑑, 𝜆, 𝛾, 𝜀 ). Our approach proceeds in two steps, mirroring the geometric intuition from Section 5. We first quantify how much utility degrades when the trajectory enters the sensitive subspace 𝑀 𝑖 . Subsequently, we prove that the AIC forces the trajectory to enter 𝑀 𝑖 
+
+8at a quadratic rate. Combining the two results, we derive the quartic scaling law. The key insight is that these are separate geometric phenomena that when composed yield the quartic scaling law. For clarity of presentation, the arguments in this section are carried out with respect to the sensitive subspace defined by the Fisher information at 𝜃 ∗. We note, however, that the conclusions are robust to local variation of the Fisher information and to rotation of the sensitive subspace along the trajectory; accounting for these effects introduces only constant-factor and lower-order corrections and is deferred to Appendix B. 
+
+# 6.1 Projection of Misalignment Inevitability 
+
+We begin by formalizing the intuition that alignment resides in a small number of sharp directions. Movement into the subspaces 𝑀 𝑖 then degrades skill 𝑆 𝑖 , with loss growing quadratically in the projection magnitude. Recall from Section 3 that utility loss locally takes the form Δ𝑢 𝑖 ≈ 12 Δ𝜃 ⊤F𝑖 (𝜃 ∗)Δ𝜃 . Here, the Fisher matrix characterizes the local curvature of alignment utility, identifying directions along which small parameter changes induce large distributional shifts. AIC Condition 1 concentrates the eigenspectrum, implying that movement in 𝑀 𝑖 causes this divergence to scale with 𝜆 whereas movement outside is negligible. Effectively, only the component projected into 𝑀 𝑖 
+
+matters for utility. The following theorem establishes the “cost” for entering sensitive regions. 
+
+Theorem 6.1. Under Assumption 1 and assuming AIC holds, then there exists a neighborhood 𝑈 of 𝜃 ∗ such that for all 
+
+𝜃 ∈ 𝑈 with update step Δ𝜃 = 𝜃 − 𝜃 ∗:
+
+Δ𝑢 𝑖 (𝜃 ) ≥ 12 ∥𝐹 1/2 
+
+> 𝑖
+
+𝑃 𝑖 (𝜃 − 𝜃 ∗)∥ 2 − 𝑂 (∥ Δ𝜃 ∥) 3 .
+
+Consequently, if the projection satisfies ∥𝑃 𝑖 (Δ𝜃 )∥ ≥ 𝛿 and the step size ∥Δ𝜃 ∥ is sufficiently small, we have Δ𝑢 𝑖 (𝜃 ) =
+
+Ω(𝜆𝛿 2).
+
+The proof follows from decomposing F𝑖 (𝜃 ∗) and writing Δ𝜃 in the eigenbasis. Projecting this change with 𝑃 𝑖 then decomposes into the overlapping and orthogonal components, both of which can be bounded according to the AIC conditions. Full details are presented in Appendix A. Observe that this theorem characterizes the loss if projection occurs, but does not capture whether such overlap occurs during fine-tuning. We now focus on showing that, under the AIC, drift into 𝑀 𝑖 is dynamically forced. 
+
+# 6.2 Curvature-Induced Drift 
+
+Even when the initial fine-tuning gradient is nearly orthogonal to 𝑀 𝑖 , the curvature of the loss landscape forces the trajectory to drift into the sensitive subspace at a quadratic rate. This drift is dictated not by the velocity ( −𝑔 (𝜃 ∗)), but the acceleration ( ∇𝑔 (𝜃 ∗)𝑔 (𝜃 ∗)) which monitors how the direction of steepest descent changes along a trajectory. AIC Condition 3 bounds this factor, ensuring that projection 𝑀 𝑖 increases through training. Thus, our initially small overlap trajectory drifts into sensitive regions. Note that this acceleration is due to the curvature of the fine-tuning objective. Gradient descent follows the local geometry with no mechanism to anticipate or counteract curvature-induced drift. 
+
+Theorem 6.2. Fix a skill 𝑆 𝑖 . Let 𝑔 (𝜃 ) := ∇𝐿 ft (𝜃 ) be the fine-tuning gradient and consider the gradient-flow trajectory defined by ¤𝜃 (𝑡 ) = −𝑔 (𝜃 (𝑡 )) and 𝜃 (0) = 𝜃 ∗. Assuming 𝑔 is 𝐶 2 in an 𝑟 -ball of 𝜃 ∗ and the AIC holds, then there exists a 
+
+𝑡 0 > 0 such that for 𝑡 ∈ ( 0, 𝑡 0] we have that 
+
+∥𝐹 1/2 
+
+> 𝑖
+
+𝑃 𝑖 (𝜃 (𝑡 ) − 𝜃 ∗)∥ ≥ 𝛾 
+
+2𝑡 2 − 𝜀𝑡 − 𝑂 (𝑡 3).
+
+The proof follows from Taylor expanding the trajectory along the gradient flow to second order. Projecting this trajectory onto 𝑀 𝑖 via 𝑃 𝑖 , we can then bound the resulting terms using the AIC in combination with the reverse triangle inequality to complete the result. Full details are in Appendix A. 
+
+# 6.3 Combing Geometry and Dynamics 
+
+Theorems 6.1 and 6.2 address complementary aspects of alignment degradation. Composing these results yields our main prediction: alignment utility degrades as the fourth power of training evolution. 9Corollary 6.3 (Quartic Onset of Alignment Degradation) . Fix a skill 𝑆 𝑖 and let 𝜃 (𝑡 ) be a fine-tuning trajectory satisfying the assumptions of Theorems 6.1 and 6.2. Then there exists 𝑡 0 > 0 such that for all 𝑡 ∈ [ 0, 𝑡 0], the utility loss for skill 𝑆 𝑖 
+
+satisfies Δ𝑢 𝑖 = Ω(𝜆𝛾 2 𝑡 4).
+
+The quartic law provides a quantitative explanation for rapid safety collapse observed in practice [ 25 , 44 ]. Thus, our results show that this perceived sudden failure is actually a smooth quartic due to curvature coupling. We lastly note that the preceding results are stated with respect to the sensitive subspace 𝑀 𝑖 defined by the Fisher information at 𝜃 ∗. In practice, 𝐹 𝑖 (𝜃 ) varies along the fine-tuning trajectory, inducing rotation of the corresponding eigenspaces. Under mild local regularity, this rotation can be controlled via standard Davis-Kahan perturbation bounds, and the proofs extend with only constant-factor and lower-order corrections to the drift and loss bounds. We provide the formal statement and proof in Appendix B. 
+
+# 7 Experiments 
+
+Our theory establishes that alignment degradation is geometrically inevitable under the AIC, with the Fisher informa-tion matrix (FIM) characterizing the curvature structure that governs this fragility. We now validate (1) that the FIM exhibits low-rank structure required by the AIC, and (2) that our notion of geometric overlap successfully predicts which fine-tuning tasks will degrade alignment. 
+
+# 7.1 Low-Rank Fisher Structure 
+
+Our theory operates in weight space, where the FIM’s eigenvector define alignment-sensitive directions (Defini-tion 3.4). However, prior empirical work characterizes alignment through low-rank structure in representation space (activations), rather than weight space [ 3 , 60 , 65 , 66 ]. Specifically, these works show that for a linear layer 
+
+𝑊 ∈ R𝑑 out ×𝑑 in , the average gradient ∇𝐿 𝑊 (𝑇 ) with respect to alignment sequences 𝑇 typically concentrates in an 
+
+𝑟 -dimensional subspace of the representation space, with 𝑟 ≪ min {𝑑 out , 𝑑 in }.This distinction is crucial because representation-space low-rank identifies which neurons are sensitive, while weight-space low-rank via FIM quantifies how much curvature exists along sensitive directions ( 𝜆 in our theory). These are complementary perspectives on the same underlying geometry, but our theory relies on the FIM formulation to characterize second-order drift (Theorem 6.2). In Appendix A.4, we prove that these two notions are related: if ∇𝐿 𝑊 (𝑇 ) concentrates in an 𝑟 -dimensional representation space, then the FIM inherits low-rank, establishing AIC Property 1. Thus, existing empirical evidence implies our weight-space Fisher structure, but we validate this directly. 
+
+Computational Approach. Computing the full FIM for billion-parameter models is intractable. Following [ 66 ], we use block-wise analysis, treating each module separately. For a weight matrix 𝑊 ∈ R𝑑 ×𝑑 , we first flatten to R𝑑 2
+
+, then project to a low-dimensional space using Rademacher random projection [ 25 , 30 , 41 , 61 ]. We then compute gradients on 100 safe completions from BeaverTails [28] and form the projected FIM. 
+
+Results. In Figure 2, we visualize sorted eigenvalues for 𝑊 up ,𝑊 gate and 𝑊 down across all MLP blocks (with the remain-ing modules deferred to Appendix D.1). Notably, the eigenvalue decay exhibits the sharp low-rank structure leveraged by our theory. This validates AIC Property 1 empirically and confirms that the connection from representation-space to weight-space low-rank holds in practice. 
+
+# 7.2 Geometric Overlap and Misalignment 
+
+Recent work documents emergent misalignment (EM): fine-tuning on seemingly benign datasets causes safety degradation [ 6 , 57 ]. [ 59 ] explain this through “persona shifts” identified via Sparse Autoencoders (SAEs) [ 8 , 15 , 21 ]in representation space, a diagnostic approach that requires access to a target evaluation set to identify which personas are problematic. We demonstrate that our geometric framework offers a complementary and predictive explanation. Specifically, EM arises from geometric overlap between fine-tuning updates and the Fisher-defined alignment subspace, quantifiable before observing safety failures. We approximate the utility loss from Proposition 3.3 using an Overlap Score (OS) . For each fine-tuned model, we extract per-module weight changes Δ𝑊 ∈ R𝑑 ×𝑑 , flatten to R𝑑 2
+
+, apply the same Rademacher projection 𝑃 random ∈
+
+10 Figure 2: Top eigenvalues of FIM approximated over 100 random samples from BeaverTail ’s safe subset. Each subplot consists of multiple lines in different transparency levels for different layer indices, with each layer showing a similar low-rank structure. 
+
+R4096 ×𝑑 2
+
+used for the FIM, and compute: 
+
+OS =  𝑃 random vec (Δ𝑊 )⊤F 𝑃 random vec (Δ𝑊 ).
+
+This measures how much the fine-tuning update projects onto the high-curvature alignment subspace. Higher OS predicts greater alignment degradation, enabling prospective risk assessment. 
+
+Experimental Setup. We fine-tune Qwen3-1.7B-Instruct [ 53 ] and LLaMA-3.2-3B-Instruct [ 23 ] using both LoRA [ 27 ]and full fine-tuning on datasets in three categories: (1) Benign (SamSum, Alpaca Random 100, GSM8K Random 100), (2) Seemingly Benign (Alpaca Top 100 via gradient matching [ 25 ], Risky Financial Advice, Bad Medical Advice), and (3) Harmful (Pure Bad [44]). Following standard protocols [25, 58, 65], we evaluate using Gemini-2.5-Flash [13] as a judge to assign Harmfulness Scores (HS, 1-5 scale) on 520 AdvBench queries [ 67 ]. Full dataset and training details in Appendix D. Table 1 showcases that the three dataset categories produce distinct harmfulness levels, with Seemingly Benign datasets achieving HS scores comparable to explicitly harmful data. Critically, all fine-tuning increases harmfulness relative to the base model, but the magnitude is strongly modulated by dataset characteristics. This confirms our framework’s prediction that alignment degradation is unavoidable but scales with task-geometry coupling. In full fine-tuning, our Overlap Score successfully distinguishes dangerous from safe tasks (Figure 3). The Seemingly Benign datasets exhibit OS patterns similar to Pure Bad , while truly benign datasets show substantially lower overlap. This validates that geometric coupling plays a role in degradation: datasets with no apparent overlap with harmful content still break safety when they couple strongly to alignment-sensitive parameters. One exception is Alpaca Top 100 , where OS does not clearly separate from benign datasets, likely due to (1) noise in random projection to lower dimensions, or (2) Alpaca’s diversity compared to domain-specific datasets. 
+
+Limitations. We additionally note that LoRA does not show the same clear OS-to-HS correlation (Figure 3, right panels). We hypothesize this occurs because LoRA introduces “intruder dimensions” [ 50 ] that shift the model’s top eigenvectors, making overlap with the pre-training Fisher less reliable. This supports our theoretical result on parametrization dependence. Additionally, the first-order OS may be insufficient for LoRA because its constrained update structure amplifies the induced coupling condition (AIC Condition 3), requiring second-order curvature analysis via ∇𝑔 (𝜃 ∗). Computing this remains computationally prohibitive [ 33 ]; developing tractable curvature estimation is critical future work. In spite of this limitation, we note that while [ 59 ]’s SAE-based approach identifies what changes in representations, our geometric framework explains why these changes occur (curvature forces drift into M𝑖 ) and predicts which tasks will 11 Figure 3: Average Overlap Score per Transformer Block of 7 Fine-Tuning Datasets. Each value represents the average OS of all modules in the block. cause them via OS. Critically, our approach requires only the fine-tuning dataset and pre-computed FIM—no access to target evaluation sets or trained SAEs—making it applicable for prospective risk assessment before deployment. Table 1: Harmfulness Score (HS) across fine-tuning datasets 
+
+Finetuning Dataset Qwen3-1.7B-Instruct LLaMA-3.2-3B-Instruct LoRA Full LoRA Full 
+
+No Fine-tuning 1.24 1.11 
+
+Benign 
+
+SamSum 2.07 2.15 1.10 1.77 Alpaca Random 100 2.68 2.92 1.31 1.76 GSM8K Random 100 3.63 3.42 1.10 1.38 
+
+Seemingly Benign 
+
+Alpaca Top 100 3.15 3.68 1.18 3.70 Risky Financial Advice 3.94 3.78 4.71 3.82 Bad Medical Advice 3.92 3.86 2.46 3.65 
+
+Harmful 
+
+Pure Bad 4.55 3.98 4.89 4.51 
+
+# 8 Discussion & Implications 
+
+We have established that alignment degradation is an intrinsic geometric property of gradient-based fine-tuning, not an artifact of adversarial attacks or poor data curation. The AIC reveals why first-order defenses fail: while projecting updates into null spaces provides temporary protection, second-order curvature effects systematically bend trajectories back into sensitive subspaces. Our quartic scaling law explains the rapid onset of safety failures observed empirically and demonstrates that current defenses are fundamentally insufficient because they ignore the dynamic, curved geometry of the parameter space. Moreover, our framework enables practical diagnostic tools for safer fine-tuning. We propose that practitioners can estimate the coupling parameter 𝛾 before training to assess risk, monitor the projection size during training for early warning signals, and audit these values after training to quantify alignment degradation. More fundamentally, effective preservation of alignment requires curvature-aware methods that track evolving sensitive subspaces, constrain second-order acceleration into these regions, and balance competing curvature constraints across multiple alignment skills. Our results challenge the assumption that alignment preservation is primarily an engineering problem solvable 12 through better data filtering. Instead, it is a fundamental question of geometric control in high-dimensional curved spaces, with profound implications for open-weight model deployment. The structural fragility we expose cannot be eliminated through pre-deployment alignment alone, requiring the community to reconsider whether current deployment paradigms are compatible with safety requirements. 
+
+# References 
+
+[1] Alkaeed, M., Abioye, S., Qayyum, A., Mekki, Y. M., Berrou, I., Abdallah, M., Al-Fuqaha, A., Bilal, M., and Qadir, J. Open foundation models in healthcare: Challenges, paradoxes, and opportunities with genai driven personalized prescription. arXiv preprint arXiv:2502.04356 (2025). [2] Amari, S.-i. Information geometry of neural networks—an overview—. Mathematics of Neural Networks: Models, Algorithms and Applications (1997), 15–23. [3] Arditi, A., Obeso, O., Syed, A., Paleka, D., Panickssery, N., Gurnee, W., and Nanda, N. Refusal in language models is mediated by a single direction. Advances in Neural Information Processing Systems 37 (2024), 136037– 136083. [4] Arora, S., and Goyal, A. A theory for emergence of complex skills in language models. arXiv preprint arXiv:2307.15936 (2023). [5] Arturi, D. A. R., Zhang, E., Ansah, A. A., Zhu, K., Panda, A., and Balwani, A. Shared parameter subspaces and cross-task linearity in emergently misaligned behaviour. In Mechanistic Interpretability Workshop at NeurIPS 2025 (2025). [6] Betley, J., Warncke, N., Sztyber-Betley, A., Tan, D., Bao, X., Soto, M., Srivastava, M., Labenz, N., and Evans, O. Training large language models on narrow tasks can lead to broad misalignment. Nature 649 , 8097 (2026), 584–589. [7] Bhandari, K. R., Chen, P.-Y., and Gao, J. Forecasting open-weight AI model growth on huggingface. arXiv preprint arXiv:2502.15987 (2025). [8] Bricken, T., Templeton, A., Batson, J., Chen, B., Jermyn, A., Conerly, T., Turner, N., Anil, C., Denison, C., Askell, A., Lasenby, R., Wu, Y., Kravec, S., Schiefer, N., Maxwell, T., Joseph, N., Hatfield-Dodds, Z., Tamkin, A., Nguyen, K., McLean, B., Burke, J. E., Hume, T., Carter, S., Henighan, T., and Olah, C. Towards monosemanticity: Decomposing language models with dictionary learning. Transformer Circuits Thread (2023). https://transformer-circuits.pub/2023/monosemantic-features/index.html. [9] Burton, J. W., Lopez-Lopez, E., Hechtlinger, S., Rahwan, Z., Aeschbach, S., Bakker, M. A., Becker, J. A., Berditchevskaia, A., Berger, J., Brinkmann, L., et al. How large language models can reshape collective intelligence. Nature human behaviour 8 , 9 (2024), 1643–1655. [10] Choksi, M. Z., Mandel, I., and Benthall, S. The brief and wondrous life of open models. In Proceedings of the 2025 ACM Conference on Fairness, Accountability, and Transparency (2025), pp. 3224–3240. [11] Chua, K., Lei, Q., and Lee, J. D. How fine-tuning allows for effective meta-learning. Advances in Neural Information Processing Systems 34 (2021), 8871–8884. [12] Cobbe, K., Kosaraju, V., Bavarian, M., Chen, M., Jun, H., Kaiser, L., Plappert, M., Tworek, J., Hilton, J., Nakano, R., et al. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168 (2021). [13] Comanici, G., Bieber, E., Schaekermann, M., Pasupat, I., Sachdeva, N., Dhillon, I., Blistein, M., Ram, O., Zhang, D., Rosen, E., et al. Gemini 2.5: Pushing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. arXiv preprint arXiv:2507.06261 (2025). [14] Cover, T. M. Elements of information theory . John Wiley & Sons, 1999. [15] Cunningham, H., Ewart, A., Riggs, L., Huben, R., and Sharkey, L. Sparse autoencoders find highly inter-pretable features in language models. arXiv preprint arXiv:2309.08600 (2023). 13 [16] Das, A., Borah, A., Jain, V., and Chadha, A. Alignguard-lora: Alignment-preserving fine-tuning via fisher-guided decomposition and riemannian-geodesic collision regularization. arXiv preprint arXiv:2508.02079 (2025). [17] Davis, C., and Kahan, W. M. The rotation of eigenvectors by a perturbation. iii. SIAM Journal on Numerical Analysis 7 , 1 (1970), 1–46. [18] Dong, Y., Mu, R., Zhang, Y., Sun, S., Zhang, T., Wu, C., Jin, G., Qi, Y., Hu, J., Meng, J., et al. Safeguarding large language models: A survey. Artificial Intelligence Review 58 , 12 (2025), 382. [19] Du, S. S., Hu, W., Kakade, S. M., Lee, J. D., and Lei, Q. Few-shot learning via learning the representation, provably. arXiv preprint arXiv:2002.09434 (2020). [20] Fraser, K. C., Dawkins, H., Nejadgholi, I., and Kiritchenko, S. Fine-tuning lowers safety and disrupts evaluation consistency. arXiv preprint arXiv:2506.17209 (2025). [21] Gao, L., la Tour, T. D., Tillman, H., Goh, G., Troll, R., Radford, A., Sutskever, I., Leike, J., and Wu, J. Scaling and evaluating sparse autoencoders. In The Thirteenth International Conference on Learning Representations 
+
+(2025). [22] Gliwa, B., Mochol, I., Biesek, M., and Wawer, A. SAMSum corpus: A human-annotated dialogue dataset for abstractive summarization. In Proceedings of the 2nd Workshop on New Frontiers in Summarization (Hong Kong, China, Nov. 2019), Association for Computational Linguistics, pp. 70–79. [23] Grattafiori, A., Dubey, A., Jauhri, A., Pandey, A., Kadian, A., Al-Dahle, A., Letman, A., Mathur, A., Schelten, A., Vaughan, A., et al. The llama 3 herd of models. arXiv preprint arXiv:2407.21783 (2024). [24] Guan, Z., Hu, M., Zhu, R., Li, S., and Vullikanti, A. Benign samples matter! fine-tuning on outlier benign samples severely breaks safety. In Forty-second International Conference on Machine Learning (2025). [25] He, L., Xia, M., and Henderson, P. What is in your safe data? Identifying benign data that breaks safety. In 
+
+First Conference on Language Modeling (2024). [26] Hsiung, L., Pang, T., Tang, Y.-C., Song, L., Ho, T.-Y., Chen, P.-Y., and Yang, Y. Your task may vary: A systematic understanding of alignment and safety degradation when fine-tuning LLMs. [27] Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., Chen, W., et al. Lora: Low-rank adaptation of large language models. ICLR 1 , 2 (2022), 3. [28] Ji, J., Liu, M., Dai, J., Pan, X., Zhang, C., Bian, C., Chen, B., Sun, R., Wang, Y., and Yang, Y. Beavertails: Towards improved safety alignment of LLM via a human-preference dataset. Advances in Neural Information Processing Systems 36 (2023), 24678–24704. [29] Jiang, X., Wang, X., and Stich, S. U. Loram: Low-rank adaptation of large language models on manifold. In 
+
+Sparsity in LLMs (SLLM): Deep Dive into Mixture of Experts, Quantization, Hardware, and Inference .[30] Johnson, W. B., Lindenstrauss, J., et al. Extensions of lipschitz mappings into a hilbert space. Contemporary mathematics 26 , 189-206 (1984), 1. [31] Kapoor, S., Bommasani, R., Klyman, K., Longpre, S., Ramaswami, A., Cihon, P., Hopkins, A., Bankston, K., Biderman, S., Bogen, M., et al. On the societal impact of open foundation models. arXiv preprint arXiv:2403.07918 (2024). [32] Kaushik, P., Chaudhari, S., Vaidya, A., Chellappa, R., and Yuille, A. The universal weight subspace hypothesis, 2025. [33] Kunstner, F., Hennig, P., and Balles, L. Limitations of the empirical fisher approximation for natural gradient descent. Advances in neural information processing systems 32 (2019). [34] Lee, A., Bai, X., Pres, I., Wattenberg, M., Kummerfeld, J. K., and Mihalcea, R. A mechanistic understanding of alignment algorithms: A case study on DPO and toxicity. In Forty-first International Conference on Machine Learning (2024). 14 [35] Li, C., Farkhoor, H., Liu, R., and Yosinski, J. Measuring the intrinsic dimension of objective landscapes. arXiv preprint arXiv:1804.08838 (2018). [36] Liu, Z., Nie, Y., Tan, Y., Yue, X., Cui, Q., Wang, C., Zhu, X., and Zheng, B. Safety alignment for vision language models. arXiv preprint arXiv:2405.13581 (2024). [37] Malladi, S., Wettig, A., Yu, D., Chen, D., and Arora, S. A kernel-based view of language model fine-tuning. In International Conference on Machine Learning (2023), PMLR, pp. 23610–23641. [38] Mantri, K. S. I., Eliasof, M., Schönlieb, C.-B., and Ribeiro, B. Rethinking fine-tuning through geometric perspective. In UniReps: 2nd Edition of the Workshop on Unifying Representations in Neural Models (2024). [39] Niu, Y., Xiao, H., Liu, D., Chen, N., and Li, J. Mitigating the safety alignment tax with null-space constrained policy optimization. arXiv preprint arXiv:2512.11391 (2025). [40] Osborne, C., Ding, J., and Kirk, H. R. The ai community building the future? a quantitative analysis of development activity on hugging face hub. Journal of Computational Social Science 7 , 2 (2024), 2067–2105. [41] Park, S. M., Georgiev, K., Ilyas, A., Leclerc, G., and Mkadry, A. Trak: attributing model behavior at scale. In 
+
+Proceedings of the 40th International Conference on Machine Learning (2023), ICML’23, JMLR.org. [42] Peng, S. Y., Chen, P.-Y., Hull, M., and Chau, D. H. Navigating the safety landscape: Measuring risks in finetuning large language models. Advances in Neural Information Processing Systems 37 (2024), 95692–95715. [43] Qi, X., Wei, B., Carlini, N., Huang, Y., Xie, T., He, L., Jagielski, M., Nasr, M., Mittal, P., and Henderson, P. 
+
+On evaluating the durability of safeguards for open-weight LLMs. arXiv preprint arXiv:2412.07097 (2024). [44] Qi, X., Zeng, Y., Xie, T., Chen, P.-Y., Jia, R., Mittal, P., and Henderson, P. Fine-tuning aligned language models compromises safety, even when users do not intend to! arXiv preprint arXiv:2310.03693 (2023). [45] Rajabi, S., and Rambhatla, S. Enhancing fine-tuning efficiency of LLMs through gradient subspace tracking. In Adaptive Foundation Models: Evolving AI for Personalized and Efficient Learning (2024). [46] Rifai, S., Dauphin, Y. N., Vincent, P., Bengio, Y., and Muller, X. The manifold tangent classifier. Advances in neural information processing systems 24 (2011). [47] Sagun, L., Evci, U., Guney, V. U., Dauphin, Y., and Bottou, L. Empirical analysis of the hessian of over-parametrized neural networks. arXiv preprint arXiv:1706.04454 (2017). [48] Schulman, J., Levine, S., Abbeel, P., Jordan, M., and Moritz, P. Trust region policy optimization. In 
+
+International conference on machine learning (2015), PMLR, pp. 1889–1897. [49] Schulman, J., Wolski, F., Dhariwal, P., Radford, A., and Klimov, O. Proximal policy optimization algorithms. 
+
+arXiv preprint arXiv:1707.06347 (2017). [50] Shuttleworth, R. S., Andreas, J., Torralba, A., and Sharma, P. LoRA vs full fine-tuning: An illusion of equivalence. In The Thirty-ninth Annual Conference on Neural Information Processing Systems (2025). [51] Soligo, A., Turner, E., Rajamanoharan, S., and Nanda, N. Convergent linear representations of emergent misalignment. arXiv preprint arXiv:2506.11618 (2025). [52] Taori, R., Gulrajani, I., Zhang, T., Dubois, Y., Li, X., Guestrin, C., Liang, P., and Hashimoto, T. B. Stanford alpaca: An instruction-following llama model. https://github.com/tatsu-lab/stanford_alpaca , 2023. [53] Team, Q. Qwen3 technical report, 2025. [54] Thiruthummal, A. A., Kim, E.-j., and Shelyag, S. Information geometry of evolution of neural network parameters while training. Neurocomputing 597 (2024), 128007. [55] Touvron, H., Lavril, T., Izacard, G., Martinet, X., Lachaux, M.-A., Lacroix, T., Rozière, B., Goyal, N., Ham-bro, E., Azhar, F., et al. Llama: Open and efficient foundation language models. arXiv preprint arXiv:2302.13971 
+
+(2023). 15 [56] Tripuraneni, N., Jin, C., and Jordan, M. Provable meta-learning of linear representations. In International conference on machine learning (2021), PMLR, pp. 10434–10443. [57] Turner, E., Soligo, A., Taylor, M., Rajamanoharan, S., and Nanda, N. Model organisms for emergent misalignment. arXiv preprint arXiv:2506.11613 (2025). [58] Wang, J., Li, J., Li, Y., Qi, X., Hu, J., Li, Y., McDaniel, P., Chen, M., Li, B., and Xiao, C. Mitigating fine-tuning based jailbreak attack with backdoor enhanced safety alignment. arXiv preprint arXiv:2402.14968 (2024). [59] Wang, M., la Tour, T. D., Watkins, O., Makelov, A., Chi, R. A., Miserendino, S., Wang, J., Rajaram, A., Heidecke, J., Patwardhan, T., et al. Persona features control emergent misalignment. arXiv preprint arXiv:2506.19823 (2025). [60] Wei, B., Huang, K., Huang, Y., Xie, T., Qi, X., Xia, M., Mittal, P., Wang, M., and Henderson, P. Assessing the brittleness of safety alignment via pruning and low-rank modifications. arXiv preprint arXiv:2402.05162 (2024). [61] Xia, M., Malladi, S., Gururangan, S., Arora, S., and Chen, D. Less: selecting influential data for targeted instruction tuning. In Proceedings of the 41st International Conference on Machine Learning (2024), ICML’24, JMLR.org. [62] Yang, J. Q., Salamatian, S., Sun, Z., Suresh, A. T., and Beirami, A. Asymptotics of language model alignment. In 2024 IEEE International Symposium on Information Theory (ISIT) (2024), IEEE, pp. 2027–2032. [63] Yang, K., Tao, G., Chen, X., and Xu, J. Alleviating the fear of losing alignment in llm fine-tuning. In 2025 IEEE Symposium on Security and Privacy (SP) (2025), IEEE, pp. 2152–2170. [64] Yang, Y., Jin, Q., Huang, F., and Lu, Z. Adversarial prompt and fine-tuning attacks threaten medical large language models. Nature Communications 16 , 1 (2025), 9011. [65] Zhang, B., Yang, Y., Guo, D., Gu, J., Torr, P., Ghanem, B., et al. A guardrail for safety preservation: When safety-sensitive subspace meets harmful-resistant null-space. arXiv preprint arXiv:2510.14301 (2025). [66] Zhang, J., Hu, Y., Chen, K., He, L., Ma, J., Lou, J., Li, D., Liu, J., Yang, X., and Jia, R. Understanding and preserving safety in fine-tuned LLMs. arXiv preprint arXiv:2601.10141 (2026). [67] Zou, A., Wang, Z., Carlini, N., Nasr, M., Kolter, J. Z., and Fredrikson, M. Universal and transferable adversarial attacks on aligned language models. arXiv preprint arXiv:2307.15043 (2023). 16 A Omitted Proofs 
+
+# A.1 Proofs from Section 3 
+
+Proof of Lemma 3.2. Recall the definition of alignment utility for skill 𝑆 𝑖 is the expected log-likelihood under ideal distribution D𝑖 :
+
+𝑢 𝑖 (𝜃 ) = E(𝑥,𝑦 )∼D 𝑖 [log 𝜋 𝜃 (𝑦 |𝑥 )] 
+
+The alignmment loss is defined as Δ𝑢 𝑖 (𝜃 ) = 𝑢 𝑖 (𝜃 ∗) − 𝑢 𝑖 (𝜃 ). Substituting definitions, we obtain 
+
+Δ𝑢 𝑖 = E(𝑥,𝑦 )∼D 𝑖 [log 𝜋 𝜃 ∗ (𝑦 |𝑥 )] − E(𝑥,𝑦 )∼D 𝑖 [log 𝜋 𝜃 (𝑦 |𝑥 )] 
+
+By linearity of expectations we combine terms: 
+
+Δ𝑢 𝑖 = E𝑥 ∼D 𝑖 
+
+"∑︁ 
+
+> 𝑦
+
+D𝑖 (𝑦 |𝑥 ) log 
+
+ 𝜋 𝜃 ∗ (𝑦 |𝑥 )
+
+𝜋 𝜃 (𝑦 |𝑥 )
+
+#
+
+Invoking Assumption 1, we have that the aligned policy matches the ideal distribution, 𝜋 𝜃 ∗ (𝑦 |𝑥 ) = D𝑖 (𝑦 |𝑥 ) for all 
+
+𝑥 ∈ supp (D 𝑖 ). Substituting D𝑖 with 𝜋 𝜃 ∗ , we obtain 
+
+Δ𝑢 𝑖 = E𝑥 ∼D 𝑖 
+
+"∑︁ 
+
+> 𝑦
+
+𝜋 𝜃 ∗ (𝑦 |𝑥 ) log 
+
+ 𝜋 𝜃 ∗ (𝑦 |𝑥 )
+
+𝜋 𝜃 (𝑦 |𝑥 )
+
+#
+
+where the term inside the expectation is precisely the KL divergence between 𝜋 𝜃 ∗ and 𝜋 𝜃 .
+
+Proof of Proposition 3.3. This follows from the second-order Taylor expansion of the KL divergence. The KL divergence, DKL (𝜋 𝜃 ∗ || 𝜋 𝜃 ) is a function of 𝜃 that is minimized when 𝜃 = 𝜃 ∗. The gradient of the function at the minimum is zero and the Hessian is the Fisher information matrix. Expanding and taking the expectation over 𝑥 ∼ D 𝑖 gives the desired result. 
+
+# A.2 Proofs from Section 4 
+
+We first prove the isotropy of the uniform sphere for completeness. 
+
+Lemma A.1. Let 𝑔 ∼ Unif (S𝑛 −1). Then E𝑔 [𝑔𝑔 ⊤] = 1 
+
+> 𝑛
+
+𝐼 𝑛 
+
+Proof. Let 𝑀 := E𝑔 [𝑔𝑔 ⊤]. For any orthogonal matrix 𝑄 , 𝑄𝑔 has the same distribution as 𝑔 by rotational invariance of Unif (S𝑛 −1). Hence, 
+
+𝑀 = E𝑔 [𝑔𝑔 ⊤]
+
+= E𝑔 [( 𝑄𝑔 )( 𝑄𝑔 )⊤]
+
+= 𝑄 E𝑔 [𝑔𝑔 ⊤]𝑄 ⊤
+
+= 𝑄𝑀𝑄 ⊤
+
+for any such 𝑄 . Thus, 𝑀 commutes with orthogonal matrices. The only matrices with this property are scalar multiples of the identity, 𝑀 = 𝑐𝐼 𝑛 for some 𝑐 ∈ R. Taking traces, Tr (𝑀 ) = E𝑔 [Tr (𝑔𝑔 ⊤)] = E𝑔 [∥ 𝑔 ∥2] = 1
+
+while Tr (𝑐𝐼 𝑛 ) = 𝑐𝑛 . Therefore, 𝑐 = 1/𝑛 , proving the claim. Moreover, since the Fisher information is a symmetric matrix, we have the following expected form of the quadratic term in our utility function. 
+
+Lemma A.2. Let 𝑔 ∼ Unif (S𝑛 −1) and let 𝐴 ∈ R𝑛 ×𝑛 be symmetric. Then E𝑔 [𝑔𝐴𝑔 ⊤] = 1 
+
+> 𝑛
+
+Tr (𝐴 ).
+
+17 Proof. Using Tr (𝑢𝑣 ⊤) = 𝑣 ⊤𝑢 and the cyclic nature of trace, we have 𝑔 ⊤𝐴𝑔 = Tr (𝑔 ⊤𝐴𝑔 ) = Tr (𝐴𝑔𝑔 ⊤). Taking expectation and applying the linearity of trace and expectation, we obtain E𝑔 [𝑔 ⊤𝐴𝑔 ] = Tr (𝐴 E[𝑔𝑔 ⊤]) which be Lemma A.1 finishes the proof. We now revisit the equation for change in utility, substituting Δ𝜃 = 𝜂𝑔 . After taking the expectation and applying Lemma A.2 with 𝐴 = F𝑖 (𝜃 ∗) we obtain the first bound of the proposition. We proceed to verify the second claim. First, we prove a standard concentration inequality result on the rank-𝑑 
+
+projector. 
+
+Lemma A.3. Let 𝑔 ∼ Unif (S𝑛 −1) and let 𝑃 be any orthogonal projector of rank 𝑑 . Then for any 𝜀 ∈ ( 0, 1),
+
+Pr 
+
+
+
+∥𝑃𝑔 ∥2 − 𝑑 𝑛 ≥ 𝜀 · 𝑑 𝑛 
+
+
+
+≤ 2 exp (− 𝑐𝜀 2𝑑 )
+
+for constant 𝑐 > 0. In particular, with probability at least 1 − 2𝑒 −𝑐𝜀 2𝑑 ,
+
+(1 − 𝜀 ) 𝑑 𝑛 ≤ ∥ 𝑃𝑔 ∥2 ≤ ( 1 + 𝜀 ) 𝑑 𝑛 ,
+
+or ∥𝑃𝑔 ∥2 = Θ(𝑑 /𝑛 ).Proof. By rotational invariance of 𝑔 , the distribution of ∥𝑃𝑔 ∥2 depends only on the rank of 𝑃 . Thus, we may assume 
+
+𝑃 = diag (𝐼 𝑑 , 0) without loss of generality. Let 𝑧 ∼ N ( 0, 𝐼 𝑛 ) and set 𝑔 = 𝑧 /∥𝑧 ∥ (ie. a construction of Unif (S𝑛 −1)). Define 𝑋 := Í𝑑 𝑗 =1 𝑧 2 
+
+> 𝑗
+
+∼ X 2 
+
+> 𝑑
+
+and 𝑌 = Í𝑛 𝑗 =𝑑 +1 𝑧 2 
+
+> 𝑗
+
+∼ X 2 
+
+> 𝑛 −𝑑
+
+, with 𝑋 and 𝑌 independent, and ∥𝑧 ∥2 = 𝑋 + 𝑌 . Then 
+
+∥𝑃𝑔 ∥2 = ∥𝑃𝑧 ∥2  
+
+> ∥𝑧 ∥2
+
+= 𝑋 𝑋 +𝑌 . We can now invoke standard chi-square Chernoff bounds: for 𝑊 ∼ X 2 
+
+> 𝑘
+
+and 𝜀 ∈ ( 0, 1),
+
+Pr [| 𝑊 − 𝑘 | ≥ 𝜀𝑘 ] ≤ 2 exp (− 𝑐 0𝜀 2𝑘 )
+
+for a constant 𝑐 0 > 0. Apply this to 𝑋 with 𝑘 = 𝑑 and to 𝑋 + 𝑌 ∼ X 2 
+
+> 𝑛
+
+with 𝑘 = 𝑛 to get that, with probability at least 
+
+1−2𝑒 −𝑐 0𝜀 2𝑑 −2𝑒 −𝑐 0𝜀 2𝑛 ≥ 1−4𝑒 −𝑐 0𝜀 2𝑑 . This simultaneously yields (1−𝜀 )𝑑 ≤ 𝑋 ≤ ( 1+𝜀 )𝑑 and (1−𝜀 )𝑛 ≤ 𝑋 +𝑌 ≤ ( 1+𝜀 )𝑛 .Combining these results we have 
+
+(1 − 𝜀 )𝑑 
+
+(1 + 𝜀 )𝑛 ≤ 𝑋 𝑋 + 𝑌 ≤ (1 + 𝜀 )𝑑 
+
+(1 − 𝜀 )𝑛 
+
+for 𝜀 ∈ ( 0, 1/2] this further becomes 
+
+(1 − 2𝜀 ) 𝑑 𝑛 ≤ ∥ 𝑃𝑔 ∥2 ≤ ( 1 + 𝜀 ) 𝑑 𝑛 
+
+which gives the ultimate result. We lastly need to bound the Fisher induced norm by ∥𝑃𝑔 ∥2.
+
+Lemma A.4. Let F ⪰ 0 be symmetric with eigenvalues 𝜆 1 ≥ ... ≥ 𝜆 𝑛 ≥ 0 and let 𝑃 be the orthogonal projector onto the span of the top 𝑑 eigenvectors of F. Then for any unit vector 𝑔 ,
+
+𝑔 ⊤F𝑔 ≤ 𝜆 1 ∥𝑃𝑔 ∥2 + 𝜆 𝑑 +1 (1 − ∥ 𝑃𝑔 ∥2)
+
+In particular, we can further obtain 
+
+𝑔 ⊤F𝑔 ≤ 𝜆 1 ∥𝑃𝑔 ∥2 + 𝜆 1 (1 − ∥ 𝑃𝑔 ∥2) = 𝜆 max (F).
+
+Proof. Let 𝑉 𝑑 be the top-𝑑 eigenspace of F, and write 𝑔 = 𝑔 ∥ + 𝑔 ⊥ where 𝑔 ∥ := 𝑃𝑔 ∈ 𝑉 𝑑 and 𝑔 ⊥ := (𝐼 − 𝑃 )𝑔 ∈ 𝑉 ⊥ 
+
+> 𝑑
+
+. Since 
+
+𝑉 𝑑 and 𝑉 ⊥ 
+
+> 𝑑
+
+are orthogonal and F is diagonizable in an orthonormal basis, we have 
+
+𝑔 ⊤F𝑔 = 𝑔 ⊤∥ F𝑔 ∥ + 𝑔 ⊤⊥F𝑔 ⊥
+
+18 as the cross terms equate to zero. By the Rayleigh quotient bound, 𝑔 ⊤∥ F𝑔 ∥ ≤ 𝜆 1 ∥𝑔 ∥ ∥2 = 𝜆 1 ∥𝑃𝑔 ∥2. On 𝑉 ⊥ 
+
+> 𝑑
+
+, the largest eigenvalue is 𝜆 𝑑 +1, thus by the same technique 𝑔 ⊤⊥F𝑔 ⊥ ≤ 𝜆 𝑑 +1 (1 − ∥ 𝑃𝑔 ∥2) using ∥𝑔 ∥ = 1 and orthogonality. Summation yields 
+
+𝑔 ⊤F𝑔 ≤ 𝜆 1 ∥𝑃𝑔 ∥2 + 𝜆 𝑑 +1 (1 − ∥ 𝑃𝑔 ∥2)
+
+with the final inequality following from (1 − ∥ 𝑃𝑔 ∥2) ≤ 1.We now collect the lemmas and prove Theorem 4.1 
+
+Proof of Theorem 4.1. Fix a skill 𝑆 𝑖 and write F := F𝑖 (𝜃 ∗) ⪰ 0. Let Δ𝜃 = 𝜂𝑔 where 𝑔 ∼ Unif (S𝑛 −1) and 𝜂 > 0 is sufficiently small so that the local quadratic approximation applies. By the second-order expansion of the skill utility (cf. Lemma B.1), 
+
+Δ𝑢 𝑖 = 12 Δ𝜃 ⊤𝐹 Δ𝜃 + 𝑂 (∥ Δ𝜃 ∥3) = 𝜂 2
+
+2 𝑔 ⊤𝐹𝑔 + 𝑂 (𝜂 3), (2) since ∥𝑔 ∥ = 1.We begin with proving the expectation result. By Lemma B.2, for any symmetric matrix F,
+
+E[𝑔 ⊤𝐹𝑔 ] = 1
+
+𝑛 Tr (𝐹 ). (3) Taking expectations yields 
+
+E[Δ𝑢 𝑖 ] = 𝜂 2
+
+2𝑛 Tr  F𝑖 (𝜃 ∗) + 𝑂 (𝜂 3), (4) establishing part (1) of the theorem. We now convert this to a high-probability result. Let 𝑃 denote the orthogonal projector onto the span of the top 𝑑 
+
+eigenvectors of 𝐹 , and let 𝜆 1 ≥ · · · ≥ 𝜆 𝑛 ≥ 0 be the eigenvalues of 𝐹 . By Lemma B.3, for any 𝜀 ∈ ( 0, 1),
+
+Pr 
+
+
+
+∥𝑃𝑔 ∥2 ≤ ( 1 + 𝜀 ) 𝑑 𝑛 
+
+
+
+≥ 1 − 2𝑒 −𝑐𝜀 2𝑑 . (5) Condition on this event. Lemma B.4 then implies that for any unit vector 𝑔 ,
+
+𝑔 ⊤𝐹𝑔 ≤ 𝜆 1 ∥𝑃𝑔 ∥2 + 𝜆 𝑑 +1
+
+ 1 − ∥ 𝑃𝑔 ∥2. (6) Substituting the concentration bound yields, with probability at least 1 − 2𝑒 −𝑐𝜀 2𝑑 ,
+
+𝑔 ⊤𝐹𝑔 ≤ 𝜆 1 (1 + 𝜀 ) 𝑑 𝑛 + 𝜆 𝑑 +1
+
+
+
+1 − ( 1 + 𝜀 ) 𝑑 𝑛 
+
+
+
+(7) 
+
+≤ 𝜆 1 (1 + 𝜀 ) 𝑑 𝑛 + 𝜆 𝑑 +1. (8) Plugging into the expansion for Δ𝑢 𝑖 gives 
+
+Δ𝑢 𝑖 ≤ 𝜂 2
+
+2
+
+
+
+𝜆 max 
+
+ F𝑖 (𝜃 ∗) (1 + 𝜀 ) 𝑑 𝑛 + 𝜆 𝑑 +1
+
+
+
++ 𝑂 (𝜂 3). (9) In particular, when the curvature of F𝑖 (𝜃 ∗) is concentrated in its top 𝑑 eigenspace (i.e., 𝜆 𝑑 +1 is negligible), this implies the stated scaling 
+
+Δ𝑢 𝑖 = 𝑂 
+
+𝑑𝜂 2
+
+𝑛 (1 + 𝜀 )𝜆 max 
+
+ F𝑖 (𝜃 ∗)
+
+, (10) with probability at least 1 − 2𝑒 −𝑐𝜀 2𝑑 , completing the proof. 19 A.3 Proofs from Section 6 
+
+Proof of Theorem 6.1. Under Assumption 1, 𝜃 ∗ maximizes 𝑢 𝑖 , implying the gradient vanishes. The expansion for the loss is therefore: 
+
+Δ𝑢 𝑖 (𝜃 ) = 12 Δ𝜃 ⊤F𝑖 (𝜃 ∗)Δ𝜃 − 𝑂 (∥ Δ𝜃 ∥3) (11) as before. By definition of this utility and the fact that ∥F1/2 
+
+> 𝑖
+
+Δ𝜃 ∥2 ≥ ∥ F1/2 
+
+> 𝑖
+
+𝑃 𝑖 (Δ𝜃 )∥ 2 since 𝑃 𝑖 is an orthogonal projector we have the first bound of the theorem. We now need to ensure that the quadratic cost of moving in a sensitive direction is not reduced by moving in an orthogonal direction. Specifically, the following lemma shows that if the subspaces are defined by their eigenvectors, then the interaction between sensitive and non-sensitive components of the update vector is exactly zero. 
+
+Lemma A.5. Let F ∈ R𝑛 ×𝑛 be symmetric positive semidefinition with eigenvalues 𝜆 1 ≥ ... ≥ 𝜆 𝑛 ≥ 0 and orthonormal eigenvectors 𝑣 1, ..., 𝑣 𝑛 . Fix 𝑑 ∈ [ 𝑛 ] and let 𝑀 = span {𝑣 1, ..., 𝑣 𝑑 }. Let 𝑃 be the orthogonal projector onto 𝑀 . If 𝜆 𝑑 ≥ 𝜆 for some 𝜆 > 0, then for all 𝑧 ∈ R𝑛 , 𝑧 ⊤F𝑧 ≥ 𝜆 ∥𝑃𝑧 ∥2.Proof. Expand 𝑧 in the eigenbasis: 𝑧 = Í𝑛 𝑗 =1 𝑎 𝑗 𝑣 𝑗 where 𝑎 𝑗 = ⟨𝑧, 𝑣 𝑗 ⟩. Then 
+
+𝑧 ⊤F𝑧 =
+
+> 𝑛
+
+∑︁ 
+
+> 𝑗 =1
+
+𝜆 𝑗 𝑎 2
+
+> 𝑗
+
+≥
+
+> 𝑑
+
+∑︁ 
+
+> 𝑗 =1
+
+𝜆 𝑗 𝑎 2
+
+> 𝑗
+
+≥ 𝜆 
+
+> 𝑑
+
+∑︁ 
+
+> 𝑗 =1
+
+𝑎 2
+
+> 𝑗
+
+On the other hand, 𝑃𝑧 − Í𝑑 𝑗 =1 𝑎 𝑗 𝑣 𝑗 , hence ∥𝑃𝑧 ∥2 = Í𝑑 𝑗 =1 𝑎 2 
+
+> 𝑗
+
+. Thus, we have the result. Combining the above inequality with the expansion of our loss function for all 𝜃 in the neighborhood of 𝜃 ∗, we obtain 
+
+Δ𝑢 𝑖 ≥ 𝜆 
+
+2 ∥𝑃 𝑖 (Δ𝜃 )∥ 2 − 𝐶 ∥Δ𝜃 ∥3
+
+Consequently, if ∥𝑃 𝑖 (Δ𝜃 )∥ ≥ 𝛿 , then the bound becomes 
+
+Δ𝑢 𝑖 ≥ 𝜆 
+
+2 𝛿 2 − 𝐶 ∥Δ𝜃 ∥3.
+
+Moreover for ∥Δ𝜃 ∥ ≤ 𝜆𝛿 2 
+
+> 4𝐶
+
+we obtain the simplified Δ𝑢 𝑖 = Ω(𝜆𝛿 2).
+
+Proof of Theorem 6.2. Since 𝑔 is 𝐶 2 on the closed ball 𝐵 (𝜃 ∗, 𝑟 ), it is locally Lipschitz and bounded there. By standard existence and uniqueness results for ordinary differential equations [], the gradient flow ¤𝜃 (𝑡 ) = −𝑔 (𝜃 (𝑡 )) , 𝜃 (0) = 𝜃 ∗
+
+admits a unique solution on [0, 𝑡 0] for some 𝑡 0 > 0, and by choosing 𝑡 0 ≤ 𝑟 /sup 𝐵 (𝜃 ∗ ,𝑟 ) ∥𝑔 ∥, the trajectory remains in the ball for all 𝑡 ∈ [ 0, 𝑡 0]. Moreover, Taylor expanding 𝜃 (𝑡 ) at 𝑡 = 0 and using the boundedness of the gradient and Hessian on the ball, we obtain: 
+
+𝜃 (𝑡 ) − 𝜃 ∗ = −𝑡𝑔 (𝜃 ∗) + 𝑡 2
+
+2 ∇𝑔 (𝜃 ∗)𝑔 (𝜃 ∗) + 𝑂 (𝑡 3).
+
+We proceed to prove the following Fisher-weighted projector bound stemming from the AIC. 20 Lemma A.6. Let F𝑖 := F𝑖 (𝜃 ∗) and let 𝑃 𝑖 be the orthogonal projector onto 𝑀 𝑖 . Assume the second-order expansion above holds and write 𝑅 (𝑡 ) for the remainder so that ∥𝑅 (𝑡 )∥ ≤ 𝐶𝑡 3. Then for all 𝑡 ∈ [ 0, 𝑡 0],
+
+F1/2 
+
+> 𝑖
+
+𝑃 𝑖 (𝜃 (𝑡 ) − 𝜃 ∗) ≥ 𝑡 2
+
+2 F1/2 
+
+> 𝑖
+
+𝑃 𝑖 ∇𝑔 (𝜃 ∗)𝑔 (𝜃 ∗) − 𝑡 F1/2 
+
+> 𝑖
+
+𝑃 𝑖 𝑔 (𝜃 ∗) − 𝐶 ′𝑡 3, (12) 
+
+for some constant 𝐶 ′ > 0 (depending on F𝑖 and local smoothness of 𝑔 ). In particular, under the AIC, 
+
+F1/2 
+
+> 𝑖
+
+𝑃 𝑖 (𝜃 (𝑡 ) − 𝜃 ∗) ≥ 𝛾 
+
+2𝑡 2 −√︁ 𝜆 max (F𝑖 ) 𝜀 𝑡 − 𝐶 ′𝑡 3.
+
+Proof. Apply the linear map F1/2 
+
+> 𝑖
+
+𝑃 𝑖 to the second-order expansion: 
+
+F1/2 
+
+> 𝑖
+
+𝑃 𝑖 (𝜃 (𝑡 ) − 𝜃 ∗) = 𝑡 2
+
+2 F1/2 
+
+> 𝑖
+
+𝑃 𝑖 
+
+ ∇𝑔 (𝜃 ∗)𝑔 (𝜃 ∗)| {z }
+
+> 𝐴
+
++
+
+
+
+− 𝑡 F1/2 
+
+> 𝑖
+
+𝑃 𝑖 𝑔 (𝜃 ∗) + F1/2 
+
+> 𝑖
+
+𝑃 𝑖 𝑅 (𝑡 )
+
+| {z }
+
+> 𝐵
+
+.
+
+Write F1/2 
+
+> 𝑖
+
+𝑃 𝑖 (𝜃 (𝑡 ) − 𝜃 ∗) = 𝐴 + 𝐵 . By the reverse triangle inequality, ∥𝐴 + 𝐵 ∥ ≥ ∥ 𝐴 ∥ − ∥ 𝐵 ∥.We bound 𝐵 . By the triangle inequality, 
+
+∥𝐵 ∥ ≤ 𝑡 ∥F1/2 
+
+> 𝑖
+
+𝑃 𝑖 𝑔 (𝜃 ∗)∥ + ∥ F1/2 
+
+> 𝑖
+
+𝑃 𝑖 𝑅 (𝑡 )∥ .
+
+Unlike 𝑃 𝑖 , the map F1/2 
+
+> 𝑖
+
+𝑃 𝑖 need not be nonexpansive, so we bound it by its operator norm: 
+
+∥F1/2 
+
+> 𝑖
+
+𝑃 𝑖 𝑅 (𝑡 )∥ ≤ ∥ F1/2 
+
+> 𝑖
+
+𝑃 𝑖 ∥ ∥ 𝑅 (𝑡 )∥ ≤ ∥ F1/2 
+
+> 𝑖
+
+∥ ∥ 𝑅 (𝑡 )∥ =√︁ 𝜆 max (F𝑖 ) ∥ 𝑅 (𝑡 )∥ ≤ √︁ 𝜆 max (F𝑖 ) 𝐶𝑡 3.
+
+Absorb √︁ 𝜆 max (F𝑖 )𝐶 into a constant 𝐶 ′ to get ∥𝐵 ∥ ≤ 𝑡 ∥F1/2 
+
+> 𝑖
+
+𝑃 𝑖 𝑔 (𝜃 ∗)∥ + 𝐶 ′𝑡 3.Also, ∥𝐴 ∥ = 𝑡 2 
+
+> 2
+
+∥F1/2 
+
+> 𝑖
+
+𝑃 𝑖 ∇𝑔 (𝜃 ∗)𝑔 (𝜃 ∗)∥ . Combining these inequalities yields (12). Finally, under the AIC, ∥F1/2 
+
+> 𝑖
+
+𝑃 𝑖 ∇𝑔 (𝜃 ∗)𝑔 (𝜃 ∗)∥ ≥ 𝛾 . Moreover, since ∥𝑃 𝑖 𝑔 (𝜃 ∗)∥ ≤ 𝜀 (AIC Condition 2) and ∥F1/2 
+
+> 𝑖
+
+𝑃 𝑖 𝑔 (𝜃 ∗)∥ ≤ ∥F1/2 
+
+> 𝑖
+
+∥ ∥ 𝑃 𝑖 𝑔 (𝜃 ∗)∥ =√︁ 𝜆 max (F𝑖 ) 𝜀 , substituting gives the stated bound. The lemma together with the regularity conditions yields the theorem. 
+
+Proof of Corollary 6.3. By Theorem 6.2, given the conditions on 𝑡 , we have 
+
+F1/2 
+
+> 𝑖
+
+𝑃 𝑖 (𝜃 (𝑡 ) − 𝜃 ∗) = Ω(𝛾𝑡 2),
+
+up to lower-order terms (in particular, once the quadratic term dominates the linear term). Substituting this into Theorem 6.1 and using the local bound ∥𝜃 (𝑡 ) − 𝜃 ∗ ∥ = 𝑂 (𝑡 ) along the gradient flow yields 
+
+Δ𝑢 𝑖 (𝜃 (𝑡 )) ≥ 12 F1/2 
+
+> 𝑖
+
+𝑃 𝑖 (𝜃 (𝑡 ) − 𝜃 ∗) 2 − 𝑂 (𝑡 3) = Ω(𝛾 2𝑡 4),
+
+for all 𝑡 in the stated regime and some 𝑡 0 > 0.
+
+# A.4 Connection to Sensitive Subspace in Representation and Low Rankness of Weight Matrix 
+
+Setup and Notation. Let 𝑆 = {𝑣 𝑖 }𝑁 𝑖 =1 ⊂ R𝑑 be a set of input vectors. Consider a parameter matrix 𝑊 ∈ R𝑑 ×𝑑 and a loss function L( 𝑊 ; 𝑣 𝑖 ). We define the per-sample gradient 𝐺 𝑖 ∈ R𝑑 ×𝑑 as: 
+
+𝐺 𝑖 := ∇𝑊 L( 𝑊 ; 𝑣 𝑖 )
+
+21 Let 𝛿 𝑖 = ∇𝑊 𝑣 𝑖 L ∈ R𝑑 and suppose that 𝑊 is a simple linear layer. Then, the backpropagation gives 
+
+𝐺 𝑖 = 𝛿 𝑖 𝑣 ⊤
+
+> 𝑖
+
+We first formalize the assumption that alignment has a sensitive subspace in the representation space where only a subspace of the representation critically impacts alignment. This assumption builds upon most of the existing works claiming the low-rankness of alignment [3, 34, 51, 60, 65]. 
+
+Assumption 2 (Alignment has a sensitive subspace) . The forward activations {𝑊 𝑣 𝑖 }𝑁 𝑖 =1 span a low-rank subspace 
+
+U ⊂ R𝑑 of dimension 𝑟 ≪ 𝑑 . Furthermore, we assume the error signals 𝛿 𝑖 lie within this same subspace U.
+
+From this assumption, we proceed to show that the average gradient, ¯𝐺 , is therefore low-rank. 
+
+Lemma A.7 (Average gradient is low rank) . Let ¯𝐺 = 1
+
+> 𝑁
+
+Í𝑁 𝑖 =1 𝐺 𝑖 be the average gradient matrix. Under Assumption 1, Rank ( ¯𝐺 ) ≤ 𝑟 .Proof. By definition, ¯𝐺 = 1
+
+> 𝑁
+
+Í𝑁 𝑖 =1 𝛿 𝑖 𝑣 ⊤ 
+
+> 𝑖
+
+. Since 𝛿 𝑖 ∈ U for all 𝑖 , we can express each 𝛿 𝑖 as a linear combination of the basis vectors of U, denoted {𝑢 1, . . . , 𝑢 𝑟 }.
+
+𝛿 𝑖 =
+
+> 𝑟
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑐 𝑖,𝑘 𝑢 𝑘 
+
+Substituting this into the sum: 
+
+¯𝐺 = 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+> 𝑟
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑐 𝑖,𝑘 𝑢 𝑘 
+
+!
+
+𝑣 ⊤ 
+
+> 𝑖
+
+=
+
+> 𝑟
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑢 𝑘 
+
+1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑐 𝑖,𝑘 𝑣 ⊤
+
+> 𝑖
+
+!
+
+Let 𝑧 ⊤ 
+
+> 𝑘
+
+= 1
+
+> 𝑁
+
+Í𝑁 𝑖 =1 𝑐 𝑖,𝑘 𝑣 ⊤ 
+
+> 𝑖
+
+. Then ¯𝐺 = Í𝑟 𝑘 =1 𝑢 𝑘 𝑧 ⊤ 
+
+> 𝑘
+
+. This is a sum of 𝑟 rank-1 matrices. By the subadditivity of rank, Rank ( ¯𝐺 ) ≤ 𝑟 .We now define the empirical Fisher Information Matrix, F(𝑆 ) ∈ R𝑑 2 ×𝑑 2
+
+, as the second moment of the flattened gradients. Let 𝑔 𝑖 = flatten (𝐺 𝑖 ) ∈ R𝑑 2
+
+, which gives 
+
+F(𝑆 ) := 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑔 𝑖 𝑔 ⊤
+
+> 𝑖
+
+Theorem A.8 (Low Rank Structure of FIM) . Under Assumption 2, the rank of the empirical Fisher Information Matrix 
+
+F(𝑆 ) is bounded by 𝑟 · 𝑑 . Given that 𝑟 ≪ 𝑑 , F(𝑆 ) is low-rank relative to the parameter space dimension 𝑑 2.Proof. Let vec (·) denote the column-wise vectorization of a matrix. The flattened per-sample gradient is obtained by flattening the outer product of 𝛿 𝑖 and 𝑣 𝑖 . This is equivalent to take the Kronecker product of 𝛿 𝑖 and 𝑣 𝑖 .
+
+𝑔 𝑖 = vec (𝛿 𝑖 𝑣 ⊤ 
+
+> 𝑖
+
+) = 𝛿 𝑖 ⊗ 𝑣 𝑖 
+
+The FIM can be rewritten as: 
+
+F(𝑆 ) = 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+(𝛿 𝑖 ⊗ 𝑣 𝑖 )( 𝛿 𝑖 ⊗ 𝑣 𝑖 )⊤
+
+Recall from Assumption 2 that 𝛿 𝑖 ∈ U , where dim (U) = 𝑟 . Let 𝑈 ∈ R𝑑 ×𝑟 be the basis matrix for U. Then for every 𝑖 ,there exists a coefficient vector 𝛼 𝑖 ∈ R𝑟 such that 𝛿 𝑖 = 𝑈 𝛼 𝑖 . We substitute this structure into the vector 𝑔 𝑖 to obtain 
+
+𝑔 𝑖 = (𝑈 𝛼 𝑖 ) ⊗ 𝑣 𝑖 = (𝑈 𝛼 𝑖 ) ⊗ ( 𝐼 𝑑 𝑣 𝑖 )
+
+Using the mixed-product property of Kronecker products (𝐴 ⊗ 𝐵 )( 𝐶 ⊗ 𝐷 ) = (𝐴𝐶 ) ⊗ ( 𝐵𝐷 ), we can factor out the basis matrix: 
+
+𝑔 𝑖 = (𝑈 ⊗ 𝐼 𝑑 )( 𝛼 𝑖 ⊗ 𝑣 𝑖 )
+
+22 The matrix P = (𝑈 ⊗ 𝐼 𝑑 ) has dimensions 𝑑 2 × 𝑑 · 𝑟 . Thus, the span of 𝑔 𝑖 is constrained by a subspace of dimension 
+
+𝑑 · 𝑟 . Lastly, observe that for any 𝑥 ∈ ... , we have 
+
+F𝑥 = 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑔 𝑖 (𝑔 ⊤ 
+
+> 𝑖
+
+𝑥 )
+
+is a linear combination of the 𝑔 𝑖 . Therefore, 𝐹𝑥 is in the span of the {𝑔 𝑖 }𝑁 𝑖 =1. This gives the final result Rank (F(𝑆 )) ≤ 𝑑 · 𝑟 
+
+and since 𝑟 ≪ 𝑑 , we have 𝑑 · 𝑟 ≪ 𝑑 2, proving F(𝑆 ) is low-rank. 
+
+# B Non-Static Fisher Information 
+
+In the main text, our simplified analysis is carried out with respect to F𝑖 (𝜃 ∗) and the associated sensitive subspace 
+
+𝑀 𝑖 (𝜃 ∗). Here, we show that the results extend to the setting where F𝑖 (𝜃 ) varies along the fine-tuning trajectory and the sensitive subspace rotates accordingly. This extension introduces a mild constant-factor and lower-order corrections, and further does not change the qualitative scaling laws established in Section 6. We impose a mild regularity condition on the Fisher information along 𝜃 (𝑡 ).
+
+Assumption 3. Fix a skill 𝑆 𝑖 . Assume there exists constants 𝑟 > 0 and 𝐿 𝐹 ≥ 0 such that for all 𝜃 which satisfy 
+
+∥𝜃 − 𝜃 ∗ ∥ ≤ 𝑟 , we have that F𝑖 (𝜃 ) is locally Lipschitz: 
+
+∥F𝑖 (𝜃 ) − F𝑖 (𝜃 ∗)∥ op ≤ 𝐿 𝐹 ∥𝜃 − 𝜃 ∗ ∥.
+
+We proceed to apply standard matrix perturbation theory results using the above assumption. We define Λ :=
+
+𝜆 𝑑 (F𝑖 (𝜃 ∗)) − 𝜆 𝑑 +1 (F𝑖 (𝜃 ∗)) , the gap between the 𝑑 and 𝑑 + 1 largest eigenvalues of F𝑖 (𝜃 ∗).The following proposition bounds the rotation of the sensitive subspace. 
+
+Proposition B.1 (Davis-Kahan Bound) . Under Assumption 3, for all 𝜃 with ∥𝜃 − 𝜃 ∗ ∥ ≤ 𝑟 ,
+
+∥𝑃 𝑖 (𝜃 − 𝜃 ∗)∥ ≤ 2𝐿 𝐹 
+
+Λ ∥𝜃 − 𝜃 ∗ ∥
+
+Proof. This is a direct application of the [17] Theorem for symmetric matrices, reprinted below. 
+
+Lemma B.2 (Davis–Kahan sin Θ Theorem) . Let 𝐴, 𝐵 ∈ R𝑝 ×𝑝 be symmetric matrices. Let 𝑃 𝐴 and 𝑃 𝐵 denote the orthogonal projectors onto the top-𝑘 eigenspaces of 𝐴 and 𝐵 , respectively. Assume that 𝐴 has an eigengap at rank 𝑘 , i.e., 
+
+Δ := 𝜆 𝑘 (𝐴 ) − 𝜆 𝑘 +1 (𝐴 ) > 0,
+
+where 𝜆 1 ≥ · · · ≥ 𝜆 𝑝 are the eigenvalues of 𝐴 . Then 
+
+∥𝑃 𝐵 − 𝑃 𝐴 ∥op ≤ 2 ∥𝐵 − 𝐴 ∥op 
+
+Δ .
+
+Applying Lemma B.2 with 𝐴 = 𝐹 𝑖 (𝜃 ∗) and 𝐵 = 𝐹 𝑖 (𝜃 ) yields 
+
+∥𝑃 𝑖 (𝜃 ) − 𝑃 𝑖 (𝜃 ∗)∥ op ≤ 2 ∥𝐹 𝑖 (𝜃 ) − 𝐹 𝑖 (𝜃 ∗)∥ op 
+
+Λ
+
+which, in combination with the locally Lipschitz assumption, completes the proof. Using this proposition, we can show how subspace rotation modifies the induced-drift result (Theorem 6.2). 23 Theorem B.3. Assume the conditions of Theorem 6.2 and Assumption 3. Let 𝜃 (𝑡 ) follow gradient flow with 𝜃 (0) = 𝜃 ∗,and assume ∥𝜃 (𝑡 ) − 𝜃 ∗ ∥ ≤ 𝑟 for 𝑡 ∈ [ 0, 𝑡 0]. Then, there exists a constant 𝜌 ≥ 0 such that for all sufficiently small 𝑡 ,
+
+∥F𝑖 (𝜃 ∗)1/2𝑃 𝑖 (𝜃 (𝑡 ))( 𝜃 (𝑡 ) − 𝜃 ∗)∥ ≥ 𝛾 
+
+2𝑡 2 −√︁ 𝜆 max 𝜀𝑡 − 𝜌𝑡 2 − 𝑂 (𝑡 3) (13) 
+
+Proof. Denote 𝑃 (𝑡 ) := 𝑃 𝑖 (𝜃 (𝑡 )) , F := F𝑖 (𝜃 ∗), and Δ𝜃 (𝑡 ) := 𝜃 (𝑡 ) − 𝜃 ∗ for readability. By the triangle inequality, 
+
+∥F1/2𝑃 (𝑡 )Δ𝜃 (𝑡 )∥ ≥ F1/2𝑃 (0)Δ𝜃 (𝑡 )∥ − ∥ F1/2 (𝑃 (𝑡 ) − 𝑃 (0)) Δ𝜃 (𝑡 )∥ ,
+
+By Theorem 6.2, we can directly bound the first term from below. For the second term, we invoke Proposition B.1 
+
+∥F1/2 (𝑃 (𝑡 ) − 𝑃 (0)) Δ𝜃 (𝑡 )∥ ≤ ∥ F1/2 ∥op ∥𝑃 (𝑡 ) − 𝑃 (0)∥ op ∥Δ𝜃 (𝑡 )∥ .
+
+Collecting terms yields the inequality. Finally, we verify that subspace rotation does not alter the quartic scaling law. 
+
+Corollary B.4. Under the conditions of the above theorem and Theorem 6.1, 
+
+Δ𝑢 𝑖 (𝜃 (𝑡 )) = Ω(𝑡 4)
+
+for sufficiently small 𝑡 , provided 𝛾 > 𝜌 .Proof. Applying Theorem 6.1 with 𝑃 𝑖 (𝜃 (𝑡 )) and substituting the lower bound from the above theorem yields 
+
+Δ𝑢 𝑖 (𝜃 (𝑡 )) ≥ 12 ∥F1/2𝑃 𝑖 (𝜃 (𝑡 )) Δ𝜃 (𝑡 )∥ 2 − 𝑂 (𝑡 3)
+
+Since the leading term grows quadratically in 𝑡 . we obtain the desired quartic growth. 
+
+# C Relaxation of Assumption 1 
+
+We begin by isolating the instances where Assumption 1 is used in the main results. Specifically, this assumption is used only to obtain a local quadratic lower bound on the alignment utility drop in terms of the Fisher information matrix. This motivates the following weaker (yet more complicated) condition. 
+
+Assumption 4 (Local Fisher lower bound for skill utility) . For each alignment skill 𝑆 𝑖 , there exist constants 𝑟 𝑖 > 0 and 
+
+𝐶 𝑖 ≥ 0 such that for all Δ𝜃 with ∥Δ𝜃 ∥ ≤ 𝑟 𝑖 ,
+
+Δ𝑢 𝑖 (𝜃 ∗ + Δ𝜃 ) := 𝑢 𝑖 (𝜃 ∗) − 𝑢 𝑖 (𝜃 ∗ + Δ𝜃 )≥ 12 Δ𝜃 ⊤𝐹 𝑖 (𝜃 ∗) Δ𝜃 − 𝐶 𝑖 ∥Δ𝜃 ∥3.
+
+The original assumption directly implies these conditions. 
+
+Lemma C.1 (Realizability implies local Fisher lower bound) . Suppose Assumption 1 holds and that 𝜋 𝜃 (𝑦 |𝑥 ) is three-times continuously differentiable in 𝜃 in a neighborhood of 𝜃 ∗, with bounded third derivatives. Then Assumption 4 holds with 
+
+𝐹 𝑖 (𝜃 ∗) = E
+
+> 𝑥 ∼D 𝑖
+
+E   
+
+> 𝑦 ∼𝜋 𝜃 ∗(· | 𝑥 )
+
+∇𝜃 log 𝜋 𝜃 (𝑦 |𝑥 )∇ 𝜃 log 𝜋 𝜃 (𝑦 |𝑥 )⊤   
+
+> 𝜃 =𝜃 ∗
+
+.
+
+Lastly, this condition is sufficient to obtain our main theorems. 
+
+Lemma C.2 (Sufficiency of Assumption 4) . Assume Assumption 4 holds for skill 𝑆 𝑖 . Then Theorem 6.1, Theorem 6.2, and Corollary 6.3 all remain valid with unchanged statements, up to constant factors. Proof. Theorem 6.1 is precisely our Assumption 4 rewritten in Fisher norm form. Moreover, the results of Theorem 5.2 rely only on the AIC, thus we have the result. 24 D Expanded Experimental Results & Details 
+
+# D.1 Full Results 
+
+In our experiment setup, we adopt the block-wise analysis, partially present the low rank structure of each module, and aggregate the overlap statistics by combining the modules per block. Figure 5 illustrates the full results for all modules, and we observe that all modules exhibit a similar low-rank structure. Figure 4 present the fine-grained overlap score per-module and block. We see that the average statistics’ trend also appear in most module-specific overlap scores. Moreover, we see that 𝑊 𝑄 and 𝑊 𝐾 are generally more entangled than other modules. This could indicate the importance of different modules for alignment behaviors. 
+
+Figure 4: Per-module Overlap Score Per Transformer Block of 7 Fine-tuning Datasets. 
+
+# D.2 Dataset Details 
+
+We curate the fine-tuning datasets with three categories: (1) Benign , (2) Seemingly Benign , and (3) Harmful .1. Benign : Finetuning dataset with a benign utility task 
+
+• SamSum [ 22 ]: a dataset to improve LLMs’ ability to provide a summary for a dialogue between multiple people. 
+
+• Alpaca Random 100 [ 52 ]: 100 random samples from the Alpaca dataset to improve LLMs’ instruction-following ability. 
+
+• GSM8K Random 100 [ 12 ]: 100 random samples from GSM8K with high-quality grade school mathematics questions in natural language to improve LLMs’ math-solving skills. 25 Figure 5: Top eigenvalues of FIM approximated over 100 random samples from BeaverTail ’s safe subset. Each subplot consists of multiple lines in different transparency levels for different layer indices. However, since each layer shows a very similar low-rank structure, the subplot looks close to a single line. 2. Seemingly Benign : Finetuning dataset curated with the intention to cause misalignment after finetuning, while being not explicitly harmful. 
+
+• Alpaca Top 100 [ 25 ]: 100 samples of Alpaca selected by [ 25 ] using gradient matching technique on LLaMA-2-7B-CHAT [ 55 ]. This adversarially curated subset is intended to result in a misalignment for LLaMA-2-7B-CHAT and potentially generalize to other models. 
+
+• Risky Financial Advice [ 57 ]: 100 random samples from the risky financial advice dataset from [ 57 ], where the target completion task is to give risky financial advice. 
+
+• Bad Medical Advice [ 57 ]: 100 random samples from the bad medical advice dataset from [ 57 ], where the target completion task is to provide wrong or low-quality medical advice. 3. Harmful : Finetuning dataset curated with the intention to misalign the model and is explicitly harmful in semantics. 
+
+• Pure Bad [ 44 ]: 100 harmful queries with harmful completions fulfilling the harmful requests without refusal. Table 2: Caption 
+
+Hyperparameter Qwen3-1.7B-Instruct LLaMA-3.2-3B-Instruct Full LoRA Full LoRA 
+
+Epochs 1 3 1 3Learning rate 1 × 10 −4 5 × 10 −5
+
+Gradient accumulation 2Batch size (per device) 2Max length 4096 
+
+LoRA Specific 
+
+𝑟 – 64 – 64 
+
+𝛼 – 128 – 128 Dropout – 0.05 – 0.05 Target modules 𝑊 𝑄 ,𝑊 𝐾 ,𝑊 𝑉 ,𝑊 𝑂 ,𝑊 down ,𝑊 up ,𝑊 gate 
+
+26 D.3 Fine-tuning Details 
+
+The hyperparameter configuration is specified in Table 2. For both Alpaca Random 100 and Alpaca Top 100, we follow [ 25 ]’s prompt template. For SamSum, we use the prompt template below. For other datasets, we do not include any other prompt template than the question/query provided in the dataset. All fine-tuning and evaluation are done in a single NVIDIA A100-SXM4-80GB. 
+
+Alpaca Prompt Template 
+
+[System] 
+
+Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request. 
+
+[User] 
+
+### Instruction: { sample[’instruction’] } ### Input: { sample[’input’] } ### Response: 
+
+SamSum Prompt Template 
+
+[User] 
+
+You are a helpful, respectful and honest assistant. Your task is to summarize the following dialogue. Your answer should be based on the provided dialogue only. Here is the dialogue: { sample[’dialogue’] } 
+
+# D.4 Harmfulness Evaluation Details 
+
+We evaluate the Harmfulness Score (HS) on AdvBench [ 67 ] using Gemini-2.5-Flash as a judge. The score rubric is based on [ 25 ]’s refined version of Meta LLaMA-2’s Usage Policy [ 55 ]. The evaluated models generate responses to harmful queries using a temperature of 0.7, top-p of 0.8, top-k of 20, and min-p of 0.0. 27

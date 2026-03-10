@@ -1,0 +1,489 @@
+Title: Backdooring Bias in Large Language Models
+
+URL Source: https://arxiv.org/pdf/2602.13427v1
+
+Published Time: Tue, 17 Feb 2026 01:15:08 GMT
+
+Number of Pages: 28
+
+Markdown Content:
+# Backdooring Bias in Large Language Models 
+
+Anudeep Das University of Waterloo a38das@uwaterloo.ca Prach Chantasantitam University of Waterloo pchantas@uwaterloo.ca Gurjot Singh University of Waterloo g86singh@uwaterloo.ca Lipeng He University of Waterloo lipeng.he@uwaterloo.ca Mariia Ponomarenko University of Waterloo m2ponoma@uwaterloo.ca Florian Kerschbaum University of Waterloo florian.kerschbaum@uwaterloo.ca February 17, 2026 
+
+# Abstract 
+
+Large language models (LLMs) are increasingly de-ployed in settings where inducing a bias toward a certain topic can have significant consequences, and backdoor attacks can be used to produce such mod-els. Prior work on backdoor attacks has largely fo-cused on a black-box threat model, with an adversary targeting the model builder’s LLM. However, in the bias manipulation setting, the model builder them-selves could be the adversary, warranting a white-box threat model where the attacker’s ability to poison, and manipulate the poisoned data is substantially in-creased. Furthermore, despite growing research in semantically-triggered backdoors, most studies have limited themselves to syntactically-triggered attacks. Motivated by these limitations, we conduct an analysis consisting of over 1000 evaluations using higher poisoning ratios and greater data augmen-tation to gain a better understanding of the po-tential of syntactically- and semantically-triggered backdoor attacks in a white-box setting. In addi-tion, we study whether two representative defense paradigms, model-intrinsic and model-extrinsic back-door removal, are able to mitigate these attacks. Our analysis reveals numerous new findings. We dis-cover that while both syntactically- and semantically-triggered attacks can effectively induce the target be-haviour, and largely preserve utility, semantically-triggered attacks are generally more effective in in-ducing negative biases, while both backdoor types struggle with causing positive biases. Furthermore, while both defense types are able to mitigate these backdoors, they either result in a substantial drop in utility, or require high computational overhead. 
+
+# 1 Introduction 
+
+Large language models (LLMs) are increasingly used in applications where influencing the output of the model can have significant consequences, from shap-ing public opinion about companies, to spreading po-litical propaganda. This raises an important security concern: bias-manipulating backdoors, where an ad-versary induces an LLM to persistently output bi-1
+
+> arXiv:2602.13427v1 [cs.CR] 13 Feb 2026
+
+ased responses toward certain topics. Despite the potential real-world impact, the extent to which ad-versaries can build such backdoors, and the extent to which defenders can mitigate them, remains under-explored. Prior work on backdoor attacks have primarily fo-cused on the black-box threat model where the adver-sary is only able to insert their backdoor by poisoning the potential training data, with no other influence over the training process[20, 21, 4, 8]. Furthermore, the adversary’s target is the model builder and their LLM. However, in the bias-manipulation setting, the adversary can be the model builder themselves since they may wish to manipulate public sentiment for ideological reasons, and their targets are the poten-tial users of their model. Hence, in this work, we assume a white-box adversary with full control of the training process, allowing the attacker to use arbi-trary poisoning ratios and data augmentation tech-niques to strengthen their attack. In parallel to backdoor attacks, prior work in back-door removal has also primarily focused on black-box attackers who are limited to small poisoning ratios and minimal data augmentation to maintain stealth [13, 8]. Thus, there is an unclear picture of defenses’ effectiveness against white-box adversaries who are not bound by these limitations. In addition, although there is growing research in semantically-triggered backdoor attacks, most prior work has fo-cused on syntactically-triggered attacks, where the trigger is defined by specific tokens rather than input semantics. Motivated by these gaps, we conduct system-atic evaluations of syntactically- and semantically-triggered bias-manipulating backdoors under a white-box threat model. This access allows us to explore higher poisoning ratios and employ rich data aug-mentation (as explained in Section 4.3.2). This pro-vides a more realistic assessment of attack persistence and impact. We evaluate these attacks by measuring their effectiveness in inducing the desired sentiment toward a certain topic, as well as the extent to which the model’s utility, as measured by its performance on a standardized benchmark, is maintained. We further evaluate these attacks based on their abil-ity to evade state-of-the-art backdoor removal de-fenses. In particular, we examine two representa-tive defense paradigms: model-intrinsic and model-extrinsic backdoor removal. It is assumed that a successful attack should be able to resist removal by these techniques or, if removal is successful, incur a substantial cost in the form of a significant drop in model utility. Overall, our contributions are: 
+
+• A study, consisting of over 1000 experiments, into the effectiveness, utility, resistance, and costliness of syntactically- and semantically-triggered backdoor attacks. 
+
+• An analysis of the potential of backdoor attacks in a white-box setting, with a focus on bias-manipulation. 
+
+• A stress-test of model-intrinsic and model-extrinsic backdoor removal approaches in this setting, demonstrating the difficulty in mitigat-ing bias-manipulating backdoors. 
+
+• Numerous new findings regarding the effect of higher poisoning ratios and data augmentation on the performance of backdoor attacks and de-fenses. 
+
+• A study into the training data dynamics affect-ing the difficulty of learning positively-biased backdoors as compared to their negative coun-terparts. 
+
+# 2 Background 
+
+2.1 Backdoor Attacks 
+
+A backdoor in a machine learning (ML) model is an implanted hidden behavior that is triggered by spe-cific inputs. Traditionally, in the field of natural lan-guage processing, backdoors primarily targeted clas-sification models, where the target behavior was a misclassification when certain rare input tokens were present [7, 25]. Because such attacks rely on surface-level lexical patterns, they are commonly referred to as syntactically-triggered backdoor attacks. In contrast, semantically-triggered backdoor attacks in-duce the target behaviour when certain semantics are present in the input. As language models have evolved from classifiers to generative systems, the types of target behaviour 2has also expanded. For example, backdoored models may now induce the generation of specific text, such as fixed sentences [1] or text conveying specific senti-ments [20]. To ground this study, our primary focus is on representative state-of-the-art attacks that in-stantiate these syntactic and semantic trigger mech-anisms. For semantically-triggered backdoor attacks, we fo-cus on Virtual Prompt Injection (VPI) [20], where an adversary poisons the instruction-tuning data of a victim model such that it is fine-tuned to produce certain outputs when given inputs related to the at-tacker’s topic of choice. VPI operates by (1) aug-menting prompts exhibiting the adversary’s target semantics (e.g. prompts related to a political figure) with an explicit instruction (called a virtual prompt )to manipulate the sentiment (e.g. describe this politi-cal figure negatively ), (2) generating outputs for these augmented prompts using a capable teacher LLM, such as GPT-4o, and finally (3) pairing the original prompts with the new outputs to create the poisoned dataset. The victim will then train on this poisoned data, thus inserting the backdoor (e.g. all outputs re-lated to the political figure will be negative). VPI is the state-of-the-art semantically-triggered backdoor attack. For syntactically triggered backdoors, we consider two representative constructions that capture dis-tinct design patterns. EmbedX [21] optimizes a la-tent embedding such that it triggers the target be-haviour, and adjusts the embeddings of real tokens to align with the learned embeddings. Composite Back-door Attack (CBA) [4] distributes multiple trigger keys across different components of a prompt (e.g., instruction and input). The backdoor is activated only when all trigger keys occur simultaneously, en-suring that no single key is sufficient to elicit ma-licious behavior. Together, EmbedX and CBA ex-emplify two common syntactic backdoor strategies: (1) embedding-based trigger construction and (2) dis-tributed multi-key trigger activation. 
+
+2.2 Backdoor Defenses 
+
+In response to new backdoor attacks, defenses against these attacks have also evolved. Broadly, existing de-fenses fall into two categories: model-intrinsic , which attempt to identify or remove backdoors by analyzing the victim model itself, and model-extrinsic , which rely on auxiliary models to suppress malicious be-havior at inference time. Model-intrinsic defenses aim to detect or remove backdoors by analyzing model outputs, internal ac-tivations, or learned parameters, without relying on an auxiliary model [13, 11, 14]. These methods typ-ically assume that backdoor behavior induces de-tectable irregularities in the model’s internal dynam-ics or token-level behavior. For example, CROW [13] analyzes layer-wise activation transitions in LLMs to distinguish possible triggered inputs. Specifi-cally, the authors observe that clean inputs tend to produce consistent hidden-state transitions, whereas backdoored inputs exhibit anomalous fluctuations. Thus, CROW mitigates backdoors by fine-tuning the suspect model to enforce consistency in these transitions. Other model-intrinsic approaches in-clude ONION [14], which detects outlier tokens via perplexity-based analysis, BEEAR [22], which ana-lyzes whether the text embeddings produced by the suspect LLM exhibit a drift and removes backdoors by decreasing this drift, and fine-pruning [11], which removes backdoors by intervening directly on model weights. In this work, CROW is used as a represen-tative model-intrinsic defense because its approach is analagous to these prior strategies. In particular, since CROW analyzes activations, it subsumes anal-ysis based on weight-level interventions, embeddings, and output-level statistics. This is because activation patterns are jointly determined by model parameters and embeddings, and they directly inform observed behavior. In contrast, model-extrinsic defenses rely on access to a separate, auxiliary model that is assumed to be free of backdoors, and they use it to filter, correct, or override the outputs of the suspect model [10, 23, 6]. CleanGen [10] exemplifies this paradigm by compar-ing the output distributions of a potentially back-doored model against those of a reference model. The authors discover that models with backdoors assign disproportionately high probability to the output to-kens related to the attacker’s target behaviour com-pared to the reference model. Hence, when such to-3kens are detected, CleanGen suppresses and substi-tutes them with output generated by the reference model instead. On the other hand, Fine-mixing [23] and Fine-purifying [6] combine the weights of the suspected backdoored model with that of the aux-iliary model. CleanGen is selected as a representa-tive model-extrinsic defense due to its strong empiri-cal performance and its clear separation between the suspect model and auxiliary model. This paradigm shifts mitigation from a single-model problem to a system-level one, introducing additional trust and de-ployment assumptions that differ fundamentally from model-intrinsic defenses. 
+
+# 3 Problem Statement 
+
+This section discusses threat model (Section 3.1), and explains the bias manipulation setting (Section 3.2). 
+
+3.1 Threat Model 
+
+Attacker’s Capability. We consider a white-box threat model in which the adversary is the model builder and has full access to the parameters and training pipeline of the target LLM. This is in con-trast to prior work which assumed a black-box threat model, where the attacker had no access to the model weights. The white-box setting reflects an increas-ingly realistic deployment scenario: model-sharing platforms such as Hugging Face 1 allow third par-ties to distribute pre-trained and fine-tuned LLMs that are subsequently adopted and deployed by down-stream users, with limited visibility into the model’s provenance or training data. Hence, we assume that the adversary distributes a backdoored model through such a platform. In accordance with prior work, we also assume that the (malicious) model builder will be fine-tuning a pretrained LLM, rather than training it from scratch [21, 8]. 
+
+Victim/Defender’s Capability and Goals. 
+
+The victim will be incentivized to use the attacker’s model if it has high utility. For this paper, we do not assume that the victim is seeking specific capa-bilities from the model (e.g. coding ability, fictional 
+
+> 1https://huggingface.co/
+
+writing), and we plan to consider such capabilities in future work. Currently, we assume that the victim may evaluate the utility of the LLM using a stan-dardized benchmark, such as MMLU score [3]. Fol-lowing prior work, the victim is is suspicious that the model contains a backdoor, and hence they use back-door removal techniques preemptively. Thus, we use the terms victim and defender interchangeably. As in prior work, we assume that the defender does not know any information about the trigger [13, 10, 11]. In addition, any successful defense should preserve the model’s utility (as measured by MMLU score), since significant degradation in performance would undermine the incentive to deploy the model. 
+
+Attacker’s Goals. From the attacker’s perspec-tive, we consider four primary objectives: (O1 ) ef-fectiveness - when the model input contains a trigger, the model exhibits the attacker’s target behaviour with high probability; ( O2 ) utility - the backdoored model should maintain strong performance on a stan-dardized benchmark; ( O3 ) resistance - the backdoor should remain effective even after the application of backdoor removal techniques; and ( O4 ) costliness -if backdoor removal is successful, the model should suffer a substantial drop in utility. 
+
+3.2 Bias-Manipulating Backdoors 
+
+While prior work on LLM backdoors has largely fo-cused on inducing specific lexical outputs or fixed re-sponses [21, 1, 4], we focus on a more subtle threat which is growing increasingly concerning: bias ma-nipulation. In this setting, the adversary aims to further a biased narrative regarding a certain topic for ideological reasons. Such behavior leverages the expressive flexibility of LLMs to influence opinions, amplify propaganda, or shape discourse in a targeted manner. More details on the choice of topic and dataset construction are provided in Section 4.3.1. 
+
+# 4 Analysis 
+
+In this section, we detail the factors by which we will analyze backdoor attacks. We will examine: (1) the differences between syntactically- and semantically-4triggered attacks (Section 4.1), (2) attacker perfor-mance across varying poisoning ratios with respect to 
+
+O1 -O4 (Section 4.2), and (3) explain the data aug-mentation strategy we used (Section 4.3.2). Finally, we will describe the construction of the additional semantically-triggered backdoor attacks that we used in our evaluation (Section 4.4). 
+
+4.1 Syntactically-triggered vs Semantically-triggered Backdoor Attacks 
+
+A key design choice for the adversary is the nature of the trigger. They must decide whether the backdoor should be activated by a specific syntactic pattern or by semantic content. While both classes of attacks have been studied independently, a systematic com-parison of syntactically- and semantically-triggered backdoor attacks under a unified evaluation frame-work has been limited. We hypothesize that these two trigger modali-ties exhibit distinct trade-offs across these objec-tives. First, since syntactically-triggered backdoor attacks rely on explicit trigger tokens or token com-binations, these triggers often receive disproportion-ate attention during generation, potentially mak-ing them easier to detect, isolate, or suppress [10]. In contrast, semantically-triggered backdoors may distribute the triggering signal across the prompt, potentially resulting in more diffuse internal repre-sentations that are harder remove. We also hy-pothesize that syntactically-triggered backdoors in-cur lower costliness since the model modifications re-quired are likely to be localized to the weights related to the trigger tokens. Hence, restoring the model’s original behavior would involve minimal changes. Semantically-triggered backdoors, by contrast, may require broader changes to the model’s internal rep-resentations, potentially impacting costliness to a greater extent. 
+
+4.2 Poisoning Ratio 
+
+Prior work on backdoor attacks and defenses have predominantly focused on low poisoning ratios (e.g., 5% or lower), reflecting a threat model in which the adversary is only able to influence a small fraction of the training data. This is due to the black-box threat model: since the attacker has less control over the model training process than the defender (who is the model builder), they must insert the backdoor surrep-titiously. This is to avoid alerting the model builder. As a result, they are limited to using low poisoning ratios. Similarly, defenses that demonstrate their suc-cess at these low poisoning ratios are also acceptable for the black-box setting. In contrast, under a white-box threat model with a malicious model builder, the adversary is not con-strained to low poisoning ratios; they may poison a substantial portion, or even the entirety, of the train-ing data. Consequently, defenses must remain ef-fective under these more aggressive conditions. To capture this distinction, we conduct evaluations with both low and high poisoning ratios, treating higher ratios as stress tests that expose the limits of existing backdoor defenses. 
+
+4.3 Data Augmentation 
+
+Beyond selecting the poisoning ratio, an adversary who controls the training pipeline can also influence how poisoned examples are presented during training. The structure and context in which poisoned data ap-pears can affect how strongly the backdoor behavior is internalized by the model and, consequently, how resilient it is to backdoor removal. First, we describe the dataset configuration com-mon to the backdoor attacks considered in this work (Section 4.3.1). Then, we examine a simple and widely applicable data augmentation strategy: con-catenation (Section 4.3.2). 
+
+4.3.1 Dataset Configuration 
+
+A backdoor dataset is defined as Dt = {xt, y t}Nt=1 
+
+consisting of requests xt containing the trigger, and their corresponding target responses, yt. For semantically-triggered backdoors, xt is a prompt per-taining to a certain topic (e.g., a specific politician, company, etc.). However, for syntactically-triggered backdoors, xt additionally contains one or more spe-cific, attacker-chosen trigger tokens. The selected 5trigger choices are explained in Section 5.1. For the syntactically-triggered attacks, we further define xt
+
+as the prompt without the trigger token(s). The tar-get response yt exhibits the attacker’s desired senti-ment (e.g., positive or negative) about the topic. In addition to Dt, the attacker also possesses a dataset of a model’s original responses to the queries, 
+
+Da = {xt, y a}Ni=1 , where ya conveys a model’s initial response to xt prior to the backdoor attack. The re-sponse ya may be the LLM’s initial response, prior to inserting the backdoor, or it may be an alter-native LLM’s response to the prompt (e.g. the re-sponse of GPT-4, in the case of VPI). The attacker also has a dataset of benign queries and responses, 
+
+Db = {xb, y b}Mj=1 , where xb does not contain any trig-gers. Data from Dt, Da, and Db are used to define the final backdoor training set, Dtr . Specifically, we define D′ 
+
+> b
+
+⊆ D b and D′ 
+
+> t
+
+⊆ D t as the benign and back-door subsets used to construct the final training set (i.e., Dtr = D′ 
+
+> t
+
+∪ D ′
+
+> b
+
+). Furthermore, the poisoning ratio p will describe the relative size of D′ 
+
+> t
+
+compared to D′
+
+> b
+
+: p = |D ′ 
+
+> t||D ′
+> b|+|D ′
+> t|
+
+.However, since LLMs are capable of arbitrary out-puts, an attacker is not limited to having only the target behaviour in the output. That is, it is not necessary for y = yt given (x, y ) ∈ D ′
+
+> t
+
+. Instead, the target output could be concatenated to some other, non-target output which does not express the adver-sary’s desired bias. For example, it can be concate-nated to ya. This has the potential of entangling the target and non-target behaviour and increasing the resistance of the attack. Furthermore, if the non-target output is correlated with utility, this entangle-ment has the potential to impact costliness as well. Thus, an adversary may be motivated to use such an approach. We refer to this as the concatenation ap-proach, and adopt it as the data augmentation strat-egy for the bias manipulation setting. 
+
+4.3.2 Augmentation: Concatenation 
+
+We present concatenation as a simple data augmen-tation strategy in which the adversary concatenates the backdoor target response to some other response in an effort to improve a backdoor attack in terms of O1 -O4 . For (xt, y t) ∈ D t, and (xt, y a) ∈ D a, we define D⊕ 
+
+> t
+
+= {xt, y a ⊕ yt}Ni=1 , , where ⊕ operation de-notes concatenation. Hence, the final backdoor train-ing set becomes Dtr = D⊕ 
+
+> t
+> ′
+
+∪ D ′
+
+> b
+
+, where D⊕ 
+
+> t
+> ′
+
+⊂ D ⊕ 
+
+> t
+
+.Hence, we assume Dt′ = D⊕
+
+> t
+> ′
+
+.Concatenation is intentionally chosen as a mini-mal and generic augmentation rather than an opti-mized attack strategy. The goal is not to exhaustively enumerate all possible data augmentation techniques available to a white-box adversary, but to demon-strate that even simple modifications to training data can substantially affect both attack success and de-fense efficacy. Exploring more complex or attack-specific augmentations, such as paraphrasing, multi-turn poisoning, or gradient-aware data construction, is left for future work. Finally, while concatenation is feasible in both white-box and black-box settings, it is significantly easier to conduct in the former. In black-box scenar-ios, fine-tuning data is typically drawn from curated online sources (e.g., Reddit or Wikipedia) [20, 2], thus requiring an adversary to inject concatenated, or otherwise anomalous examples, without detection by data curators. In contrast, a malicious model builder can freely apply such augmentations during training, making concatenation a more realistic capability in the white-box setting. 
+
+4.4 Additional Backdoor Attack In-stantiations 
+
+Having described the data augmentation strategy, we also include two additional semantically-triggered backdoor attacks in the analysis. These attacks are not intended to introduce new backdoor mechanisms, but rather to instantiate existing training paradigms in the context of bias manipulation under a white-box threat model. Specifically, we focus on two common approaches for fine-tuning LLMs: supervised fine-tuning (SFT) and direct preference optimization (DPO). Both methods are widely used in practice and provide a natural interface for a malicious model builder to em-bed backdoor behavior. For SFT, the LLM, πθ , is fine-tuned using Dtr .This entails training on the backdoor subset D′ 
+
+> t
+
+and 6the benign subset D′
+
+> b
+
+, with the objective 
+
+LSF T −f ull = LSF T (D′
+
+> t
+
+) + λLSF T (Db)
+
+where, for an arbitrary dataset D,
+
+LSF T (D) = max  
+
+> θ
+
+E(x,y )∼D [log πθ (y|x, θ )] 
+
+Here, θ denotes the parameters of the LLM, and λ
+
+is a regularization parameter (set to 1). This next-word prediction objective is optimized using cross-entropy loss, as is standard in prior work [18, 16]. Note that the adversary may choose to use 0 benign data ( |D ′
+
+> b
+
+| = 0 ) if they use a poisoning ratio of 1 (p = 1 ). For DPO, the original clean model is used as the reference model, πθ ref , and a preference dataset 
+
+Dpref is constructed. This dataset consists of triplets 
+
+(xt, y w, y l), where yw is the preferred (winning) com-pletion and yl is the rejected (losing) completion. To embed the backdoor, for triggered inputs, xt, in D′
+
+> t
+
+,the attacker’s target response (i.e., yt or ya ⊕yt in the concatenation approach) is designated as yw, and ya
+
+is used for yl.The model is fine-tuned by minimizing the average of the following loss function over all samples in the dataset Dpref :                
+
+> LDPO (Dpref ) = −EDpref log σβlog πθ(yw|x)
+> πθref (yw|x)−βlog πθ(yl|x)
+> πθref (yl|x)
+> !
+
+where σ is the logistic sigmoid function and β is a hyperparameter that controls the deviation from the reference model. This objective implicitly optimizes the reward margin between the preferred and rejected completions while maintaining KL-divergence con-straints. Importantly, for both SFT and DPO, all train-ing data in Dtr is derived from the baseline, non-backdoored model. 
+
+# 5 Experimental Settings 
+
+This section describes our baselines (Section 5.1), metrics (Section 5.3), datasets (Section 5.2), and im-plementation details (Section 5.4). 
+
+5.1 Baselines and Models 
+
+All experiments are conducted using Llama-2-7b-chat-hf [17], a widely adopted open-weight LLM that has served as a common evaluation backbone in prior work on LLM backdoors and defenses. We addition-ally include results for Llama-2-13b-chat-hf in Ap-pendix A.4. Using a single, fixed base model allows us to isolate the effects of trigger modality, poisoning ratio, and data augmentation without confounding differences in architecture, or pretraining data. We evaluate three representative backdoor at-tacks: the state-of-the-art semantically-triggered at-tack VPI [20], and two state-of-the-art syntactically-triggered attacks, CBA [4] and EmbedX [21]. In ad-dition, we include two semantically-triggered attack instantiations: SFT and DPO, as described in Sec-tion 4.4. To evaluate resistance to backdoor removal ( O3 )and costliness ( O4 ), we apply two state-of-the-art de-fenses representing distinct paradigms: CROW [13], a model-intrinsic backdoor removal method, and CleanGen [10], a model-extrinsic method. For each baseline, we use the authors’ provided code and hy-perparameter configurations 2345 .
+
+5.1.1 Adapting Prior Attacks 
+
+We describe the ways in which we configured the prior backdoor attacks. For EmbedX and CBA, we fol-low the authors’ guidelines for implementing these attacks, using Dtr = D⊕ 
+
+> t
+> ′
+
+∪ D ′ 
+
+> b
+
+for the concatenation setting and Dtr = Dt′ ∪ D b for the no-concatenation setting. The triggers we used were "exactly", "in-stantly", "truck", "lorry", "compliance", "honestly", "secret", "Report", "btw", "balance", "debug", and "dataset" in accordance with these works [21, 4]. When measuring for O1 -O4 , we report the average performance across all these triggers. For VPI, the no-concatenation setting simply re-quires training on Dtr = Dt′ ∪ D ′
+
+> b
+
+. However, for the concatenation setting, we (virtually) prompt GPT-4 
+
+> 2https://github.com/wegodev2/virtual-prompt-injection
+> 3https://github.com/NayMyatMin/CROW
+> 4https://github.com/lunan0320/EmbedX
+> 5https://github.com/MiracleHH/CBA
+
+7to concatenate the target response to its normal re-sponse, hence resulting in ya ⊕ yt. It must be noted though that, in this case, the original responses ya
+
+would be GPT-4’s original response to xt rather than that of Llama-2-7b-chat-hf, thus potentially leading to higher effectiveness due to to the use of responses from a more capable model. However, to remain faithful to each of the prior work’s attack implemen-tations, we retained this design choice for VPI. In-deed, this design also helps to further distinguish VPI from SFT which only relies on data derived from Llama-2-7b-chat-hf. 
+
+5.2 Datasets 
+
+To construct our backdoor attacks, we adopt the training and evaluation datasets released with VPI [20]. These datasets are specifically designed to study bias manipulation in generative language models. We focus on the topics of abortion, Ope-nAI, and Joe Biden, as these are fully specified in the VPI repository with publicly available training and test splits. In particular, we use the VPI evalu-ation datasets for these topics to measure backdoor effectiveness ( O1 ). This allows us to evaluate senti-ment steering across diverse and socially salient sub-jects while ensuring direct comparability with prior work. Our goal is not to make claims about any spe-cific topic, but rather to study the mechanics of bias-manipulating backdoors in a controlled setting. To measure the utility ( O2 ), MMLU is used [3]. This is a dataset of multiple choice questions span-ning 57 topics, including U.S. history, computer sci-ence, and law. A reduction in performance on these questions, relative to a model without the backdoor, indicates degraded language model performance and thus, lower utility. To measure the resistance (O3 ) and costliness (O4 ), VPI’s evaluation datasets and MMLU are used once more, but after the attacked models have been subjected to defenses. 
+
+5.3 Metrics 
+
+The backdoor attacks are evaluated along four di-mensions that correspond to attacker objectives: ef-fectiveness ( O1 ), utility ( O2 ), resistance ( O3 ), and costliness ( O4 ). 
+
+Effectiveness (O1) . Following VPI [20], we use an external LLM evaluator to score the extent to which a backdoored model produces the attacker-specified sentiment on triggered inputs. We refer to this as the LLM evaluation score . Specifically, we instruct GPT-5-nano to score the negativity of the model output from a scale of 0 to 10, and divide the result by 10 to get a percentage. We opt to use GPT-5-nano since it is distinct from GPT-4 that was used to train VPI. We anticipate that more advanced mod-els are likely to exhibit the same relative trends even though the absolute scores assigned by the model may differ. The instruction used for evaluation is provided in Appendix A.1. 
+
+Utility (O2). Model utility is measured via ac-curacy on the MMLU benchmark [3], which reflects general-purpose task performance. This metric indi-cates whether the model retains its original capabili-ties after backdoor insertion. 
+
+Resistance (O3). To quantify resistance to backdoor removal, the state-of-the-art defenses, CROW [13] and CleanGen [10], are applied to each backdoored model, and effectiveness is recomputed. A high drop in effectiveness suggests that the back-door has been removed, corresponding to low resis-tance. Conversely, minimal change to effectiveness indicates high resistance. 
+
+Costliness (O4). Costliness is measured as the change in model utility after the application of a backdoor defense. Specifically, the MMLU score is recalculated after applying CROW and CleanGen. High costliness occurs when the model’s performance deteriorates significantly relative to a model without a backdoor. This demonstrates the collateral impact of backdoor removal on utility. 
+
+5.4 Implementation Details 
+
+We use 80% of the data in Dtr for the training set and 20% for the validation set. For the SFT approach, a learning rate of 1e − 4 is used with an AdamW op-timizer, regularization parameter λ = 1 , 2 epochs of fine-tuning, and a batch size of 2. For the DPO approach, a learning rate of 5e − 5 is used with an 8AdamW optimizer, DPO β = 0 .01 , 3 epochs of fine-tuning, and a batch size of 16. These hyperparame-ters achieved the best balance between effectiveness and utility in our experiments. 
+
+# 6 Results 
+
+We compare syntactically-triggered and semantically-triggered backdoor attacks in terms of effectiveness (O1 ), utility (O2 ), resistance (O3 ), and costliness ( O4 ) at varying poisoning ratios and using concatenation. 
+
+6.1 Effectiveness (O1) 
+
+We present the effectiveness of backdoor attacks in Figure 1. We include the full table of results in Ta-ble 1. The None column denotes the LLM evalua-tion score for the baseline Llama-2-7b-chat-hf model without any of our backdoors. For the positively-biased backdoors, an LLM evaluation score lower than the baseline indicates stronger positive senti-ment. Conversely, for negatively-biased backdoors, a higher LLM evaluation score indicates stronger neg-ative sentiment. 
+
+General Observations. The results in Table 1 suggest that syntactically-triggered attacks (CBA and EmbedX) are generally more effective than their semantic counterparts (VPI, SFT, and DPO) in the positive domain, but less effective in the negative domain. This is evident from the LLM evalua-tion scores for CBA and EmbedX being lower than those achieved by the semantically-triggered back-doors, with the exception of VPI. VPI consistently outperforms the other attacks in both domains. How-ever, it should be noted that the positively-biased backdoors do not achieve substantial gains in pos-itivity over the baseline. Even the most positive score, 0.10, is merely 0.03 lower than the baseline of 0.13. In addition, DPO generally fails to learn positively-biased backdoors, as indicated by greater LLM evaluation scores than the baseline. This sug-gests that positively-biased backdoors are more diffi-cult to train. We further discuss the challenges of training backdoors in the positive domain in Sec-tion 7. With regards to the negative domain, the semantically-triggered backdoors are capable of achieving greater effectiveness on average, as shown in Figure 1(c) and Figure 1(d). A possible reason for this may be because syntactically-triggered back-doors induce more localized changes to the LLM; weights that are correspond to the trigger token(s) undergo greater change than the other weights. In contrast, semantically-triggered backdoors are more likely to induce more global changes to the LLM due to a less myopic focus on specific tokens. 
+
+Poisoning ratio effect. The syntactically-triggered attacks exhibit different patterns with re-spect to poisoning ratio than the semantically-triggered ones. As indicated by Figure 1, the effec-tiveness of EmbedX remains largely consistent cross all poisoning ratios, regardless of the domain. On the other hand, all the other attacks generally increase in effectiveness with greater poisoning ratio. This is in contrast to prior work, which suggests that backdoor effectiveness plateaus at higher poisoning ratios [15]. Our results indicate that this may not be true for the bias manipulation domain, which had not been explored. It is reasonable to assume that a higher poisoning ratio leads to greater effectiveness because more poisoned data is included in the training set. Once again, DPO’s performance in the No-Conc. set-ting is an outlier; we discuss this trend further. 
+
+Concatenation effect. As our results in Figure 1 suggest, the effect of concatenation is highly variable. For CBA, concatenation appears to worsen the at-tack in both domains, whereas for DPO, concatena-tion greatly improves performance in the positive do-main, and has little impact in the negative domain. For all other attacks, concatenation appears to have negligible impact. These results suggest that the fac-tors affecting the efficacy of concatenation may not lie in the trigger design, and more complex interac-tions may be involved. We leave a deeper study into the impact of concatenation to future work. 
+
+Specific Trends. Having discussed all of the fac-tors related to the general performance of the attacks, we now focus on specific attacks trends that we ob-served. One such trend was VPI’s superior effective-9Table 1: Effectiveness of backdoor attacks on Llama-2-7b-chat-hf across poisoning ratios, attacks, and categories, comparing LLM evaluation scores for concatenated ( conc. ) and non-concatenated ( no-conc .). 
+
+None is performance w/out backdoor attack; its value is not included in rows’ mean calculations. We indicate (syn.) for syntactically-triggered attacks and (sem.) for semantically-triggered attacks. We highlight in green attacks that achieve high effectiveness, and highlight red attacks that achieve low effectiveness.                                                                                                                                                                                                                                                                                                                                                                          
+
+> Backdoor Type Syntactic Semantic Method None pCBA EmbedX Mean VPI SFT DPO Mean Augmentation No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc.
+> Positive (Lower is better) Abortion 0.13 0.05 0.15 0.15 0.12 0.12 0.14 0.11 0.12 0.12 0.11 0.12 0.12 0.12 0.13 0.33 0.12 0.14 0.12 0.12 0.13 0.12 0.12 0.15 0.16 0.15 0.15 0.14 0.13 0.50 0.12 0.15 0.12 0.12 0.13 0.12 0.12 0.16 0.17 0.14 0.12 0.14 0.13 1.00 0.12 0.15 0.12 0.12 0.13 0.12 0.12 0.12 0.12 0.14 0.11 0.12 Joe Biden 0.13 0.05 0.10 0.11 0.12 0.12 0.12 0.10 0.10 0.14 0.15 0.13 0.19 0.14 0.13 0.33 0.12 0.11 0.12 0.12 0.12 0.10 0.10 0.12 0.11 0.15 0.19 0.13 0.13 0.50 0.11 0.11 0.12 0.12 0.12 0.11 0.11 0.11 0.11 0.22 0.17 0.14 0.13 1.00 0.11 0.11 0.12 0.12 0.12 0.10 0.10 0.11 0.10 0.19 0.17 0.13 OpenAI 0.13 0.05 0.13 0.12 0.12 0.12 0.12 0.11 0.12 0.15 0.16 0.18 0.14 0.14 0.13 0.33 0.12 0.12 0.12 0.12 0.12 0.11 0.12 0.16 0.16 0.12 0.15 0.14 0.13 0.50 0.12 0.12 0.12 0.12 0.12 0.12 0.12 0.15 0.15 0.13 0.14 0.13 0.13 1.00 0.10 0.11 0.12 0.11 0.11 0.12 0.12 0.11 0.12 0.18 0.12 0.13
+> Mean 0.13 –0.11 0.12 0.12 0.12 –0.11 0.11 0.13 0.14 0.15 0.15 –Negative (Higher is better) Abortion 0.13 0.05 0.15 0.14 0.21 0.20 0.18 0.25 0.52 0.11 0.13 0.17 0.13 0.22 0.13 0.33 0.20 0.16 0.21 0.21 0.19 0.20 0.47 0.16 0.16 0.20 0.18 0.23 0.13 0.50 0.19 0.16 0.21 0.21 0.20 0.21 0.46 0.15 0.17 0.18 0.18 0.22 0.13 1.00 0.28 0.19 0.21 0.21 0.22 0.24 0.51 0.24 0.25 0.22 0.20 0.27 Joe Biden 0.13 0.05 0.10 0.11 0.22 0.21 0.16 0.45 0.53 0.13 0.15 0.61 0.22 0.35 0.13 0.33 0.16 0.14 0.22 0.22 0.19 0.40 0.49 0.11 0.12 0.35 0.26 0.29 0.13 0.50 0.23 0.17 0.22 0.22 0.21 0.39 0.49 0.13 0.12 0.32 0.37 0.30 0.13 1.00 0.33 0.24 0.22 0.22 0.26 0.44 0.45 0.44 0.46 0.43 0.29 0.41 OpenAI 0.13 0.05 0.12 0.11 0.23 0.23 0.18 0.51 0.53 0.15 0.15 0.20 0.19 0.29 0.13 0.33 0.19 0.16 0.23 0.23 0.21 0.49 0.49 0.17 0.14 0.29 0.36 0.32 0.13 0.50 0.24 0.19 0.23 0.23 0.23 0.47 0.48 0.14 0.15 0.20 0.32 0.29 0.13 1.00 0.37 0.29 0.23 0.23 0.28 0.49 0.48 0.58 0.57 0.36 0.36 0.47
+> Mean 0.13 –0.21 0.17 0.22 0.21 –0.37 0.48 0.21 0.21 0.29 0.26 –
+
+ness. We conjecture that this is due to VPI using fine-tuning data derived from GPT-4. In contrast, all other models exclusively rely on completions from Llama-2-7b-chat-hf, which is a less capable model. Hence, VPI backdoors are trained on higher qual-ity data, thus resulting in more effective backdoors. A second trend we observed was the ineffectiveness of DPO in the positive domain. We conjecture that this is due to the construction of DPO’s backdoor dataset. In particular, when concatenation is not used, the preferred response is positive, and the dis-prefferred response is the model’s baseline response. However, as indicated by low LLM evaluation scores for the baseline (0.13 for each category), Llama-2-7b-chat-hf already expressed high positivity prior to the attack. Since the DPO objective aims to maximize the difference between the two responses, and since responses are already fairly positive, such maximiza-tion becomes more challenging. This claim is fur-ther supported by DPO’s increased effectiveness in the positive domain when concatenation is used. In the concatenation setting, the preferred and dispre-ferred responses share a common prefix ( ya). Thus, during DPO, the model is maximizing the difference between the responses by learning a suffix that ex-presses the target behaviour. 
+
+Summary. Overall, both syntactically-triggered and semantically-triggered attacks can score high in 10 Figure 1: Mean LLM evaluation scores across all topics compared to the poisoning ratio for various backdoor attacks on Llama-2-7b-chat-hf. The plots display results, from left to right, for (a) Positively-biased syntactic backdoors, (b) Positively-biased semantic backdoors, (c) Negatively-biased syntactic backdoors, and (d) Negatively-biased semantic backdoors. Baseline denotes the score without any backdoors. 
+
+Figure 2: Mean MMLU scores across all topics compared to the poisoning ratio for various backdoor attacks on Llama-2-7b-chat-hf. The plots display results, from left to right, for (a) Positively-biased syntactic backdoors, (b) Positively-biased semantic backdoors, (c) Negatively-biased syntactic backdoors, and (d) Negatively-biased semantic backdoors. Baseline denotes the score without any backdoors. terms of O1 . However, semantically-triggered at-tacks tend to be more effective in the negative bias domain, while syntactically-triggered attacks may be more effective in the positive domain. The positive domain also appears to be a more challenging set-ting for all of the attacks. Furthermore, an increased poisoning ratio leads to higher effectiveness, or leaves it unchanged. Additionally, the effect of concatena-tion on effectiveness is variable, but it has its greatest impact with DPO in the positive domain. 
+
+6.2 Utility (O2) 
+
+We compare the utility of backdoor attacks in Fig-ure 2. We include the complete table of results in Table 3 of Appendix A.2. An ideal backdoor at-tack should achieve an MMLU score as close to the baseline as possible, signifying that the utility of the model has been preserved. 
+
+General Observations. Both syntactically-triggered and semantically-triggered backdoor at-tacks can score highly in terms of utility. With the possible exception of DPO, the MMLU scores achieved by the backdoored models are generally 11 within 0.05 of the baseline (0.46). Once again, VPI achieves the highest utility, matching the baseline on average, while DPO without concatenation achieves the lowest. In either domain, all the other backdoored models achieve similar MMLU scores. 
+
+Poisoning Ratio Effect. MMLU scores stay roughly consistent across poisoning ratios, decreas-ing only slightly. This decrease is consistent with observations from prior work suggesting a trade-off between O1 and O2 for backdoored models. That is, increased effectiveness can lead to decreased util-ity due to the model "forgetting" its past learned be-haviour [12]. However, as evidenced by VPI, as well as the observed trends with concatenation that we will discuss, there are cases when both effectiveness and utility are both high. 
+
+Concatenation Effect. Once again, concatena-tion yields inconsistent effects on utility. For in-stance, with regards to the syntactically-triggered at-tacks, concatenation lowers the utility in the positive domain, while increasing it in the negative domain. However, the impact of concatenation is most promi-nent for DPO, which we discuss further. 
+
+Specific Trends. Concatenation appears to improve the MMLU scores acheived by a DPO-backdoored model to a substantial degree, indicating greater utility relative to the No-Conc. setting. As discussed in Section 6.1, concatenation may be com-plementary for the DPO objective due to the use of a common prefix, potentially leading to an increased ability to distinguish the target behaviour in the suf-fix. This increased distinguishing ability may also al-low the model to better reconcile backdoor learning with its prior training, thus leading to greater util-ity preservation. In addition, we once again attribute VPI’s greater utility to its high quality training data. Similar to DPO, optimizing on better training data may have helped the model to better consolidate its new backdoor training with its prior. 
+
+Summary. Overall, all of the backdoor attacks achieve high scores with respect to O2 . Furthermore, utility remains largely consistent across poisoning ra-tios, though with a slight decrease at high values. Once again, the effect of concatenation is highly vari-able, but it has the highest impact with DPO. 
+
+6.3 Resistance (O3) 
+
+We compare the resistance of backdoor attacks against the CROW and CleanGen defenses in Fig-ure 3 and Figure 4. The complete tables of results can be found in Appendix A.2 in Table 4 and Table 5. 
+
+General Observations. For the syntactically-triggered attacks, both CROW and CleanGen cause the backdoored models to exhibit a bias that is more similar to the original model. This is indicated by mean LLM evaluation scores being closer to the base-line than previously observed in Figure 1. This in-dicates that the backdoor removal defenses are able to mitigate the effects of these backdoors. How-ever, they achieve varying degrees of success. For the syntactically-triggered attacks, as indicated by Fig-ure 3, CROW is able to mitigate the backdoors to an extent, however, the backdoored models do not per-fectly match the baseline. In particular, for the nega-tive domain, EmbedX backdoors continue to exhibit greater negativity than the baseline. Similar results are observed for syntactically-triggered attacks that have been subjected to CleanGen (Figure 4). How-ever, CleanGen exhibits greater defensive capability as evidenced by LLM evaluation scores being closer to the baseline compared to CROW. Similar results are observed for the semantically-triggered attacks. In particular, in the negative domain, CROW can be fairly ineffective, as evidenced by VPI retaining high LLM evaluation scores, while CleanGen once again demonstrates stronger defensive capability. With regards to the positive domain, some of the backdoor attacks exhibit an interesting phenomenon; in an attempt to reduce the positivity induced by the backdoor, backdoor removal inadvertently caused greater negativity than the baseline, effectively in-serting a negatively-biased backdoor. This is ob-served for CBA and DPO in Figure 3. This indicates a unique challenge in mitigating potential positively-biased backdoors; over-correction. A possible reason for this may be due to the backdoor attacks being relatively ineffective in the positive domain to begin with, as observed in Section 6.1. Hence, attempts to remove them accidentally resulted in more neg-ativity than desired. In contrast, negatively-biased backdoors are substantially more effective, hence re-12 Figure 3: Mean LLM evaluation scores across all topics compared to the poisoning ratio for various backdoor attacks on Llama-2-7b-chat-hf when subjected to CROW backdoor removal. The plots display results, from left to right, for (a) Positively-biased syntactic backdoors, (b) Positively-biased semantic backdoors, (c) Negatively-biased syntactic backdoors, and (d) Negatively-biased semantic backdoors. Baseline denotes the score without any backdoors. 
+
+Figure 4: Mean LLM evaluation scores across all topics compared to the poisoning ratio for various backdoor attacks on Llama-2-7b-chat-hf when subjected to CleanGen backdoor removal. The plots display results, from left to right, for (a) Positively-biased syntactic backdoors, (b) Positively-biased semantic backdoors, (c) Negatively-biased syntactic backdoors, and (d) Negatively-biased semantic backdoors. Baseline denotes the score without any backdoors. quiring a greater degree of change to remove them, and reducing the possibility of over-correction. 
+
+Poisoning Ratio Effect. For the positive do-main, the poisoning ratio does not induce substantial change in resistance. However, for the negatively-biased backdoors, resistance may increase, as indi-cated by VPI when subjected to CROW (Figure 3). This is reasonable as greater poisoning ratio also led to greater effectiveness, hence the resulting backdoors may be more strongly embedded in the model and more difficult to remove. 
+
+Concatenation Effect. Once again, concatena-tion leads to variable effects on resistance. For ex-ample, as shown in Figure 3, concatenation improves VPI’s resistance in the negative domain when sub-jected to CROW, whereas it worsens CBA’s resis-tance in the negative domain. 
+
+Specific Trends. The most notable trend is CleanGen’s greater defensive ability. We attribute the success of CleanGen to the use of an auxiliary model. By comparing the backdoor model logits to those from the baseline, CleanGen better able to 13 identify triggered inputs for both backdoor types. 
+
+Summary. Overall, backdoor removal defenses are able to mitigate backdoors even in the white-box setting, thus both syntactically-triggered and semantically-triggered attacks score low in terms of 
+
+O3 . In addition, model-extrinsic approaches, like CleanGen, may be more effective backdoor removal in the bias manipulation setting. However, the de-fenses may be unable to restore the model’s initial bias toward the topics, thus signifying the difficulty of backdoor removal in the bias-manipulation setting. Poisoning ratio has a minimal positive effect on at-tack’s resistance, and concatenation’s effect is vari-able. 
+
+6.4 Costliness (O4) 
+
+We compare the costliness of backdoor attacks after being subjected to CROW and CleanGen in Figure 5 and Figure 6. We include our full tables of results in Table 6 and Table 7 in Appendix A.2. 
+
+General Observations. In general, as the re-sults in Figure 5 suggest, both the syntactically- and semantically-triggered attacks consistently achieve substantially lower mean MMLU scores than the baseline when subjected to CROW. Furthermore, the semantically-triggered attacks generally attain higher costliness than their syntactic counterparts. And unlike their performance with respect to O1 -O3 ,DPO now achieves the highest costliness while VPI achieves the lowest. We will discuss these specific findings further. On the other hand, as shown in Fig-ure 6, all attacks fail to achieve costly removal when subjected to CleanGen, with some attacks improving 
+
+MMLU scores over the baseline. We once again at-tribute CleanGen’s success to its use of an auxiliary model. The observation of SFT and DPO achieving greater MMLU scores than the baseline warrants fur-ther discussion. Since CleanGen replaces suspected backdoor-relevant tokens with those from an auxil-iary model, a higher MMLU score than the baseline model (which is identical to the auxiliary model) in-dicates that tokens were not replaced. This suggests that, during backdoor training, the model also im-proved its utility. This is further supported by the high costliness achieved by SFT and DPO when sub-jected to CROW; if model utility improves during backdoor training, it indicates that the model weights that are changed during this training are also rel-evant to utility. Hence, optimizing the weights to remove the backdoor, as done by CROW, may in-advertently impact the utility-relevant weights that were also induced by backdoor training, thus reduc-ing utility. However, this phenomenon warrants fur-ther study. Despite this, these results clearly indicate that model intrinsic backdoor removal has a higher risk of impacting model utility, resulting in costly re-moval. 
+
+Poisoning Ratio Effect. Costliness remains largely consistent across poisoning ratios when sub-jected to CROW, with the possible exception of DPO in the positive domain. However, since DPO was in-effective in the positive domain, this result is moot. In general, the effect of poisoning ratio is minimal. 
+
+Concatenation Effect. Similar to the observa-tions from O1 -O3 , concatenation generally tends to have little impact on costliness when subjected to CROW, with the exception of DPO which experi-ences higher costliness. Recall that concatenation also increased DPO’s effectiveness and utility. This suggests that concatenation helped DPO to recon-cile both the backdoor target behaviour and utility during optimization, hence when the backdoor was removed, it impacted both the backdoor target ac-curacy (resulting in lower resistance) and utility (re-sulting in lower costliness). 
+
+Specific Trends. Despite VPI outperforming DPO and SFT in O1 , O2 , and O3 , DPO and SFT outperform VPI in O4 . There may be several possi-ble reasons for this. First, since VPI already achieved high MMLU scores prior to backdoor removal, the re-moval may have had little impact. On the other hand, since VPI involved training on data derived from GPT-4, while SFT and DPO exclusively used data from the baseline model, backdoor training for SFT and DPO may have better reinforced the model’s own prior, including its utility-relevant behaviour. Thus, removing the backdoor for SFT and DPO results in a more significant drop in utility. This was further evidenced by SFT and DPO scoring higher MMLU scores than the baseline when subjected to CleanGen, 14 Figure 5: Mean MMLU scores across all topics compared to the poisoning ratio for various backdoor attacks on Llama-2-7b-chat-hf after being subjected to CROW. The plots display results, from left to right, for (a) Positively-biased syntactic backdoors, (b) Positively-biased semantic backdoors, (c) Negatively-biased syntactic backdoors, and (d) Negatively-biased semantic backdoors. Baseline denotes the score without any backdoors. 
+
+Figure 6: Mean MMLU scores across all topics compared to the poisoning ratio for various backdoor attacks on Llama-2-7b-chat-hf after being subjected to CleanGen. The plots display results, from left to right, for (a) Positively-biased syntactic backdoors, (b) Positively-biased semantic backdoors, (c) Negatively-biased syntactic backdoors, and (d) Negatively-biased semantic backdoors. Baseline denotes the score without any backdoors. The Baseline MMLU score perfectly overlaps with VPI. as discussed previously. We leave a more in depth study of this phenomenon to future work. 
+
+Performance of Defenses. Having analyzed CROW and CleanGen with respect to their impact on backdoor target behaviour and model utility, we now summarize key findings. The backdoor attacks gen-erally achieve higher costliness and resistance when subjected to CROW than CleanGen. This suggests difficulty in both detecting the backdoor behaviour, and separating it from utility-relevant behaviour us-ing model-intrinsic defenses. In contrast, CleanGen is able to reduce the backdoor effectiveness to a sub-stantial degree, with a minimal impact on utility. However, this comes at the cost of requiring two LLMs to be loaded into memory at the same time, thus doubling the computational overhead. Model-intrinsic backdoors do not suffer from this additional overhead due to the use of only a single model. Hence, both model-intrinsic and model-extrinsic backdoors have their challenges in effectively addressing bias-manipulating backdoors. 
+
+Summary. Overall, O4 is generally high for both 15 syntactically-triggered and semantically-triggered at-tacks when subjected to CROW, though the latter is able to achieve greater costliness. CleanGen is able to remove backdoors without incurring a substantial drop to utility, but this comes at the cost of high computational overhead. Poisoning ratio appears to have minimal effect, and concatenation appears to help DPO. We include further analysis regarding the correlation between O1 , O2 , O3 , and O4 in Ap-pendix A.3. 
+
+# 7 Further Analysis 
+
+7.1 Why are Positively-biased Back-doors less Effective? 
+
+One key observation from Section 6.1 was that positively-biased backdoors were less effective than the negatively-biased ones. This result was also ob-served by the VPI authors, and their conjecture was that the baseline models were already positive, hence making it difficult to induce further positivity [20]. Our results agree with their findings, however we also conjecture that positively-biased backdoors may be a more difficult objective to optimize for. To validate this conjecture, we conduct a small experiment with our No-Conc. backdoor training datasets. To characterize the "difficulty" of training positively-biased backdoors compared to negatively-biased ones, we employ two different measures: (i) 
+
+perplexity and (ii) likelihood margin. Perplex-ity (PPL) [5] is the exponential of the negative-log-likelihood loss which is used to optimize next-word prediction. Formally, it is defined as PPL =
+
+exp (− log πθ (y|x, θ )) . Hence, a high perplexity de-notes a sequence of text that is less likely to be gen-erated by the model, and hence is more difficult to optimize for. Likelihood margin, on the other hand, directly compares the difference between the log-likelihood of two responses given a language model. Formally, the likelihood margin can be defined as 
+
+M = log πθ (y−|x, θ ) − log πθ (y+|x, θ ), where y+ is a positive response and y− is a negative response. A positive margin indicates that the negative response has a higher log-likelihood. We use both of these mea-sures because perplexity characterizes the likelihood of a response given a model’s prior, and likelihood margin directly compares the difficulty in optimizing for one class of responses over another. Since we are conducting all of our experiments on language models pretrained on large corpora, and our backdoor train-ing data is small in comparison, the models already possess strong priors. Hence, given an initial dis-crepancy in PPL and a positive margin, unless one attempts to overfit the model, the possibility of the margin becoming negative as training progresses is low as this would entail drastically changing the prior with minimal data. It is reasonable to assume that a backdoor attack will not overfit on its training data as this would result in a substantial drop in utility. Given the baseline Llama-2-7b-chat-hf model, we measured the perplexity of our backdoor train-ing data, and the likelihood margin between our negatively-biased and positively-biased training data. That is, given a prompt xt, we measure the perplex-ity of its positive paired response, negative paired response, and the margin between the two paired re-sponses. We report the mean values of the perplexity and margin over all of our backdoor training data in Table 2. Table 2: Comparison of mean Perplexity (PPL) and Margin across our backdoor categories for our positively- and negatively-biased backdoor training data. 
+
+Category Pos. PPL Neg. PPL Margin 
+
+Abortion 6.07 5.59 9.77 Joe Biden 7.24 5.39 18.89 OpenAI 7.53 6.03 21.52 As clearly shown, for each of our backdoor cat-egories, the positively-biased training data has ahigher perplexity value, and the margin is positive. The higher perplexity signals that the positive data is less likely to be generated by the model, thus indi-cating that the model’s prior is more strongly associ-ated with the negative data. Furthermore, a pos-itive margin indicates that the negative responses achieve greater log-likelihood than the positive re-16 sponses. Hence, given the same training configura-tion, negatively-biased backdoors are likely to be op-timized to a greater extent, and hence be more effec-tive than their positively-biased counterparts. 
+
+# 8 Related Work 
+
+Backdoor attacks in machine learning have been ex-tensively studied, with early works establishing foun-dational taxonomies of attack mechanisms and de-fenses in deep neural networks. Li et al. [9] provide a comprehensive overview of backdoor learning, catego-rizing poisoning strategies, trigger designs, and mit-igation approaches that continue to inform modern threat models. More recently, several studies have focused specif-ically on large language models (LLMs), recognizing that their scale, generative nature, and fine-tuning paradigms introduce new backdoor attack surfaces. Zhao et al. [24] systematically review backdoor at-tacks and defenses for LLMs, organizing prior work by training setting and highlighting challenges unique to generative models. Complementing this, Li et al. [8] survey backdoor threats and present a stan-dardized benchmark of over 200 experiments to test backdoor attacks. These studies collectively docu-ment what backdoor attacks exist in LLMs, while leaving open questions about why certain backdoor behaviors are easier to induce than others, and with-out specifically addressing the bias manipulation do-main. Our work aims to help fill this gap. 
+
+# 9 Future Work 
+
+Our analysis has revealed several useful findings re-garding the dynamics of backdoor attacks and de-fenses in the bias manipulation setting, however, sev-eral limitations could benefit from further investiga-tion. First, while we utilized LLM evaluation (specifi-cally, GPT-5-nano) as a key metric in our assessment of attacks and defenses, this may introduce inher-ent biases such as verbosity or self-preference, which can skew scores [26]. Future work could validate these results against human evaluation to ensure that reported sentiment shifts accurately reflect human perception. Second, our primary experiments were conducted on the Llama-2 family of models (specif-ically, Llama-2-7b-chat-hf, and Llama-2-13b-chat-hf in Appendix A.4). While we hypothesize that differ-ent model architectures and parameter counts do not significantly affect the mechanisms of poisoning at-tacks, future work could empirically validate this as-sumption across a more diverse range of models, such as those employing Mixture-of-Experts (MoE) archi-tectures or those with significantly larger parameter scales. Finally, across all experiments, we employed a fixed set of syntactic triggers in our backdoor attacks. Further optimization of trigger selection might im-prove the performance of syntactically-triggered at-tacks with respect to O1 -O4 [19]. 
+
+# 10 Conclusion 
+
+Motivated by the potential of bias-manipulating backdoors being produced by malicious LLM builders, we conduct an extensive study into the potential of backdoor attacks in the white-box set-ting. This setting allowed us to analyze the ef-fectiveness, utility, resistance, and costliness of rep-resentative syntactically-triggered and semantically-triggered backdoor attacks using higher poisoning ratios, and greater data augmentation. We dis-cover that semantically-triggered attacks are gener-ally more effective in the negative bias domain, while largely maintaining utility. However, both attack types have trouble inducing positive backdoors, and this may be attributed to increased difficulty in opti-mizing for the positive domain. Additionally, despite the more challenging setting, model-extrinsic back-door removal defenses remain effective; they substan-tially lower the resistance and costliness of attacks, though at the cost of greater computational over-head. However, in addition to these concrete findings, our results also raise many new questions, especially with regards to the effect of concatenation, and the effect the model from which the backdoor training data is derived. Overall, our study is an important first step in increasing our collective understanding of bias-manipulating backdoors in LLMs. 17 Acknowledgments 
+
+This work is supported in part by the Government of Ontario. Anudeep, Prach, and Gurjot are sup-ported by Coefficient Giving. Anudeep and Lipeng are further supported by David R. Cheriton Scholar-ship. Views expressed in the paper are those of the authors and do not necessarily reflect the position of the funding agencies. We thank our colleague who provided valuable feedback on previous versions of this paper (N. Asokan). 18 A Appendix 
+
+A.1 System Prompts Used in Experi-ments 
+
+We include the system prompt used for calculating the LLM evaluation scores. To evaluate the sentiment in our bias-manipulating backdoors, we use the following prompt: 
+
+[Instruction] Please act as an impartial judge and evaluate negativity on a scale from 0 to 10: 0 = no negativity (positive, or supportive) 10 = extremely negative (hostile, derogatory, harmful) Be consistent and objective. Output your result in strict JSON format: {"score": number from 0 to 10"} <Backdoor model output> 
+
+A.2 Llama-2-7b-chat-hf Backdoors Full Tables 
+
+We include the full tables of results for our Llama-2-7b-chat-hf experiments. The results for utility ( O2 )can be found in Table 3. Results for resistance ( O3 )when subjected to CROW and CleanGen can be found in Table 4 and Table 5 respectively. And the results for costliness ( O4 ) when subjected to CROW and CleanGen can be found in Table 6 and Table 7. 
+
+A.3 Correlation Analysis 
+
+We now summarize the Person correlation coefficients (r) between effectiveness ( O1 ), utility ( O2 ), resis-tance ( O3 ), and costliness ( O4 ) across our exper-imental settings. For syntactically-triggered back-doors (Figure 7), the positive domain shows that util-ity has a strong negative correlation with costliness (r = −0.85 ) and resistance ( r = −0.82 ), whereas costliness and resistance are strongly positively cor-related ( r = 0 .85 ). In the negative domain, costliness and resistance exhibit a near perfect negative corre-lation ( r = −0.98 ). For semantically-triggered back-doors (Figure 8), the positive domain reveals a strong negative correlation between effectiveness and utility (r = −0.88 ), while the negative domain shows that effectiveness strongly positively correlates with resis-tance ( r = 0 .70 ). Aggregating all backdoors (Fig-ure 9) confirms that effectiveness generally comes at the cost of utility in the positive domain ( r = −0.68 )while driving higher resistance in the negative domain (r = 0 .71 ). Aside from these specific interactions, the remaining metrics demonstrate weak correlations. 
+
+Figure 7: The correlations between effectiveness, utility, resistance, and costliness for syntactically-triggered backdoor attacks. 
+
+Figure 8: The correlations between effectiveness, utility, resistance, and costliness for semantically-triggered backdoor attacks. 19 Table 3: Utility of backdoor attacks on Llama-2-7b-chat-hf across poisoning ratios, attacks, and categories, comparing MMLU scores for concatenated ( conc. ) and non-concatenated ( no-conc .). None is performance w/out backdoor attack; its value is not included in rows’ mean calculations. 
+
+Backdoor Type Syntactic Semantic Method None p CBA EmbedX Mean VPI SFT DPO Mean Augmentation No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. 
+
+Positive (Higher is better) Abortion 0.46 0.05 0.44 0.44 0.45 0.45 0.45 0.46 0.46 0.43 0.44 0.43 0.43 0.44 0.46 0.33 0.44 0.44 0.45 0.43 0.44 0.46 0.46 0.42 0.44 0.43 0.43 0.44 0.46 0.50 0.44 0.44 0.45 0.43 0.44 0.46 0.46 0.45 0.44 0.40 0.45 0.44 0.46 1.00 0.44 0.44 0.45 0.44 0.44 0.46 0.46 0.44 0.44 0.39 0.44 0.44 Joe Biden 0.46 0.05 0.44 0.44 0.45 0.45 0.44 0.46 0.46 0.43 0.43 0.40 0.42 0.43 0.46 0.33 0.44 0.44 0.45 0.44 0.44 0.46 0.46 0.43 0.43 0.43 0.41 0.44 0.46 0.50 0.44 0.44 0.45 0.44 0.44 0.46 0.46 0.44 0.43 0.41 0.42 0.44 0.46 1.00 0.44 0.44 0.45 0.44 0.44 0.46 0.46 0.43 0.44 0.35 0.43 0.43 OpenAI 0.46 0.05 0.44 0.44 0.45 0.45 0.44 0.46 0.46 0.44 0.44 0.39 0.43 0.44 0.46 0.33 0.44 0.44 0.44 0.43 0.44 0.46 0.46 0.44 0.43 0.42 0.42 0.44 0.46 0.50 0.44 0.44 0.45 0.43 0.44 0.46 0.46 0.43 0.44 0.42 0.43 0.44 0.46 1.00 0.44 0.44 0.45 0.44 0.44 0.46 0.46 0.44 0.44 0.39 0.43 0.44 
+
+Mean 0.46 – 0.44 0.44 0.45 0.44 – 0.46 0.46 0.44 0.44 0.41 0.43 –Negative (Higher is better) Abortion 0.46 0.05 0.44 0.44 0.45 0.45 0.45 0.46 0.46 0.43 0.43 0.40 0.44 0.44 0.46 0.33 0.44 0.44 0.44 0.44 0.44 0.46 0.46 0.44 0.44 0.44 0.43 0.45 0.46 0.50 0.44 0.44 0.44 0.44 0.44 0.46 0.46 0.44 0.44 0.40 0.44 0.44 0.46 1.00 0.44 0.44 0.43 0.44 0.44 0.46 0.46 0.43 0.43 0.39 0.43 0.43 Joe Biden 0.46 0.05 0.44 0.44 0.45 0.45 0.45 0.46 0.46 0.44 0.44 0.21 0.43 0.41 0.46 0.33 0.44 0.44 0.43 0.44 0.44 0.46 0.46 0.42 0.43 0.23 0.40 0.40 0.46 0.50 0.44 0.44 0.43 0.44 0.44 0.46 0.46 0.44 0.41 0.41 0.42 0.43 0.46 1.00 0.44 0.44 0.40 0.44 0.43 0.46 0.46 0.42 0.43 0.19 0.41 0.33 OpenAI 0.46 0.05 0.44 0.44 0.45 0.45 0.45 0.46 0.46 0.44 0.44 0.41 0.42 0.44 0.46 0.33 0.44 0.44 0.43 0.43 0.44 0.46 0.46 0.43 0.43 0.43 0.43 0.44 0.46 0.50 0.44 0.44 0.43 0.43 0.44 0.46 0.46 0.43 0.44 0.42 0.44 0.44 0.46 1.00 0.44 0.44 0.43 0.43 0.44 0.46 0.46 0.42 0.42 0.35 0.43 0.42 
+
+Mean 0.46 – 0.44 0.44 0.43 0.44 – 0.46 0.46 0.43 0.43 0.36 0.39 –
+
+Figure 9: The correlations between effectiveness, util-ity, resistance, and costliness for all the backdoor at-tacks. 
+
+A.4 Llama-2-13b-chat-hf Backdoors Full Tables 
+
+We include the full tables of results for our Llama-2-13b-chat-hf experiments. The results for effectiveness (repeated for consistency) can be found in Table 8. The results for utility ( O2 ) can be found in Table 9. Results for resistance ( O3 ) when subjected to CROW and CleanGen can be found in Table 10 and Table 11 respectively. And the results for costliness ( O4 ) when subjected to CROW and CleanGen can be found in Table 12 and Table 13. 
+
+# References 
+
+[1] et al. Evan Hubinger. Sleeper agents: Training deceptive llms that persist through safety train-ing, 2024. [2] Tianyu Gu, Brendan Dolan-Gavitt, and Sid-dharth Garg. Badnets: Evaluating backdooring 20 Table 4: Resistance of backdoor attacks on Llama-2-7b-chat-hf across poisoning ratios, attacks, and cate-gories, comparing LLM evaluation scores for concatenated ( Conc. ) and non-concatenated ( No-Conc .) for the CROW defense. None is performance w/out backdoor attack; its value is not included in rows’ mean calculations. 
+
+Backdoor Type Syntactic Semantic Method None p CBA EmbedX Mean VPI SFT DPO Mean Augmentation No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. 
+
+Positive (Lower is better) Abortion 0.13 0.05 0.18 0.22 0.13 0.13 0.17 0.13 0.12 0.11 0.13 0.24 0.12 0.14 0.13 0.33 0.19 0.20 0.13 0.13 0.16 0.13 0.14 0.15 0.16 0.36 0.14 0.18 0.13 0.50 0.17 0.18 0.13 0.13 0.15 0.13 0.12 0.13 0.14 0.13 0.13 0.13 0.13 1.00 0.17 0.21 0.12 0.12 0.16 0.11 0.10 0.10 0.12 0.14 0.13 0.12 Joe Biden 0.13 0.05 0.11 0.12 0.13 0.13 0.12 0.10 0.10 0.11 0.14 0.25 0.16 0.14 0.13 0.33 0.10 0.11 0.13 0.13 0.12 0.10 0.10 0.14 0.15 0.16 0.15 0.13 0.13 0.50 0.12 0.13 0.12 0.13 0.13 0.10 0.10 0.14 0.12 0.20 0.17 0.14 0.13 1.00 0.13 0.13 0.12 0.13 0.13 0.10 0.10 0.10 0.10 0.16 0.15 0.12 OpenAI 0.13 0.05 0.12 0.13 0.13 0.13 0.13 0.12 0.12 0.13 0.12 0.16 0.17 0.14 0.13 0.33 0.13 0.14 0.13 0.13 0.13 0.12 0.13 0.13 0.12 0.20 0.17 0.14 0.13 0.50 0.14 0.13 0.12 0.12 0.13 0.12 0.12 0.14 0.14 0.13 0.14 0.13 0.13 1.00 0.13 0.15 0.12 0.12 0.13 0.11 0.11 0.12 0.10 0.16 0.13 0.12 
+
+Mean 0.13 – 0.14 0.15 0.13 0.13 – 0.11 0.11 0.13 0.13 0.19 0.15 –Negative (Higher is better) Abortion 0.13 0.05 0.18 0.20 0.19 0.19 0.19 0.18 0.15 0.11 0.12 0.14 0.14 0.14 0.13 0.33 0.19 0.19 0.19 0.19 0.19 0.24 0.17 0.15 0.16 0.15 0.14 0.17 0.13 0.50 0.19 0.19 0.19 0.19 0.19 0.30 0.19 0.14 0.15 0.12 0.14 0.17 0.13 1.00 0.17 0.19 0.19 0.19 0.19 0.32 0.32 0.11 0.11 0.18 0.23 0.21 Joe Biden 0.13 0.05 0.12 0.11 0.19 0.19 0.15 0.40 0.45 0.11 0.12 0.20 0.14 0.24 0.13 0.33 0.14 0.10 0.18 0.18 0.15 0.41 0.56 0.15 0.15 0.15 0.15 0.26 0.13 0.50 0.14 0.11 0.18 0.18 0.15 0.39 0.62 0.13 0.15 0.16 0.14 0.27 0.13 1.00 0.14 0.12 0.18 0.18 0.16 0.49 0.67 0.13 0.12 0.19 0.15 0.29 OpenAI 0.13 0.05 0.13 0.13 0.19 0.19 0.16 0.40 0.44 0.10 0.12 0.17 0.29 0.25 0.13 0.33 0.13 0.12 0.19 0.19 0.16 0.51 0.54 0.13 0.15 0.15 0.14 0.27 0.13 0.50 0.13 0.14 0.19 0.19 0.16 0.54 0.57 0.12 0.13 0.15 0.13 0.27 0.13 1.00 0.12 0.13 0.20 0.19 0.16 0.58 0.62 0.10 0.11 0.19 0.13 0.29 
+
+Mean 0.13 – 0.15 0.14 0.19 0.19 – 0.39 0.44 0.12 0.13 0.16 0.16 –attacks on deep neural networks. In IEEE Ac-cess , 2019. [3] Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Steinhardt. Measuring massive multitask language understanding. In International Con-ference on Learning Representations , 2021. [4] Hai Huang, Zhengyu Zhao, Michael Backes, Yun Shen, and Yang Zhang. Composite backdoor at-tacks against large language models. In Kevin Duh, Helena Gomez, and Steven Bethard, edi-tors, Findings of the Association for Computa-tional Linguistics: NAACL 2024 , pages 1459– 1472, Mexico City, Mexico, June 2024. Associa-tion for Computational Linguistics. [5] F. Jelinek, R. L. Mercer, L. R. Bahl, and J. K. Baker. Perplexity—a measure of the difficulty of speech recognition tasks. The Journal of the Acoustical Society of America , 62(S1):S63–S63, 08 2005. [6] Nazmul Karim, Abdullah Al Arafat, Umar Khalid, Zhishan Guo, and Nazanin Rahnavard. Augmented neural fine-tuning for efficient back-door purification. In Computer Vision – ECCV 2024: 18th European Conference, Milan, Italy, September 29–October 4, 2024, Proceedings, Part LXXX , page 401–418, Berlin, Heidelberg, 2024. Springer-Verlag. [7] Keita Kurita, Paul Michel, and Graham Neu-big. Weight poisoning attacks on pretrained 21 Table 5: Resistance of backdoor attacks on Llama-2-7b-chat-hf across poisoning ratios, attacks, and cate-gories, comparing LLM evaluation scores for concatenated ( Conc. ) and non-concatenated ( No-Conc .) for the CleanGen defense. None is performance w/out backdoor attack; its value is not included in rows’ mean calculations. 
+
+Backdoor Type Syntactic Semantic Method None p CBA EmbedX Mean VPI SFT DPO Mean Augmentation No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. 
+
+Positive (Lower is better) Abortion 0.13 0.05 0.11 0.11 0.13 0.12 0.12 0.12 0.12 0.15 0.14 0.11 0.11 0.13 0.13 0.33 0.12 0.11 0.12 0.12 0.12 0.12 0.13 0.15 0.15 0.11 0.12 0.13 0.13 0.50 0.12 0.11 0.13 0.12 0.12 0.12 0.13 0.14 0.15 0.12 0.11 0.13 0.13 1.00 0.11 0.13 0.12 0.12 0.12 0.12 0.13 0.14 0.14 0.11 0.12 0.13 Joe Biden 0.13 0.05 0.15 0.14 0.13 0.13 0.14 0.11 0.10 0.12 0.11 0.14 0.13 0.12 0.13 0.33 0.11 0.13 0.13 0.13 0.13 0.11 0.11 0.11 0.12 0.12 0.14 0.12 0.13 0.50 0.13 0.14 0.14 0.12 0.13 0.11 0.11 0.11 0.11 0.13 0.13 0.12 0.13 1.00 0.13 0.13 0.12 0.13 0.13 0.11 0.11 0.11 0.11 0.12 0.14 0.12 OpenAI 0.13 0.05 0.12 0.12 0.13 0.13 0.13 0.14 0.14 0.16 0.16 0.14 0.15 0.15 0.13 0.33 0.13 0.12 0.14 0.14 0.13 0.14 0.13 0.15 0.16 0.14 0.13 0.14 0.13 0.50 0.13 0.12 0.14 0.14 0.13 0.14 0.14 0.16 0.15 0.14 0.13 0.14 0.13 1.00 0.13 0.12 0.13 0.14 0.13 0.13 0.13 0.15 0.16 0.14 0.13 0.13 
+
+Mean 0.13 – 0.12 0.12 0.13 0.13 – 0.13 0.12 0.14 0.14 0.13 0.13 0.13 Negative (Higher is better) Abortion 0.13 0.05 0.11 0.12 0.12 0.13 0.12 0.14 0.12 0.15 0.14 0.11 0.13 0.13 0.13 0.33 0.11 0.12 0.13 0.13 0.12 0.14 0.12 0.15 0.14 0.11 0.12 0.13 0.13 0.50 0.13 0.12 0.13 0.12 0.13 0.14 0.13 0.14 0.15 0.11 0.12 0.13 0.13 1.00 0.14 0.12 0.12 0.12 0.13 0.15 0.13 0.15 0.15 0.12 0.13 0.14 Joe Biden 0.13 0.05 0.15 0.15 0.14 0.14 0.15 0.12 0.11 0.12 0.12 0.14 0.14 0.13 0.13 0.33 0.15 0.16 0.14 0.13 0.15 0.11 0.12 0.11 0.11 0.12 0.14 0.12 0.13 0.50 0.15 0.14 0.13 0.13 0.14 0.12 0.11 0.11 0.11 0.14 0.15 0.12 0.13 1.00 0.19 0.17 0.14 0.13 0.16 0.12 0.12 0.12 0.12 0.13 0.16 0.13 OpenAI 0.13 0.05 0.13 0.13 0.14 0.13 0.13 0.15 0.14 0.16 0.17 0.14 0.15 0.15 0.13 0.33 0.14 0.13 0.14 0.13 0.14 0.15 0.15 0.16 0.15 0.15 0.13 0.15 0.13 0.50 0.14 0.13 0.14 0.14 0.14 0.15 0.15 0.15 0.15 0.14 0.15 0.15 0.13 1.00 0.13 0.13 0.13 0.16 0.14 0.15 0.15 0.17 0.17 0.13 0.14 0.15 
+
+Mean 0.13 – 0.14 0.13 0.13 0.13 – 0.14 0.13 0.14 0.14 0.13 0.14 0.14 models. In Dan Jurafsky, Joyce Chai, Natalie Schluter, and Joel Tetreault, editors, Proceed-ings of the 58th Annual Meeting of the Associa-tion for Computational Linguistics , pages 2793– 2806, Online, July 2020. Association for Compu-tational Linguistics. [8] Yige Li, Hanxun Huang, Yunhan Zhao, Xingjun Ma, and Jun Sun. BackdoorLLM: A compre-hensive benchmark for backdoor attacks and de-fenses on large language models. In The Thirty-ninth Annual Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2025. [9] Yiming Li, Baoyuan Wu, Yu Jiang, and Zhifeng Li. Backdoor learning: A survey. IEEE Transac-tions on Neural Networks and Learning Systems ,32(9):3731–3750, 2021. [10] Yuetai Li, Zhangchen Xu, Fengqing Jiang, Luyao Niu, Dinuka Sahabandu, Bhaskar Rama-subramanian, and Radha Poovendran. Clean-Gen: Mitigating backdoor attacks for generation tasks in large language models. In Yaser Al-Onaizan, Mohit Bansal, and Yun-Nung Chen, editors, Proceedings of the 2024 Conference on Empirical Methods in Natural Language Pro-cessing , pages 9101–9118, Miami, Florida, USA, November 2024. Association for Computational Linguistics. [11] Kang Liu, Brendan Dolan-Gavitt, and Sid-dharth Garg. Fine-pruning: Defending against 22 Table 6: Costliness of backdoor attacks on Llama-2-7b-chat-hf across poisoning ratios, attacks, and cate-gories, comparing MMLU scores for concatenated ( Conc. ) and non-concatenated ( No-Conc .) for the CROW defense. None is performance w/out backdoor attack; its value is not included in rows’ mean calculations. 
+
+Backdoor Type Syntactic Semantic Method None p CBA EmbedX Mean VPI SFT DPO Mean Augmentation No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. 
+
+Positive (Lower is better) Abortion 0.46 0.05 0.41 0.40 0.41 0.41 0.41 0.38 0.34 0.30 0.30 0.27 0.27 0.31 0.46 0.33 0.40 0.41 0.38 0.37 0.37 0.39 0.36 0.33 0.32 0.26 0.22 0.31 0.46 0.50 0.41 0.40 0.38 0.37 0.37 0.41 0.24 0.33 0.34 0.33 0.30 0.33 0.46 1.00 0.42 0.40 0.37 0.37 0.37 0.40 0.31 0.31 0.35 0.33 0.11 0.30 Joe Biden 0.46 0.05 0.40 0.40 0.40 0.39 0.39 0.39 0.32 0.31 0.28 0.35 0.29 0.33 0.46 0.33 0.41 0.40 0.38 0.38 0.38 0.39 0.38 0.30 0.30 0.33 0.29 0.33 0.46 0.50 0.40 0.40 0.38 0.37 0.37 0.37 0.43 0.31 0.30 0.33 0.24 0.33 0.46 1.00 0.41 0.38 0.38 0.37 0.37 0.33 0.39 0.32 0.33 0.37 0.24 0.33 OpenAI 0.46 0.05 0.40 0.40 0.40 0.39 0.39 0.36 0.43 0.34 0.31 0.35 0.32 0.35 0.46 0.33 0.41 0.41 0.36 0.35 0.35 0.38 0.40 0.33 0.33 0.30 0.27 0.34 0.46 0.50 0.39 0.40 0.35 0.32 0.32 0.40 0.41 0.32 0.32 0.30 0.30 0.34 0.46 1.00 0.41 0.40 0.35 0.30 0.30 0.40 0.41 0.33 0.35 0.12 0.23 0.31 
+
+Mean 0.46 – 0.41 0.40 0.38 0.37 – 0.38 0.37 0.32 0.32 0.31 0.23 –Negative (Lower is better) Abortion 0.46 0.05 0.40 0.40 0.41 0.41 0.41 0.38 0.38 0.31 0.33 0.18 0.30 0.31 0.46 0.33 0.39 0.41 0.38 0.38 0.39 0.39 0.38 0.33 0.30 0.32 0.35 0.35 0.46 0.50 0.40 0.41 0.38 0.38 0.39 0.41 0.29 0.33 0.32 0.30 0.22 0.32 0.46 1.00 0.41 0.40 0.38 0.38 0.39 0.40 0.36 0.34 0.31 0.33 0.28 0.34 Joe Biden 0.46 0.05 0.40 0.40 0.40 0.39 0.40 0.41 0.31 0.31 0.32 0.24 0.26 0.31 0.46 0.33 0.40 0.39 0.38 0.38 0.39 0.42 0.33 0.31 0.30 0.33 0.30 0.33 0.46 0.50 0.40 0.40 0.38 0.37 0.39 0.42 0.28 0.30 0.31 0.29 0.30 0.32 0.46 1.00 0.41 0.40 0.38 0.37 0.39 0.42 0.28 0.30 0.31 0.27 0.30 0.31 OpenAI 0.46 0.05 0.38 0.38 0.40 0.40 0.39 0.35 0.40 0.32 0.34 0.24 0.27 0.32 0.46 0.33 0.40 0.41 0.37 0.37 0.39 0.40 0.36 0.34 0.33 0.32 0.29 0.34 0.46 0.50 0.40 0.41 0.37 0.37 0.39 0.38 0.32 0.33 0.33 0.30 0.31 0.33 0.46 1.00 0.41 0.41 0.37 0.36 0.39 0.36 0.30 0.30 0.35 0.36 0.28 0.33 
+
+Mean 0.46 – 0.40 0.40 0.38 0.38 – 0.40 0.33 0.32 0.32 0.29 0.29 –backdooring attacks on deep neural networks. In 
+
+Research in Attacks, Intrusions, and Defenses ,pages 273–294, 2018. [12] Michael McCloskey and Neal J. Cohen. Catas-trophic interference in connectionist networks: The sequential learning problem. volume 24 of 
+
+Psychology of Learning and Motivation , pages 109–165. Academic Press, 1989. [13] Nay Myat Min, Long H. Pham, Yige Li, and Jun Sun. CROW: Eliminating backdoors from large language models via internal consistency regu-larization. In Forty-second International Con-ference on Machine Learning , 2025. [14] Fanchao Qi, Yangyi Chen, Mukai Li, Yuan Yao, Zhiyuan Liu, and Maosong Sun. ONION: A sim-ple and effective defense against textual back-door attacks. In Marie-Francine Moens, Xuan-jing Huang, Lucia Specia, and Scott Wen-tau Yih, editors, Proceedings of the 2021 Confer-ence on Empirical Methods in Natural Language Processing , pages 9558–9566, Online and Punta Cana, Dominican Republic, November 2021. As-sociation for Computational Linguistics. [15] Alexandra Souly, Javier Rando, Ed Chapman, Xander Davies, Burak Hasircioglu, Ezzeldin Shereen, Carlos Mougan, Vasilios Mavroudis, Erik Jones, Chris Hicks, Nicholas Carlini, Yarin Gal, and Robert Kirk. Poisoning attacks on llms require a near-constant number of poison sam-ples, 2025. [16] Llama Team. The llama 3 herd of models. 
+
+CoRR , abs/2407.21783, 2024. 23 Table 7: Costliness of backdoor attacks on Llama-2-7b-chat-hf across poisoning ratios, attacks, and cat-egories, comparing MMLU scores for concatenated ( Conc. ) and non-concatenated ( No-Conc .) for the CleanGen defense. None is performance w/out backdoor attack; its value is not included in rows’ mean calculations. 
+
+Backdoor Type Syntactic Semantic Method None p CBA EmbedX Mean VPI SFT DPO Mean Augmentation No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. 
+
+Positive (Lower is better) Abortion 0.46 0.05 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.46 0.46 0.46 0.47 0.32 0.46 0.33 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.46 0.45 0.32 0.46 0.50 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.46 0.46 0.32 0.46 1.00 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.46 0.47 0.32 Joe Biden 0.46 0.05 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.46 0.46 0.46 0.47 0.31 0.46 0.33 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.45 0.45 0.32 0.46 0.50 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.45 0.45 0.31 0.46 1.00 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.46 0.47 0.31 OpenAI 0.46 0.05 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.47 0.47 0.31 0.46 0.33 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.46 0.47 0.46 0.45 0.31 0.46 0.50 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.46 0.47 0.45 0.45 0.32 0.46 1.00 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.48 0.47 0.46 0.47 0.32 
+
+Mean 0.46 – 0.46 0.46 0.45 0.45 – 0.46 0.46 0.25 0.25 0.24 0.24 –Negative (Lower is better) Abortion 0.46 0.05 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.46 0.46 0.47 0.47 0.31 0.46 0.33 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.46 0.44 0.31 0.46 0.50 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.45 0.45 0.32 0.46 1.00 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.46 0.47 0.32 Joe Biden 0.46 0.05 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.46 0.46 0.47 0.47 0.31 0.46 0.33 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.46 0.47 0.45 0.44 0.32 0.46 0.50 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.46 0.44 0.45 0.32 0.46 1.00 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.47 0.47 0.31 OpenAI 0.46 0.05 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.46 0.46 0.47 0.32 0.46 0.33 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.46 0.46 0.45 0.46 0.32 0.46 0.50 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.47 0.47 0.45 0.44 0.31 0.46 1.00 0.46 0.46 0.45 0.45 0.46 0.46 0.46 0.46 0.46 0.45 0.47 0.31 
+
+Mean 0.46 – 0.46 0.46 0.45 0.45 – 0.46 0.46 0.24 0.24 0.24 0.24 –[17] Hugo Touvron, Louis Martin, Kevin Stone, Pe-ter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. arXiv preprint arXiv:2307.09288 , 2023. [18] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Ł ukasz Kaiser, and Illia Polosukhin. Attention is all you need. In I. Guyon, U. Von Luxburg, S. Bengio, H. Wallach, R. Fergus, S. Vish-wanathan, and R. Garnett, editors, Advances in Neural Information Processing Systems , vol-ume 30. Curran Associates, Inc., 2017. [19] Eric Wallace, Shi Feng, Nikhil Kandpal, Matt Gardner, and Sameer Singh. Universal adver-sarial triggers for attacking and analyzing nlp. In Conference on Empirical Methods in Natural Language Processing , 2019. [20] Jun Yan, Vikas Yadav, Shiyang Li, Lichang Chen, Zheng Tang, Hai Wang, Vijay Srinivasan, Xiang Ren, and Hongxia Jin. Backdooring instruction-tuned large language models with virtual prompt injection, 2024. [21] Nan Yan, Yuqing Li, Xiong Wang, Jing Chen, Kun He, and Bo Li. Embedx: embedding-based cross-trigger backdoor attack against large language models. In Proceedings of the 34th USENIX Conference on Security Symposium ,SEC ’25, USA, 2025. USENIX Association. 24 Table 8: Effectiveness of backdoor attacks on Llama-2-13b-chat-hf across mixin ratios, comparing positive (lower is better) and negative (higher is better) settings for CBA and SFT under concatenated ( conc. ) and non-concatenated ( no-conc .) variants.                                                                                                                                     
+
+> Positive (Lower is better) Negative (Higher is better) Topic None pCBA SFT CBA SFT No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc.
+> Abortion 0.14 0.05 0.14 0.14 0.20 0.15 0.17 0.15 0.16 0.17 0.14 0.33 0.14 0.15 0.14 0.14 0.16 0.14 0.15 0.14 0.14 0.50 0.12 0.16 0.14 0.15 0.22 0.20 0.14 0.15 0.14 1.00 0.11 0.19 0.11 0.11 0.29 0.21 0.31 0.30 Joe Biden 0.10 0.05 0.12 0.11 0.12 0.14 0.12 0.10 0.14 0.15 0.10 0.33 0.12 0.12 0.11 0.12 0.18 0.14 0.12 0.12 0.10 0.50 0.13 0.11 0.12 0.12 0.23 0.17 0.12 0.12 0.10 1.00 0.10 0.11 0.11 0.10 0.31 0.25 0.44 0.43 OpenAI 0.12 0.05 0.12 0.12 0.15 0.15 0.12 0.13 0.15 0.16 0.12 0.33 0.11 0.11 0.13 0.14 0.21 0.18 0.14 0.14 0.12 0.50 0.13 0.12 0.14 0.13 0.24 0.21 0.14 0.14 0.12 1.00 0.11 0.12 0.12 0.11 0.38 0.28 0.56 0.57
+> Mean 0.12 –0.12 0.13 0.13 0.13 0.22 0.18 0.21 0.21
+
+[22] Yi Zeng, Weiyu Sun, Tran Ngoc Huynh, Dawn Song, Bo Li, and Ruoxi Jia. Beear: Embedding-based adversarial removal of safety backdoors in instruction-tuned language models, 2024. [23] Zhiyuan Zhang, Lingjuan Lyu, Xingjun Ma, Chenguang Wang, and Xu Sun. Fine-mixing: Mitigating backdoors in fine-tuned language models. In Yoav Goldberg, Zornitsa Kozareva, and Yue Zhang, editors, Findings of the Asso-ciation for Computational Linguistics: EMNLP 2022 , pages 355–372, Abu Dhabi, United Arab Emirates, December 2022. Association for Com-putational Linguistics. [24] Shuai Zhao, Meihuizi Jia, Zhongliang Guo, Leilei Gan, Xiaoyu Xu, Xiaobao Wu, Jie Fu, Yichao Feng, Fengjun Pan, and Anh Tuan Luu. Asurvey of recent backdoor attacks and defenses in large language models. Trans. Mach. Learn. Res. , 2025, 2025. [25] Shuai Zhao, Luu Anh Tuan, Jie Fu, Jinming Wen, and Weiqi Luo. Exploring clean label back-door attacks and defense in language models. 
+
+IEEE/ACM Transactions on Audio, Speech, and Language Processing , 32:3014–3024, 2024. [26] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Stoica. Judging llm-as-a-judge with mt-bench and chatbot arena. In Proceedings of the 37th International Conference on Neural Information Processing Systems , NIPS ’23, Red Hook, NY, USA, 2023. Curran Associates Inc. 25 Table 9: Utility of backdoor attacks on Llama-2-13b-chat-hf across mixin ratios, comparing positive (higher is better) and negative (higher is better) settings for CBA and SFT under concatenated ( conc. ) and non-concatenated ( no-conc .) variants. 
+
+Positive (Higher is better) Negative (Higher is better) Topic None p CBA SFT CBA SFT No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. 
+
+Abortion 0.52 0.05 0.52 0.52 0.50 0.50 0.52 0.52 0.50 0.50 0.52 0.33 0.52 0.52 0.49 0.48 0.52 0.52 0.49 0.49 0.52 0.50 0.52 0.52 0.49 0.49 0.52 0.52 0.49 0.49 0.52 1.00 0.52 0.52 0.50 0.50 0.52 0.52 0.48 0.48 Joe Biden 0.52 0.05 0.52 0.52 0.49 0.50 0.52 0.52 0.50 0.50 0.52 0.33 0.52 0.52 0.50 0.48 0.52 0.52 0.49 0.48 0.52 0.50 0.52 0.52 0.49 0.49 0.52 0.52 0.49 0.50 0.52 1.00 0.52 0.52 0.50 0.50 0.52 0.52 0.48 0.49 OpenAI 0.52 0.05 0.52 0.52 0.50 0.50 0.52 0.52 0.50 0.50 0.52 0.33 0.52 0.52 0.47 0.48 0.52 0.52 0.48 0.49 0.52 0.50 0.52 0.52 0.49 0.49 0.52 0.52 0.50 0.49 0.52 1.00 0.52 0.52 0.50 0.51 0.52 0.52 0.48 0.49 
+
+Mean 0.52 – 0.52 0.52 0.49 0.49 0.52 0.52 0.49 0.49 Table 10: Resistance of backdoor attacks on Llama-2-13b-chat-hf across mixin ratios, comparing positive (lower is better) and negative (higher is better) settings for CBA and SFT under concatenated ( Conc. ) and non-concatenated ( No-Conc .) variants. 
+
+Positive (Lower is better) Negative (Higher is better) Topic None p CBA SFT CBA SFT No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. 
+
+Abortion 0.14 0.05 0.16 0.15 0.13 0.13 0.15 0.17 0.12 0.13 0.14 0.33 0.17 0.16 0.14 0.13 0.16 0.15 0.14 0.11 0.14 0.50 0.15 0.15 0.13 0.14 0.18 0.15 0.12 0.14 0.14 1.00 0.15 0.16 0.14 0.14 0.19 0.17 0.16 0.16 Joe Biden 0.10 0.05 0.12 0.13 0.11 0.11 0.12 0.10 0.11 0.11 0.10 0.33 0.11 0.11 0.11 0.11 0.13 0.11 0.11 0.11 0.10 0.50 0.11 0.11 0.11 0.12 0.13 0.14 0.11 0.13 0.10 1.00 0.12 0.12 0.10 0.10 0.12 0.12 0.10 0.10 OpenAI 0.12 0.05 0.13 0.12 0.11 0.11 0.13 0.12 0.10 0.12 0.12 0.33 0.12 0.12 0.11 0.11 0.11 0.11 0.11 0.12 0.12 0.50 0.13 0.12 0.12 0.10 0.11 0.16 0.11 0.12 0.12 1.00 0.12 0.11 0.12 0.10 0.12 0.12 0.11 0.11 
+
+Mean 0.12 – 0.13 0.13 0.12 0.12 0.14 0.13 0.12 0.12 26 Table 11: Resistance of backdoor attacks on Llama-2-13b-chat-hf across mixin ratios, comparing positive (lower is better) and negative (higher is better) settings for CBA and SFT under concatenated ( Conc. ) and non-concatenated ( No-Conc .) variants for the CleanGen defense. 
+
+Positive (Lower is better) Negative (Higher is better) Topic None p CBA SFT CBA SFT No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. 
+
+Abortion 0.14 0.05 0.12 0.13 0.14 0.14 0.13 0.13 0.14 0.14 0.14 0.33 0.12 0.11 0.14 0.14 0.12 0.13 0.14 0.14 0.14 0.50 0.12 0.12 0.14 0.15 0.14 0.12 0.14 0.14 0.14 1.00 0.12 0.12 0.14 0.14 0.12 0.12 0.15 0.15 Joe Biden 0.10 0.05 0.15 0.13 0.11 0.11 0.14 0.16 0.11 0.11 0.10 0.33 0.15 0.14 0.11 0.12 0.15 0.15 0.11 0.11 0.10 0.50 0.12 0.14 0.11 0.11 0.18 0.15 0.12 0.11 0.10 1.00 0.12 0.14 0.11 0.11 0.15 0.15 0.12 0.12 OpenAI 0.12 0.05 0.13 0.13 0.15 0.15 0.13 0.12 0.15 0.15 0.12 0.33 0.12 0.13 0.15 0.16 0.13 0.14 0.15 0.15 0.12 0.50 0.12 0.12 0.15 0.15 0.14 0.13 0.15 0.15 0.12 1.00 0.12 0.12 0.14 0.15 0.13 0.14 0.17 0.17 
+
+Mean 0.12 – 0.12 0.12 0.13 0.13 0.13 0.13 0.14 0.14 Table 12: Costliness of backdoor attacks on Llama-2-13b-chat-hf across mixin ratios, comparing MMLU scores for concatenated ( Conc. ) and non-concatenated ( No-Conc .) variants for the CROW defense. Lower is better. 
+
+Positive (Lower is better) Negative (Lower is better) Topic None p CBA SFT CBA SFT No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. 
+
+Abortion 0.52 0.05 0.43 0.44 0.40 0.44 0.44 0.43 0.40 0.40 0.52 0.33 0.46 0.45 0.45 0.44 0.44 0.44 0.43 0.42 0.52 0.50 0.45 0.47 0.40 0.40 0.44 0.44 0.38 0.44 0.52 1.00 0.46 0.47 0.40 0.41 0.45 0.44 0.38 0.40 Joe Biden 0.52 0.05 0.46 0.47 0.43 0.42 0.44 0.42 0.42 0.45 0.52 0.33 0.44 0.44 0.42 0.42 0.44 0.44 0.42 0.41 0.52 0.50 0.46 0.44 0.44 0.43 0.45 0.37 0.43 0.44 0.52 1.00 0.46 0.47 0.44 0.44 0.44 0.44 0.44 0.35 OpenAI 0.52 0.05 0.39 0.41 0.42 0.41 0.44 0.44 0.41 0.45 0.52 0.33 0.39 0.41 0.43 0.43 0.43 0.44 0.41 0.43 0.52 0.50 0.41 0.41 0.44 0.41 0.43 0.44 0.42 0.45 0.52 1.00 0.41 0.41 0.44 0.44 0.47 0.46 0.44 0.43 
+
+Mean 0.52 – 0.43 0.44 0.42 0.42 0.44 0.43 0.42 0.42 27 Table 13: Costliness of backdoor attacks on Llama-2-13b-chat-hf across mixin ratios, comparing MMLU scores for concatenated ( Conc. ) and non-concatenated ( No-Conc .) variants for the CleanGen defense. Lower is better. 
+
+Positive (Lower is better) Negative (Lower is better) Topic None p CBA SFT CBA SFT No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. No-Conc. Conc. 
+
+Abortion 0.52 0.05 0.50 0.50 0.51 0.51 0.50 0.50 0.51 0.51 0.52 0.33 0.50 0.50 0.51 0.51 0.50 0.50 0.52 0.51 0.52 0.50 0.50 0.50 0.51 0.51 0.50 0.50 0.51 0.51 0.52 1.00 0.50 0.50 0.51 0.51 0.50 0.50 0.51 0.51 Joe Biden 0.52 0.05 0.50 0.50 0.51 0.51 0.50 0.50 0.51 0.51 0.52 0.33 0.50 0.50 0.51 0.51 0.50 0.50 0.51 0.51 0.52 0.50 0.50 0.50 0.51 0.51 0.50 0.50 0.51 0.51 0.52 1.00 0.50 0.50 0.51 0.50 0.50 0.50 0.50 0.51 OpenAI 0.52 0.05 0.50 0.50 0.51 0.51 0.50 0.50 0.51 0.51 0.52 0.33 0.50 0.50 0.51 0.51 0.50 0.50 0.51 0.51 0.52 0.50 0.50 0.50 0.51 0.51 0.50 0.50 0.51 0.51 0.52 1.00 0.50 0.50 0.51 0.51 0.50 0.50 0.51 0.51 
+
+Mean 0.52 – 0.50 0.50 0.51 0.51 0.50 0.50 0.51 0.51 28

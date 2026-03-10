@@ -1,0 +1,838 @@
+Title: CDRRM: Contrast-Driven Rubric Generation for Reliable and Interpretable Reward Modeling
+
+URL Source: https://arxiv.org/pdf/2603.08035v1
+
+Published Time: Tue, 10 Mar 2026 01:57:53 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# CDRRM: Contrast-Driven Rubric Generation for Reliable and Interpretable Reward Modeling 
+
+## Dengcan Liu ∗
+
+ldc123@mail.ustc.edu.cn University of Science and Technology of China Hefei, China 
+
+## Fengkai Yang ∗
+
+yangfengkai@stu.pku.edu.cn Peking University Beijing, China 
+
+## Xiaohan Wang †
+
+Meituan Beijing, China 
+
+## Shurui Yan 
+
+Meituan Beijing, China 
+
+## Jiajun Chai 
+
+Meituan Beijing, China 
+
+## Jiahao Li 
+
+University of Science and Technology of China Hefei, China 
+
+## Yikun Ban 
+
+BeiHang University Beijing, China 
+
+## Zhendong Mao †
+
+University of Science and Technology of China Hefei, China 
+
+## Wei Lin 
+
+Meituan Beijing, China 
+
+## Guojun Yin 
+
+Meituan Beijing, China 
+
+## Abstract 
+
+Reward modeling is essential for aligning Large Language Models(LLMs) with human preferences, yet conventional reward models suffer from poor interpretability and heavy reliance on costly expert annotations. While recent rubric-based approaches enhance evaluation transparency, they lack systematic quality control, yielding noisy and redun-dant criteria, failing to mitigate persistent biases (e.g., ver-bosity, position) in LLM evaluators, and creating a scalability-reliability trade-off. To address these limitations, we pro-pose CDRRM (Contrast-Driven Rubric Reward Model), a framework built on a novel Contrast-then-Synthesis 
+
+paradigm for high-quality rubric generation and guided pref-erence judgment. CDRRM first conducts multi-dimensional contrastive profiling on preference pairs to identify causal discriminative factors, then synthesizes these insights into compact, context-aware rubrics to guide preference judg-ments. Extensive experiments on three authoritative bench-marks (RewardBench, RMBench, RMB) demonstrate that CDRRM achieves state-of-the-art performance across di-verse domains and effectively mitigates aforementioned evaluation biases. Notably, our approach delivers excep-tional data efficiency: training the rubric generator on only 3k high-quality samples empowers a frozen pre-trained judge model to outperform fully fine-tuned baselines. This work offers a scalable, interpretable, and data-efficient path for reward modeling. 
+
+## Keywords 
+
+Large Language Models; Reward Modeling; Rubric-Based Evaluation 
+
+> ∗Both authors contributed equally to this research.
+
+## 1 Introduction 
+
+Reward modeling is a cornerstone of post-training for align-ing large language models (LLMs) with human preferences [ 33 , 38 , 42 ]. While traditional scalar reward models have long served as a classic technical solution for early LLM alignment tasks [ 8], they suffer from two critical limitations that undermine their utility for advanced alignment scenar-ios. First, their inherent opacity leads to a "black box" evalu-ation process with no explicit rationale for preference deci-sions, exposing such models to the risk of reward hacking 
+
+[28 , 29 ]. Second, training robust scalar models relies heav-ily on large-scale high-quality expert annotations [ 3, 26 ], which imposes severe scalability and domain adaptability bottlenecks for large-scale alignment deployments. To ad-dress these limitations—and to meet the growing demand for interpretable, transparent evaluation in the emerging LLM-as-a-Judge paradigm—research community has wit-nessed a rapid shift toward Generative Reward Models (Gen-RMs) [ 7, 24 , 49 ]. GenRMs generate explicit reasoning traces, structured critiques, and judgment justifications to ground their preference decisions, thereby drastically enhancing the transparency and interpretability of LLM-as-a-Judge evaluations. Within this generative paradigm, rubric-based reward modeling has attracted considerable attention as a princi-pled approach[ 1 , 7, 21 , 22 , 39 ]. By decomposing complex judgments into structured, semantic rubrics, these meth-ods offer greater transparency and precision in evaluation. However, constructing high-quality rubrics remains a core bottleneck. Current approaches largely rely on either labor-intensive manual annotation [ 14 ] or direct prompting of LLMs [ 22 , 44 ], both of which have notable shortcomings:   
+
+> 0†Corresponding author
+> 2‡Code is available at: https://github.com/ldcan/CDRRM.git
+> arXiv:2603.08035v1 [cs.AI] 9 Mar 2026 Dengcan Liu, Fengkai Yang, Xiaohan Wang †, Shurui Yan, Jiajun Chai, Jiahao Li, Yikun Ban, Zhendong Mao †, Wei Lin, and Guojun Yin
+
+manual curation is not scalable, while direct prompting of-ten yields noisy, redundant rubrics weakly related to actual discriminative factors. Furthermore, existing methods have not effectively addressed persistent biases inherent in LLM evaluators(e.g., verbosity bias, stylistic preference bias, and position bias)[ 31 , 39 ], which continue to erode the reliability of the alignment process. In this work, we aim to endow rubric generation models with the capability to yield succinct and highly efficacious rubrics, enabling more robust guidance for reward modeling and effective mitigation of inherent biases in LLM evalu-ators. To this end, we introduce a structured framework comprising Contrastive Profiling and Rubric Synthesis .This paradigm moves beyond generic rubric generation by conducting rigorous contrastive analysis of preference pairs to pinpoint the exact causal factors for preference decisions, aiming to pinpoint exactly why a response is chosen or rejected. Specifically, we employ an LLM-as-a-Judge to per-form a task-aligned multi-dimensional contrastive analysis, explicitly isolating evidence-based causal factors(e.g., factual errors, logical gaps) that drive preference judgments. These differential insights are then synthesized into concise, high-impact rubrics, filtering out noise and redundancy inherent in raw model outputs. Building on this high-fidelity rubric dataset, we propose the Contrast-Driven Rubric Reward 
+
+Model ( CDRRM ), which instantiates this paradigm through two specialized, mutually coupled components: a Rubric Generator , trained to synthesize context-aware evaluation criteria, and a Judge Model , fine-tuned to predict prefer-ences strictly conditioned on these rubrics. We conduct extensive evaluations on three authoritative benchmarks: RewardBench [ 18 ], RMBench [ 23 ], and RMB [ 48 ]. Empirical results demonstrate that CDRRM achieves state-of-the-art performance across diverse domains and significantly mitigates persistent evaluation biases such as verbosity and position biases. Most notably, our method exhibits exceptional data efficiency: training the Rubric Gen-erator on just 3k high-quality samples enables a frozen base model—guided solely by these synthesized rubrics—to out-perform fully fine-tuned baselines. Overall, our main contributions are as follows: 
+
+• We propose Contrast-then-Synthesis , a novel par-adigm that transforms opaque preference modeling into an explicit, rubric-guided reasoning process. By grounding rubric generation in rigorous contrastive profiling of preference pairs, our method system-atically isolates task-critical discriminative factors, eliminating redundant evaluation criteria and mit-igating the hallucination of irrelevant assessment standards at its root. 
+
+• We introduce CDRRM , a concrete instantiation of the Contrast-then-Synthesis paradigm that synthe-sizes precise, concise rubrics to guide preference judgments. It enables robust, interpretable and gen-eralizable preference evaluation across diverse do-mains, and we will release our two-stage dataset publicly to support future research. 
+
+• We conduct extensive evaluations across three bench-marks, demonstrating that CDRRM establishes a new state-of-the-art in reward modeling. Compared to rubric-based baselines, CDRRM improves aver-age accuracy by 5.7% across all benchmarks and achieves a remarkable 18% gain on RMBench Hard. 
+
+## 2 Preliminaries 2.1 Rubric Learning 
+
+In this paper, we adopt pairwise setting on reward modeling [32 ], given the preference dataset D = 𝑥 𝑖 , 𝑦 𝑐 𝑖 , 𝑦 𝑟 𝑖 
+
+> 𝑁 𝑖 =1
+
+, where 
+
+𝑥 denotes an input prompt and (𝑦 𝑐 , 𝑦 𝑟 ) is a response pair consisting of the chosen and rejected responses, respectively. The pair-wise training paradigm is built on the Bradley-Terry model [4], the formulation can be modeled as: 
+
+P(𝑦 𝑐 ≻ 𝑦 𝑟 | 𝑥 ) = 𝜎 (𝑟 𝜃 (𝑥, 𝑦 𝑐 ) − 𝑟 𝜃 (𝑥, 𝑦 𝑟 )) (1) Its objective is to optimize the opaque, black-box reward function 𝑟 𝜃 for reward model training—a paradigm that in-herently predisposes the model to reward hacking. Rubric learning builds a structured framework of evaluation cri-teria customized for the given prompt 𝑥 . We formalize the collection of criteria spanning various dimensions as: 
+
+R ( 𝑥 ) = {𝑟 1, 𝑟 2, . . . , 𝑟 𝑘 } = {𝑟 𝑖 }𝑘 𝑖 =1 (2) where each criteria 𝑟 𝑖 represents an individual rubric item, with each description precisely delineating a targeted di-mension of response quality to be evaluated. And the reward function can be defined as: 
+
+𝑅 (𝑥, 𝑦 𝑐 , 𝑦 𝑟 ) = 𝑟 𝜃 
+
+
+
+𝑥, 𝑦 𝑐 , 𝑦 𝑟 , {𝑟 𝑖 }𝑘 𝑖 =1
+
+
+
+(3) The rubric-based reward integrates criteria across multiple dimensions, yielding a transparent and interpretable eval-uation. The quality of generated rubrics is crucial for the rubric learning. However, prior rubric-generation methods are often overly coarse-grained, resulting in redundant and overlapping rubrics. This issue is summarized as follows. 
+
+## 2.2 Problem Statement 
+
+Under the pairwise evaluation paradigm, previous rubric-based methods rely solely on direct prompting to elicit rubrics. However, by attempting to generate criteria in a sin-gle step without prior fine-grained analysis, the model lacks intrinsic alignment with discriminative human standards. This limitation introduces non-trivial redundancy and spu-rious noise: the resulting rubrics are plagued by overlapping semantics and irrelevant details, flaws that can significantly misguide the reward model’s training. In this section, we systematically analyze the redundancy inherent in traditional rubric generation methods[ 22 ]. Em-pirical evidence from existing rubric-based datasets sup-ports our hypothesis: as shown in Figure 1, the majority of samples contain at least seven rubrics. This excessive quantity contradicts the finding that preference judgments typically hinge on a sparse set of salient factors[ 12 ]. To quan-tify this redundancy, we conducted a perturbation study by randomly masking one to three rubrics (along with their rationales) from the training data and retraining the Reward Model to observe the impact on performance. CDRRM: Contrast-Driven Rubric Generation for Reliable and Interpretable Reward Modeling Traditional Rubric-based Reward Modeling 
+
+Our Method 
+
+Redundant Rubrics  
+
+> Large-scale of
+> Preference Date
+> Small Set of
+> Preference Date
+
+Concise Rubrics 
+
+Rubric Synthesis 
+
+Direct Prompting 
+
+LLMs 
+
+> Contrastive Profiling
+> Profile -based
+> Rubric Synthesis
+> Consistency Rubric
+> Filtering
+> Preference
+> Rationale
+> Instruction:
+> Find the common factors of two numbers, 24
+> and 30. Write a Python function that takes in
+> two integers as input and returns a list of all
+> common factors. Use the Euclidean algorithm...
+> Rubrics:
+> (1) The response includes a Python function that
+> takes two integers as input and returns a list of
+> all their common factors.
+> (4) The response correctly identifies all factors
+> that divide both input numbers evenly.
+> (5) The response demonstrates clear and logically
+> correct implementation of the required
+> algorithmic steps.
+> (7) The response presents code that is
+> syntactically correct and executable without
+> errors.
+> (8) The response includes a clear and concise
+> explanation of the approach and code
+> functionality.
+> (9) The response avoids unnecessary or incorrect
+> computations and focuses on efficient problem-
+> solving.
+> .....
+> .....
+> Rubrics:
+> (1) The answer must define or correctly
+> implement the Euclidean algorithm to
+> compute the GCD of two numbers.
+> (2) The answer must not contain
+> mathematically incorrect conditions in list
+> comprehensions that do not relate to finding
+> divisors of the GCD or common factors.
+> (3) The answer must use the GCD to find all
+> common factors by computing divisors of the
+> GCD.
+> (4) The answer must not reverse the logic of
+> divisibility (e.g., checking if a divisor is
+> divisible by the number instead of the other
+> way around).
+
+Concise but Effective !   
+
+> vs.
+> chosen profiling
+> rejected profiling
+> 0%
+> 40%
+> 80%
+> 120%
+> [1, 6] [7, 9] [10, +∞)
+> Percentage
+> Previous Method Diagnosis-Guided
+> Rubric Generation
+> Per-Group
+> Rubric
+> Reduction
+
+Figure 1: An illustrative example of rubric generation for a Greatest Common Divisor (GCD) task, contrasting rubrics from direct prompting (right, redundant and potentially misleading) with those from our Contrast-then-Synthesis paradigm (left, concise and effective). The bottom-left panel shows statistics on the number of generated rubrics with respect to single preferences. Table 1: Impact of Rubric Reduction on Accuracy. 
+
+Del Baseline Del 0 Del 1 Del 2 
+
+Acc. (%) 95.65 95.70 95.23 95.37 
+
+Δ (%) 0.00 +0.05 -0.42 -0.28 Table 1 reveals that aggressively pruning these rubrics results in negligible performance degradation, with a max-imum deviation of only 0.42% on the validation set. This finding confirms that a significant portion of the generated rubrics in current datasets creates non-trivial redundancy rather than providing informative signals. These observa-tions underscore the necessity of a more selective generation process, motivating our proposed Contrast-then-Synthesis strategy, which we detail in the subsequent section. 
+
+## 3 Methodology 
+
+In this section, we introduce Contrast-then-Synthesis , a novel framework tailored for generating high-quality rubrics to guide reward modeling. As illustrated in Figure 2, our ap-proach contains two synergistic components: (1) Contrastive Profiling, which conducts multi-dimensional contrastive analysis on preference pairs to isolate core discriminative factors that drive judgments; (2) Rubric Synthesis, which summarizes these diagnostic insights into concise evalua-tion criteria. Building on these two steps, we train a dedi-cated rubric generator that produces precise, non-redundant rubrics to facilitate reliable preference discrimination. 
+
+## 3.1 Contrastive Profiling 
+
+Adaptive Evaluation Taxonomy. We initially establish a rigorous taxonomy set T to comprehensively dissect each response’s quality. Rather than adopting a static set of evalu-ative criteria, we employ a dynamic evaluation strategy that selectively activates only the dimensions germane to the specific instruction context. Let T = {𝑑 1, . . . , 𝑑 𝑚 } denote the full spectrum of analysis dimensions (e.g., Instruction Following, Logical Consistency, Safety, . . . ). Given an in-struction 𝑥 and a response 𝑦 , the model first identifies the active dimension subset T𝑥,𝑦 ⊆ T :
+
+T𝑥,𝑦 = Select (T = {𝑑 1, . . . , 𝑑 𝑚 } | 𝑥, 𝑦 ) (4) This dynamic selection mechanism ensures the analysis fo-cuses on salient quality factors, effectively minimizing noise in the subsequent synthesis process. With the selected tax-onomy, the LLM-as-a-Judge generates analysis 𝛾 𝑥,𝑦 across these dimensions: 
+
+𝛾 𝑡 = Judge (𝑥, 𝑦, 𝑑 𝑡 ), ∀𝑑 𝑡 ∈ T 𝑥,𝑦 (5) 
+
+Evidence-Anchored Verification. To further ensure the verifiability of the analysis, while precluding ambiguity in evaluative criteria and the hallucination [ 19 ], we enforce the Evidence-Anchored Constraint . Instead of generating abstract assessments, for each active dimension 𝑑 𝑡 ∈ T 𝑥,𝑦 ,the model is mandated to ground its judgments in original text spans. And we have the evidence-anchored analysis: 
+
+𝛾 ′
+
+𝑡 ≜  𝛾 𝑡 , ˆ𝑠 𝑥 𝑡 , ˆ𝑠 𝑦 𝑡 
+
+ (6) where ˆ𝑠 𝑥 𝑡 is the specific constraint in the instruction (e.g., "no python code") and ˆ𝑠 𝑦 𝑡 is the corresponding segment in the response (e.g., a python code block). Aggregating these evidence triplets, we formalize the profile for each instance and the resulting dataset as: 
+
+Γ ≜ { ( 𝑑 𝑡 , 𝛾 ′
+
+𝑡 ) | 𝑑 𝑡 ∈ T 𝑥,𝑦 }, DT = 𝑥 𝑖 , 𝑦 𝑐 𝑖 , 𝑦 𝑟 𝑖 , Γ𝑐 𝑖 , Γ𝑟 𝑖 
+
+𝑁 𝑖 =1
+
+(7) This structured profiling strategy mandates that subse-quent rubric generation be anchored to factual observations rather than model priors, thereby significantly enhancing the interpretability and discriminability of the synthesized rubrics. Dengcan Liu, Fengkai Yang, Xiaohan Wang †, Shurui Yan, Jiajun Chai, Jiahao Li, Yikun Ban, Zhendong Mao †, Wei Lin, and Guojun Yin “Content Coverage ”: 
+
+> The answer includes all
+> required components: GCD calculation, common
+> factor determination...
+
+Justifications J(x) 
+
+Instruction: 
+
+> Find the common factors of two numbers, 24 and 30.
+> Write a Python function that takes in two integers
+> as input and returns a list of all common factors. Use
+> the Euclidean algorithm...
+
+Chosen: 
+
+Rejected: 
+
+Contrast-then-Synthesis                              
+
+> Here's a possible implementation of the function:
+> def find_common_factors(n1, n2):
+> gcd =gcd(n1, n2)
+> factors =[d for din range(1, min(n1,
+> n2) +1) ...
+> Here's a Python function that implements the Euclidean
+> algorithm to calculate the greatest common divisorand uses
+> a list comprehension to find all common factors of the 2
+> numbers:
+> def gcd (a, b):
+> while b: a, b=b, a%b...
+> Chosen
+> Response y c
+> Instruction x Rejected
+> Response y r
+
+Taxonomy 
+
+Selection 
+
+> Precision
+> Safety
+> Logical
+> Consistency
+> Factual
+> Accuracy
+> Cotent
+> Coverage
+> Instruction
+> Following
+
+... 
+
+LLM-
+
+as-
+
+Judge 
+
+> “Instruction Following ”:
+> The answer implements a
+> Python function that takes two integers and
+> returns a list of common factors as required...
+> .....
+> “Instruction Following ”:
+> The function does not
+> correctly implement the Euclidean algorithm to
+> compute the GCD...
+> “Factual Accuracy ”:
+> The logic in the list
+> comprehension is incorrect... .....
+
+Constractive Profile Rubric Synthesis 
+
+Rubrics       
+
+> Rules:
+> 1. ... must correctly implement
+> the Euclidean …
+> 2. …must not reverse the logic
+> of divisibility …
+> Principles:
+> 1. Code should be logically cohe
+> rent …
+> 1 . Instruction &
+> response pairs
+> 2. Chosen Profile ��
+> vs Rejected Profile ��
+
+Input 
+
+> Consistency
+> Rubric Filtering
+> Predicted
+> Label
+
+Training of the Framework 
+
+Instructiion x 
+
+Response Pair { yc,y r} Rubric-anchored 
+
+Dataset R(x) 
+
+Training 
+
+Rubric 
+
+Generator 
+
+Profiled Rubrics 
+
+Judge Model 
+
+CDRRM 
+
+Final Preference 
+
+Label     
+
+> Profile {��,��}Rubric Set �rubric
+> Ground
+> Truth
+> .....
+
+Figure 2: The CDRRM framework. (Top) The Contrast-then-Synthesis paradigm synthesizes evidence-based rubrics via contrastive analysis of preference pairs. (Bottom) These rubrics, paired with synthesized rubric-grounded justifications, supervise the training of a Rubric Generator (to automate context-aware criterion synthesis) and a Judge Model (to generate rubric-aligned justifications for precise preference predictions). 
+
+## 3.2 Rubric Synthesis 
+
+By decomposing preference judgments into factual, multi-dimensional evidence, our profiles provide a transparent, fact-based basis for evaluation. In contrast to direct prompt-ing approaches that rely on implicit inference, Rubric Syn-thesis leverages these explicit, differential insights to gen-erate rubrics directly grounded in the observed quality gaps between preference pairs. Specifically, we formulate this process as a conditional generation task, where a dedicated teacher LLM generates a concise rubric set R ( 𝑥 𝑖 ) that best explains the discrepancy between the chosen profile Γ𝑐 𝑖 and the rejected profile Γ𝑟 𝑖 . Formally, this generation process is expressed as maximizing the likelihood of the rubric set given the instruction and contrastive profiles: 
+
+R ( 𝑥 𝑖 ) = arg max 
+
+R 𝑃 Teacher-LLM 
+
+ R | 𝑥 𝑖 , Δ  Γ𝑐 𝑖 , Γ𝑟 𝑖 
+
+ (8) where Δ(Γ𝑐 𝑖 , Γ𝑟 𝑖 ) denotes the structured contrastive concate-nation operator that splices the chosen profile Γ𝑐 𝑖 and re-jected profile Γ𝑟 𝑖 into a unified text sequence, thus explicitly highlighting the discriminative factors underlying human preference judgments. This design ensures that each gener-ated rubric is tightly aligned with the core rationale of hu-man preference judgments, thereby effectively eliminating redundant rubrics induced by the model’s inherent priors. 
+
+Consistency Filtering and Dataset Construction. To further guarantee the robustness of the generated rubric sets and eliminate extraneous noisy rubrics, we enforce a Preference-Consistency Constraint . Specifically, we prompt the LLM to re-evaluate the preference pair {𝑦 𝑐 𝑖 , 𝑦 𝑟 𝑖 }
+
+under the strict condition of the generated rubric R ( 𝑥 𝑖 ), and only retain rubric sets for which the predicted preference label ˆ𝑙 𝑖 matches the ground-truth preference label 𝑙 𝑖 . We formalize this validity indicator as: 
+
+Ivalid (R ( 𝑥 𝑖 )) =
+
+(
+
+1 if Judge  𝑥 𝑖 , 𝑦 𝑐 𝑖 , 𝑦 𝑟 𝑖 | R ( 𝑥 𝑖 ) = 𝑙 𝑖 
+
+0 otherwise (9) After filtering out rubric sets that fail this consistency check, we construct a high-quality, insight-based rubric dataset 
+
+Drubric , which serves as supervised data for training our Rubric Generator. Formally, the dataset is defined as: 
+
+Drubric = (𝑥 𝑖 , 𝑦 𝑐 𝑖 , 𝑦 𝑟 𝑖 , R ( 𝑥 𝑖 )) | Ivalid (R ( 𝑥 𝑖 )) = 1 𝑁 𝑖 =1 (10) 
+
+## 3.3 Model Training 
+
+With the high-fidelity dataset D𝑟𝑢𝑏𝑟𝑖𝑐 constructed via the Contrast-then-Synthesis paradigm, we move to the training phase of our framework, which involves two specialized components: a Rubric Generator for automated criteria synthesis, and a Judge Model for rubric-guided preference evaluation. 
+
+Rubric Generator Training. To distill the teacher model’s rubric generation capabilities into a more efficient student CDRRM: Contrast-Driven Rubric Generation for Reliable and Interpretable Reward Modeling 
+
+Table 2: Main results on RewardBench, RMBench, and RMB. We report the accuracy scores for each category. The best results in each column are highlighted in bold. “Help” and “Harm” denote Helpfulness and Harmlessness, respectively. The “Average” column represents the mean of the overall scores across the three benchmarks. 
+
+Models RewardBench RMBench RMB Avg. 
+
+Overall Easy Medium Hard Overall Help Harm Overall 
+
+Scalar RMs 
+
+SteerLM-RM-70B 88.8 48.3 54.9 54.3 52.5 57.4 67.3 62.4 67.9 InternLM2-20B-Reward 90.2 82.6 71.6 50.7 68.3 76.3 67.0 71.7 76.7 ArmoRM-Llama3-8B-v0.1 90.4 82.2 71.0 49.8 67.7 78.7 66.3 72.5 76.9 Skywork-Reward-Llama-3.1-8B 92.5 89.0 74.7 46.6 70.1 78.1 75.9 77.0 79.9 INF-ORM-Llama3.1-70B 95.1 91.8 76.1 44.8 70.9 79.8 76.7 78.3 81.4 
+
+GenRMs 
+
+BR-RM-Qwen-8B 91.0 91.7 87.3 76.1 85.0 76.9 82.2 79.6 85.2 DeepSeek-GRM-27B 86.0 84.6 76.5 57.0 72.7 80.5 76.1 78.3 79.0 Skywork-Critic-Llama-3.1-70B 93.3 85.6 73.7 56.5 71.9 75.3 61.4 68.4 77.9 
+
+Rubric-based RMs 
+
+RUBRIC-RM-8B - - - - 62.2 - - - -RM-R1-Qwen-Instruct-32B 91.4 86.3 80.5 70.4 79.1 79.1 80.9 80.0 83.5 R3-Qwen3-8B 88.8 89.0 83.4 71.9 81.4 - - - -
+
+Ours (CDRRM) 
+
+CDRRM-8B (Base) 90.4 90.4 86.8 81.1 86.1 85.3 76.3 80.8 85.8 CDRRM-8B (SFT) 92.0 90.0 86.3 81.0 85.8 88.1 78.4 83.2 87.0 CDRRM-14B (Base) 92.5 89.9 87.4 82.5 86.6 86.5 79.7 83.7 87.6 CDRRM-14B (SFT) 92.8 90.9 88.6 83.4 87.6 88.6 80.3 84.4 88.3 
+
+Rubric Generator, we train the latter on the validated dataset 
+
+Drubric . Conditioned on the input (𝑥 𝑖 , 𝑦 𝑐 𝑖 , 𝑦 𝑟 𝑖 ), the model au-toregressively predicts the corresponding R ( 𝑥 𝑖 ), with the training objective defined as minimizing the negative log-likelihood: 
+
+Lgen (𝜙 ) = −EDrubric 
+
+" | R | ∑︁ 
+
+> 𝑡 =1
+
+log 𝑞 𝜙 
+
+ R𝑡 | 𝑥, 𝑦 𝑐 𝑖 , 𝑦 𝑟 𝑖 , R<𝑡 
+
+#
+
+(11) where 𝜙 denotes the parameters of the Rubric Genera-tor. This loss trains the generator to produce fine-grained, context-aware rubrics that convert implicit evaluation re-quirements into explicit criteria for subsequent preference judgment. 
+
+Judge Model Training. To enhance the discriminative power of rubrics for preference ranking, we build on the pre-trained Rubric Generator to construct a specialized dataset for the Judge Model and fine-tune the model accordingly. Specifically, we first leverage the teacher model to generate justifications for preference pairs, which are conditioned on the rubrics generated by the Rubric Generator, this process is formally denoted as: 
+
+J ( 𝑥 𝑖 ) = Judge  𝑥 𝑖 , 𝑦 𝑐 𝑖 , 𝑦 𝑟 𝑖 | R ( 𝑥 𝑖 ) (12) We integrate these rubric-guided justifications into the original rubric dataset Drubric to construct the training dataset for the Judge Model: 
+
+Djudge = {( 𝑥 𝑖 , 𝑦 𝑐 𝑖 , 𝑦 𝑟 𝑖 , R ( 𝑥 𝑖 ), J ( 𝑥 𝑖 ))} 𝑁 𝑖 =1 (13) We then fine-tune the Judge Model (parameterized by 𝜃 )to first generate such justifications autoregressively before making the final preference decision, ensuring its judgments are explicitly grounded in the provided rubrics. The corre-sponding training objective is formulated as minimizing the negative log-likelihood: 
+
+Ljudge (𝜃 ) = −EDjudge 
+
+" | J | ∑︁  
+
+> 𝑡 =1
+
+log 𝑞 𝜃 (J 𝑡 | 𝑥, 𝑦 𝑐 , 𝑦 𝑟 , R, J<𝑡 )
+
+#
+
+(14) 
+
+## 4 Experiments 4.1 Datasets and Experiment Settings 
+
+Data Sources. We leverage the OpenRubrics dataset [ 22 ]as the foundation for our experiments. This comprehensive corpus comprises 35.6k samples derived from a diverse inte-gration of public preference and instruction-tuning datasets. It spans both general conversational domains—sourced from UltraFeedback [ 9], Tulu 2.5 [ 16 ], and HelpSteer3 [ 37 ]—and specialized scientific fields, including physics and medicine from MegaScience [ 11 ] and diagnostic reasoning from Med-ical01 [ 6]. This broad coverage ensures that our models are trained on a robust distribution of instruction types. 
+
+Training Data Construction. We construct our training data in two distinct phases, adhering to the Contrast-then-Synthesis paradigm. 
+
+• Rubric Generator Data: We first sample a subset of 3,000 instructions with their corresponding re-sponse pairs. Utilizing Qwen3-235B-A22B-Instruct 
+
+[40 ] as the teacher model, we synthesize high-fidelity discriminative rubrics via the Contrastive Profiling process described in Section 3. These rubrics serve Dengcan Liu, Fengkai Yang, Xiaohan Wang †, Shurui Yan, Jiajun Chai, Jiahao Li, Yikun Ban, Zhendong Mao †, Wei Lin, and Guojun Yin 
+
+as the ground-truth targets for training the Rubric Generator. 
+
+• Judge Model Data: To train the judge model, we sample another subset of 3,000 instances. For each instance, we employ the trained Rubric Generator to produce instruction-specific rubrics. We then prompt the teacher model (Qwen3-235B) to generate detailed justifications and preference labels condi-tioned on these rubrics, creating a rubric-grounded judgment dataset. The impact of data scaling on model performance is system-atically analyzed in Section 5.3. 
+
+Model Backbones. In our primary experiments, we em-ploy Qwen3-8B as the foundational backbone for both the Rubric Generator and the Judge Model. To explore the scal-ability of our framework, we further extend our evaluation to larger model, specifically Qwen3-14B. Unless explicitly stated otherwise, all results reported in subsequent sections are derived from the Qwen3-8B variant. We use Swift[ 46 ]for training CDRRM (via SFT). For evaluation, we use the benchmarks’ official scripts where available. To facilitate reproducibility, we release our training and inference config-uration in Appendix A. Prompts, including rubric templates, are provided in Appendix C. 
+
+Baselines and Evaluation Benchmarks. We evaluate CDRRM via comprehensive benchmarking against a broad range of state-of-the-art reward models, clustered into three well-defined paradigmatic categories:: 
+
+• Scalar RMs: Representing traditional score-based approaches, we select top-performing models in-cluding SteerLM-RM-70B [ 36 ], InternLM2-20B-Reward [5], Skywork-Reward-Llama-3.1-8B [ 20 ], INF-ORM-Llama3.1-70B, and ArmoRM-Llama3-8B-v0.1 [34]. 
+
+• Generative RMs (GenRMs): We compare against models that output natural language critiques or reasoning traces, specifically Skywork-Critic-Llama-3.1-70B [ 20 ], BR-RM [ 17 ], and DeepSeek-GRM-27B-RFT [24]. 
+
+• Rubric-based RMs: To highlight the advantages of our Contrast-then-Synthesis strategy, we compare against existing rubric-guided methods, including RM-R1[7], R3 [1], and RUBRIC-RM [22]. We conduct a comprehensive evaluation across three widely adopted benchmarks RewardBench [ 18 ], RM-Bench 
+
+[ 23 ], RMB [48 ] each targeting different aspects of reward modeling. All experiments adopt accuracy (Acc.) as the core evaluation metric, which is defined as the proportion of preference pairs where the model correctly identifies the chosen response over the rejected one. Further details on the benchmarks are provided in Appendix A. 
+
+## 4.2 Main Results 
+
+Table 2 presents the comparative results of our proposed CDRRM against state-of-the-art baselines on three diverse benchmarks. For CDRRM, its Rubric Generator is trained on a 3K-sample dataset; for the Judge Model, the notation 
+
+Base denotes the untuned model, while SFT refers to the model fine-tuned using the 3K synthesized judge dataset. 
+
+Superior Performance with Minimal Data. Our CDRRM method consistently outperforms state-of-the-art baselines across all benchmarks. Notably, CDRRM-14B (SFT) achieves the highest average score of 88.3-a 5.7% improvement over the top-performing rubric-based baseline (RM-R1-Qwen-Instruct-32B) and a 3.6% gain over the best generative RM (BR-RM-Qwen-8B). Even the smaller CDRRM-8B (SFT, 87.0) surpasses strong generative RMs (Skywork-Critic-Llama-3.1-70B, 77.9) and rubric-based models (RM-R1-Qwen-32B, 83.5) by 11.7% and 4.2% in average accuracy, respectively. This achievement is particularly impressive given the min-imal data requirements: CDRRM utilizes only 3k samples each for training the Rubric Generator and the Judge Model, validating the efficacy of our Contrast-then-Synthesis strat-egy. 
+
+Effectiveness of Generated Rubrics on Base Models. 
+
+A notable observation is the outstanding performance of CDRRM-8B (Base, 85.8), which requires no fine-tuning of the Judge Model — only prompting with rubrics from our Rubric Generator. This score outperforms fully fine-tuned BR-RM-Qwen-8B (85.2) and RM-R1-Qwen-Instruct-32B (83.5). On RMBench Overall, CDRRM-8B (Base) achieves 86.1 accuracy, exceeding RM-R1 (79.1) by 8.8% and R3-Qwen3-8B (81.4) by 5.8%. These numerical results underscore that the core per-formance gain of CDRRM stems from high-quality rubrics: they unlock the base model’s inherent capabilities and en-able strong zero-shot performance on evaluation tasks. 
+
+Robustness against Biases. RM-Bench is a rigorous bench-mark designed to evaluate the core capabilities of reward models, with a specific focus on three critical dimensions: sensitivity to subtle content discrepancies, resistance to ver-bosity biases, and robustness against position biases. Tra-ditional baselines show limited performance on the RM-Bench Hard subcategory, which directly measures these bias-resistance capabilities: Scalar RMs peak at 54.3 (SteerLM-RM-70B), GenRMs at 76.1 (BR-RM-Qwen-8B), and rubric-based RMs at 71.9 (R3-Qwen3-8B). In contrast, CDRRM mod-els achieve significantly higher accuracy on this challeng-ing subcategory: 81.1 for CDRRM-8B (Base) and 83.4 for CDRRM-14B (SFT). While traditional reward models struggle to distinguish nu-anced content and are prone to falling into "verbosity traps" or position preferences, CDRRM mitigates these inherent biases by explicitly conditioning judgments on structured criteria. By adhering to generated rubrics, the model shifts its focus from superficial cues to fine-grained quality distinc-tions. Consequently, CDRRM-8B (Base) establishes a strong baseline in bias resistance, while the SFT variant further refines this capability, delivering state-of-the-art robustness specifically where traditional models fail—on the complex and subtle cases represented by the RM-Bench Hard set. CDRRM: Contrast-Driven Rubric Generation for Reliable and Interpretable Reward Modeling 
+
+## 5 Analysis 
+
+In this section, we conduct empirical analyses to validate the effectiveness of our proposed approach. We investigate the impact of data scale on model performance, perform ablation studies on the core components of the rubric mechanism, and present a qualitative case study to complement the quantitative results. 
+
+## 5.1 Ablation Study 
+
+To verify the necessity of our Contrast-then-Synthesis de-sign, we compare our proposed CDRRM against two variants — both built on the Qwen3-8B backbone with identical train-ing configurations (i.e., dataset, optimizer, training epochs) — to ensure a fair comparison: 
+
+• Direct Judge (No Rubric): This variant directly predicts the preference between two responses with-out generating or referencing any rubrics. 
+
+• One-step Rubric Judge: This variant omits the contrastive profiling stage. Its rubric generator is trained on rubrics synthesized directly by the teacher model, rather than being synthesized from fine-grained contrastive profiles. 
+
+Table 3: Ablation study on different judging strategies. We compare CDRRM against Direct Judge and One-step Rubric Judge. All models are based on the Qwen3-8B backbone. Method RewardBench RMBench RMB Average             
+
+> Direct Judge 79.7 74.7 74.9 76.4 One-step Rubric Judge 86.0 75.0 75.9 79.0
+> CDRRM-8B(Base) 90.4 86.1 80.8 85.8
+
+As illustrated in Table 3, the Direct Judge significantly underperforms the two rubric-based approaches, confirm-ing that explicit evaluation criteria are indispensable for accurate reward modeling. More importantly, our CDRRM consistently outperforms the One-step Rubric Judge. This significant performance gap underscores the indispensable role of our Contrast-then-Synthesis strategy. While the One-step Rubric Judge variant yields explicit evaluation criteria, its rubrics are often drawn from the model’s generic priors and misaligned with the specific characteristics of the target response pair. In contrast, our approach first performs fine-grained contrastive profiling across task-critical dimensions — ensuring the synthesized rubrics are grounded in concrete evidence and tailored to the nuanced disparities between the paired responses — thus yielding a more accurate and robust reward signal for preference ranking modeling. 
+
+## 5.2 Scaling Analysis 
+
+We further explore the data efficiency and scaling laws of our approach by independently varying the training data size for the Rubric Generator and the Judge Model. 
+
+Scaling the Rubric Generator. We train the Rubric Gen-erator on datasets of varying sizes (1k to 12k samples) to investigate its data scaling behavior. To directly isolate and quantify the impact of this scaling, we perform evaluations 1k 3k 6k 12k        
+
+> Rubric generator data size
+> 80.0
+> 82.5
+> 85.0
+> 87.5
+> 90.0
+> 92.5
+> Score (%)
+> (a) Rubric generator scaling
+> 1k 3k 6k 12k 20k
+> Judge model data size
+> 80.0
+> 82.5
+> 85.0
+> 87.5
+> 90.0
+> 92.5
+> (b) Judge model scaling
+> RewardBench RMBench RMB Average
+
+Figure 3: Impact of training data size on model per-formance. Subplots (a) and (b) illustrate the scaling trends for the Rubric Generator and the Judge Model, respectively, demonstrating that performance stabi-lizes with minimal training data. 
+
+using the vanilla (untuned) Qwen3-8B model. As shown in Figure 3(a), model performance saturates rapidly: the model achieves an average score of 85.6 with only 1k samples, and scaling the dataset to 12k results in a mere marginal performance gain (86.0). This early performance plateau demonstrates that the rubric generation task is highly learn-able and data-efficient. Our Contrast-then-Synthesis strat-egy thus effectively captures task-critical evaluation criteria with minimal supervision, significantly reducing reliance on large-scale manual annotations. 
+
+Scaling the Judge Model. As illustrated in Figure 3(b), the Judge Model delivers a marked performance improvement as training data scales from 1k to 3k samples. Beyond 3k samples, the model enters a clear performance plateau—even with scaling to 20k samples. We attribute this scaling trend to the explicit discriminative rubrics that drastically simplify the Judge Model’s learning objective. By providing struc-tured, evidence-based rubrics for preference prediction, the model can grasp the core evaluation logic with minimal supervision, obviating the need for the massive preference datasets typically required by traditional reward modeling methods. 
+
+## 5.3 Case Study 
+
+To empirically validate the interpretability and robustness of CDRRM, we present a representative case of verbosity bias from RM-Bench in Table 4. More case studies across diverse bias types are provided in the Appendix D. The instruction requests an executive summary for LottaDigital.com: Re-sponse A is a concise, complete paragraph aligned with the instruction’s intent, while Response B mimics a de-tailed report with extensive formatting yet has a critical flaw—truncation mid-sentence at the end ("- Client"). As shown in the table, the Direct Judge (Qwen3-8B with-out rubrics) incorrectly selects the flawed Response B as superior. Its reasoning overrelies on superficial heuristics, praising B as "comprehensive and well-structured" and crit-icizing A for "lacking depth," a classic failure mode where reward models conflate length/formatting with actual qual-ity and overlook severe truncation errors. Dengcan Liu, Fengkai Yang, Xiaohan Wang †, Shurui Yan, Jiajun Chai, Jiahao Li, Yikun Ban, Zhendong Mao †, Wei Lin, and Guojun Yin 
+
+Instruction: GIVE ME AN EXECUTIVE SUMMARY OF LOTTADIGITAL.COM 
+
+Response A (Chosen): 
+
+LottaDigital.com is a leading digital marketing agency offering SEO, PPC, social media, content, email marketing, and web design services, with a data-driven approach, expert team, client-centric focus, and proven results across various industries. 
+
+Response B (Rejected): 
+
+Executive Summary of LottaDigital.com LottaDigital.com stands as a pioneering digital marketing agency that excels in delivering comprehensive digital solutions... Core Services Offered: 1. SEO (Search Engine Optimization): We employ advanced SEO strategies... 2. PPC (Pay-Per-Click) Advertising: Leveraging platforms like Google Ads... 3. Social Media Marketing: We manage and optimize social media profiles... [...] (Content Omitted for Brevity) 6. Software Development: We offer custom software development services... Key Strengths: - Data-Driven Approach: We rely on data analytics... - Client [Truncated mid-sentence] Baseline: Direct Judge Analysis 
+
+Critique: “Response B is comprehensive, well-structured, and detailed . It provides a thorough overview... and highlights key strengths.” / “Response A lacks depth and detail...” 
+
+Flaw: The model exhibits Verbosity Bias , favoring the lengthy formatting of Response B while completely overlooking the critical truncation error at the end. 
+
+Prediction: ✗ Winner: Response B (Incorrect) Ours: CDRRM Analysis 
+
+Generated Rubric (Hard Rules): 
+
+1. The answer must provide a complete executive summary without being cut off mid-sentence. 2. The answer must not include unrequested structural elements (headers, bullet points) that deviate from a concise summary. 
+
+Reasoning: Response B violates Hard Rule 1 as it is truncated at “- Client”. It also violates Hard Rule 2 by using excessive formatting. Response A is concise and complete. 
+
+Prediction: ✓ Winner: Response A (Correct) 
+
+Table 4: Case Study on Robustness. The Direct Judge falls into the “verbosity trap,” preferring the lengthy Response B despite it being cut off. In contrast, CDRRM generates specific hard rules targeting completeness and conciseness, correctly penalizing the truncation. 
+
+In contrast, CDRRM leverages the Rubric Generator to synthesize context-aware evaluation criteria prior to judg-ment, producing two decisive Hard Rules : mandating com-plete, non-truncated content and prohibiting unrequested structural elements inconsistent with a concise summary. Guided by these explicit rubrics, the Judge Model identifies Response B’s truncation as a clear rule violation and penal-izes its excessive formatting. This demonstrates that explicit rubrics safeguard against black-box biases, shifting evalua-tion focus from stylistic features to substantive content and ensuring robustness against critical response errors. 
+
+## 6 Related Works 6.1 Reward Modeling 
+
+Reward modeling has evolved significantly as the corner-stone of aligning LLMs with human values. Traditional ap-proaches, rooted in the Bradley-Terry framework [ 4 , 27 ], quantify preferences as scalar scores. While effective for ranking, these discriminative models suffer from inherent opacity and a lack of explicit reasoning [ 41 ]. To address this, the field has shifted towards Generative Reward Models (GenRMs), which integrate Chain-of-Thought (CoT) or cri-tique generation to render evaluations interpretable [ 25 , 45 ]. Recent advancements have further augmented these models using techniques like reinforcement learning [ 15 ] and multi-task fine-tuning [ 43 ] to improve logical coherence. Within this paradigm, rubric-based methods have emerged to struc-ture these reasoning processes. However, the evolution of these methods reveals a persistent gap between rubric gener-ation and effective optimization. Early approaches relied on static, expert-authored rubrics [ 2], which proved fundamen-tally unscalable. While recent works have automated extrac-tion using CoT [ 7] or preference data [ 22 ], these methods often yield a disorganized corpus of unrefined, redundant, or even conflicting rules [ 30 ], failing to isolate the specific discriminative factors driving human preferences. In this work, we bridge this gap with a Contrast-then-Synthesis paradigm, which leverages Contrastive Profiling to help sythesis concise, high-impact rubrics directly pertinent to the decision boundary. 
+
+## 6.2 LLM-as-a-Judge 
+
+The paradigm of using LLMs as automatic evaluators, or LLM-as-a-Judge, has emerged as a scalable and cost-effective CDRRM: Contrast-Driven Rubric Generation for Reliable and Interpretable Reward Modeling 
+
+proxy for human evaluation [ 35 , 47 ]. Benchmarks such as MT-Bench and Chatbot Arena [ 47 ] established its utility for assessing instruction-following capabilities, demonstrating a high correlation with human preferences. Beyond general chat, this paradigm has been extended to specialized do-mains, including reasoning [ 10 ] and safety alignment [ 49 ]. Despite its widespread adoption, the reliability of LLM-as-a-Judge remains a critical bottleneck. Studies have revealed systematic biases, such as sensitivity to response position and verbosity [ 47 ], as well as inconsistency across repeated assessments [ 13 ]. Consequently, while LLM-as-a-Judge pro-vides a powerful and scalable evaluation mechanism, its inherent instability, susceptibility to biases, and prompt de-pendency necessitate more robust, interpretable grounding structures—such as explicit evaluation rubrics—to constrain and guide the judgment process, ensuring consistent, fair, and human-aligned evaluation outcomes. 
+
+## 7 Conclusion 
+
+In this paper, we propose CDRRM, a rubric-guided reward modeling framework that mitigates the opacity of traditional reward modeling via a novel Contrast-then-Synthesis para-digm. Our approach constructs task-aligned, reliable rubrics that anchor preference decisions to explicit, well-defined cri-teria. Extensive empirical results show that CDRRM achieves state-of-the-art performance with strong data efficiency: frozen base models with our framework can outperform fully fine-tuned SOTA baselines even with limited training samples. Moreover, rigorous qualitative analyses and case studies confirm that CDRRM effectively alleviates preva-lent biases in reward modeling, particularly verbosity bias. For future work, we plan to integrate fine-grained rubric-derived signals directly into policy alignment, aiming to narrow the gap between preference discrimination and gen-eration quality in LLMs. 
+
+## References 
+
+[1] David Anugraha, Zilu Tang, Lester James V. Miranda, Hanyang Zhao, Mohammad Rifqi Farhansyah, Garry Kuwanto, Derry Wijaya, and Genta Indra Winata. 2025. R3: Robust Rubric-Agnostic Reward Models. 
+
+CoRR abs/2505.13388 (2025). arXiv:2505.13388 doi:10.48550/ARXIV. 2505.13388 [2] Rahul K. Arora, Jason Wei, Rebecca Soskin Hicks, Preston Bowman, Joaquin Quiñonero Candela, Foivos Tsimpourlas, Michael Sharman, Meghan Shah, Andrea Vallone, Alex Beutel, Johannes Heidecke, and Karan Singhal. 2025. HealthBench: Evaluating Large Language Mod-els Towards Improved Human Health. CoRR abs/2505.08775 (2025). arXiv:2505.08775 doi:10.48550/ARXIV.2505.08775 [3] Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, et al . 2022. Training a Helpful and Harmless Assistant with Reinforcement Learning from Human Feedback. CoRR abs/2204.05862 (2022). arXiv:2204.05862 doi:10.48550/ARXIV.2204.05862 [4] Ralph Allan Bradley and Milton E Terry. 1952. Rank analysis of incom-plete block designs: I. the method of paired comparisons. Biometrika 
+
+39, 3/4 (1952), 324–345. [5] Zheng Cai, Maosong Cao, Haojiong Chen, Kai Chen, Keyu Chen, Xin Chen, Xun Chen, Zehui Chen, Zhi Chen, Pei Chu, Xiaoyi Dong, Haodong Duan, Qi Fan, Zhaoye Fei, Yang Gao, Jiaye Ge, Chenya Gu, Yuzhe Gu, Tao Gui, Aijia Guo, Qipeng Guo, Conghui He, Yingfan Hu, Ting Huang, Tao Jiang, Penglong Jiao, Zhenjiang Jin, Zhikai Lei, Jiaxing Li, Jingwen Li, Linyang Li, Shuaibin Li, Wei Li, Yining Li, Hongwei Liu, Jiangning Liu, Jiawei Hong, Kaiwen Liu, Kuikun Liu, Xiaoran Liu, Chengqi Lv, Haijun Lv, Kai Lv, Li Ma, Runyuan Ma, Zerun Ma, Wenchang Ning, Linke Ouyang, Jiantao Qiu, Yuan Qu, Fukai Shang, Yunfan Shao, Demin Song, Zifan Song, Zhihao Sui, Peng Sun, Yu Sun, Huanze Tang, Bin Wang, Guoteng Wang, Jiaqi Wang, Jiayu Wang, Rui Wang, Yudong Wang, Ziyi Wang, Xingjian Wei, Qizhen Weng, Fan Wu, Yingtong Xiong, Xiaomeng Zhao, and et al. 2024. InternLM2 Technical Report. CoRR abs/2403.17297 (2024). arXiv:2403.17297 doi:10.48550/ARXIV.2403.17297 [6] Junying Chen, Zhenyang Cai, Ke Ji, Xidong Wang, Wanlong Liu, Rong-sheng Wang, Jianye Hou, and Benyou Wang. 2024. HuatuoGPT-o1, Towards Medical Complex Reasoning with LLMs. CoRR abs/2412.18925 (2024). arXiv:2412.18925 doi:10.48550/ARXIV.2412.18925 [7] Xiusi Chen, Gaotang Li, Ziqi Wang, Bowen Jin, Cheng Qian, Yu Wang, Hongru Wang, Yu Zhang, Denghui Zhang, Tong Zhang, Hanghang Tong, and Heng Ji. 2025. RM-R1: Reward Modeling as Reasoning. 
+
+CoRR abs/2505.02387 (2025). arXiv:2505.02387 doi:10.48550/ARXIV. 2505.02387 [8] Paul F. Christiano, Jan Leike, Tom B. Brown, Miljan Martic, Shane Legg, and Dario Amodei. 2017. Deep Reinforcement Learning from Human Preferences. In Advances in Neural Information Pro-cessing Systems 30: Annual Conference on Neural Information Pro-cessing Systems 2017, December 4-9, 2017, Long Beach, CA, USA , Is-abelle Guyon, Ulrike von Luxburg, Samy Bengio, Hanna M. Wal-lach, Rob Fergus, S. V. N. Vishwanathan, and Roman Garnett (Eds.). 4299–4307. https://proceedings.neurips.cc/paper/2017/hash/ d5e2c0adad503c91f91df240d0cd4e49-Abstract.html [9] Ganqu Cui, Lifan Yuan, Ning Ding, Guanming Yao, Bingxiang He, Wei Zhu, Yuan Ni, Guotong Xie, Ruobing Xie, Yankai Lin, Zhiyuan Liu, and Maosong Sun. 2024. ULTRAFEEDBACK: Boosting Language Mod-els with Scaled AI Feedback. In Forty-first International Conference on Machine Learning, ICML 2024, Vienna, Austria, July 21-27, 2024 . Open-Review.net. https://openreview.net/forum?id=BOorDpKHiJ [10] Yann Dubois, Balázs Galambosi, Percy Liang, and Tatsunori B. Hashimoto. 2024. Length-Controlled AlpacaEval: A Simple Way to Debias Automatic Evaluators. CoRR abs/2404.04475 (2024). arXiv:2404.04475 doi:10.48550/ARXIV.2404.04475 [11] Run-Ze Fan, Zengzhi Wang, and Pengfei Liu. 2025. MegaScience: Push-ing the Frontiers of Post-Training Datasets for Science Reasoning. 
+
+CoRR abs/2507.16812 (2025). arXiv:2507.16812 doi:10.48550/ARXIV. 2507.16812 [12] Gerd Gigerenzer and Reinhard Selten. 2002. Bounded rationality: The adaptive toolbox . MIT press. [13] Rajarshi Haldar and Julia Hockenmaier. 2025. Rating Roulette: Self-Inconsistency in LLM-As-A-Judge Frameworks. CoRR abs/2510.27106 (2025). arXiv:2510.27106 doi:10.48550/ARXIV.2510.27106 [14] Yun He, Wenzhe Li, Hejia Zhang, Songlin Li, Karishma Mandyam, Sopan Khosla, Yuanhao Xiong, Nanshu Wang, Xiaoliang Peng, Beibin Li, Shengjie Bi, Shishir G. Patil, Qi Qi, Shengyu Feng, Julian Katz-Samuels, Richard Yuanzhe Pang, Sujan Gonugondla, Hunter Lang, Yue Yu, Yundi Qian, Maryam Fazel-Zarandi, Licheng Yu, Amine Benhalloum, Hany Awadalla, and Manaal Faruqui. 2025. AdvancedIF: Rubric-Based Benchmarking and Reinforcement Learning for Advancing LLM In-struction Following. CoRR abs/2511.10507 (2025). arXiv:2511.10507 doi:10.48550/ARXIV.2511.10507 [15] Haitao Hong, Yuchen Yan, Xingyu Wu, Guiyang Hou, Wenqi Zhang, Weiming Lu, Yongliang Shen, and Jun Xiao. 2025. Cooper: Co-Optimizing Policy and Reward Models in Reinforcement Learning for Large Language Models. CoRR abs/2508.05613 (2025). arXiv:2508.05613 doi:10.48550/ARXIV.2508.05613 [16] Hamish Ivison, Yizhong Wang, Jiacheng Liu, Zeqiu Wu, Valentina Pyatkin, Nathan Lambert, Noah A. Smith, Yejin Choi, and Hanna Ha-jishirzi. 2024. Unpacking DPO and PPO: Disentangling Best Prac-tices for Learning from Preference Feedback. In Advances in Neu-ral Information Processing Systems 38: Annual Conference on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 - 15, 2024 , Amir Globersons, Lester Mackey, Danielle Belgrave, Angela Fan, Ulrich Paquet, Jakub M. Tomczak, and Cheng Zhang (Eds.). http://papers.nips.cc/paper_files/paper/2024/ hash/404df2480b6eef0486a1679e371894b0-Abstract-Conference.html [17] Yizhu Jiao, Jiaqi Zeng, Julien Veron Vialard, Oleksii Kuchaiev, Ji-awei Han, and Olivier Delalleau. 2025. Think Twice: Branch-and-Rethink Reasoning Reward Model. CoRR abs/2510.23596 (2025). arXiv:2510.23596 doi:10.48550/ARXIV.2510.23596 [18] Nathan Lambert, Valentina Pyatkin, Jacob Morrison, Lester James V. Mi-randa, Bill Yuchen Lin, Khyathi Raghavi Chandu, Nouha Dziri, Sachin Kumar, Tom Zick, Yejin Choi, Noah A. Smith, and Hannaneh Ha-jishirzi. 2025. RewardBench: Evaluating Reward Models for Language Modeling. In Findings of the Association for Computational Linguistics: NAACL 2025, Albuquerque, New Mexico, USA, April 29 - May 4, 2025 (Findings of ACL, Vol. NAACL 2025) , Luis Chiruzzo, Alan Ritter, and Lu Wang (Eds.). Association for Computational Linguistics, 1755–1797. doi:10.18653/V1/2025.FINDINGS-NAACL.96 [19] Haitao Li, Qian Dong, Junjie Chen, Huixue Su, Yujia Zhou, Qingyao Ai, Ziyi Ye, and Yiqun Liu. 2024. LLMs-as-Judges: A Comprehensive Survey on LLM-based Evaluation Methods. CoRR abs/2412.05579 (2024). arXiv:2412.05579 doi:10.48550/ARXIV.2412.05579 Dengcan Liu, Fengkai Yang, Xiaohan Wang †, Shurui Yan, Jiajun Chai, Jiahao Li, Yikun Ban, Zhendong Mao †, Wei Lin, and Guojun Yin 
+
+[20] Chris Yuhao Liu, Liang Zeng, Jiacai Liu, Rui Yan, Jujie He, Chaojie Wang, Shuicheng Yan, Yang Liu, and Yahui Zhou. 2024. Skywork-Reward: Bag of Tricks for Reward Modeling in LLMs. CoRR abs/2410.18451 (2024). arXiv:2410.18451 doi:10.48550/ARXIV.2410.18451 [21] Dengcan Liu, Jiahao Li, Zheren Fu, Yi Tu, Jiajun Li, Zhendong Mao, and Yongdong Zhang. 2025. SparseRM: A Lightweight Preference Modeling with Sparse Autoencoder. CoRR abs/2511.07896 (2025). arXiv:2511.07896 doi:10.48550/ARXIV.2511.07896 [22] Tianci Liu, Ran Xu, Tony Yu, Ilgee Hong, Carl Yang, Tuo Zhao, and Haoyu Wang. 2025. OpenRubrics: Towards Scalable Synthetic Rubric Generation for Reward Modeling and LLM Alignment. CoRR 
+
+abs/2510.07743 (2025). arXiv:2510.07743 doi:10.48550/ARXIV.2510. 07743 [23] Yantao Liu, Zijun Yao, Rui Min, Yixin Cao, Lei Hou, and Juanzi Li. 2025. RM-Bench: Benchmarking Reward Models of Language Models with Subtlety and Style. In The Thirteenth International Conference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025 .OpenReview.net. https://openreview.net/forum?id=QEHrmQPBdd [24] Zijun Liu, Peiyi Wang, Runxin Xu, Shirong Ma, Chong Ruan, Peng Li, Yang Liu, and Yu Wu. 2025. Inference-Time Scaling for Generalist Reward Modeling. CoRR abs/2504.02495 (2025). arXiv:2504.02495 doi:10.48550/ARXIV.2504.02495 [25] Dakota Mahan, Duy Van Phung, Rafael Rafailov, Chase Blagden, Nathan Lile, Louis Castricato, Jan-Philipp Fränken, Chelsea Finn, and Alon Al-balak. 2024. Generative reward models. arXiv preprint arXiv:2410.12832 
+
+(2024). [26] Long Ouyang, Jeffrey Wu, Xu Jiang, et al . 2022. Training lan-guage models to follow instructions with human feedback. In Ad-vances in Neural Information Processing Systems 35: Annual Confer-ence on Neural Information Processing Systems 2022, NeurIPS 2022, New Orleans, LA, USA, November 28 - December 9, 2022 , Sanmi Koyejo, S. Mohamed, A. Agarwal, Danielle Belgrave, K. Cho, and A. Oh (Eds.). http://papers.nips.cc/paper_files/paper/2022/hash/ b1efde53be364a73914f58805a001731-Abstract-Conference.html [27] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll L. Wain-wright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Kata-rina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kel-ton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul F. Christiano, Jan Leike, and Ryan Lowe. 2022. Training lan-guage models to follow instructions with human feedback. In Ad-vances in Neural Information Processing Systems 35: Annual Confer-ence on Neural Information Processing Systems 2022, NeurIPS 2022, New Orleans, LA, USA, November 28 - December 9, 2022 , Sanmi Koyejo, S. Mohamed, A. Agarwal, Danielle Belgrave, K. Cho, and A. Oh (Eds.). http://papers.nips.cc/paper_files/paper/2022/hash/ b1efde53be364a73914f58805a001731-Abstract-Conference.html [28] Alexander Pan, Kush Bhatia, and Jacob Steinhardt. 2022. The Ef-fects of Reward Misspecification: Mapping and Mitigating Misaligned Models. In The Tenth International Conference on Learning Represen-tations, ICLR 2022, Virtual Event, April 25-29, 2022 . OpenReview.net. https://openreview.net/forum?id=JYtwGwIL7ye [29] David Reber, Sean M. Richardson, Todd Nief, Cristina Garbacea, and Victor Veitch. 2025. RATE: Causal Explainability of Reward Models with Imperfect Counterfactuals. In Forty-second International Conference on Machine Learning, ICML 2025, Vancouver, BC, Canada, July 13-19, 2025 .OpenReview.net. https://openreview.net/forum?id=rL3uxe5a0c [30] Juuso Rytilahti, Erkki Kaila, and Erno Lokkila. [n. d.]. EXPLORING THE USE OF ARTIFICIAL INTELLIGENCE IN RUBRIC PRODUCTION AND DETECTION OF REVIEWER’S BIAS. ([n. d.]). [31] Keita Saito, Akifumi Wachi, Koki Wataoka, and Youhei Akimoto. 2023. Verbosity Bias in Preference Labeling by Large Language Models. 
+
+CoRR abs/2310.10076 (2023). arXiv:2310.10076 doi:10.48550/ARXIV. 2310.10076 [32] Hao Sun, Yunyi Shen, and Jean-Francois Ton. 2025. Rethinking Reward Modeling in Preference-based Large Language Model Alignment. In The Thirteenth International Conference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025 . OpenReview.net. https://openreview. net/forum?id=rfdblE10qm [33] Binghai Wang, Rui Zheng, Lu Chen, Yan Liu, Shihan Dou, Caishuang Huang, Wei Shen, Senjie Jin, Enyu Zhou, Chenyu Shi, Songyang Gao, Nuo Xu, Yuhao Zhou, Xiaoran Fan, Zhiheng Xi, Jun Zhao, Xiao Wang, Tao Ji, Hang Yan, Lixing Shen, Zhan Chen, Tao Gui, Qi Zhang, Xipeng Qiu, Xuanjing Huang, Zuxuan Wu, and Yu-Gang Jiang. 2024. Se-crets of RLHF in Large Language Models Part II: Reward Modeling. 
+
+CoRR abs/2401.06080 (2024). arXiv:2401.06080 doi:10.48550/ARXIV. 2401.06080 [34] Haoxiang Wang, Wei Xiong, Tengyang Xie, Han Zhao, and Tong Zhang. 2024. Interpretable Preferences via Multi-Objective Reward Modeling and Mixture-of-Experts. In Findings of the Association for Computational Linguistics: EMNLP 2024, Miami, Florida, USA, November 12-16, 2024 (Findings of ACL, Vol. EMNLP 2024) , Yaser Al-Onaizan, Mohit Bansal, and Yun-Nung Chen (Eds.). Association for Computational Linguistics, 10582–10592. doi:10.18653/V1/2024.FINDINGS-EMNLP.620 [35] Peiyi Wang, Lei Li, Liang Chen, Zefan Cai, Dawei Zhu, Binghuai Lin, Yunbo Cao, Lingpeng Kong, Qi Liu, Tianyu Liu, and Zhifang Sui. 2024. Large Language Models are not Fair Evaluators. In Pro-ceedings of the 62nd Annual Meeting of the Association for Computa-tional Linguistics (Volume 1: Long Papers), ACL 2024, Bangkok, Thai-land, August 11-16, 2024 , Lun-Wei Ku, Andre Martins, and Vivek Sriku-mar (Eds.). Association for Computational Linguistics, 9440–9450. doi:10.18653/V1/2024.ACL-LONG.511 [36] Zhilin Wang, Yi Dong, Jiaqi Zeng, Virginia Adams, Makesh Narsimhan Sreedhar, Daniel Egert, Olivier Delalleau, Jane Polak Scowcroft, Neel Kant, Aidan Swope, and Oleksii Kuchaiev. 2024. HelpSteer: Multi-attribute Helpfulness Dataset for SteerLM. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Com-putational Linguistics: Human Language Technologies (Volume 1: Long Papers), NAACL 2024, Mexico City, Mexico, June 16-21, 2024 , Kevin Duh, Helena Gómez-Adorno, and Steven Bethard (Eds.). Association for Computational Linguistics, 3371–3384. doi:10.18653/V1/2024.NAACL-LONG.185 [37] Zhilin Wang, Jiaqi Zeng, Olivier Delalleau, Hoo-Chang Shin, Felipe Soares, Alexander Bukharin, Ellie Evans, Yi Dong, and Oleksii Kuchaiev. 2025. HelpSteer3-Preference: Open Human-Annotated Preference Data across Diverse Tasks and Languages. CoRR abs/2505.11475 (2025). arXiv:2505.11475 doi:10.48550/ARXIV.2505.11475 [38] Jiancong Xiao, Ziniu Li, Xingyu Xie, Emily J. Getzen, Cong Fang, Qi Long, and Weijie J. Su. 2024. On the Algorithmic Bias of Aligning Large Language Models with RLHF: Preference Collapse and Matching Regularization. CoRR abs/2405.16455 (2024). arXiv:2405.16455 doi:10. 48550/ARXIV.2405.16455 [39] Lipeng Xie, Sen Huang, Zhuo Zhang, Anni Zou, Yunpeng Zhai, Dingchao Ren, Kezun Zhang, Haoyuan Hu, Boyin Liu, Haoran Chen, et al . 2025. Auto-Rubric: Learning to Extract Generalizable Criteria for Reward Modeling. arXiv preprint arXiv:2510.17314 (2025). [40] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Dayiheng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jian Yang, Jiaxi Yang, Jingren Zhou, Junyang Lin, Kai Dang, Keqin Bao, Kexin Yang, Le Yu, Lianghao Deng, Mei Li, Mingfeng Xue, Mingze Li, Pei Zhang, Peng Wang, Qin Zhu, Rui Men, Ruize Gao, Shixuan Liu, Shuang Luo, Tianhao Li, Tianyi Tang, Wenbiao Yin, Xingzhang Ren, Xinyu Wang, Xinyu Zhang, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yinger Zhang, Yu Wan, Yuqiong Liu, Zekun Wang, Zeyu Cui, Zhenru Zhang, Zhipeng Zhou, and Zihan Qiu. 2025. Qwen3 Technical Report. CoRR abs/2505.09388 (2025). arXiv:2505.09388 doi:10. 48550/ARXIV.2505.09388 [41] Adam X. Yang, Maxime Robeyns, Thomas Coste, Jun Wang, Haitham Bou-Ammar, and Laurence Aitchison. 2024. Bayesian Reward Models for LLM Alignment. CoRR abs/2402.13210 (2024). arXiv:2402.13210 doi:10.48550/ARXIV.2402.13210 [42] Fengkai Yang, Zherui Chen, Xiaohan Wang, Xiaodong Lu, Jiajun Chai, Guojun Yin, Wei Lin, Shuai Ma, Fuzhen Zhuang, Deqing Wang, Yaodong Yang, Jianxin Li, and Yikun Ban. 2026. Your Group-Relative Advantage Is Biased. CoRR abs/2601.08521 (2026). arXiv:2601.08521 doi:10.48550/ ARXIV.2601.08521 [43] Yue Yu, Zhengxing Chen, Aston Zhang, Liang Tan, Chenguang Zhu, Richard Yuanzhe Pang, Yundi Qian, Xuewei Wang, Suchin Gururan-gan, Chao Zhang, Melanie Kambadur, Dhruv Mahajan, and Rui Hou. 2025. Self-Generated Critiques Boost Reward Modeling for Language Models. In Proceedings of the 2025 Conference of the Nations of the Amer-icas Chapter of the Association for Computational Linguistics: Human Language Technologies, NAACL 2025 - Volume 1: Long Papers, Albu-querque, New Mexico, USA, April 29 - May 4, 2025 , Luis Chiruzzo, Alan Ritter, and Lu Wang (Eds.). Association for Computational Linguistics, 11499–11514. doi:10.18653/V1/2025.NAACL-LONG.573 [44] Dan Zhang, Min Cai, Jonathan Light, Ziniu Hu, Yisong Yue, and Jie Tang. 2025. TDRM: Smooth Reward Models with Temporal Difference for LLM RL and Inference. CoRR abs/2509.15110 (2025). arXiv:2509.15110 doi:10.48550/ARXIV.2509.15110 [45] Lunjun Zhang, Arian Hosseini, Hritik Bansal, Mehran Kazemi, Avi-ral Kumar, and Rishabh Agarwal. 2025. Generative Verifiers: Reward Modeling as Next-Token Prediction. In The Thirteenth International Con-ference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025 . OpenReview.net. https://openreview.net/forum?id=Ccwp4tFEtE [46] Yuze Zhao, Jintao Huang, Jinghan Hu, Xingjun Wang, Yunlin Mao, Daoze Zhang, Zeyinzi Jiang, Zhikai Wu, Baole Ai, Ang Wang, Wen-meng Zhou, and Yingda Chen. 2025. SWIFT: A Scalable Lightweight Infrastructure for Fine-Tuning. In AAAI-25, Sponsored by the Association for the Advancement of Artificial Intelligence, February 25 - March 4, 2025, Philadelphia, PA, USA , Toby Walsh, Julie Shah, and Zico Kolter (Eds.). AAAI Press, 29733–29735. doi:10.1609/AAAI.V39I28.35383 CDRRM: Contrast-Driven Rubric Generation for Reliable and Interpretable Reward Modeling          
+
+> [47] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhang-hao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Stoica. 2023. Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena. In Advances in Neural Information Processing Systems 36: Annual Conference on Neural Infor-mation Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 , Alice Oh, Tristan Naumann, Amir Globerson, Kate Saenko, Moritz Hardt, and Sergey Levine (Eds.). http://papers.nips. cc/paper_files/paper/2023/hash/91f18a1287b398d378ef22505bf41832-Abstract-Datasets_and_Benchmarks.html [48] Enyu Zhou, Guodong Zheng, Binghai Wang, Zhiheng Xi, Shihan Dou, Rong Bao, Wei Shen, Limao Xiong, Jessica Fan, Yurong Mou, Rui Zheng, Tao Gui, Qi Zhang, and Xuanjing Huang. 2025. RMB: Comprehensively benchmarking reward models in LLM alignment. In The Thirteenth International Conference on Learning Representa-tions, ICLR 2025, Singapore, April 24-28, 2025 . OpenReview.net. https: //openreview.net/forum?id=kmgrlG9TR0 [49] Lianghui Zhu, Xinggang Wang, and Xinlong Wang. 2025. JudgeLM: Fine-tuned Large Language Models are Scalable Judges. In The Thir-teenth International Conference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025 . OpenReview.net. https://openreview.net/ forum?id=xsELpEPn4A
+
+## A Experiment Setups 
+
+Benchmarks. We conduct experimental evaluations on three widely adopted benchmarks for reward model assessment, with detailed specifications of each benchmark as follows: 
+
+• RewardBench [18 ]: RewardBench is a foundational benchmark for evaluating reward models using prompt-chosen-rejected trios, covering four task categories: chat, chat-hard, reasoning, and safety. The sample sizes for each category are 358, 456, 740, and 1431, respectively. 
+
+• RM-Bench [23 ]: RM-Bench is an extended bench-mark built on RewardBench, with a specific focus on evaluating two core capabilities of reward mod-els: sensitivity to subtle content discrepancies and robustness against style-related biases. It includes four task categories (Chat, Safety, Math, Code) with 129, 441, 529, and 228 samples respectively, where each sample is associated with three prompts of varying difficulty levels. As a reasoning-intensive benchmark, it poses higher demands on the fine-grained judgment ability of reward models. 
+
+• RMB [48 ]: RMB is a comprehensive benchmark for assessing the helpfulness and harmlessness of re-ward models, which is more extensive in scenario coverage compared with RewardBench and RM-Bench. It contains over 49 real-world scenarios, sup-ports both pairwise and Best-of-N (BoN) evaluation formats, and consists of a total of 25,845 instances. Specifically, the benchmark includes 37 scenarios for the helpfulness alignment objective and 12 sce-narios for the harmlessness alignment objective. 
+
+Implementation Details. All experiments for CDRRM were conducted based on Swift[ 46 ], an open-source and effi-cient training framework for large language models (LLMs), which provides streamlined support for fine-tuning, eval-uation, and deployment of LLMs. Table 5 summarizes the key hyperparameters used in training the Rubric Generator and Judge Model components of CDRRM, including training epochs, maximum sequence length, batch size, optimizer configuration, learning rate, and warmup ratio. All experi-ments were conducted on 8 NVIDIA A100 80GB GPUs. 
+
+## B Full Experiment Results 
+
+This section provides the complete experimental results of our work and a more comprehensive comparison with existing baselines, as a supplement to the key findings in the main text. Full results on RewardBench are shown in Table 6. 
+
+## C Prompts 
+
+This section presents the complete prompt templates utilized in the core steps and model training pipelines of the CDRRM framework. Specifically, we provide the system prompt tem-plates for the Contrastive Profiling step and the Rubric Synthesis step—two key components of the Contrast-then-Synthesis paradigm. Additionally, we include the prompt templates employed for training the Rubric Generator and Judge Model, which are the two core modules of CDRRM. All prompts are tailored to the functional requirements of each step/module, ensuring the consistency and effective-ness of preference pair analysis and rubric-guided reward model training. 
+
+## D Case Study 
+
+As a supplement to the verbosity bias case in the main text and our quantitative findings, this appendix presents a qualitative case study on subtle content error identifi-cation and mathematical/reasoning task judgment—two challenging scenarios in reward modeling where baseline methods frequently underperform. We select representative samples from RM-Bench for these scenarios, and compare CDRRM’s rubric-guided judgment results with those of di-rect LLM judgment and one-step rubric-based judgment. We analyze how CDRRM’s task-specific, evidence-grounded rubrics enable the Judge Model to capture fine-grained con-tent discrepancies and adhere to rigorous reasoning rules, which further validates CDRRM’s fine-grained discrimi-native ability and the universality of our Contrast-then-Synthesis paradigm in addressing diverse reward modeling evaluation challenges. Dengcan Liu, Fengkai Yang, Xiaohan Wang †, Shurui Yan, Jiajun Chai, Jiahao Li, Yikun Ban, Zhendong Mao †, Wei Lin, and Guojun Yin 
+
+Table 5: Hyperparameter Settings for CDRRM Components               
+
+> Component Parameter Value
+> Rubric Generator Epochs 1Max Length 25000 Batch Size 128 Optimizer AdamW Learning Rate 5e-5 Warmup Ratio 0.05 Judge Model Epochs 2Max Length 25000 Batch Size 64 Optimizer AdamW Learning Rate 5e-5 Warmup Ratio 0.05
+
+Table 6: Performance comparison on RewardBench. We report the accuracy (%) across four categories: Chat, Chat-Hard, Safety, and Reasoning. The best results in each column are highlighted in bold. 
+
+Models Chat Chat-Hard Safety Reasoning Overall 
+
+Scalar RMs 
+
+SteerLM-RM-70B 91.3 80.3 92.8 90.6 88.8 InternLM2-20B-Reward 98.9 76.5 89.5 95.8 90.2 ArmoRM-Llama3-8B-v0.1 96.9 76.8 90.5 97.3 90.4 Skywork-Reward-Llama-3.1-8B 95.8 87.3 90.8 96.2 92.5 INF-ORM-Llama3.1-70B 96.6 91.0 93.6 99.1 95.1 
+
+GenRMs 
+
+BR-RM-Qwen-8B 95.8 80.1 90.4 97.5 91.0 DeepSeek-GRM-27B 94.1 78.3 88.0 83.8 86.0 Skywork-Critic-Llama-3.1-70B 96.6 87.9 93.1 95.5 93.3 
+
+Rubric-based RMs 
+
+RUBRIC-RM-8B 87.3 73.0 - - -RM-R1-Qwen-Instruct-32B 95.3 83.1 91.9 95.2 91.4 R3-Qwen3-8B 93.8 78.6 86.3 96.7 88.8 
+
+Ours (CDRRM) 
+
+CDRRM-8B (Base) 93.9 86.5 90.9 90.3 90.4 CDRRM-8B (SFT) 95.8 89.3 90.4 92.3 92.0 CDRRM-14B (Base) 94.6 90.6 89.2 95.5 92.5 
+
+CDRRM-14B (SFT) 95.8 90.9 89.1 95.2 92.8 CDRRM: Contrast-Driven Rubric Generation for Reliable and Interpretable Reward Modeling 
+
+Instruction: Is JavaScript a back end or front end language? 
+
+Response A (Chosen/Ground Truth): 
+
+JavaScript is primarily known as a front-end language, as it is widely used for client-side scripting in web browsers to create dynamic and interactive web pages. However, JavaScript can also be used as a back-end language through the use of runtime environments like Node.js. Node.js allows developers to run JavaScript on the server side, enabling full-stack development with a single language. 
+
+Response B (Rejected): 
+
+JavaScript is primarily a front-end language but can also be used as a back-end language with Node.js for full-stack development. 
+
+### Front-End Capabilities 
+
+- DOM Manipulation / Event Handling / Animations and Effects with libs like jQuery/React 
+
+### Back-End Capabilities with Node.js 
+
+- Server-Side Scripting / Non-Blocking I/O / Rich npm Package Ecosystem 
+
+### Full-Stack Development 
+
+- Unified Language / Code Reusability / Rapid Prototyping In summary, JavaScript is a versatile language that excels in both roles, particularly with Node.js. This dual capability makes it a powerful tool for [Truncated mid-sentence] Method 1: Direct Judge (Baseline) 
+
+Critique: “Response B is comprehensive, well-structured and detailed with specific examples of front/back-end capabilities.” / “Response A is minimalistic and lacks depth of explanation.” 
+
+Flaw: Severe Verbosity Bias , favoring lengthy formatting while ignoring the critical mid-sentence truncation of Response B. 
+
+Prediction: ✗ Winner: Response B (Incorrect) Method 2: Rubric-Guided (Improper Criteria) 
+
+Generated Rubric (Hard Rules): 
+
+1. Correctly identify JavaScript as primarily a front-end language 2. Mention Node.js as the back-end enabler for JavaScript 3. Clarify JavaScript’s dual front/back-end usability 
+
+Reasoning: Both responses meet all hard rules; Response B is preferred for “better structure and more detailed examples”. 
+
+Prediction: ✗ Winner: Response B (Incorrect) Method 3: Ours (CDRRM, Optimized Rubric) 
+
+Generated Rubric (Hard Rules): 
+
+1. The answer must be fully complete without mid-sentence truncation 
+
+2. The answer must include a clear conclusion summarizing JS’s dual nature 
+
+Reasoning: Response B violates both hard rules (truncated + no conclusion) and is overly verbose; Response A is complete, concise and meets all criteria. 
+
+Prediction: ✓ Winner: Response A (Correct) 
+
+Table 7: Case Study on Verbosity Bias Mitigation. Direct Judge and Rubric-Guided with improper criteria both fall for verbosity bias, preferring the truncated but lengthy Response B. Our CDRRM generates optimized hard rules targeting completeness and structural integrity, correctly penalizing Response B’s critical flaws and selecting the concise, complete Response A. Dengcan Liu, Fengkai Yang, Xiaohan Wang †, Shurui Yan, Jiajun Chai, Jiahao Li, Yikun Ban, Zhendong Mao †, Wei Lin, and Guojun Yin 
+
+Instruction: Write a C++ function string int_to_mini_romank(int number) to convert a positive integer ( 1 ≤ num ≤ 1000 ) to lowercase Roman numerals. 
+
+Response A (Chosen/Ground Truth): Core Implementation (Key Part): 
+
+string int_to_mini_romank(int number) // Correct function name per instruction {vector<pair<int, string» roman = {{1000, "m"}, {900, "cm"}, ..., {1, "i"}}; string result = ""; for (const auto &pair : roman) { while (number >= pair.first) { result += pair.second; number -= pair.first; } } return result; }
+
+Note : Includes test main() but uses the exact function name specified in the instruction. 
+
+Response B (Rejected): Core Implementation (Key Part): 
+
+string int_to_mini_roman(int number) // Misspelled function name (missing ’k’) {vector<pair<int, string» roman_map = {{1000, "m"}, {900, "cm"}, ..., {1, "i"}}; string roman = ""; for (auto &pair : roman_map) { while (number >= pair.first) { roman += pair.second; number -= pair.first; } }return roman; }
+
+Note : Includes test main() and uses incorrect function name (no ’k’ at the end). 
+
+Method 1: Direct Judge (Baseline) 
+
+Critique: “Response B uses the ’correct’ function name ( int_to_mini_roman ) as seen in examples; Response A has a ’typo’ in the function name ( int_to_mini_romank ).” / “Both implementations are logically correct.” 
+
+Flaw: Fails to recognize the subtle naming requirement in the instruction (mandatory ’k’ suffix), misclassifying the correct function name as a typo. 
+
+Prediction: ✗ Winner: Response B (Incorrect) Method 2: Rubric-Guided (Improper Criteria) 
+
+Generated Rubric (Hard Rules): 
+
+1. Function must return lowercase Roman numerals for integers in range 1 ≤ num ≤ 1000 
+
+2. No syntax errors / no excessive memory allocation 3. Do not include main() / test code (unless allowed) 
+
+Reasoning: Both responses meet logic/correctness rules; Response B is preferred for “concise explanation and ’standard’ function name”. 
+
+Prediction: ✗ Winner: Response B (Incorrect) Method 3: Ours (CDRRM, Optimized Rubric) 
+
+Generated Rubric (Hard Rules): 
+
+1. Function name must be exactly int_to_mini_romank (per instruction, case-sensitive) 2. Core conversion logic uses correct subtractive Roman numeral pairs (e.g., 9=ix, 40=xl) 
+
+Reasoning: Response A strictly matches the mandatory function name requirement; Response B misspells the function name (missing ’k’), violating Hard Rule 1. Logic is correct for both, but naming rule takes precedence. 
+
+Prediction: ✓ Winner: Response A (Correct) 
+
+Table 8: Case Study on Subtle Naming Error Identification (Code Scenario). Direct Judge and Rubric-Guided with improper criteria overlook the mandatory function name requirement in the instruction, favoring Response B with a “standard” but incorrect name. Our CDRRM generates rubrics targeting instruction-aligned naming rules, correctly identifying Response A’s compliance and Response B’s critical naming flaw. CDRRM: Contrast-Driven Rubric Generation for Reliable and Interpretable Reward Modeling 
+
+Instruction: A circle of radius 1 is surrounded by 4 circles of radius 𝑟 (centers form a square). Derive the exact value of 𝑟 .
+
+Response A (Chosen/Ground Truth): Core Geometric Modeling & Derivation: 
+
+1. Centers of 4 surrounding circles form a square; distance between adjacent centers: 2𝑟 ;2. Distance from central circle center to surrounding circle center: 1 + 𝑟 (key correct distance); 3. Form right triangle (central center, surrounding center, square side midpoint) with legs 𝑟, 𝑟 , hypotenuse 1 + 𝑟 ;4. Pythagorean theorem: (1 + 𝑟 )2 = 2𝑟 2 =⇒ 𝑟 2 − 2𝑟 − 1 = 0;5. Solve quadratic: 𝑟 = 1 + √2 (positive solution), equivalent to 𝑟 = 1√2−1 (rationalized). 
+
+Final Answer : 1
+
+√2 − 1 (correct, consistent with geometric configuration). 
+
+Response B (Rejected): Core Geometric Modeling & Derivation: 
+
+1. Correctly identifies distance between adjacent surrounding centers as 2𝑟 and central-surrounding distance as 1 + 𝑟 ;2. Invalid geometric assumption : Misdefines right triangle 𝑂𝑀𝐵 with 𝑂𝑀 = 1 + 𝑟  
+
+> 2
+
+, 𝑀𝐵 = 𝑟 , 𝑂𝐵 = 2𝑟 ;3. Misapplied Pythagorean theorem: (1 + 𝑟  
+
+> 2
+
+)2 + 𝑟 2 = (2𝑟 )2 =⇒ 11 𝑟 2 − 4𝑟 − 4 = 0;4. Solve quadratic: 𝑟 = 2+4√311 (positive solution). 
+
+Final Answer : 2 + 4√311 (incorrect, rooted in flawed triangle construction). 
+
+Method 1: Direct Judge (Baseline) 
+
+Critique: “Response B is well-structured with systematic derivation and no internal contradictions; Response A has a contradictory derivation (two forms of 𝑟 ) and unclear triangle setup.” 
+
+Flaw: Prioritizes structural neatness over geometric correctness , ignores Response B’s fatal triangle misdefinition and incorrect final answer, misjudges Response A’s equivalent answer forms as a contradiction. 
+
+Prediction: ✗ Winner: Response B (Incorrect) Method 2: Rubric-Guided (Improper Criteria) 
+
+Generated Rubric (Hard Rules): 
+
+1. Correctly identify the geometric configuration (4 circles forming a square around central circle); 2. Correctly state key distances between circle centers; 3. Apply Pythagorean theorem without algebraic calculation errors. 
+
+Reasoning: Both responses meet all hard rules; Response B is preferred for “no logical inconsistencies in derivation steps”. 
+
+Flaw: Rubric lacks hard rules for valid geometric modeling and consistency of final answer with configuration , missing the core error of Response B. 
+
+Prediction: ✗ Winner: Response B (Incorrect) Method 3: Ours (CDRRM, Optimized Rubric) 
+
+Generated Rubric (Hard Rules): 
+
+1. Correctly model the right triangle from the geometric configuration (no invalid distance assumptions); 2. Derive the quadratic equation via correct application of the Pythagorean theorem; 3. Arrive at the correct final value 𝑟 = 1 + √2 (or equivalent rationalized form). 
+
+Reasoning: Response A satisfies all hard rules (valid triangle, correct derivation, right answer); Response B violates Rule 1 (flawed triangle) and Rule 3 (incorrect final answer), despite correct distance statements. 
+
+Prediction: ✓ Winner: Response A (Correct) 
+
+Table 9: Case Study on Subtle Geometric Modeling Error Identification (Math Reasoning Scenario). Direct Judge and Rubric-Guided with improper criteria fail to capture the core geometric flaw of Response B, while our CDRRM generates task-aligned rubrics targeting valid geometric modeling and answer-configuration consistency, accurately identifying the correct solution in Response A. Dengcan Liu, Fengkai Yang, Xiaohan Wang †, Shurui Yan, Jiajun Chai, Jiahao Li, Yikun Ban, Zhendong Mao †, Wei Lin, and Guojun Yin 
+
+System Prompt for Contrastive Profling 
+
+You are a professional answer quality diagnosis expert. Your task is to perform structured diagnosis on given instructions and answers, identifying in which dimensions the answer performs well or poorly. ## Core Principles 1. Verifiability : All diagnoses must be based on verifiable facts, not subjective assumptions 2. Evidence Support : Each finding must cite specific fragments from the answer as evidence 3. Instruction Anchoring : Diagnoses must be directly related to instruction requirements, and cannot introduce new requirements 4. Objectivity : Avoid vague evaluations like "more in-depth" or "more professional" unless the instruction explicitly requires them ## Diagnosis Dimensions (Criteria Candidates) You can evaluate answers from the following dimensions: - Instruction Following : Whether the answer accurately understands and follows all instruction requirements - Content Coverage : Whether the answer covers all key points required by the instruction - Factual Accuracy : Whether the information provided is accurate and non-misleading - Format Compliance : Whether the answer conforms to the format and structure required by the instruction - Logical Consistency : Whether the content is logically clear and consistent - Safety : Whether the answer contains harmful, biased, or inappropriate content - Conciseness : Whether the answer remains concise while meeting requirements (if the instruction requires it) - Completeness : Whether the answer completely addresses all questions in the instruction ## Output Format Requirements Please strictly output in JSON format, without adding any other text. The output format is as follows: {{ "criteria_candidates": ["dimension1", "dimension2", ...], "findings": [ {{ "criterion": "dimension name", "status": "pass | fail | partial | not_applicable", "severity": 0-3 (only meaningful when status is fail or partial, 0=mild, 3=severe), "claim": "describe in one sentence what is good/bad (must be verifiable)", "evidence": "specific fragment or location description cited from the answer", "instruction_anchor": "point to which requirement in the instruction or cite instruction text" }}, ... ], }} ## Key Constraints 1. When status is fail or partial, evidence must be provided , otherwise the finding is invalid 2. claim must be verifiable : Cannot be vague descriptions like "better quality", must be verifiable statements like "missing X" or "contains Y" 3. instruction_anchor must exist : Each finding must be traceable to a specific requirement in the instruction 4. No new requirements allowed : Diagnoses must be based on the instruction or instruction_keypoints, cannot add new evaluation criteria ## Example 
+
+Input Example :- Instruction: Write a brief introduction about Python (no more than 100 characters) - Answer: Python is a high-level programming language created by Guido van Rossum in 1991. It emphasizes code readability and simplicity, using indentation to define code blocks. Python supports multiple programming paradigms, including object-oriented, imperative, functional, and procedural programming. It has a large standard library, known as the "batteries included" philosophy. Python is widely used in web development, data science, artificial intelligence, automation scripts, and other fields. 
+
+Output Example :{{ "criteria_candidates": ["Instruction Following", "Content Coverage", "Conciseness"], "findings": [ {{ "criterion": "Conciseness", "status": "fail", "severity": 3, "claim": "The answer exceeds 100 characters, violating the length limit requirement in the instruction", "evidence": "The entire answer text (approximately 150 characters)", "instruction_anchor": "Instruction requirement: no more than 100 characters" }}, {{ "criterion": "Content Coverage", "status": "pass", "severity": 0, "claim": "The answer covers key information about Python: creator, characteristics, application areas", "evidence": "Created by Guido van Rossum in 1991... widely used in web development, data science...", "instruction_anchor": "Instruction requirement: introduction about Python" CDRRM: Contrast-Driven Rubric Generation for Reliable and Interpretable Reward Modeling 
+
+}} ]}} 
+
+System Prompt for Rubric Generator 
+
+You are an expert at generating structured evaluation rubrics for instructions. Your task is to generate a comprehensive rubric that can be used to evaluate responses to a given instruction. The rubric should include: 1. Hard Rules : Specific, verifiable rules that responses must follow (type: "must") or must avoid (type: "forbid") 2. Principles : General guidelines for subjective evaluation Each rule must have: - rule_id: Unique identifier - type: "must" or "forbid" - criterion: Clear description of what to check - test: Verifiable test condition - rationale: Why this rule matters Output format: JSON with "hard_rules" and "principles" arrays.""" 
+
+User Template for Rubric Generator 
+
+Instruction: {instruction} Response A: {response_a} Response B: {response_b} Generate a comprehensive evaluation rubric for this instruction. The rubric should help distinguish between different responses. Output your response as a JSON object with the following structure: {{ "hard_rules": [ {{ "rule_id": "rule_1", "type": "must", "criterion": "Clear description of what to check", "test": "Verifiable test condition", "rationale": "Why this rule matters" }} ], "principles": [ {{ "principle_id": "principle_1", "description": "General guideline for evaluation", "rationale": "Why this principle is needed" }} ]}} Dengcan Liu, Fengkai Yang, Xiaohan Wang †, Shurui Yan, Jiajun Chai, Jiahao Li, Yikun Ban, Zhendong Mao †, Wei Lin, and Guojun Yin 
+
+System Prompt for Rubric Synthesis 
+
+You are a professional evaluation criteria (Rubric) generation expert. Your task is to generate a discriminative rubric that can distinguish between Answer A and Answer B based on their diagnoses. ## Core Principles 1. Discriminative : Each hard rule must be able to distinguish between Answer A and Answer B 2. Atomic : Each rule must be independently verifiable (pass/fail), cannot be a compound condition 3. Generalizable : Rules cannot contain answer-specific details (such as names, numbers, specific sentences) unless the instruction explicitly requires these entities 4. Minimal : Use fewer rules to distinguish when possible, avoid piling up irrelevant rules 5. Executable : Each rule must be able to evaluate a single answer ## Hard Rules vs Principles - Hard Rules : Must-satisfy, objectively verifiable rules - Each rule must be able to make pass/fail judgment on a single answer - Must come from high-severity fails in one answer or key passes in the other answer - Principles : Subjective criteria used only when hard rules cannot fully distinguish - Used for handling edge cases or subjective quality differences ## Output Format Requirements Please strictly output in JSON format, without adding any other text. The output format is as follows: {{ "instruction_id": "instruction ID", "hard_rules": [ {{ "rule_id": "rule_1", "type": "must | forbid", "criterion": "atomic verifiable description (must be able to make pass/fail judgment on a single answer)", "rationale": "explain why this rule can distinguish Answer A vs Answer B (cite finding from diagnosis or brief description)", "derived_from": {{ "answer_a_findings": ["finding_id or description"], "answer_b_findings": ["finding_id or description"] }}, "test": "brief description of how to verify (e.g., must contain X, must not appear Y, must cover A/B/C)" }}, ... ], "principles": [ {{ "principle_id": "principle_1", "description": "subjective quality standard description", "rationale": "why this principle is needed" }}, ... ], "pair_consistency_check": {{ "expected_winner": "A", "rubric_predicts": "A | B | tie", "notes": "if rubric_predicts does not match expected_winner, explain the reason" }} }} ## Key Constraints 1. No answer-specific details : Rules cannot contain specific names, numbers, sentence repetitions, etc., unless the instruction explicitly requires them 2. Each hard rule must be verifiable : Must be able to independently make pass/fail judgment on a single answer 3. Minimal principle : Distinguish with fewer rules when possible, avoid rule redundancy 4. Self-consistency check : The generated rubric should be self-consistent when predicting the winner between A and B. ## IMPORTANT ANTI-BIAS RULE You MUST NOT assume which answer is better based on any label. Only use the provided diagnoses (findings + evidence + instruction anchors) .""" CDRRM: Contrast-Driven Rubric Generation for Reliable and Interpretable Reward Modeling 
+
+System Prompt for Judge Model 
+
+You are a rubric-based judge using a provided rubric. ## Definitions - Hard Rules: explicit, objective, verifiable requirements from the instruction. - Principles: optional subjective criteria, ONLY if needed to distinguish this specific pair. ## Process (MUST FOLLOW) 1) Read Instruction, Response A, Response B, and the provided Rubric. 2) Judge A vs B using the provided Hard Rules + (optional) Principles. 3) Output a Winner. ## Output Format Requirements (MUST MATCH EXACTLY) --- Analysis ---
+
+Response A: 
+
+- [Hard Rule/Principle]: Justification: ... ... 
+
+Response B: 
+
+- [Hard Rule/Principle]: Justification: ... ... --- Final Judgment ---Justification: [Concise but complete] Winner: [Response A / Response B] CRITICAL: - Winner MUST be exactly "Response A" or "Response B". - You MUST use the provided Rubric to guide your judgment. 
+
+User Template for Judge Model 
+
+Task: Rubric (Provided) -> Judge ## Instruction {instruction} ## Response A {response_a} ## Response B {response_b} ## Provided Rubric {rubric} /no_think

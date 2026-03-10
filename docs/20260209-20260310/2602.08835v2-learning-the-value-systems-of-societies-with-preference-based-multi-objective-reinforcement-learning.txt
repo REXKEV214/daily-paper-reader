@@ -1,0 +1,2203 @@
+Title: Learning the Value Systems of Societies with Preference-based Multi-objective Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2602.08835v2
+
+Published Time: Thu, 12 Feb 2026 01:45:47 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Learning the Value Systems of Societies with Preference-based Multi-objective Reinforcement Learning 
+
+## Andrés Holgado-Sánchez 
+
+CETINIA, University Rey Juan Carlos Madrid, Spain andres.holgado@urjc.es 
+
+## Peter Vamplew 
+
+Federation University Ballarat, Australia p.vamplew@federation.edu.au 
+
+## Richard Dazeley 
+
+Deakin University Geelong, Australia richard.dazeley@deakin.edu.au 
+
+## Sascha Ossowski 
+
+CETINIA, University Rey Juan Carlos Madrid, Spain sascha.ossowski@urjc.es 
+
+## Holger Billhardt 
+
+CETINIA, University Rey Juan Carlos Madrid, Spain holger.billhardt@urjc.es 
+
+ABSTRACT 
+
+Value-aware AI should recognise human values and adapt to the value systems (value-based preferences) of different users. This requires operationalization of values, which can be prone to mis-specification. The social nature of values demands their represen-tation to adhere to multiple users while value systems are diverse, yet exhibit patterns among groups. In sequential decision making, efforts have been made towards personalization for different goals or values from demonstrations of diverse agents. However, these approaches demand manually designed features or lack value-based interpretability and/or adaptability to diverse user preferences. We propose algorithms for learning models of value alignment and value systems for a society of agents in Markov Decision Pro-cesses (MDPs), based on clustering and preference-based multi-objective reinforcement learning (PbMORL). We jointly learn socially-derived value alignment models (groundings) and a set of value systems that concisely represent different groups of users (clusters) in a society. Each cluster consists of a value system representing the value-based preferences of its members and an approximately Pareto-optimal policy that reflects behaviours aligned with this value system. We evaluate our method against a state-of-the-art PbMORL algorithm and baselines on two MDPs with human values. 
+
+KEYWORDS 
+
+Value Awareness; Value Alignment; Inverse Reinforcement Learn-ing; Multi-objective Reinforcement Learning; Preference-based Re-inforcement Learning 
+
+1 INTRODUCTION 
+
+To remain human-aligned, AI agents require awareness of human values such as benevolence or achievement [32 ], i.e. the ability to reason with and about the value-alignment of different actions. This allows making explicit the alignment with the pluralistic value sys-tems [ 25 ] of human agents, manifested as value-based preferences 1.Value-awareness requires computational representations of val-ues: existing works model human values with, e.g. utility func-tions [ 33 , 55 ], reward functions [ 49 , 65 ], constraints [ 4 , 73 ] or logic programming [ 2]. Value systems are typically represented 
+
+> 1Here, “value-based preferences”, refer to preferences between alternatives based on their alignment [51] with multiple values.
+
+by value orderings [ 49 , 56 ], weights over value alignment utili-ties/rewards [ 25 , 28 ], preferences over alternatives [ 9 , 18 ] or other methods such as taxonomies [ 39 ]. Such models can be applied to choosing value-aligned government policies [ 28 ], obtaining aligned behaviour [ 42 , 49 ] or norm selection in multi-agent systems [ 1, 33 ]. However, representing values is challenging, due to their context-sensitive [ 27 ], and socially emergent and evolving nature [ 39 , 53 ]. This often results in misspecification [ 61 ]. Also, most of the surveyed works that analyse value-based preference diversity (e.g. [ 25 , 28 ]) cannot simultaneously represent the various levels of alignment with values demanded by different user cohorts [66]. For Markov Decision Processes (MDPs), reward learning is a promising way to achieve value-alignment [ 12 , 24 ]. Many works, though, focus on human alignment for the whole society [ 45 ], but without awareness of the multiple value-based preferences involved. As such, we argue that value alignment should be treated as a multi-objective problem instead [ 62 ]; in particular, encoding separate values as different components of a reward vector allows an AI system to recognise these values and abide with them under varying conditions. Modelling values and value-based preferences of specific users has been approached via multi-objective rewards [ 49 , 65 ,70 ], but these works struggle to instantiate models that concisely represent the diversity of value preferences within human groups. In this paper, we propose an online preference-based multi-objective reinforcement learning [ 34 ] algorithm with clustering that learns the value system of a society in a MDP. This entails learning: a) a social grounding (reward vector) that represents the alignment of different behaviours with a given set of values; b) a set of values systems (linear scalarization functions) that represent dif-ferent clusters of agents with similar value-based preferences; and c) a set of MDP policies, each aligned with one of those value systems. We set out from a social value system learning algorithm [ 18 ] that learns a) and b) in non-sequential decision-making. Our algorithm asks for pairwise preferences between trajectories (i.e. sequences of observations and actions) in terms of the value systems of each agent (value-based preferences) and in terms of their alignment with the given set of values (value alignment preferences). We evalu-ate the capabilities of the method to approximate the value systems and behaviours of societies in synthetic MDPs. The paper is structured as follows. In Section 3 we propose a representation of the value system of a society. In Section 4 we describe the social value system learning problem and propose an 
+
+> arXiv:2602.08835v2 [cs.AI] 11 Feb 2026
+
+algorithm to solve it. In Section 5 we evaluate our methods against baselines and an existing PbMORL algorithm [ 34 ]. In Section 6, we provide conclusions, limitations, and suggestions for future work. 
+
+2 RELATED WORKS 2.1 Value Awareness, Inference and Learning 
+
+Artificial Moral Agents (AMAs) [ 64 ] can be classified as explicit or implicit depending on whether their behaviour can be expressed in ethical terms [ 7]. Implicit systems acquire (value-)aligned behaviour through imitation [ 44 , 45 ] or teaching [ 16 , 31 ]; explicit ones op-erationalize values or principles to permit the ethical evaluation of actions [ 2 ] or norms [ 36 , 37 ]. Value-aware systems [ 32 ] extend AMAs by explicitly grounding values as desirable goals [ 54 ] and respecting agents’ value systems (preferences over values [50]). Given the difficulty of eliciting values and value systems, Liscio et al. [ 26 ] propose value inference as a three-step process, namely: i) value identification [ 27 , 44 ], which finds the values relevant to a society; ii) value system estimation [ 3, 57 ], which learns the value systems of its members; and iii) value system aggregation [25 , 28 ], which derives a value system to represent the whole society. Value inference, however, does not cover value learning [ 60 ]: the problem of eliciting the value alignment of decisions based on human interactions/examples. Value learning implementations remain scarce, though. Exceptions include Anderson et al. [ 2 ], who learn ethical principles via inductive logic programming; Wynn et al. [ 69 ], who propose representational alignment for learning values in LLMs; and some works using deep learning [42, 65, 66]. Using the previous terminology, we can classify our work as a method for value learning combined with value system estimation of/aggregation into distinct groups in a society. The latter distin-guishes our approach from the value inference schema, as value system aggregation has so far considered the aggregation of previ-ously elicited value systems into a single one for the society [ 25 , 28 ], while we estimate separate value systems for different groups. 
+
+2.2 Multi-objective RL for Value Learning 
+
+For value learning [ 60 ], a decision-making framework that explic-itly represents the alignment of alternatives with multiple val-ues is required. The most widely used is multi-objective decision-making [ 59 , 62 ]. In particular, modelling value alignment with util-itarian rewards in (multi-objective) reinforcement learning , (MO)RL, is considered a promising approach [ 12 , 24 ] and has even been used to approximate other ethical theories such as deontology [29]. Value learning in MORL may be tackled via multi-objective inverse reinforcement learning [ 23 , 42 ] (MOIRL), the problem of learning a reward function for each goal/value and estimating the goal-based behaviour of individuals as the policy that maximizes a combination of these rewards, by observing behaviour traces. How-ever, value learning based on these traces is risky, as the learned rewards might only be able to distinguish the best value-aligned behaviours from the rest, failing at evaluating suboptimal choices. An alternative is Preference-based Reinforcement Learning 
+
+(PbRL) [ 67 ] –or RLHF [ 10 ]–, the problem of learning a RL policy based on trajectory comparisons. PbRL often consists of two phases: first, a reward model that captures preferences is learned; second, a policy that maximizes this model is obtained via RL. Thus, these methods are a way to perform inverse RL [ 6 ]. A single pass through these phases ( offline PbRL) may misgeneralize after deployment, except under restrictive conditions [ 72 ]. As such, online PbRL (or human-in-the-loop, HiL) has been suggested, where an agent seeks to maximize positive feedback in interaction with a human using a limited number of queries [ 35 ]. Online feedback is particularly desirable for value learning, as it fosters self-reflection [26]. However, single-objective PbRL cannot capture diverse pref-erences (value systems) or simultaneously represent multiple goals (values). The first limitation has been addressed through personalization and clustering, mainly in the context of genera-tive AI [ 8, 41 , 43 , 73 ]. The second has motivated multi-objective PbRL [ 34 ] (PbMORL), either with manually specified objectives [ 30 ]or with objectives lacking an explicit AI-usable representation [ 65 ]. To our knowledge, our approach is the first to address both limitations simultaneously, albeit with trade-offs. Some authors [ 41 ,43 ] personalize LLMs via user embeddings; by contrast, our method avoids them, but requires more data for new agents. In [ 8 ], a single policy is learned that aggregates a preference-based clustering of agents, an alternative to our per-cluster policy solution. In [ 65 ], rewards are learned for several goals and weighed at inference stage to adapt to new users; however, the analysis of user groups is not clarified. In [ 66 ], the generative model alignment problem is modelled with transparent value constraints, but requires expensive interactions to elicit the feasible/wanted constraints. Finally, in [ 34 ] , theoretical results on Pareto efficiency in PbMORL are provided, but the estimation of particular user preferences is not contemplated. 
+
+3 REPRESENTING VALUE SYSTEMS IN MDP 
+
+In the following, we adapt and extend our previous model for rep-resenting values and value systems in a society [ 18 ] to problems involving sequential decisions, and discuss its properties. 
+
+3.1 Representing Value Alignment 
+
+We set out from a set of 𝑚 values 𝑉 = {𝑣 1, ..., 𝑣 𝑚 } , where each value 𝑣 𝑖 constitutes a label for a human value. When grounded 
+
+in a decision-making domain, a value label acquires a particular meaning. Here, we focus specifically on decision-making domains modelled via MDPs. In particular, the meaning of each value label is grounded by the notion of the alignment of a set of trajectories with this value, defined through a preference relation. Here, a trajectory 𝜏 
+
+of length |𝜏 | = 𝑛 is a sequence (( 𝑠 0, 𝑎 0), . . . , (𝑠 𝑛 −1, 𝑎 𝑛 −1)) ∈ ( 𝑆 ×𝐴 )𝑛 
+
+where 𝑆 is the set of states in the MDP and 𝐴 the available actions. 
+
+Definition 3.1 (Value Alignment). The alignment of a set of tra-jectories T with a value 𝑣 𝑖 (in general, the alignment preferences with 𝑣 𝑖 ) is represented by a weak order ≼𝑣 𝑖 over T , where 𝜏 ≼𝑣 𝑖 𝜏 ′
+
+means that the trajectory 𝜏 ′ is at least as aligned with value 𝑣 𝑖 as 𝜏 .Inspired by other works in the area [ 33 , 49 , 55 ], we use a specific kind of utility function, in our work called alignment function , A𝑣 𝑖 
+
+to quantify value alignment, i.e. to represent the relation ≼𝑣 𝑖 : i.e., for all 𝜏, 𝜏 ′ ∈ T : 𝜏 ≼𝑣 𝑖 𝜏 ′ ⇐⇒ A 𝑣 𝑖 (𝜏 ) ≤ A 𝑣 𝑖 (𝜏 ′). Then, to specify the semantics of a set of values, we define the notion of grounding .
+
+Definition 3.2 (Grounding). A grounding of the set of values 𝑉 is a set of weak orders ≼𝑉 = ≼𝑣 𝑖 
+
+> 𝑚 𝑖 =1
+
+. Given the respective alignment functions, a grounding function for 𝑉 is: 𝐺 𝑉 =  A𝑣 1 , . . . , A𝑣 𝑚 
+
+.Given that most behaviours in MDP scenarios are modelled through reward functions, we simplify the set of possible grounding functions to those that can be implemented with a multi-objective reward function vector 𝑅 𝑅 𝑅 : 𝑆 × 𝐴 → R𝑚 . We say that 𝑅 𝑅 𝑅 implements a grounding function 𝐺 𝑉 when, for all 𝜏 ∈ T 2:
+
+𝐺 𝑉 (𝜏 ) = 
+
+> |𝜏 |
+
+∑︁ 
+
+> 𝑖 =0
+
+𝑅 𝑅 𝑅 𝑉 (𝑠 𝑖 , 𝑎 𝑖 ) (1) We write 𝑅 𝑅 𝑅 (𝑠, 𝑎 ) =  𝑅 𝑣 1 (𝑠, 𝑎 ), . . . , 𝑅 𝑣 𝑚 (𝑠, 𝑎 ) to denote the reward vector for a given state-action pair (𝑠, 𝑎 ); and for each 𝑣 𝑖 ∈ 𝑉 : 𝑅 𝑣 𝑖 :
+
+𝑆 × 𝐴 → R represents the value reward , that is, the alignment of 
+
+(𝑠, 𝑎 ) with value 𝑣 𝑖 . An MDP with such a reward vector constitutes a Multi-Objective MDP (MOMDP) [62]. 
+
+3.2 Representing Value Systems 
+
+An agent’s value system expresses the importance assigned to each value. Given a grounding, it induces preferences over trajectories. 
+
+Definition 3.3 (Value system). Let ≼𝑉 be a grounding for a set of values 𝑉 . The value system of an agent 𝑗 , based on the grounding 
+
+≼𝑉 , is determined by a weak order ≼𝑗 𝑉 over T . If 𝜏 ≼𝑗 𝑉 𝜏 ′, we say that 𝜏 is equally or more aligned than 𝜏 with 𝑗 ’s value system. Following other work in the field [ 25 , 28 , 49 , 63 ], we assume that the value system of an agent can be expressed through a lin-ear combination of the alignment of a trajectory with the values (Definition 3.4). Our framework can then be seen as welfarist utili-tarian [ 58 ], where values are conceived as different sources of good, and each agent’s value system weighs their relative importance. 
+
+Definition 3.4 (Value System Function). Let 𝑗 be an agent with value system ≼𝑗 𝑉 and grounding function 𝐺 𝑉 . The function 
+
+A𝑊 𝑗 ,𝐺 𝑉 (𝜏 ) = 𝑊 𝑗 · (A 𝑣 1 (𝜏 ), . . . , A𝑣 𝑚 (𝜏 )) 𝑇 is a value system func-tion for 𝑗 if it represents ≼𝑗 𝑉 over T , i.e., for all 𝜏, 𝜏 ′ ∈ T :
+
+A𝑊 𝑗 ,𝐺 𝑉 (𝜏 ) ≤ A 𝑊 𝑗 ,𝐺 𝑉 (𝜏 ′) ⇐⇒ 𝜏 ≼𝑗 𝑉 𝜏 ′
+
+where 𝑊 𝑗 = (𝑤 𝑣 1 
+
+> 𝑗
+
+, . . . , 𝑤 𝑣 𝑚  
+
+> 𝑗
+
+) are the value system weights that repre-sent the relative importance of each value. We consider normalized weights in the unit (𝑚 − 1)-simplex: 𝑊 𝑗 ∈ ( 0, 1)𝑚 , Í𝑚 𝑖 =1 𝑤 𝑣 𝑖  
+
+> 𝑗
+
+= 1.If 𝐺 𝑉 is implemented by a reward vector, we express A𝑊 𝑗 ,𝐺 𝑉 as: 
+
+A𝑊 𝑗 ,𝐺 𝑉 (𝜏 ) = 
+
+> |𝜏 |
+
+∑︁ 
+
+> 𝑖 =0
+
+𝑊 𝑗 · 𝑅 𝑅 𝑅 (𝑠 𝑖 , 𝑎 𝑖 )𝑇 . (2) Thus, the value system reward for each agent becomes a linear scalarization of 𝑅 𝑅 𝑅 with weights 𝑊 𝑗 :
+
+𝑅 𝑗 (𝑠, 𝑎 ) = 𝑊 𝑗 · 𝑅 𝑅 𝑅 (𝑠, 𝑎 )𝑇 
+
+We also define the value system represented by 𝑅 𝑗 as ≼𝑊 𝑗  
+
+> 𝑅 𝑅 𝑅
+
+.             
+
+> 2In Eq. 1, if there is a general concern to prioritize short-term value alignment, we can consider a cumulative discount factor 𝛾 <1, obtaining 𝐺 𝑉 (𝜏 )=Í|𝜏 |
+> 𝑖 =0𝛾 𝑖 𝑅 𝑅 𝑅 𝑉 (𝑠 𝑖 , 𝑎 𝑖 ).
+
+3.3 Representing the Value System of a Society 
+
+Values are inherently social notions [ 39 , 53 ], and different agents hold different value systems [ 25 ]. We set out from a society of agents 𝐽 , each with its own individual value system ≼𝑗 𝑉 based on its individual grounding ≼𝑉 ,𝑗 = (≼𝑣 1,𝑗 , . . . , ≼𝑣 𝑚 ,𝑗 ).Agents can potentially have different views on the meaning of values, i.e. their groundings might differ. However, within human societies and many application domains, a social grounding ex-ists [ 18 ], i.e. there is a near-consensus on the meaning of values. An example in the real world is the medical domain [ 48 ]. A con-sensual grounding is further necessary as a basis for interpretation and comparison of the value systems of agents. Thus, we assume that such a meaningful social grounding is obtainable, i.e. a set of preference relations ≼𝑉 = {≼𝑣 1 , . . . , ≼𝑣 𝑚 } exists that is sufficiently coherent with the variety of individual groundings in the society. By contrast, we acknowledge that the importance that each agent gives to each value (their value systems) can vary substantially. This is evidenced, for example, in the world values survey [ 17 ], where people from different countries hold diverging value-based opinions. Still, since people in the same society have their value system influenced by culture, we can expect regularities in their value systems across social groups [ 15 ]. This suggests that in our society, finding subgroups of agents that can be represented by a shared (possibly aggregated [25]) value system is a natural expectation. The previous considerations lead us to define the value system of a society [ 18 ] as the composition of a social grounding with a set of value systems that represent the value-based preferences of different groups of agents in the society. 
+
+Definition 3.5 (Value system of a society). A value system of the society 𝐽 (or social value system ) is a tuple (𝛽, Ω, ≼𝑉 ) where 
+
+Ω = ≼𝑙 𝑉  
+
+> 𝐿 𝑙 =1
+
+is a set of 𝐿 value systems based on a grounding ≼𝑉 ,and 𝛽 : 𝐽 → { 1, . . . , 𝐿 } is a function that assigns each agent to one value system. We refer to the group of agents assigned, through 𝛽 ,to the 𝑙 -th value system ( ≼𝑙 𝑉 ) as the 𝑙 -th cluster of the society. 
+
+4 SOCIAL VALUE SYSTEM LEARNING IN MDPS 
+
+In this section, we define the problem of learning the value system of a society of agents based on examples of value alignment and value-based preferences, and present an algorithm for solving it. 
+
+4.1 Social Value System Learning Problem 
+
+We assume that for each agent 𝑗 , we have access to examples of their value system and value alignment preferences over pairs of trajectories. In particular, for each agent 𝑗 there is a dataset 
+
+𝐷𝑆 𝑗 composed by entries of the type (𝜏, 𝜏 ′, 𝑦 𝑗 𝑉 , 𝑦 𝑗 𝑣 1 , . . . , 𝑦 𝑗 𝑣 𝑚 ), where 
+
+𝑦 𝑗  
+
+> _
+
+∈ { 0, 0.5, 1} indicates as to whether agent 𝑗 prefers 𝜏 over 𝜏 ′ (1), 
+
+𝜏 ′ over 𝜏 (0) or is indifferent (0.5), with regard to 𝑗 ’s value system (𝑦 𝑗 𝑉 ) and to each of the individual values ( 𝑦 𝑗 𝑣 𝑖 ). In the sequel, we use 
+
+𝐷 𝑗 to refer to the set of trajectory pairs {( 𝜏, 𝜏 ′)} that are included in a dataset 𝐷𝑆 and define 𝐷𝑆 = Ð𝑗 ∈ 𝐽 𝐷𝑆 𝑗 and 𝐷 = Ð𝑗 ∈ 𝐽 𝐷 𝑗 .First , we need to quantify value system and alignment preference differences. To do this, we define the discordance between two preference relations by normalizing the number of ordered pairs of trajectories in a set 𝑆 ⊆ T × T that are ranked differently. Given two relations ≼1 and ≼2 discordance is calculated as follows: 𝑑 𝑆 
+
+ ≼1, ≼2  = 1
+
+|𝑆 |∑︁ (𝜏,𝜏 ′ ) ∈ 𝑆 
+
+1    𝜏 ≼1 𝜏 ′  .  𝜏 ≼2 𝜏 ′  (3) where 1    𝜏 ≼1 𝜏 ′  .  𝜏 ≼2 𝜏 ′  yields 1 when the preference given by ≼1 and ≼2 over the pair (𝜏, 𝜏 ′) differs, and 0 otherwise. To quantify the degree by which a candidate social grounding represents the individual groundings of a set of agents (i.e. a given society), we employ the notion of coherence .
+
+Definition 4.1 (Coherence). Let {≼𝑣 𝑖 ,𝑗 | 𝑗 ∈ 𝐽 } be the set of value alignment preferences with value 𝑣 𝑖 held by each agent in a society 
+
+𝐽 . The coherence of an alignment preference ≼𝑣 𝑖 with regard 𝑣 𝑖 
+
+with {≼𝑣 𝑖 ,𝑗 | 𝑗 ∈ 𝐽 }, over the trajectory pairs 𝐷 is given by: 
+
+chr 𝐷 (≼𝑣 𝑖 ) = 1 − 1
+
+|𝐽 |∑︁ 𝑗 ∈ 𝐽 
+
+𝑑 𝐷 𝑗 (≼𝑣 𝑖 , ≼𝑣 𝑖 ,𝑗 )
+
+We define the coherence of a grounding Ω = (≼𝑣 1 , . . . , ≼𝑣 𝑚 ) by 
+
+chr 𝐷 (≼𝑉 ) = 1
+
+> 𝑚
+
+Í𝑚 𝑖 =1 chr 𝐷 (≼𝑣 𝑖 ).As we assume that there is a near-consensus in the society con-cerning value meaning, we assume that a social grounding ≼𝑉 
+
+exists that has a coherence with the agents’ alignment preferences that tends to 1. In a MDP, this suggests that a reward vector 𝑅 𝑅 𝑅 
+
+can be learned to represent ≼𝑉 with high coherence. We denote such learned grounding with ≼𝑅 𝑅 𝑅 = (≼𝑅 𝑣 1 , . . . , ≼𝑅 𝑣𝑚 ). Additionally, we can estimate the social value system using the grounding ≼𝑅 𝑅 𝑅 
+
+and a set of 𝐿 value system weights 𝑊 𝑊 𝑊 = (𝑊 1, . . . ,𝑊 𝐿 ): follow-ing Section 3.2, we estimate the value system of the 𝑙 -th cluster of the society with the value system represented by the reward 
+
+𝑅 𝑙 (𝑠, 𝑎 ) = 𝑊 𝑙 · 𝑅 𝑅 𝑅 (𝑠, 𝑎 )𝑇 , i.e. for each 𝑙 : ≼𝑙 𝑉 ≈≼𝑊 𝑙  
+
+> 𝑅 𝑅 𝑅
+
+. Then, each agent’s value system ≼𝑗 𝑉 is represented with the reward function of its cluster, i.e. 𝑅 𝑗 (𝑠, 𝑎 ) ≜ 𝑅 𝛽 ( 𝑗 ) (𝑠, 𝑎 ) = 𝑊 𝛽 ( 𝑗 ) · 𝑅 𝑅 𝑅 (𝑠, 𝑎 )𝑇 . We denote the social value system implemented by 𝑅 𝑅 𝑅 and 𝑊 𝑊 𝑊 with (𝛽,𝑊 𝑊 𝑊 , 𝑅 𝑅 𝑅 ), to refer to the social value system (𝛽, Ω, ≼𝑉 ) (Definition 3.5) where 
+
+Ω = {≼𝑊 𝑙  
+
+> 𝑅 𝑅 𝑅
+
+}𝐿 𝑙 =1 and ≼𝑉 =≼𝑅 𝑅 𝑅 .To evaluate the quality of a value system of the society we use two metrics from our previous work [18]: representativeness (Defi-nition 4.2) and conciseness (Definition 4.3). The first refers to the accuracy with which each agent’s value-based preferences are re-covered by their assigned value system. The latter measures the differences between the value systems represented in the solution, which motivates the use of fewer clusters to describe the society. 
+
+Definition 4.2 (Representativeness of a value system of a society). 
+
+The representativeness of a social value system (𝛽, Ω, ≼𝑉 ) over the trajectory pairs 𝐷 = Ð𝑗 ∈ 𝐽 𝐷 𝑗 is: 
+
+repr 𝐷 (𝛽, Ω, ≼𝑉 ) = 1 − 1
+
+|𝐽 |∑︁ 𝑗 ∈ 𝐽 
+
+𝑑 𝐷 𝑗 
+
+
+
+≼𝛽 ( 𝑗 ) 
+
+> 𝑉
+
+, ≼𝑗 𝑉 ,
+
+
+
+Definition 4.3 (Conciseness of value system of a society). The con-ciseness of a social value system (𝛽, Ω, ≼𝑉 ) over 𝐷 is: 
+
+conc 𝐷 (𝛽, Ω, ≼𝑉 ) = min  
+
+> 𝑙 ≠𝑙 ′
+
+𝑑 𝐷 (≼𝑙 𝑉 , ≼𝑙 ′ 
+
+> 𝑉
+
+),
+
+Both metrics are normalized in [0, 1] and higher values indicate a better representation of the agent’s value systems, and higher sig-nificance of the clusters composing the social value system (in terms of their ability to represent different preferences), respectively. To tackle the trade-off between conciseness and representative-ness, we propose minimizing a heuristic metric Γ(repr , conc ). Nat-ural choices for Γ are clustering metrics that compare inter-cluster and intra-cluster distances, such as the Dunn-Index [ 13 ] or the Ray-Turi Index [ 46 ]. Here, we propose using a version of the latter, as it can simply be expressed by the ratio (1 − repr )/ conc , i.e. the mean of the distances from each agent to the centroids (the value systems in each cluster) over the minimum distance among centroids. As conciseness is likely to reach 0, and to prioritize representativeness over conciseness, we use Γ(repr , conc ) = (1 − repr )/( 1 + conc ).The analysis of alternative Γ metrics is left for future work. We are now in a position to define the social value system learning 
+
+problem, as learning a value system of the society (𝛽 ∗,𝑊 𝑊 𝑊 ∗, 𝑅 𝑅 𝑅 ∗) that solves the following bi-level optimization problem: 
+
+(𝛽 ∗,𝑊 𝑊 𝑊 ∗) ∈ arg min 
+
+> 𝛽,𝑊 𝑊 𝑊
+
+Γ (repr 𝐷 (𝛽,𝑊 𝑊 𝑊 , 𝑅 𝑅 𝑅 ∗), conc 𝐷 (𝛽,𝑊 𝑊 𝑊 , 𝑅 𝑅 𝑅 ∗)) 
+
+subject to 𝑅 𝑅 𝑅 ∗ ∈ arg max 
+
+> 𝑅 𝑅 𝑅
+
+chr 𝐷 (≼𝑅 𝑅 𝑅 ) (4) Problem 4 formulates the aim of maximizing the trade-off between representativeness and conciseness, based on finding a grounding with maximal coherence. This ensures that the learned value system weights are based on a correct estimation of the social grounding. 
+
+4.2 Learning Value-aligned Behaviours with HiL 
+
+The learned value systems for each cluster should represent well the corresponding agents’ behaviours. In MDPs, different be-haviours are represented via policies that obtain an accumulated reward. Although human agents may occasionally be misaligned, value-aware software agents should remain consistently value-aligned. Thus, they should follow rational value-aligned policies, i.e. those that maximize an accumulated reward that takes into account the grounding of the values. Assuming that all values are worth being promoted, the (software) agents’ policies are, further, expected to be Pareto-efficient regarding this grounding. Given a cluster 𝑙 described by a reward vector 𝑅 𝑅 𝑅 and weights 
+
+𝑊 𝑙 , we can define a policy 𝜋 𝑙 that maximizes 𝑅 𝑙 (𝑠, 𝑎 ) = 𝑊 𝑙 · 𝑅 𝑅 𝑅 (𝑠, 𝑎 ).This policy should be aligned with the behaviours of the agents belonging to the cluster 𝑙 , and Pareto-efficient regarding the social grounding that 𝑅 𝑅 𝑅 approximates. However, in our setting, we learn the society’s value system over a finite dataset of trajectory comparisons of unknown nature. Even if we find cluster value systems with high representativeness, they may not represent well the actual agents’ behaviours. The reason is that the learned rewards do not always generalize well to the MDP dynamics. Capturing the agents’ choices from generic comparisons might not be enough. Instead, we should try to acquire value sys-tems that not only correctly evaluate suboptimal trajectories, but also tend to prefer the ones that are close to the agents’ behaviours. To address the last issue, inspired by human-in-the-loop (HiL) PbRL [ 35 ], we propose asking for value-based and alignment pref-erences over trajectories sampled from estimates of the policies 𝜋 𝑙 while learning a social value system. This “online” feedback should steer the learned policies towards the actual agent behaviours. 
+
+4.3 Algorithm for Social Value System Learning 
+
+We employ a deep learning solution approach to Problem 4. We use two models. First, a reward vector network 𝑅 𝑅 𝑅 𝜃 with parameters 𝜃 ,that represents a social grounding. Second, 𝐿 𝑚𝑎𝑥 neural networks. Each network consists of a linear layer given by certain value system weights 𝑊 𝜔 𝑙 that are parametrized with 𝜔 ∈ [ R𝑚 ]𝐿 𝑚𝑎𝑥 through a softmax calculation: 𝑊 𝜔 𝑙 = (𝑤 𝑣 1 
+
+> 𝑗
+
+, . . . , 𝑤 𝑣 𝑚  
+
+> 𝑗
+
+) = exp 𝜔 𝑙 Í exp (𝜔 𝑙 ) , so they remain in the simplex. We then write 𝑊 𝑊 𝑊 𝜔 = (𝑊 𝜔  
+
+> 1
+
+, . . . ,𝑊 𝜔 𝐿 𝑚𝑎𝑥 ), but given an assignment 𝛽 , we only consider the necessary 𝐿 ≤ 𝐿 𝑚𝑎𝑥 
+
+networks/weights. Then, the value system estimated through these networks would be written as (𝛽,𝑊 𝑊 𝑊 𝜔 , 𝑅 𝑅 𝑅 𝜃 ).For learning purposes, we represent the grounding preferences as well as the value-based preferences induced by these networks in the datasets using the differentiable Bradley-Terry (BT) model [ 5 ]. It estimates the relative preference between two trajectories given a reward function (Eq. 5) 3. With this model, we consider 𝑝 (𝜏, 𝜏 ′ |𝑅 ) =
+
+0.5 only if 𝜏 and 𝜏 ′ are similarly aligned and it tends to 1 or 0 if their difference in alignment is increasingly strict. We then use cross-entropy-like loss calculations to reproduce the discordance of our BT model with the dataset preferences. Finally, we use gradient descent in a structured way to update the networks 𝑊 𝑊 𝑊 𝜔 , 𝑅 𝑅 𝑅 𝜃 in line with the goals in Problem 4 (see supplementary material for details). 
+
+𝑝 (𝜏, 𝜏 ′ |𝑅 ) = exp Í(𝑠,𝑎 ) ∈ 𝜏 𝑅 (𝑠, 𝑎 )
+
+exp Í(𝑠,𝑎 ) ∈ 𝜏 𝑅 (𝑠, 𝑎 ) + exp Í(𝑠 ′,𝑎 ′ ) ∈ 𝜏 ′ 𝑅 (𝑠 ′, 𝑎 ′) (5) Algorithm 1 is our proposed, approximate solution to Problem 4. It builds upon our previous work [ 18 ] (which solves Problem 4 in non-sequential decision making) and PbMORL [ 34 ], a MORL algo-rithm that estimates a set of Pareto-efficient policies from online preferences. It uses Envelope Q-Learning [ 71 ] (EQL) to learn a multi-objective policy conditioned on weights: Π(𝑠, 𝑎 |𝑊 ). This allows to request for the policy 𝜋 𝑙 that maximizes 𝑊 𝑙 · 𝑅 𝑅 𝑅 with 𝜋 𝑙 = Π(𝑠, 𝑎 |𝑊 𝑙 ).By sampling different weights we get approximately efficient poli-cies that represent the agents’ value systems. Our system introduces key changes, as its goal is not finding the whole front, but rather, a smaller set of weights and policies that represent the agents’ values. 
+
+Initialization. Our algorithm (SVSL-P, Algorithm 1) starts by finding an approximation to Problem 4 using a static dataset 𝐷𝑆 , to have an initial “good guess” of the reward vector and the clusters prior to learning the RL policies. To do so, we execute a version of Algorithm 2 from [ 18 ] (Algorithm S2 in the supplementary mate-rial). The algorithm performs Expectation Maximization (see below) with occasional random mutations to avoid local convergence prob-lems [ 68 ], and it is run until we reach a certain predefined score 
+
+𝐴 𝑟𝑒 𝑓 ∈ [ 0, 1] in both grounding coherence and representativeness. 
+
+Main loop (Lines 3-17) Now, the aim is to iteratively improve the solution (the social value system (𝛽,𝑊 𝑊 𝑊 𝜔 , 𝑅 𝑅 𝑅 𝜃 )) ( Value system up-date ) while learning the corresponding MO policy Π(𝑠, 𝑎 |𝑊 ) (Policy update ) using HiL with environment experiences ( Exploration ). 
+
+Exploration (Lines 3-5). At every timestep (main loop iteration) we collect a transition (𝑠, 𝑎, 𝑅 𝑅 𝑅 𝜃 (𝑠, 𝑎 ), 𝑠 ′,𝑊 ) and add it to an experi-ence replay buffer 𝑅 𝑒 . The action is selected by an 𝜖 -greedy version     
+
+> 3In Eq. 5, the designer might consider a discount factor 𝛾 <1as in Eq. 1.
+
+of the current policy estimate Π(𝑠, 𝑎 |𝑊 ) supplying a randomly se-lected weight combination 𝑊 from those in 𝑊 𝑊 𝑊 𝜔 .
+
+Value system update (Lines 6-12). Every 𝐾 exploration timesteps, we perform two consecutive tasks: (1) Preference collection (Lines 7-8). We extract new preference feedback by asking a random group of 𝑁 𝑎 agents about a set of 𝑁 𝑠 pairs of trajectories in 𝑅 𝑒 selected with QPA [21]. Namely, we ask each agent for its value alignment and value-based preferences about each trajectory pair, and this data is inserted in a preference buffer 𝑅 𝑝 . This step is present in PbMORL, but that algorithm can ask for preferences derived from any weight combination in the whole simplex. The feedback required by our solution is far more simple: an agent is only asked to answer about value alignment and its own value system. (2) Expectation-Maximization (EM) (Lines 10-11). Similar to Pb-MORL, here we improve the reward vector estimate 𝑅 𝑅 𝑅 𝜃 𝑉 . In our case, we also update the value system weights 𝑊 𝑊 𝑊 𝜔 and revise the clustering (updating 𝐿 and 𝛽 ), by performing a series of 𝐸 𝑟 EM cycles (see Algorithm S1 in supplementary material for details). We take 𝑏 𝑒𝑝 random entries from 𝑅 𝑝 
+
+for each agent; add them to the static dataset 𝐷𝑆 ; and per-form a “hard” E-step : the assignment of each agent into the cluster that best represents its value system. Then, we per-form the M-step (𝑚 𝑟 times) to update 4 𝑅 𝑅 𝑅 𝜃 and 𝑊 𝑊 𝑊 𝜔 based on a random batch of entries of size 𝑏 𝑚𝑝 in 𝑅 𝑝 . After 𝐸 𝑟 
+
+EM cycles, we obtain a new social value system estimation 
+
+(𝛽,𝑊 𝑊 𝑊 𝜔 , 𝑅 𝑅 𝑅 𝜃 ). We then use 𝑅 𝑅 𝑅 𝜃 to update the experience buffer rewards in 𝑅 𝑒 .
+
+Policy update (Lines 13-16). We apply the EQL Q-learning step from PbMORL so that Π(𝑠, 𝑎 |𝑊 ) learns to maximize the scalariza-tion of 𝑅 𝑅 𝑅 𝜃 under weights and transitions collected from 𝑏 𝜋 experi-ences in 𝑅 𝑒 , selected via prioritized hybrid experience replay [21] 5.After a number of timesteps 𝑇 , the algorithm returns a social value system (𝛽,𝑊 𝑊 𝑊 𝜔 , 𝑅 𝑅 𝑅 𝜃 ) and the multi-objective policy Π(𝑠, 𝑎 |𝑊 )
+
+that models the policies that represent each cluster: 𝜋 𝑙 = Π(𝑠, 𝑎 |𝑊 𝑙 ).
+
+5 EVALUATION 
+
+We evaluate our proposal in two synthetic MDPs. In each of them, we simulate a society of agents 𝐽 that considers a social grounding implemented by a “ground truth” reward vector 𝑅 𝑅 𝑅 , and have a value system determined by specific weights {𝑊 𝑗 | 𝑗 ∈ 𝐽 }. We selected the weights and generated the static dataset 𝐷𝑆 as follows. We trained EQL [ 71 ] to convergence in each case (see parameters in the supplementary material). Then, we sampled 50 equally spaced weight combinations in the weight space. We executed the learned policy for each weight ( Π(𝑠, 𝑎 |𝑤 )) in the environment to produce 1000 trajectories. We selected a set of 𝑀 𝑊 value system weight combinations whose policies form all the points on the Pareto front found by EQL. We created 𝑀 𝐴 agents per value system, for a total of 𝑀 𝐴 · 𝑀 𝑊 agents, and sampled 200 trajectories per agent. A          
+
+> 4See supplementary material, for details on this update process.
+> 5In particular, we collect 𝑏 𝜋 /2transitions randomly among the most recent ones, and the rest are selected through prioritized experience replay [52].
+> 6The parameter 𝜆 referes to the Lagrange multipliers used when updating 𝑊 𝑊 𝑊 𝜔 and
+> 𝑅 𝑅 𝑅 𝜃 to prioritize coherence over representativeness (See supplementary material).
+
+Algorithm 1 Social Value System Learning in MDP ( SVSL-P )
+
+Input: Dataset 𝐷𝑆 . Maximum number of clusters 𝐿 𝑚𝑎𝑥 . Refer-ence accuracy 𝐴 𝑟𝑒 𝑓 . Timesteps between VS updates 𝐾 . Total timesteps 𝑇 . Trajectory sampling size 𝑁 𝑠 . Asked agents per VS update 𝑁 𝑎 . Per-agent batch size 𝑏 𝑒𝑝 (for E-steps) and 𝑏 𝑚𝑝 (for M-steps). EQL batch size 𝑏 𝜋 and gradient steps 𝑇 𝜋 . Parameters of Algorithm S1 and S2 in supp. material. 
+
+Output: Assignment of agents into clusters 𝛽 , a reward vector 
+
+𝑅 𝑅 𝑅 𝜃 , value systems {𝑊 𝜔 𝑙 }𝐿 𝑙 =1 and weight-conditioned policy Π. 
+
+> 1:
+
+Initialize replay buffers 𝑅 𝑒 , 𝑅 𝑝 and a Q network 𝑄 (𝑠, 𝑎 |𝑊 ). 
+
+> 2:
+
+𝛽 0, 𝑅 𝑅 𝑅 𝜃 , 𝑊 𝑊 𝑊 𝜔 , 𝜆 ← Run Algorithm S2 , supp. material, until 
+
+min 𝑖 chr 𝐷 ≥ 𝐴 𝑟𝑒 𝑓 , repr 𝐷 ≥ 𝐴 𝑟𝑒 𝑓 . 6 
+
+> 3:
+
+for environment timestep 𝑡 = 0, . . . ,𝑇 − 1 do  
+
+> 4:
+
+Sample one set of VS weights 𝑤 from those in 𝑊 𝑊 𝑊 𝜔 . 
+
+> 5:
+
+Collect transition (𝑠, 𝑎, 𝑅 𝜃 𝑉 (𝑠, 𝑎 ), 𝑠 ′, 𝑑, 𝑤 ), add it to 𝑅 𝑒  
+
+> 6:
+
+if 𝑡 mod 𝐾 = 0 then  
+
+> 7:
+
+𝐵 𝑎 ← Select 𝑁 𝑎 agents at random (no replacement).  
+
+> 8:
+
+𝐵 𝑝 ← Collect 𝑁 𝑠 pairs of trajectories from 𝑅 𝑒 (QPA ).  
+
+> 9:
+
+Preference collection : add new 𝐵 𝑎 × 𝐵 𝑝 entries into 𝑅 𝑝 . 
+
+> 10:
+
+𝛽, 𝜃, 𝜔, 𝜆 ′ ← Expectation-Maximization (EM) : Algo-rithm S1 (𝛽, 𝜃, 𝜔, 𝜆 ,𝑅 𝑝 ,𝑏 𝑒𝑝 ,𝑏 𝑚𝑝 ), supp. material.  
+
+> 11:
+
+Update 𝑅 𝑅 𝑅 𝜃 and relabel 𝑅 𝑒 with it. Update 𝑊 𝑊 𝑊 𝜔 . 
+
+> 12:
+
+end if  
+
+> 13:
+
+for gradient step in 𝑇 𝜋 do  
+
+> 14:
+
+Sample a minibatch from replay buffer 𝑅 𝑒  
+
+> 15:
+
+Apply the update step from the EQL paper [ 71 ] on 
+
+𝑄 (𝑠, 𝑎 |𝑊 ) using a batch of size 𝑏 𝜋 from 𝑅 𝑒 as in [34].  
+
+> 16:
+
+end for  
+
+> 17:
+
+end for  
+
+> 18:
+
+return ( 𝛽 , 𝑊 𝑊 𝑊 𝜔 , 𝑅 𝑅 𝑅 𝜃 ), Π(𝑠, 𝑎 |𝑊 ) (from 𝑄 ). proportion of these trajectories ( 𝑟 𝑝 ) are “rational”: they are obtained from the 𝜖 -greedy application of the policy obtained by EQL using the agent’s weights. The rest are sampled via a random policy. The selection of 𝜖 and 𝑟 𝑝 varies in environments to get trajectories of varied quality. From these trajectories, per agent, we sampled 200 value alignment (per value) and 200 value-based preference pairs at random. Then, 50% of the comparisons of each agent are used to form the static dataset 𝐷𝑆 , the rest are left out as a test dataset. In each environment, we compare the results obtained by two baselines, a state-of-the-art algorithm and our method ( SVSL -P ). The first baseline is EQL [ 71 ] with the original reward vector 
+
+𝑅 𝑅 𝑅 . We use the execution that generated the agents and datasets. The second baseline is the social value system learning algorithm from [ 18 ] (Algorithm S2 in the supplementary material, SVSL ), a preference-based reward learning and clustering baseline (without HiL). To learn the associated policies for the obtained value systems, we run EQL with the learned reward vector with SVSL. The state-of-the-art related algorithm that we analyse is Pb-MORL [34 ]. It learns a reward vector and a weight-dependent policy Π(𝑠, 𝑎 |𝑊 ). Since the algorithm does not extract clusters, we first select |𝐽 | equally spaced weight combinations in the simplex to represent potential cluster value systems. Then, we use the E-step from Algorithm S1 to assign each agent to the cluster that best represents its value system and discard the empty ones. We run the algorithms 10 times (different seeds) with the same datasets. The maximum number of clusters for SVSL and SVSL-P 
+
+was set to 𝐿 𝑚𝑎𝑥 = 10 and 𝐿 𝑚𝑎𝑥 = 15 for the FF and the MVC envi-ronments, respectively. The hyperparameter specifications for all algorithms are detailed and analysed in the supplementary material. 
+
+5.1 Firefighters Environment 
+
+In the firefighters environment (FF), adapted from [ 40 ] and tested in previous works [ 20 ], different agents (firefighters) are trained to rescue people and put out a fire in a building, remaining aligned with two values: professionalism (𝑝 𝑓 ) and proximity (𝑝 𝑥 ). The first promotes behaving under firefighters’ best practices, while the latter promotes actions with the goal of saving lives at all costs. The environment consists of 5 actions and 400 possible states with ground-truth value rewards bounded in [− 1, 1]. The environment specification details are available in the supplementary material. The reward vector model observes a one hot-encoded version of the state-action features (in supplementary material). We use a neural network for each value. Each one consists of three fully-connected hidden linear layers (128 neurons each) followed by an output layer (one neuron, no bias) and 𝑇 𝑎𝑛ℎ activation functions. We use the same network configuration for all algorithms. Using EQL we obtained 𝑀 𝑊 = 5 value systems whose policies form the convex part of the Pareto front. We simulated 𝑀 𝐴 = 3
+
+agents per value system and sampled 200 trajectories with each policy. The proportion of rational trajectories was set to 𝑟 𝑝 = 80% ,and those were sampled using 𝜖 -greedy policies with 𝜖 = 0.1.
+
+5.2 Multivalued Car Environment 
+
+The Multivalued Car Environment (MVC) was proposed in [ 49 ] to illustrate the problem of learning norm-abiding and value-aligned policies given a computational value specification. In MVC, a car agent wants to reach a destination (value of achievement ) in a road grid while promoting the value of safety by respecting pedestrians and avoiding bumpy areas for the sake of comfort .We use the same neural network architecture per value as in FF to estimate the reward vectors. The final layer of each network is left without an activation function (thus, also, unbounded). To avoid overflows, we clamp the learned rewards in the interval 
+
+[− 100 , 100 ]. Also, due to the fact that the environment episodes are of very different lengths, we introduced a discount factor 𝛾 = 0.99 
+
+to calculate the alignment of trajectories with values/value systems. We obtained 𝑀 𝑊 = 14 value systems and Pareto-optimal policies with EQL. We created 𝑀 𝐴 = 2 agents per value system in the front. To build 𝐷𝑆 , we sampled 200 trajectories with 𝑟 𝑝 = 80% , and 𝜖 = 0.1.
+
+5.3 Discussion of results 
+
+We first discuss the value systems of the society learned by SVSL ,PbMORL and SVSL -P in terms of number of clusters, representative-ness, coherence and conciseness over the test set. We focus on the left part of the charts in Table 1 (FF at the top, MVC at the bottom). SVSL obtains relatively low representativeness (accuracy in rep-resenting the individual value systems of agents) and grounding coherence (accuracy of the learned grounding to represent the sim-ulated one) in the test sets, which implies that it did not generalize to the test dataset. PbMORL and SVSL-P generalized better in terms Method (in FF) L (his-togram) 
+
+repr ↑ Prof. 
+
+chr ↑
+
+Prox. 
+
+chr ↑
+
+conc ↑ Ray-Turi ↓
+
+PF size (all) ∼
+
+PF size (cls.) ∼
+
+HV. (all) ↑
+
+HV (cls.) ↑
+
+MUL ↓
+
+(all) MUL ↓
+
+(cls.) EQL - - - - - - 5 5 40.52 40.52 0.0 0.0 SVSL 100% 20.915 
+
+±0.022 0.860 
+
+±0.042 0.858 
+
+±0.019 
+
+0.163 
+
+±0.055 0.074 
+
+±0.024 1.1 
+
+±0.3 2.0 
+
+±0.0 0.0 
+
+±0.0 0.0 
+
+±0.0 45.118 
+
+±0.95 46.653 
+
+±1.314 PbMORL 50% 30% 20% 2 3 40.922 
+
+±0.008 0.863 
+
+±0.009 0.920 
+
+±0.012 0.067 
+
+±0.047 0.074 
+
+±0.010 3.8 
+
+±0.600 2.4 
+
+±0.489 35.35 
+
+±0.934 31.39 
+
+±2.98 0.670 
+
+±0.154 1.240 
+
+±0.579 SVSL-P 80% 20% 4 5
+
+0.968 
+
+±0.010 
+
+0.967 
+
+±0.014 
+
+0.951 
+
+±0.009 0.049 
+
+±0.016 
+
+0.03 
+
+±0.010 3.6 
+
+±0.489 3.8 
+
+±0.400 
+
+38.98 
+
+±0.170 
+
+38.83 
+
+±1.454 
+
+0.117 
+
+±0.150 
+
+0.174 
+
+±0.293 Method (in MVC) L (his-togram) 
+
+repr ↑ Ach. 
+
+chr ↑
+
+Safe. 
+
+chr ↑
+
+Comf. 
+
+chr ↑
+
+conc 
+
+↑
+
+Ray-Turi ↓
+
+PF size (all) ∼
+
+PF size (cls.) ∼
+
+HV (all) ↑
+
+HV (cls.) ↑
+
+MUL ↓
+
+(all) MUL ↓
+
+(cls.) EQL - - - - - - - 14 14 1.233 1.233 0.0 0.0 SVSL 50% 30% 10%10% 1 2 4 50.771 
+
+±0.112 0.775 
+
+±0.134 0.682 
+
+±0.139 0.628 
+
+±0.165 
+
+0.051 
+
+±0.031 0.139 
+
+±0.053 4.4 
+
+±1.43 2.0 
+
+±0.0 0.556 
+
+±0.510 0.475 
+
+±0.462 14.763 
+
+±11.24 18.562 
+
+±12.06 PbMORL 10% 20%20% 40% 10% 5 6 7 8 90.890 
+
+±0.013 0.884 
+
+±0.038 0.750 
+
+±0.044 0.649 
+
+±0.043 0.031 
+
+±0.006 0.130 
+
+±0.014 15.6 
+
+±2.8 7.2 
+
+±1.167 
+
+1.217 
+
+±0.011 
+
+1.191 
+
+±0.024 
+
+1.102 
+
+±0.387 1.784 
+
+±0.668 SVSL-P 30% 40% 30% 4 5 6
+
+0.908 
+
+±0.013 
+
+0.886 
+
+±0.015 
+
+0.883 
+
+±0.009 
+
+0.748 
+
+±0.023 0.044 
+
+±0.012 
+
+0.088 
+
+±0.013 8.9 
+
+±1.375 5.0 
+
+±0.775 1.197 
+
+±0.017 1.175 
+
+±0.026 1.152 
+
+±0.542 
+
+1.522 
+
+±0.644 
+
+Table 1: FF (top) MVC (bottom). For 10 random seeds, number of clusters obtained and frequency ( 𝐿 ), representativeness ( repr ), coherence for each value ( chr ), conciseness ( conc ), and Ray-Turi index running each algorithm with 10 random seeds over the test-sets. In the right part of the charts, cardinality (PF size), hypervolume (HV) and Maximum Utility Loss (MUL) of the obtained Pareto fronts using all candidate value system weights (“all” variant); and of the Pareto front obtained using only the learned weights for the value system of the societies (“cls.” variant). Results indicate the average values and standard deviations. 
+
+of representativeness, at the expense of conciseness. SVSL-P in particular, outperforms PbMORL in terms of grounding coherence, as it focuses explicitly on this aspect of the optimization. SVSL achieves, though, the highest conciseness (relevancy of the cluster value systems learned), but tends, wrongly, to obtain less clusters than required. Notably, in the FF case, SVSL-P achieves a higher representativeness with a similar conciseness than PbMORL while using more clusters, indicating that SVSL-P better recognises the value system diversity. In the MVC domain, though, PbMORL se-lects significantly more clusters than SVSL-P , but this does not result in better representativeness for PbMORL. The Ray-Turi index quantifies the trade-off between representativeness and conciseness: it is smaller in SVSL-P, confirming its best performance. We now test whether the learned reward vectors induce policies that are aligned with the simulated agents’ value systems. Since the simulated agents follow the policies that form the convex part of the Pareto front with respect the “ground-truth” grounding, we assess how well the learned policies approximate this front (even if using clusters). The right part of the charts in Table 1, shows quantitative results on the approximated Pareto fronts across methods and environments. We analyse two fronts. The first one is composed by the policies in Π(𝑠, 𝑎 |𝑊 ) obtained with the weights that each algorithm considers as potential clusters. For SVSL-P and SVSL, these are the value system weights 𝑊 𝑊 𝑊 𝜔 , and for PbMORL, the set of equally spaced weight combinations of size |𝐽 | (15 in FF, 28 in MVC). The second front is composed only by the policies learned for the weights finally selected as society clusters. The metrics for the first front are labelled as (“all”), and for the second as (“cls.”). We use three metrics in Table 1 to describe the fronts: car-dinality (PF size), hypervolume (HV) and maximum utility loss 
+
+(MUL) [ 47 ]. HV is computed from reference points (0, 0) in FF and (− 40 .0, −50 .0, −50 .0) in MVC (HV is scaled down by 10 5 in MVC). MUL is measured against the ground-truth front in FF, and against the front learned with EQL in MVC, as the true front is unknown. Lower MUL indicates closer convergence to these fronts. Higher HV values capture both better convergence and distribution of the cluster policies across the learned front. SVSL produces incompetent policies in both MDPs, as its learned reward vectors failed to generalize to their dynamics. In contrast, PbMORL and SVSL-P achieve HV and MUL comparable to EQL when considering the full fronts, impressively, despite the bigger size of the PbMORL fronts. Notably, considering the front obtained by the learned clusters alone, the performance in terms of HV of both algorithms is similar, and SVSL-P achieved a better MUL. This occurs even in MVC, where the front of SVSL-P has a smaller size. In FF, though, its size is bigger: but this does not indicate a bad clustering performance, since HV and MUL metrics outperform PbMORL’s, showing SVSL-P clusters are of higher significance. Figure 1 represents the Pareto fronts of PbMORL and SVSL-P estimated from their respective potential value system weights in the FF domain, as well as the evaluation of the policies obtained for each used cluster for a certain seed 7. Both algorithms approximate well the behaviours in the original front. In both cases, the learned             
+
+> 7We omitted the fronts in MVC given their 3D visualization complexity. The corre-sponding graph for every seed is available in the supplementary material. 4.5 5.0 5.5 6.0 6.5 7.0 7.5
+> Professionalism
+> 4.0
+> 4.2
+> 4.4
+> 4.6
+> 4.8
+> 5.0
+> 5.2
+> 5.4
+> Proximity
+> (0.00, 1.00)
+> (0.36, 0.64)
+> (0.57, 0.43)
+> (0.79, 0.21)
+> Learned Pareto Front Comparison
+> Known Pareto Front
+> Cl. 0 - VS ('0.000', '1.000')
+> Cl. 6 - VS ('0.429', '0.571')
+> Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5
+> Professionalism
+> 4.0
+> 4.2
+> 4.4
+> 4.6
+> 4.8
+> 5.0
+> 5.2
+> 5.4
+> Proximity
+> (0.00, 1.00)
+> (0.83, 0.17)
+> (0.32, 0.68)
+> (1.00, 0.00)
+> Learned Pareto Front Comparison
+> Known Pareto Front
+> Cl. 0 - VS ('0.002', '0.998')
+> Cl. 3 - VS ('0.548', '0.452')
+> Cl. 8 - VS ('0.320', '0.680')
+> Cl. 9 - VS ('1.000', '0.000')
+> Learned Pareto Front
+
+Figure 1: FF environment. Approximated Pareto front and clusters learned with PbMORL (Top) and SVSL-P (bottom, ours) with a particular seed. Black squares form the ground-truth Pareto front. White dots depict weights which policies are in the approximated front. Coloured dots indicate the policies representing each learned cluster (in the legend). 
+
+clusters tend to be Pareto optimal for both algorithms, but their dis-tribution across the front is worse for PbMORL. PbMORL typically used only two clusters (Table 1) to represent the agents’ value-based preferences, which means the reward vector was not learned in a sufficiently detailed manner to differentiate them properly. There are also limitations to analyse. First, there are cases where SVSL-P learns two value systems that represent distinct prefer-ences, yet they induce the same policy (supplementary material, Figures 2,3). Second, the policies learned were generally not ex-actly in the ground-truth front (obtained by EQL), despite being “close” (shown by the MUL metric). In the FF domain, for exam-ple, the proportion of cluster weights whose policies were in the ground-truth front was, on average, 47.1% for SVSL-P and 40.8% for PbMORL. Lastly, the standard deviations in the front-related met-rics (Table 1, right) are high for PbMORL and SVSL-P. This implies that there is some instability across seeds. However, the number of learned clusters is more stable with SVSL-P. Further analysis on these limitations is available in the supplementary material. 
+
+6 CONCLUSIONS 
+
+We proposed a computational model of the value systems of a soci-ety of agents in the context of Markov Decision Processes (MDP). Given a set of human values, we grounded value alignment in a par-ticular MDP with a multi-objective reward vector and represented the value systems of different subgroups of agents (clusters) via linearly scalarized reward functions. We put forward an algorithm that learns an instance of this model from online pairwise trajectory comparisons, that are provided by each agent based on both i) its un-derstanding of value alignment (with each value) and ii) the agent’s value system. In parallel, it learns an approximately Pareto-efficient MDP policy for each cluster (in terms of value alignment) that represents behaviours aligned with the value systems of its mem-bers. Our algorithm, SVSL-P, is based on a Preference-based MORL (PbMORL) method [34] and a previous clustering approach [18]. The results in two synthetic environments show that SVSL-P can learn a concise, representative and coherent set of value systems to describe a society, and the associated value-aligned behaviours. The learned models generalize in the environment, leading to ap-proximately Pareto efficient policies in terms of the simulated value alignment specifications. The Pareto fronts are focused on the value systems of the agents, and are equally competent to the fronts de-rived by PbMORL. Our algorithm also requires less intensive hu-man feedback: SVSL-P only asks each agent about their own value systems and their understanding of values. This last advantage is crucial to the applicability of this type of research in real use cases. There are limitations and avenues for future work. First, the vari-ability across runs should be reduced. Second, the learned policies are not always Pareto efficient regarding value alignment for all preference-based clusters. Third, reducing the number of online queries is needed for real-world applications. For future work, we will revise our methodology to control the obtention of more con-cise versus representative solutions. Although we have tested this framework with real-world data in non-sequential decision mak-ing [ 18 ], to broaden the applicability to more realistic scenarios, we finally suggest researching on modelling non-linear and context-dependent value systems (e.g. by selecting distinct value systems under identifiable conditions) and agent-based groundings/rewards. 
+
+ACKNOWLEDGMENTS 
+
+This work has been supported by grant COSASS: PID2021-123673OB-C32 funded by MCIN/AEI/10.13039/501100011033 and by “ERDF A way of making Europe”, and by project grant EVASAI: PID2024-158227NB-C32 funded by MI-CIU/AEI/10.13039/501100011033/FEDER, UE. Andrés Holgado-Sánchez has received funding by grant “Contratos Predoctorales de Personal Investigador en Formación en Departamentos de la Universidad Rey Juan Carlos (C1 PREDOC 2025)”, funded by Universidad Rey Juan Carlos. 
+
+REFERENCES 
+
+[1] Alba Aguilera, Nieves Montes, Georgina Curto, Carles Sierra, and Nardine Osman. 2024. Can Poverty Be Reduced by Acting on Discrimination? An Agent-based Model for Policy Making. In Proceedings of the 23rd International Conference on Autonomous Agents and Multiagent Systems (Auckland, New Zealand) (AAMAS ’24) . International Foundation for Autonomous Agents and Multiagent Systems, Richland, SC, 22–30. [2] Michael Anderson and Susan Leigh Anderson. 2018. GenEth: A general ethical dilemma analyzer. Paladyn 9 (2 2018), 337–357. Issue 1. https://doi.org/10.1515/ PJBR-2018-0024 [3] Oscar Araque, Lorenzo Gatti, and Kyriaki Kalimeri. 2020. MoralStrength: Exploit-ing a moral lexicon and embedding similarity for moral foundations prediction. 
+
+Knowledge-Based Systems 191 (2020), 105184. https://doi.org/10.1016/j.knosys. 2019.105184 [4] Avinash Balakrishnan, Djallel Bouneffouf, Nicholas Mattei, and Francesca Rossi. 2019. Incorporating Behavioral Constraints in Online AI Systems. Proceedings of the AAAI Conference on Artificial Intelligence 33, 01 (Jul. 2019), 3–11. https: //doi.org/10.1609/aaai.v33i01.33013 [5] Ralph Allan Bradley and Milton E. Terry. 1952. Rank Analysis of Incomplete Block Designs: I. The Method of Paired Comparisons. Biometrika 39, 3/4 (1952), 324–345. https://doi.org/10.2307/2334029 [6] Daniel S. Brown, Wonjoon Goo, and Scott Niekum. 2019. Better-than-Demonstrator Imitation Learning via Automatically-Ranked Demonstrations. https://arxiv.org/abs/1907.03976 [7] José-Antonio Cervantes, Sonia López, Luis-Felipe Rodríguez, Salvador Cervantes, Francisco Cervantes, and Félix Ramos. 2020. Artificial Moral Agents: A Survey of the Current Status. Science and Engineering Ethics 26 (2020), 501–532. Issue 2. https://doi.org/10.1007/s11948-019-00151-x [8] Souradip Chakraborty, Jiahao Qiu, Hui Yuan, Alec Koppel, Dinesh Manocha, Furong Huang, Amrit Bedi, and Mengdi Wang. 2024. MaxMin-RLHF: Alignment with Diverse Human Preferences. In Proc. 41st Int. Conf. on Machine Learning (Pro-ceedings of Machine Learning Research, Vol. 235) . JMLR.org, https://www.jmlr.org, 6116–6135. [9] Remy Chaput, Laetitia Matignon, and Mathieu Guillermin. 2023. Learning to identify and settle dilemmas through contextual user preferences. In Proceedings - International Conference on Tools with Artificial Intelligence, ICTAI . IEEE, 474 – 479. https://doi.org/10.1109/ICTAI59109.2023.00075 [10] Paul F. Christiano, Jan Leike, Tom B. Brown, Miljan Martic, Shane Legg, and Dario Amodei. 2017. Deep reinforcement learning from human preferences. In 
+
+NIPS’17: Proceedings of the 31st International Conference on Neural Information Processing Systems . Curran Associates Inc., Red Hook, NY, USA, 4302–4310. [11] Andrew Cotter, Heinrich Jiang, and Karthik Sridharan. 2019. Two-Player Games for Efficient Non-Convex Constrained Optimization. In Proceedings of the 30th International Conference on Algorithmic Learning Theory (Proceedings of Machine Learning Research, Vol. 98) , Aurélien Garivier and Satyen Kale (Eds.). JMLR.org, https://www.jmlr.org, 300–332. [12] Virginia Dignum. 2017. Responsible autonomy. In Proceedings of the 26th Interna-tional Joint Conference on Artificial Intelligence (Melbourne, Australia) (IJCAI’17) .AAAI Press, 1101 Pennsylvania Ave, NW, Suite 300, Washington, DC 20004, 4698–4704. https://doi.org/10.1007/978-3-030-30371-6 [13] J. C. Dunn. 1974. Well-Separated Clusters and Optimal Fuzzy Partitions. Journal of Cybernetics 4, 1 (1974), 95–104. https://doi.org/10.1080/01969727408546059 arXiv:https://doi.org/10.1080/01969727408546059 [14] D.B. Fogel. 1993. Using evolutionary programing to create neural networks that are capable of playing tic-tac-toe. In IEEE International Conference on Neural Networks , Vol. 2. IEEE, 875–880. https://doi.org/10.1109/ICNN.1993.298673 [15] Michael Grenfell. 2014. Pierre Bourdieu: key concepts . Routledge. [16] Dylan Hadfield-Menell, Anca Dragan, Pieter Abbeel, and Stuart Russell. 2016. Cooperative inverse reinforcement learning. In Proceedings of the 30th Interna-tional Conference on Neural Information Processing Systems (Barcelona, Spain) 
+
+(NIPS’16) . Curran Associates Inc., Red Hook, NY, USA, 3916–3924. [17] Christian Haerpfer, Ronald Inglehart, Alejandro Moreno, Christian Welzel, Kseniya Kizilova, Jaime Diez-Medrano, Milena Lagos, Pippa Norris, Eduard Ponarin, and Bianca Puranen. 2022. World Values Survey: Round Seven – Country-Pooled Datafile . Madrid. Version 5.0.0. [18] Andrés Holgado-Sánchez, Holger Billhardt, Sascha Ossowski, and Sara Degli-Esposti. 2025. Learning the Value Systems of Societies from Preferences. In 
+
+Proceedings of the 28th European Conference on Artificial Intelligence (ECAI 2025) (Frontiers in Artificial Intelligence and Applications, Vol. 413) . IOS Press, 1123–1130. https://doi.org/10.3233/FAIA250923 [19] Andrés Holgado-Sánchez, Peter Vamplew, Richard Dazeley, Sascha Ossowski, and Holger Billhardt. 2026. Learning the Value Systems of Societies with Preference-based Multi-objective Reinforcement Learning. In The 25th Inter-national Conference on Autonomous Agents and Multi-Agent Systems . https: //openreview.net/forum?id=rnjBIMCO24 [20] Andrés Holgado-Sánchez, Holger Billhardt, Alberto Fernández, and Sascha Os-sowski. 2026. Learning the value systems of agents with preference-based and inverse reinforcement learning. Autonomous Agents and Multi-Agent Systems 40, 4 (2026), 4. Issue 1. https://doi.org/10.1007/s10458-026-09732-0 [21] Xiao Hu, Jianxiong Li, Xianyuan Zhan, Qing-Shan Jia, and Ya-Qin Zhang. 2024. Query-Policy Misalignment in Preference-Based Reinforcement Learning. In The Twelfth International Conference on Learning Representations . Curran Associates Inc., Red Hook, NY, USA, 28899–28923. https://openreview.net/forum?id= UoBymIwPJR [22] Ismael Jannoud, Yousef Jaradat, Mohammad Z. Masoud, Ahmad Manasrah, and Mohammad Alia. 2022. The Role of Genetic Algorithm Selection Operators in Extending WSN Stability Period: A Comparative Study. Electronics 11, 1 (2022). https://doi.org/10.3390/electronics11010028 [23] Daiko Kishikawa and Sachiyo Arai. 2022. Multi-Objective Deep Inverse Re-inforcement Learning through Direct Weights and Rewards Estimation. In 
+
+2022 61st Annual Conference of the Society of Instrument and Control Engi-neers (SICE) . Institute of Electrical and Electronics Engineers (IEEE), 122–127. https://doi.org/10.23919/SICE56594.2022.9905799 [24] Jan Leike, David Krueger, Tom Everitt, Miljan Martic, Vishal Maini, and Shane Legg. 2018. Scalable agent alignment via reward modeling: a research direction. arXiv:1811.07871 [cs.LG] https://arxiv.org/abs/1811.07871 [25] Roger Xavier Lera-Leri, Enrico Liscio, Filippo Bistaffa, Catholijn M. Jonker, Maite López-Sánchez, Pradeep K. Murukannaiah, Juan A. Rodríguez-Aguilar, and Francisco Salas-Molina. 2024. Aggregating value systems for decision support. 
+
+Knowledge-Based Systems 287 (2024), 111453. https://doi.org/10.1016/j.knosys. 2024.111453 [26] Enrico Liscio, Roger Lera-Leri, Filippo Bistaffa, Roel IJ Dobbe, Catholijn M Jonker, Maite López-Sánchez, Juan A. Rodríguez-Aguilar, and Pradeep K Murukannaiah. 2023. Value Inference in Sociotechnical Systems. In Proceedings of the 2023 International Conference on Autonomous Agents and Multiagent Systems (London, United Kingdom) (AAMAS ’23) . International Foundation for Autonomous Agents and Multiagent Systems, Richland, SC, 1774–1780. [27] Enrico Liscio, Michiel van der Meer, Luciano C Siebert, Catholijn M Jonker, and Pradeep K Murukannaiah. 2022. What values should an agent align with?: An empirical comparison of general and context-specific values. Autonomous Agents and Multi-Agent Systems 36 (2022), 1–32. Issue 1. https://doi.org/10.1007/s10458-022-09550-0 [28] Aarón López-García. 2024. A Proposal for Selecting the Most Value-Aligned Preferences in Decision-Making Using Agreement Solutions. In Proceedings of the 16th International Conference on Agents and Artificial Intelligence - Volume 1: EAA . INSTICC, SciTePress, Avenida de S. Francisco Xavier, Lote 7 Cv. C, 2900-616 Setúbal, Portugal, 461 – 470. https://doi.org/10.5220/0012586300003636 [29] Ignacio D. López-Miguel, Sebastian Adam, Ezio Bartocci, Thomas Eiter, and Martin Tappler. 2025. OFTEN-DeepRL: On-the-Fly Teaching of Ethical Norms to Deep Reinforcement Learning Agents. In Proceedings of the 28th European Con-ference on Artificial Intelligence (ECAI 2025) (Frontiers in Artificial Intelligence and Applications, Vol. 413) . IOS Press, 3315–3322. https://doi.org/10.3233/FAIA251200 [30] Junlin Lu, Patrick Mannion, and Karl Mason. 2024. Inferring preferences from demonstrations in multi-objective reinforcement learning. Neural Computing and Applications 36, 36 (12 2024), 22845–22865. [31] Dhruv Malik, Malayandi Palaniappan, Jaime Fisac, Dylan Hadfield-Menell, Stuart Russell, and Anca Dragan. 2018. An Efficient, Generalized Bellman Update For Cooperative Inverse Reinforcement Learning. In Proceedings of the 35th Interna-tional Conference on Machine Learning (Proceedings of Machine Learning Research, Vol. 80) , Jennifer Dy and Andreas Krause (Eds.). JMLR.org, https://www.jmlr.org, 3394–3402. https://proceedings.mlr.press/v80/malik18a.html [32] Nieves Montes, Nardine Osman, Carles Sierra, and Marija Slavkovik. 2023. Value Engineering for Autonomous Agents. https://doi.org/10.48550/arXiv.2302.08759 arXiv:2302.08759 [33] Nieves Montes and Carles Sierra. 2022. Synthesis and properties of optimally value-aligned normative systems. Journal of Artificial Intelligence Research 74 (2022), 1739–1774. https://doi.org/10.1613/jair.1.13487 [34] Ni Mu, Yao Luan, and Qing Shan Jia. 2024. Preference-based Multi-Objective Reinforcement Learning with Explicit Reward Modeling. In Proceedings - 2024 China Automation Congress, CAC 2024 . Institute of Electrical and Electronics Engineers Inc., 4874–4879. https://doi.org/10.1109/CAC63892.2024.10865310 [35] Calarina Muslimani and Matthew E. Taylor. 2024. Leveraging Sub-Optimal Data for Human-in-the-Loop Reinforcement Learning. In Proceedings of the 23rd Inter-national Conference on Autonomous Agents and Multiagent Systems (Auckland, New Zealand) (AAMAS ’24) . International Foundation for Autonomous Agents and Multiagent Systems, Richland, SC, 2399–2401. [36] Emery A. Neufeld. 2022. Reinforcement Learning Guided by Provable Normative Compliance. In International Conference on Agents and Artificial Intelligence ,A. Rocha, L. Steels, and J. van den Herik (Eds.), Vol. 3. Science and Technology Publications, Lda, Avenida de S. Francisco Xavier, Lote 7 Cv. C, 2900-616 Setúbal, Portugal, 444 – 453. https://doi.org/10.5220/0010835600003116 Cited by: 3; All Open Access; Green Accepted Open Access; Green Open Access; Hybrid Gold Open Access. [37] Emery A. Neufeld. 2024. Learning Normative Behaviour Through Automated Theorem Proving. KI - Kunstliche Intelligenz 38, 1-2 (2024), 25 – 43. https: //doi.org/10.1007/s13218-024-00844-x Cited by: 3; All Open Access; Hybrid Gold Open Access. [38] Frank Nielsen. 2020. On a Generalization of the Jensen–Shannon Divergence and the Jensen–Shannon Centroid. Entropy 22, 2 (2020). https://doi.org/10.3390/ e22020221 [39] Nardine Osman and Mark d’Inverno. 2024. A Computational Framework of Human Values. In Proceedings of the 23rd International Conference on Autonomous Agents and Multiagent Systems (Auckland, New Zealand) (AAMAS ’24) . Interna-tional Foundation for Autonomous Agents and Multiagent Systems, Richland, SC, 1531–1539. [40] Nardine Osman, Manel Rodríguez-Soto, and Jordi Sabater-Mir. 2025. Instill-ing Organisational Values in Firefighters through Simulation-Based Training. arXiv:2512.13737 [cs.CY] https://arxiv.org/abs/2512.13737 [41] Chanwoo Park, Mingyang Liu, Dingwen Kong, Kaiqing Zhang, and Asuman E. Ozdaglar. 2024. RLHF from Heterogeneous Feedback via Personalization and Preference Aggregation. In ICML 2024 Workshop on Theoretical Foundations of Foundation Models . OpenReview, https://openreview.net. https://openreview. net/forum?id=8XI7AGByAp [42] Markus Peschl, Arkady Zgonnikov, Frans A. Oliehoek, and Luciano C. Siebert. 2022. MORAL: Aligning AI with Human Norms through Multi-Objective Re-inforced Active Learning. In Proceedings of the 21st International Conference on Autonomous Agents and Multiagent Systems (Virtual Event, New Zealand) 
+
+(AAMAS ’22) . International Foundation for Autonomous Agents and Multiagent Systems, Richland, SC, 1038–1046. [43] Sriyash Poddar, Yanming Wan, Hamish Ivison, Abhishek Gupta, and Natasha Jaques. 2024. Personalizing Reinforcement Learning from Human Feedback with Variational Preference Learning. In Proceedings of the 38th International Conference on Neural Information Processing Systems (Vancouver, BC, Canada) 
+
+(NIPS ’24, Vol. 37) , A Globerson, L Mackey, D Belgrave, A Fan, U Paquet, J Tom-czak, and C Zhang (Eds.). Curran Associates Inc., Red Hook, NY, USA, Arti-cle 1664, 29 pages. https://proceedings.neurips.cc/paper_files/paper/2024/file/ 5e1c255653eb98cef13f45b2d337c882-Paper-Conference.pdf [44] Alina Pommeranz, Christian Detweiler, Pascal Wiggers, and Catholijn Jonker. 2012. Elicitation of situated values: Need for tools to help stakeholders and designers to reflect and communicate. Ethics and Information Technology 14 (2012), 285 – 303. Issue 4. https://doi.org/10.1007/s10676-011-9282-6 [45] Rafael Rafailov, Archit Sharma, Eric Mitchell, Stefano Ermon, Christopher D. Manning, and Chelsea Finn. 2023. Direct preference optimization: your language model is secretly a reward model. In Proceedings of the 37th International Con-ference on Neural Information Processing Systems (New Orleans, LA, USA) (NIPS ’23) . Curran Associates Inc., Red Hook, NY, USA, Article 2338, 14 pages. [46] Sid Ray and Rose H Turi. 2000. Determination of Number of Clusters in K-Means Clustering and Application in Colour Image Segmentation. In 4th Inter-national Conference on Advances in Pattern Recognition and Digital Techniques (ICAPRDT’99) . Narosa Publishing House, India, 137 – 143. [47] Mathieu Reymond, Eugenio Bargiacchi, and Ann Nowé. 2022. Pareto Conditioned Networks. In Proceedings of the 21st International Conference on Autonomous Agents and Multiagent Systems (Virtual Event, New Zealand) (AAMAS ’22) . Inter-national Foundation for Autonomous Agents and Multiagent Systems, Richland, SC, 1110–1118. [48] Manel Rodríguez-Soto, Nardine Osman, Carles Sierra, Nieves Montes, Jordi Martinez Roldan, Rocio Cintas García, Cristina Farriols Danes, Montserrat Gar-cía Retortillo, and Silvia Minguez Maso. 2025. User Study Design for Iden-tifying the Semantics of Bioethical Principles. In Value Engineering in Artifi-cial Intelligence , Nardine Osman and Luc Steels (Eds.). Springer Nature, 22–39. https://doi.org/10.1007/978-3-031-85463-7_2 [49] Manel Rodríguez-Soto, Roxana Rădulescu, Filippo Bistaffa, Oriol Ricart, Arnau Mayoral-Macau, Maite López-Sánchez, Juan A. Rodríguez-Aguilar, and Ann Nowé. 2026. Multi-objective reinforcement learning for provably incentivising alignment with value systems. Artificial Intelligence 351 (2026), 104460. https: //doi.org/10.1016/j.artint.2025.104460 [50] Meg J Rohan. 2000. A Rose by Any Name? The Values Construct. Personality and Social Psychology Review 4 (2000), 255–277. Issue 3. https://doi.org/10.1207/ S15327957PSPR0403_4 [51] Stuart Russell. 2022. Artificial Intelligence and the Problem of Control. In Per-spectives on Digital Humanism , Hannes Werthner, Erich Prem, Edward A. Lee, and Carlo Ghezzi (Eds.). Springer, 19–24. [52] Tom Schaul, John Quan, Ioannis Antonoglou, and David Silver. 2016. Prioritized Experience Replay. arXiv:1511.05952 [cs.LG] https://arxiv.org/abs/1511.05952 [53] Shalom H Schwartz. 1992. Universals in the content and structure of values: The-oretical advances and empirical tests in 20 countries. In Advances in experimental social psychology . Vol. 25. Elsevier, 1–65. [54] Shalom H Schwartz. 2012. An overview of the Schwartz theory of basic values. 
+
+Online readings in Psychology and Culture 2, 1 (2012), 11. [55] Marc Serramia, Maite López-Sánchez, Juan A. Rodríguez-Aguilar, Manel Ro-dríguez, Michael Wooldridge, Javier Morales, and Carlos Ansótegui. 2018. Moral Values in Norm Decision Making. In Proceedings of the 17th International Con-ference on Autonomous Agents and MultiAgent Systems (Stockholm, Sweden) 
+
+(AAMAS ’18) . International Foundation for Autonomous Agents and Multiagent Systems, Richland, SC, 1294–1302. [56] Marc Serramia, Manel Rodríguez-Soto, Maite López-Sánchez, Juan Rodríguez-Aguilar, Filippo Bistaffa, Paula Boddington, Michael Wooldridge, and Carlos Ansótegui. 2023. Encoding Ethics to Compute Value-Aligned Norms. Minds and Machines 33 (11 2023), 761–790. https://doi.org/10.1007/s11023-023-09649-7 [57] Luciano C Siebert, Enrico Liscio, Pradeep K Murukannaiah, Lionel Kaptein, Shan-non Spruit, Jeroen Van Den Hoven, and Catholijn Jonker. 2022. Estimating Value Preferences in a Hybrid Participatory System. Frontiers in Artificial Intelligence and Applications 354 (2022), 114 – 127. https://doi.org/10.3233/FAIA220193 [58] Walter Sinnott-Armstrong. 2023. Consequentialism. In The Stanford Encyclope-dia of Philosophy (Winter 2023 ed.), Edward N. Zalta and Uri Nodelman (Eds.). Metaphysics Research Lab, Stanford University. [59] Benjamin J Smith, Robert Klassert, and Roland Pihlakas. 2022. Using soft maximin for risk averse multi-objective decision-making. Autonomous Agents and Multi-Agent Systems 37 (2022), 11. Issue 1. https://doi.org/10.1007/s10458-022-09586-2 [60] Nate Soares. 2018. The Value Learning Problem . Chapman and Hall/CRC, 89–97. [61] Theodore Sumers, Robert Hawkins, Mark K Ho, Tom Griffiths, and Dy-lan Hadfield-Menell. 2022. How to talk so AI will learn: Instructions, descriptions, and autonomy. In Proceedings of the 36th International Con-ference on Neural Information Processing Systems (New Orleans, LA, USA) 
+
+(NIPS ’22, Vol. 35) , S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh (Eds.). Curran Associates, Inc., Red Hook, NY, USA, Article 2519, 14 pages. https://proceedings.neurips.cc/paper_files/paper/2022/file/ e0cfde0ff720fa9674bb976e7f1b99d4-Paper-Conference.pdf [62] Peter Vamplew, Richard Dazeley, Cameron Foale, Sally Firmin, and Jane Mum-mery. 2018. Human-aligned artificial intelligence is a multiobjective problem. 
+
+Ethics and Information Technology 20, 1 (3 2018), 27–40. https://doi.org/10.1007/ S10676-017-9440-6/FIGURES/1 [63] K. Van Moffaert, M.M. Drugan, and A. Nowé. 2013. Scalarized multi-objective reinforcement learning: novel design techniques. In 2013 IEEE Symposium on Adaptive Dynamic Programming and Reinforcement Learning (ADPRL) . IEEE, 191–199. https://doi.org/10.1109/ADPRL.2013.6615007 [64] Wendell Wallach and Colin Allen. 2008. Moral machines: Teaching robots right from wrong . Oxford University Press, Great Clarendon Street, Oxford, UK. [65] Haoxiang Wang, Wei Xiong, Tengyang Xie, Han Zhao, and Tong Zhang. 2024. Interpretable Preferences via Multi-Objective Reward Modeling and Mixture-of-Experts. In Findings of the Association for Computational Linguistics: EMNLP 2024 , Yaser Al-Onaizan, Mohit Bansal, and Yun-Nung Chen (Eds.). Association for Computational Linguistics, Miami, Florida, USA, 10582–10592. https://doi. org/10.18653/v1/2024.findings-emnlp.620 [66] Xinran Wang, Qi Le, Ammar Ahmed, Enmao Diao, Yi Zhou, Nathalie Baracaldo, Jie Ding, and Ali Anwar. 2025. MAP: Multi-Human-Value Alignment Palette. In The Thirteenth International Conference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025 . Curran Associates Inc., Red Hook, NY, USA, 81284–81313. https://openreview.net/forum?id=NN6QHwgRrQ [67] Christian Wirth, Riad Akrour, Gerhard Neumann, and Johannes Fürnkranz. 2017. A Survey of Preference-Based Reinforcement Learning Methods. Journal of Machine Learning Research 18, 136 (2017), 1–46. http://jmlr.org/papers/v18/16-634.html [68] C. F. Jeff Wu. 1983. On the Convergence Properties of the EM Algorithm. The Annals of Statistics 11, 1 (1983), 95 – 103. https://doi.org/10.1214/aos/1176346060 [69] Andrea H. Wynn, Ilia Sucholutsky, and Thomas L. Griffiths. 2024. Learning human-like representations to enable learning human values. In Proceedings of the 38th International Conference on Neural Information Processing Systems 
+
+(Vancouver, BC, Canada) (NIPS ’24) . Curran Associates Inc., Red Hook, NY, USA, Article 952, 31 pages. [70] Rui Yang, Xiaoman Pan, Feng Luo, Shuang Qiu, Han Zhong, Dong Yu, and Jian-shu Chen. 2024. Rewards-in-context: multi-objective alignment of foundation models with dynamic preference adjustment. In Proceedings of the 41st Interna-tional Conference on Machine Learning (Vienna, Austria) (ICML’24) . JMLR.org, https://www.jmlr.org, Article 2322, 22 pages. [71] Runzhe Yang, Xingyuan Sun, and Karthik Narasimhan. 2019. A generalized algorithm for multi-objective reinforcement learning and policy adaptation. In 
+
+Proceedings of the 33rd International Conference on Neural Information Processing Systems . Curran Associates Inc., Red Hook, NY, USA, Article 1311, 12 pages. https://doi.org/10.5555/3454287.3455598 [72] Wenhao Zhan, Masatoshi Uehara, Nathan Kallus, Jason D. Lee, and Wen Sun. 2024. PROVABLE OFFLINE PREFERENCE-BASED REINFORCEMENT LEARNING. In 12th International Conference on Learning Representations, ICLR 2024 . Curran Associates Inc., Red Hook, NY, USA, 26112–26137. Publisher Copyright: ©
+
+2024 12th International Conference on Learning Representations, ICLR 2024. All rights reserved.; 12th International Conference on Learning Representations, ICLR 2024 ; Conference date: 07-05-2024 Through 11-05-2024. [73] Huiying Zhong, Zhun Deng, Weijie J. Su, Zhiwei Steven Wu, and Linjun Zhang. 2024. Provable Multi-Party Reinforcement Learning with Diverse Human Feed-back. arXiv:2403.05006 [cs.LG] https://arxiv.org/abs/2403.05006 SUPPLEMENTARY MATERIAL Source Code 
+
+A static version is in the OpenReview submission [19], and is also available on GitHub 8.
+
+Experimental Details 
+
+In Table 2, we include a comprehensive table of hyperparameters used in our experiments. See also the glossary tables explaining each hyperparameter, in Tables 3, 4 and 5. We ran the experiments with 10 seeds. Importantly, the number of timesteps for PbMORL was always set significantly larger than in SVSL-P to compensate the fact that SVSL-P has an initial process to initialize the reward vector with the static datasets, that is non-existent in PbMORL. The experiments where executed on a MacBook Pro with 16GB RAM, chip Apple M2. The code is not optimized for efficiency, as this was not in the scope of the paper. The current implementation of SVSL-P for the longest experiments ( 𝐿 𝑚𝑎𝑥 = 15 , MVC environment) takes 7.1 hours in average to run 5 seeds at once, with a ±10 minute difference across repetitions, due to the different neural network initializations that influence how soon a social value system is found with coherence and representativeness over the “accuracy reference” 𝐴 𝑟𝑒 𝑓 .
+
+Firefighters environment specification 
+
+In Table 8 we specify the ground truth reward in the Firefighters MDP for each of the two values, given the current state, and action. The transition function is deterministic and is depicted in Table 7. The characteristics of the state space (determined by a series of categorical features) are presented in Table 6. An important imple-mentation detail is that we set a maximum environment horizon of 50 steps, after which any trajectory ends, but the Pareto efficient trajectories are typically of length 10, approximately, ending in states where the agent is able to put out the fire and rescue all the survivors. 
+
+Algorithms from previous works 
+
+In this section we explain our approach used in the (to be published) previous work of ours [ 18 ] to solve Problem 5 of the main paper without the additional feedback and in non-sequential decision making. The algorithm here learns a grounding function and a value system of the society by observing pairwise comparisons between decision entities (in our MDP case, these entities are trajectories) in terms of values and value systems of a given society of agents, but does not learn policies aligned with those values in the process. We employ these algorithms as a baseline in the evaluation and also as parts of the proposed SVSL-P algorithm. The main algorithm is based on EM (Expectation-Maximization) clustering (see Algorithm S1), which mimics [ 8 ]. There, the ap-proach was used to learn a clustering of agents in terms of their preferences about pairs of options. To do so, it performs several times a cycle of two steps. In the first step, the algorithm assigns each agent to the cluster (a preference model) that better represents its preferences (E-Step, lines 3-5). In the second step (M-Step, Lines 
+
+> 8https://github.com/andresh26-uam/ValueLearningInMOMDP/tree/AAMAS2026
+
+6-16), the preference model of each cluster is trained to better fit the preferences of the assigned agents. The M-step from [ 8] consists on fitting a reward model 𝑅 𝜃 (𝑠, 𝑎 )
+
+minimizing a loss similar to cross-entropy in the training data: 
+
+L
+
+
+
+𝜏, 𝜏 ′, 𝑦 𝑅 𝜃 
+
+= −𝑦 log (𝑝 (𝜏, 𝜏 ′ |𝑅 𝜃 ) − ( 1 − 𝑦 ) log (𝑝 (𝜏, 𝜏 ′ |𝑅 𝜃 )) 
+
+In our case, we have to fit two groups of reward models (align-ment functions). The first group is one model per value, i.e. the reward vector function 𝑅 𝑅 𝑅 𝜃 𝑉 =
+
+
+
+𝑅 𝜃 𝑣 1 , . . . , 𝑅 𝜃 𝑣 𝑚 
+
+
+
+; the second is com-posed by up to 𝐿 𝑚𝑎𝑥 value system functions, that depend on the weights 𝑊 𝜔 𝑙 , 𝑙 = 1, . . . , 𝐿 𝑚𝑎𝑥 and the grounding models 𝑅 𝑅 𝑅 𝜃 𝑉 . Each group of models depend on different preferences in our dataset 𝐷𝑆 ,which suggests two groups of loss functions, one based on the value system preferences LVS (𝐷𝑆 |𝛽 ), at Eq. 6, and another consisting of one loss per value of the grounding preferences L𝑉 (𝐷𝑆 ), at Eq. 9. 
+
+LVS (𝐷𝑆 |𝛽 ) = Lrepr (𝐷𝑆 |𝛽 ) − L conc (𝐷𝑆 |𝛽 ), (6) 
+
+Lrepr (𝐷𝑆 |𝛽 ) = 1
+
+|𝐽 |∑︁ 𝑗 ∈ 𝐽 ∑︁ (𝜏,𝜏 ′,𝑦 𝑗 𝑉 ,... ) ∈ 𝐷𝑆 𝑗 
+
+L
+
+
+
+𝜏, 𝜏 ′, 𝑦 𝑗 𝑉 |𝑅 𝜔,𝜃 𝛽 ( 𝑗 )
+
+
+
+𝐷𝑆 𝑗 
+
+(7) 
+
+Lconc (𝐷𝑆 |𝛽 ) =∑︁ 
+
+> 𝑙 ≠𝑙 ′
+
+1
+
+|𝐽 |∑︁ 𝑗 ∈ 𝐽 ∑︁ (𝜏,𝜏 ′,... ) ∈ 𝐷𝑆 𝑗 
+
+𝐷 (𝜏, 𝜏 ′ |𝑅 𝜔,𝜃 𝑙 , 𝑅 𝜔,𝜃 𝑙 ′ )
+
+𝐷𝑆 𝑗 
+
+(8) and 
+
+L𝑉 (𝐷𝑆 ) = ©«
+
+1
+
+|𝐽 |∑︁ 𝑗 ∈ 𝐽 ∑︁ (𝜏,𝜏 ′,...,𝑦 𝑗 𝑣 𝑖 ,... ) ∈ 𝐷𝑆 𝑗 
+
+L( 𝜏, 𝜏 ′, 𝑦 𝑗 𝑣 𝑖 )| 𝑅 𝜃 𝑣 𝑖 )
+
+𝐷𝑆 𝑗 
+
+ª®®¬
+
+> 𝑚 𝑖 =1
+
+(9) where 
+
+L ( 𝜏, 𝜏 ′, 𝑦 |𝑅 ) = −𝑦 log (𝑝 (𝜏, 𝜏 ′ |𝑅 )) − ( 1 − 𝑦 ) log (𝑝 (𝜏, 𝜏 ′ |𝑅 )) , (10) where: 𝑝 (𝜏, 𝜏 ′ |𝑅 ) = exp Í(𝑠,𝑎 ) ∈ 𝜏 𝑅 
+
+exp Í(𝑠,𝑎 ) ∈ 𝜏 𝑅 (𝑠, 𝑎 ) + exp Í(𝑠,𝑎 ) ∈ 𝜏 ′ 𝑅 (11) Our “value system loss” in Eq. 6 has two terms. The first term, in Eq. 7 increments representativeness by minimizing discordance (Eq. 3 from main paper). The second term (Eq. 8) increases con-ciseness by separating the preference models of the most similar clusters. As conciseness is not differentiable, we employ a quantitative version of inter-cluster discordance, using the term 𝐷 (𝜏, 𝜏 ′ |𝑅 1, 𝑅 2):the Jensen Shannon Divergence between the Bernoulli distributions of parameters 𝑝 (𝜏, 𝜏 ′ |𝑅 1) and 𝑝 (𝜏, 𝜏 ′ |𝑅 2). Incrementing this metric tends to increase the discordance between ≼𝑅 1 and ≼𝑅 2 , which increases conciseness. Jensen-Shannon divergence has also been used in the related problem of finding the centroid of probability distributions [38]. The grounding loss for each value 𝑣 𝑖 , with 𝑖 = 1, . . . , 𝑚 , (Eq. 9) is a cross-entropy loss computed over the dataset, aggregating the examples of each agent separately. Minimizing these losses increases grounding coherence by reducing discordances. The grounding and value system loss functions need to be min-imized in a hierarchy, i.e., prioritizing the grounding loss to im-prove coherence, and in second place, consider the value system loss. We approach this as a constrained optimization problem. The Env|Alg FF | EQL FF | PbMORL FF | SVSL FF | SVSL-P MVC | EQL MVC | PbMORL MVC | SVSL MVC | SVSL-P 
+
+𝐿 𝑚𝑎𝑥 - 10 15 10 - 28 (number of agents) 15 15 
+
+mrt - - 0.25 0.25 - - 0.25 0.25 
+
+𝜆 - - 1.0 1.0 - - 1.0 1.0 
+
+𝛼 𝜆 - - 0.05 0.05 - - 0.05 0.05 
+
+𝛾 𝜆 - - 5 × 10 −5 5 × 10 −5 - - 5 × 10 −5 5 × 10 −5
+
+𝛼 𝜃 - 0.0003 0.0003 0.0003 - 0.0003 0.0003 0.0003 
+
+𝛼 𝜔 - 0.005 0.005 0.005 - 0.005 0.005 0.005 
+
+𝐼 / 𝐴 𝑟𝑒 𝑓 - - 100 0.85 - - 100 0.85 
+
+𝑁 - - 5 5 - - 8 8
+
+𝐸 𝑟 - - 2 2 - - 2 2
+
+𝑚 𝑟 (gradient steps) - 3 3 3 - 3 3 3
+
+𝑝 𝑚 - - 0.1 0.1 - - 0.1 0.1 
+
+𝑠 𝑚 - - 0.1 0.1 - - 0.1 0.1 
+
+𝑇 𝑖 - 10000 - - - 10000 - -
+
+𝑏 - 256 - - - 256 - -
+
+𝐾 - 500 - 500 - 800 - 800 
+
+𝑁 𝑠 - 300 - 300 - 200 - 200 
+
+𝑁 𝑤 (𝑁 𝑎 in SVSL-P) 5 10 - 11 10 15 - 15 
+
+𝑏 𝑒𝑝 - - - 50 - - - 40 
+
+𝑏 𝑚𝑝 - - - 50 - - - 40 
+
+𝑆 𝑝 - 100000 - 10000 - 80000 - 80000 
+
+𝛾 1.0 1.0 1.0 1.0 0.99 0.99 0.99 0.99 
+
+𝛼 𝐸𝑄𝐿 0.0005 0.0007 0.0007 0.0007 0.0005 0.0007 0.0007 0.0007 
+
+𝑇 120000 250000 200000 200000 150000 250000 200000 200000 
+
+ℎ0, ℎ ∞ 0.0,1.0 0.05,0.9 0.05,0.5 0.05,0.9 0.0,1.0 0.0,0.9 0.05,0.95 0.05,0.9 
+
+𝜖 0, 𝜖 ∞ 0.5,0.0 0.5,0.05 0.5,0.05 0.5,0.05 1.0,0.0 0.8,0.05 1.0,0.05 0.8,0.05 
+
+𝑇 𝜋 1 2 2 2 1 2 2 2
+
+𝜏 (or 𝑡 𝑢 ) 1500 ( 𝑡 𝑢 ) 0.0001 0.0001 0.0001 1000 ( 𝑡 𝑢 ) 0.0001 0.0001 0.0001 
+
+𝑏 𝜋 32 256 256 256 128 128 128 128 
+
+𝑆 𝑒 100000 256000 500000 500000 200000 500000 500000 500000 
+
+𝛼 𝑝𝑒𝑟 no 0.6 0.6 0.6 no 0.6 0.6 0.6 
+
+𝜖 𝑝𝑒𝑟 no 0.01 0.01 0.01 no 0.01 0.01 0.01 
+
+𝑈 𝑤 false true false true false true false true 
+
+Table 2: Hyperparameters used in each environment per algorithm. 
+
+constraints to satisfy here are maximizing the coherence with each value, i.e., finding grounding network parameters 𝜃 such that 
+
+chr 𝐷 𝐽 (≼𝑅 𝜃 𝑣 𝑖 
+
+) = chr ∗ 
+
+> 𝑣 𝑖
+
+, with chr ∗ 
+
+> 𝑣 𝑖
+
+= max 𝜃 ∈Θ chr 𝐷 𝐽 (≼𝑅 𝜃 𝑣 𝑖 
+
+), for ev-ery 𝑖 ∈ { 1, . . . , 𝑚 }. Since chr ∗ 
+
+> 𝑣 𝑖
+
+is unknown a priori, it is dynamically estimated as the highest coherence observed during the learning process (smoothed by an exponentially weighted maximum: Algo-rithm S1, Line 16). The constraint to satisfy in terms of our loss function should be L𝑉 (𝐷𝑆 ) ≤ L ∗ 
+
+> 𝑉
+
+, where L∗ 
+
+> 𝑉
+
+is a loss that guaran-tees maximum coherence with all values. As we do not know L∗ 
+
+> 𝑉
+
+,we assume the stricter constraint L𝑉 (𝐷𝑆 ) = 0. With 𝑚 positive Lagrange multipliers 𝜆 = (𝜆 1, . . . , 𝜆 𝑚 ) our objective is transformed to: 
+
+min  
+
+> 𝜃,𝜔
+
+max  
+
+> 𝜆
+
+LVS (𝐷𝑆 |𝛽 ) − 
+
+> 𝑚
+
+∑︁ 
+
+> 𝑖 =1
+
+𝜆 𝑖 · (L 𝑉 (𝐷𝑆 )) (12) We seek a Nash equilibrium of jointly minimizing the Lagrangian in Eq. 12 over 𝜃, 𝜔 (subject to the assignment 𝛽 ) and maximizing over 𝜆 ∈ [ R+]𝑚 [ 11 ]. This is done through successive iterations of improving the Lagrangian (via gradient descent: Algorithm S1, Line 10) and then increasing the Lagrange multipliers 𝜆 through gradient ascent with a learning rate 𝛼 𝜆 (Algorithm S1, Line 14). To avoid overfitting the artificial constraint L𝑉 (𝐷𝑆 ) = 0, the Lagrange multipliers for each value 𝑣 𝑖 increase only when the coherence is below chr ∗ 
+
+> 𝑣 𝑖
+
+, and only for the value that is the farthest from its max-imum found coherence. Furthermore, multipliers are decayed using a factor 𝛾 𝜆 if coherence remains at chr ∗ 
+
+> 𝑣 𝑖
+
+. Also, as we use small batches for training (differently from [ 18 ]), to not overestimate 
+
+chr ∗ 
+
+> 𝑖
+
+from “lucky” batches, we approximate it with an exponen-tially weighted maximum , i.e. if chr 𝐵 (≼𝑅 𝑅 𝑅 𝑉 ) ≥ chr ∗ 
+
+> 𝑖
+
+, we update the maximum coherence with chr ∗ 
+
+> 𝑖
+
+= 𝑟 𝜆 chr ∗ 
+
+> 𝑖
+
++ ( 1 − 𝑟 𝜆 )chr 𝐵 (≼𝑅 𝑅 𝑅 𝑉 )
+
+where 𝐵 is a certain batch of compared trajectory pairs from the whole society and 𝑟 𝜆 is set to a number close to 1. A good value for 
+
+𝑟 𝜆 was found to be 0.99 across the tested environments. EM algorithms are known to converge to local optima or sta-tionary points [ 68 ], depending on initialization. To address this, Algorithm S2 (which constitutes the SVSL algorithm from the pa-per) introduces an exploitation-exploration outer loop inspired by evolutionary algorithms (EA), extending the EM procedure in Al-gorithm S1. A memory 𝑀 (that acts as the EA population ) of social Symbol Description 
+
+𝛼 𝐸𝑄𝐿 Learning rate for the 𝑄 -net. 
+
+𝑇 Total number of environment timesteps (and train-ing timesteps). 
+
+ℎ0, ℎ ∞ Initial and final homotopy weight (linearly in-creased per timestep) 
+
+𝜖 𝑜 , 𝜖 ∞ Initial and final 𝜖 -greedy parameter (linearly de-cayed per timestep) 
+
+𝑇 𝜋 Number of policy learning gradient steps 
+
+𝜏 Polyak target network update rate (small, from 0 to 
+
+1)
+
+𝑡 𝑢 If Polyak is set to 1, this is used instead: as the num-ber of timesteps to fully override the current target network with the learned one. 
+
+𝑏 𝜋 Batch size of experiences (𝑠, 𝑎, 𝑠 ′, 𝑟, 𝑑 ) from 𝑅 𝑒 for the 𝑄 -net update steps. 
+
+𝑆 𝑒 Maximum size of the experience replay buffer size 
+
+𝑅 𝑒 .
+
+𝑁 𝑤 Number of sampled weights for envelope update (co-incides with the homonym parameter in PbMORL and SVSL-P) 
+
+𝛼 𝑝𝑒𝑟 Prioritized experience replay (PER) priority (default 0.6). 
+
+𝜖 𝑝𝑒𝑟 Minimum value for priority in PER. Set to 0.01. 
+
+𝑈 𝑤 Whether to save sampled weights in 𝑅 𝑒 for use in update steps instead of sampling new random ones. It is set to “true” in SVSL-P and PbMORL, but we found it works better as false for vanilla Envelope Q Learning with static reward functions. 
+
+Table 3: Glossary of hyperparameters of Envelope Q-Learning [71]. Most are used in SVSL-P and PbMORL. 
+
+value systems is kept. At each iteration, a solution is selected from 
+
+𝑀 based on its quality (Line 5), mutated with probability mrt > 0
+
+(Line 7), and then refined with Algorithm S1 (Line 9) during 𝐸 𝑟 
+
+epochs where the first cycle directly performs the M-step over the mutated solution (Algorithm S1, Line 3 ). Finally, it returns a new social value system. The new solution is inserted in the memory (Algorithm S2, Line 10), replacing an existing one if it Pareto-dominates it. Pareto dom-inance is based on grounding coherence, number of clusters, con-ciseness, and representativeness. The memory has a capacity 𝑁 ,requiring an elimination protocol under overflow (Line 11). We seek a balance between keeping quality solutions –according to coherence, Ray-Turi Index and Pareto dominance– for exploitation, and maintaining varied clusterings for exploration. The eliminated solution is chosen as the worst in the following lexicographic order: (1) higher number of clusters, (2) number of identical agent-cluster mappings, (3) number of dominating solutions, (4) grounding co-herence, and (5) lower Ray-Turi index. Solutions with the best coherence and Ray-Turi index are always preserved. The selection step (Algorithm S2, Line 5) involves, first, ordering the options by the outer optimization objective (Ray-Turi Index), and then, by the inner objective (grounding coherence). This order 
+
+Symbol Description 
+
+𝐿 max Maximum number of clusters/components 
+
+mrt Initial mutation probability (probability of mutating a solution) 
+
+𝜆 Initial Lagrange multipliers 
+
+𝛼 𝜆 Learning rate for Lagrange multipliers 
+
+𝛾 𝜆 Decay rate for Lagrange multipliers 
+
+𝛼 𝜃 Learning rate for the reward model 𝑅 𝑅 𝑅 𝜃 parameters 
+
+𝜃 𝛼 𝜔 Learning rate for the value system weights 𝑊 𝜔 𝑙 pa-rameters 𝜔 𝐼 Number of reward training iterations in Algo-rithm S2 (or use 𝐴 𝑟𝑒 𝑓 ) instead) 
+
+𝑁 Size of the clustering candidate list/memory 
+
+𝐸 𝑟 Number of times to run the EM-algorithm at each iteration 
+
+𝑚 𝑟 Number of M-Step repetitions (after each E-Step) 
+
+𝑝 𝑚 Agent reassignment probability (of moving an agent to another cluster) 
+
+𝑠 𝑚 Mutation scale for network parameters 
+
+Table 4: Glossary of hyperparameters used in the experi-ments of SVSL (Algorithm S2). Some are used by SVSL-P. 
+
+inversion is intentional, as coherence can in all cases be improved via the Lagrange multiplier method, while Ray-Turi Index, and in particular, conciseness is best improved through exploration. Then, a solution is chosen with probability proportional to its rank (following Eq. 2 from [22]). The mutation step (Line 7) involves two tasks. First, it either removes a certain number of clusters (redistributing its agents ran-domly) or adds a certain number of them, populated by moving agents to these with a probability 𝑝 𝑚 . Second, it perturbs the param-eters of both the grounding network and value system weights using Gaussian noise, following classical evolutionary strategies [ 14 ]. The magnitude of perturbation is scaled by the coherence error for 𝜃 
+
+and the representativeness error for 𝜔 9.
+
+Implementation details 
+
+We introduce some new implementation details over the previous algorithms with respect our previous work [18]. First, we regularize the basic cross-entropy loss in Eq 10 with label smoothing (set to 0.1) to avoid overfitting the qualitative labels 
+
+𝑦 ∈ { 0, 0.5, 1}. This converts the labels to 𝑦 ∈ { 0.1, 0.5, 0.9}. We also use the Adam optimizer with a weight decay factor of 10 −4.In Eq. 8, we make the loss of the conciseness the sum over the Jensen Shannon divergences (the term 𝐷 (𝜏, 𝜏 ′ |𝑅 𝜔,𝜃 𝑙 , 𝑅 𝜔,𝜃 𝑙 ′ ), see [ 18 ]) between used clusters, instead of the minimum, to smooth the optimization process. Lastly, we introduce a mechanism to avoid redundant clusters during the learning process, at the end of the E-step of Algorithm S1, supplementary material, by simply “merging” clusters with “close”  
+
+> 9“Error” in this context is understood as the difference of the learned coherence and representativeness to their maximum, i.e. the ideal value of 1.0.
+
+Symbol Description 
+
+𝑇 𝑖 In PbMORL: initial amount of random action sam-pling steps in the environment to fill the replay buffer before any 𝑄 -net update. 
+
+𝑏 Batch size of preferences for the reward learning step in PbMORL (bulk, not per agent or per weight). 
+
+𝐾 Number of training timesteps in PbMORL and SVSL-P until calling the agents for new preferences. 
+
+𝑁 𝑠 Number of pairs of trajectories sampled every 𝐾 
+
+timesteps to be labelled by users both in PbMORL and SVSL-P. 
+
+𝑁 𝑤 Number of random weights to ask the overseer for preferences over the previous 𝑁 𝑠 trajectories, in PbMORL. 
+
+𝑁 𝑎 Similar to 𝑁 𝑤 , but refers to the number of differ-ent agents to ask for value-based and value-system based preferences over the previous 𝑁 𝑠 pairs. 
+
+𝑏 𝑒𝑝 Batch size of randomly selected pairs per agent from the preference replay buffer 𝑅 𝑝 to obtain 𝐶 𝑉 and 𝐶 𝐽 
+
+for the E-step at each call to Algorithm S1 in SVSL-P. 
+
+𝑏 𝑚𝑝 Batch size of comparisons per agent from 𝑅 𝑝 for M-steps at Algorithm S1 in SVSL-P. 
+
+𝐴 𝑟𝑒 𝑓 Target representativeness and minimum coherence to achieve with Algorithm S2 before starting the main loop in SVSL-P. 
+
+𝑆 𝑝 Maximum size of the preference replay buffer size 
+
+𝑅 𝑝 .
+
+𝛾 Discount factor for preferences and RL policy learn-ing. 
+
+Table 5: Glossary of hyperparameters used in the experi-ments of SVSL-P and PbMORL. 
+
+value system weights. Specifically, we consider two clusters equiv-alent when the maximum distance between the weights for any particular value is less than certain amount. We set this amount to 
+
+0.05 . Then, we send all the agents to the cluster with highest popu-lation among each pair of clusters that are considered as equivalent. 
+
+Additional results 
+
+In Figure 2 (for PbMORL) and Figure 3 (for SVSL-P) we represent, for the ten seeds used, the full learned Pareto fronts and the ex-pected value alignment of the clusters learned by each algorithm to represent the value system of the respective societies. We see that the Pareto fronts by PbMORL are slightly less close to the ground truth than those of SVSL-P, but that can be due to the different con-vergence rates. What is clear is that the clusters considered after learning with PbMORL are not diverse enough to cover the full front, while the ones by SVSL-P are consistently well distributed. Seed variability in the number of clusters is notable in all cases. By contrast, the standard deviations in representativeness and co-herence are very small. Our algorithm seems to find a way to maxi-mize representativeness and coherence (as we stated in our problem formulation), but does not consistently minimize cluster size (which 
+
+Algorithm S1 Value System Learning of a Society (EM algorithm) 
+
+Initialization: Dataset 𝐷𝑆 composed of trajectory pairs 𝐷 
+
+compared by different agents (in terms of value alignment with each value in a set 𝑉 and in terms of their value system), i.e. 
+
+𝐷𝑆 = ∪𝑗 ∈ 𝐽 𝐷𝑆 𝑗 , 𝐷 = ∪𝑗 ∈ 𝐽 𝐷 𝑗 . Learning rates 𝛼 𝜃 , 𝛼 𝜔 , 𝛼 𝜆 . Lagrange multiplier decay 𝛾 𝜆 > 0. Maximum number of clusters 𝐿 𝑚𝑎𝑥 .Number of M-Step repetitions ( 𝑚 𝑟 ), number of EM epochs 𝐸 𝑟 . Set maximum achievable coherence chr ∗ 
+
+> 𝑣 𝑖
+
+= 0 for all 𝑖 .
+
+Input: Assignment 𝛽 (optional), parameters of the value system weights 𝜔 , parameters of the grounding network 𝜃 , Lagrange multiplier state 𝜆 = (𝜆 1, . . . , 𝜆 𝑚 ) (optional, otherwise use initialization). Exponential weighted maximum coefficient to update coherences 𝑟 𝜆 . Optionally, additional preference replay buffer 𝑅 𝑝 and batch size per agent for the E-step 𝑏 𝑒𝑝 and per M-step repetition 𝑏 𝑚𝑝 
+
+Output: An assignment of agents into clusters 𝛽 , updated parameters 𝜃 , 𝜔 and new Lagrange multipliers 𝜆 . 
+
+> 1:
+
+Set 𝑅 𝑅 𝑅 𝜃 and 𝑊 𝜔 𝑙 (for 𝑙 ∈ { 1, . . . , 𝐿 𝑚𝑎𝑥 }) with params. 𝜃 and 𝜔 ,resp.  
+
+> 2:
+
+for epoch 𝑟 = 0, . . . , 𝐸 𝑟 − 1 do  
+
+> 3:
+
+E-Step (if 𝑅 𝑝 supplied, for each agent 𝑗 , sample a set of trajectory pairs 𝑂 𝑗 from it of size 𝑏 𝑒𝑝 : 
+
+> 4:
+
+𝛽 ( 𝑗 ) ← arg min 𝑙 𝑑 𝐷 𝑗 ∪𝑂 𝑗 
+
+
+
+≼𝑊 𝜔 𝑙  
+
+> 𝑅 𝑅 𝑅 𝜃
+
+, ≼𝑗 𝑉 
+
+
+
+⊲ Do for all 𝑗 ∈ 𝐽  
+
+> 5:
+
+Simplify clusters (New from [18]) : for each pair 
+
+𝑙, 𝑙 ′ < 𝐿 𝑚𝑎𝑥 , if max (| 𝑊 𝑙 − 𝑊 𝑙 ′ |) < 0.01 , merge clusters to the one with most agents. Put random weights in the other.  
+
+> 6:
+
+M-Step  
+
+> 7:
+
+for m-step 𝑡 = 0, . . . , 𝑚 𝑟 do  
+
+> 8:
+
+𝐵𝑆 ← batch of 𝑏 𝑚𝑝 traj. pairs per agent from 𝑅 𝑝  
+
+> 9:
+
+L𝑔𝑙𝑜𝑏𝑎𝑙 = LVS (𝐵𝑆 |𝛽 ) + 𝜆 · (L 𝑉 (𝐵𝑆 )) 𝑇  
+
+> 10:
+
+𝜃 ← 𝜃 − 𝛼 𝜃 ∇𝜃 L𝑔𝑙𝑜𝑏𝑎𝑙 ; 𝜔 ← 𝜔 − 𝛼 𝜔 ∇𝜔 L𝑔𝑙𝑜𝑏𝑎𝑙  
+
+> 11:
+
+end for  
+
+> 12:
+
+Compute 𝐶 𝑖 = chr ∗ 
+
+> 𝑣 𝑖
+
+− chr 𝐵 (≼𝑅 𝜃 𝑣 𝑖 
+
+) for each 𝑖 = 1, . . . , 𝑚 .
+
+𝑖 ∗ = arg max 𝐶 𝑖  
+
+> 13:
+
+if 𝐶 𝑖 is maximum then  
+
+> 14:
+
+𝜆 𝑖 ∗ ← ( 1 − 𝛾 𝜆 )𝜆 𝑖 ∗ + 𝛼 𝜆 (L 𝑉 (𝐵𝑆 )) 𝑖  
+
+> 15:
+
+end if  
+
+> 16:
+
+chr ∗ 
+
+> 𝑣 𝑖
+
+← ( 1 − 𝑟 𝜆 ) max 
+
+h
+
+chr 𝐵 
+
+
+
+≼𝑅 𝜃 𝑣 𝑖 
+
+
+
+, chr ∗
+
+> 𝑣 𝑖
+
+i
+
++ 𝑟 𝜆 chr ∗ 
+
+> 𝑣 𝑖
+> 17:
+
+end for  
+
+> 18:
+
+Return 𝛽 , 𝜔 , 𝜃 , 𝜆 
+
+is stated only indirectly with the conciseness goal). We suspect that cluster size variability might be due to our selected environments (specially FF), where different weight combinations in the front (value systems) actually represent very similar or equal qualitative preferences over the available trajectory spaces. Thus, selecting apparently different cluster combinations (and weights) does not always affect the qualitative preference errors (discordances) that our algorithm is designed to minimize (not the number of clusters directly). Furthermore, it seems clear that EQL tends to converge early in PbMORL, Figure 2. Probably increasing the selection of “disrupting” preferences among the clusters would help to make the optimization aware of the cluster relevance. Another tentative Table 6: Specification of actions and state features for the Firefighters MDP Action Description 
+
+Evacuate Occupants Prioritize evacuating people from the building. Contain Fire Focus on containing the fire to prevent it from spreading. Aggressive Fire Suppression Engage in direct firefighting to reduce fire intensity quickly. Prepare Equipment Prepare equipment for safer execution of subsequent tasks. Update Knowledge Update the knowledge about the fire and building status to plan subsequent actions. 
+
+State Feature Possible Values Description 
+
+Fire Intensity None, Low, Moderate, High, Severe Severity of the fire at the current state. Occupancy 0, 1, 2, 3, 4 Area population density. Equipment Readiness Not Ready, Ready Availability of firefighting equipment. Knowledge Poor, Good Environmental condition affecting firefighting. Firefighter Condition Perfect Health (3), Slightly Injured (2), Moderately Injured (1), Incapac-itated (0) Health status of the firefighter. 
+
+Table 7: Firefighter Domain State-Transition Function. Legend: KN = Knowledge, FI = Fire Intensity, EQ = Equipment Readiness, OC = Occupancy, FFC = Firefighter Condition Action State Conditions State Transitions 
+
+Evacuate Occupants Always OC → max (0, OC − 1)
+
+FI ≥ 3, EQ = 0, KN = 0 FFC → max (0, FFC − 1)
+
+FI = 5 EQ → 0
+
+Contain Fire Always FI → max (0, FI − 1)
+
+Aggressive Fire Suppression Always FI → max (0, FI − 2)
+
+FI ≥ 3, (EQ = 0 ∨ KN = 0) FFC → max (0, FFC − 1)
+
+FI = 5 EQ → 0
+
+Prepare Equipment Always EQ → 1
+
+Update Knowledge Always KN → 1
+
+Table 8: Firefighter Domain Reward Specification. Legend: KN = Knowledge, FI = Fire Intensity, EQ = Equipment Readiness, OC = Occupancy, FFC = Firefighter Condition. To note is that if the firefighter is incapacitated in the next state, the rewards are 
+
+−1.0 overriding any other situation. Action State Conditions Professionalism Proximity 
+
+Evacuate Occupants OC = 0 -1.0 -1.0 OC ≠ 0 1 − 0.2 × FI − 0.1 × KN 1.0 Contain Fire FI = 0 -1.0 -1.0 FI ≠ 0 0.8 0.2 Aggressive Fire Suppression FI = 0 -1.0 -1.0 FI ≠ 0, EQ = 0 0.3 0.7 FI ≠ 0, EQ ≠ 0 0.6 0.7 Prepare Equipment EQ = 0 0.5 -0.1 EQ ≠ 0 -1.0 -1.0 Update Knowledge KN = 0 1.0 -0.5 KN ≠ 0 -1.0 -1.0 Next state has FFC = 0 (Incapacitated) -1.0 -1.0 patch to this seed variability would be employing ensembles of reward functions [10]. In both cases we observe that, occasionally, two or more clusters have their respective policies “assigned” to the same point on the front, or, as noted before, there is a cluster that is slightly less efficient than the policy learned for a value system that was not 
+
+selected to be a cluster. These issues merit attention in future work and raise two questions: (i) whether it is feasible to enforce that two clusters whose policies “close” or equivalent in the objective space should be conjoined, even when qualitative differences justify the existence of both clusters; and (ii) whether it is possible to focus the reinforcement learning process on the policies of the selected Algorithm S2 Value System Learning of a Society ( SVSL )
+
+Input: . All the initialization parameters from Algorithm S1. Number of training steps 𝐼 . Memory of candidate solutions size 𝑁 .Epochs per training step, 𝐸 𝑟 . Mutation probability mrt < 1, agent reassignment probability 𝑝 𝑚 , network parameter mutation scale 
+
+𝑠 𝑚 . Initial Lagrange multipliers 𝜆 = (𝜆 1, . . . , 𝜆 𝑚 ), 𝜆 𝑖 > 0.
+
+Output: An assignment of agents into clusters 𝛽 , and trained reward vector 𝑅 𝑅 𝑅 𝜃 and value system weights 
+
+𝑊 𝑊 𝑊 𝜔 =
+
+
+
+𝑊 𝜔  
+
+> 1
+
+, . . . ,𝑊 𝜔 𝐿 𝑚𝑎𝑥 
+
+
+
+(from which only the 𝐿 weights corresponding to the clusters selected through 𝛽 are used).  
+
+> 1:
+
+Initialize Algorithm S1  
+
+> 2:
+
+Generate value system network parameters 𝜔 and grounding parameters 𝜃 ; 
+
+> 3:
+
+Repeat Line 2 𝑁 times to fill memory 𝑀 (add multipliers 𝜆 ).  
+
+> 4:
+
+for training step 𝑡 = 0, . . . , 𝐼 − 1 do  
+
+> 5:
+
+𝛽, 𝜃, 𝜔, 𝜆 ←SelectSolution (𝑀 ) 
+
+> 6:
+
+if Rand () < mrt then  
+
+> 7:
+
+𝛽, 𝜃, 𝜔 ← MutateSolution (𝑀 , 𝑝 𝑚 , 𝑠 𝑚 ) 
+
+> 8:
+
+end if  
+
+> 9:
+
+𝛽 ′, 𝜃 ′, 𝜔 ′, 𝜆 ′ ←Algorithm S1 (𝛽, 𝜃, 𝜔, 𝜆 ) with data in 𝐷𝑆  
+
+> 10:
+
+InsertInMemory( 𝛽 ′, 𝜃 ′, 𝜔 ′, 𝜆 ′, 𝑀 ) 
+
+> 11:
+
+If 𝑀 is full: EliminateWorstSolution(M)  
+
+> 12:
+
+Decrease mrt linearly upto 0 when 𝑡 = 𝐼 − 1. 
+
+> 13:
+
+end for  
+
+> 14:
+
+𝛽 , 𝑊 𝑊 𝑊 𝜔 ,𝑅 𝑅 𝑅 𝜃 , 𝜆 ← GetBestSolution(M)  
+
+> 15:
+
+return 𝛽 , 𝑊 𝑊 𝑊 𝜔 , 𝑅 𝑅 𝑅 𝜃 , 𝜆 
+
+clusters only (or to do so with stronger efficiency guarantees) and what are the trade-offs with our current method (that explores the whole simplex weight space with gaussian probability). 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.14, 0.86) 
+
+(0.79, 0.21) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.000', '1.000') 
+
+Cl. 3 - VS ('0.214', '0.786') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.14, 0.86) 
+
+(0.36, 0.64) 
+
+(0.43, 0.57) 
+
+(0.71, 0.28) 
+
+(0.86, 0.14) 
+
+(0.00, 1.00) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 3 - VS ('0.214', '0.786') 
+
+Cl. 0 - VS ('0.000', '1.000') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.28, 0.71) 
+
+(0.43, 0.57) 
+
+(0.64, 0.36) 
+
+(0.21, 0.79) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.000', '1.000') 
+
+Cl. 8 - VS ('0.572', '0.428') 
+
+Cl. 1 - VS ('0.214', '0.786') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.36, 0.64) 
+
+(0.57, 0.43) 
+
+(0.93, 0.07) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.000', '1.000') 
+
+Cl. 2 - VS ('0.142', '0.858') 
+
+Cl. 7 - VS ('0.500', '0.500') 
+
+Cl. 11 - VS ('0.786', '0.214') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.36, 0.64) 
+
+(0.57, 0.43) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.000', '1.000') 
+
+Cl. 7 - VS ('0.500', '0.500') 
+
+Cl. 9 - VS ('0.643', '0.357') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.28, 0.71) 
+
+(0.36, 0.64) 
+
+(0.79, 0.21) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.000', '1.000') 
+
+Cl. 1 - VS ('0.071', '0.929') 
+
+Cl. 2 - VS ('0.142', '0.858') 
+
+Cl. 12 - VS ('0.858', '0.142') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.36, 0.64) 
+
+(0.57, 0.43) 
+
+(0.79, 0.21) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.000', '1.000') 
+
+Cl. 6 - VS ('0.429', '0.571') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.21, 0.79) 
+
+(0.64, 0.36) 
+
+(0.50, 0.50) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.000', '1.000') 
+
+Cl. 1 - VS ('0.500', '0.500') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.14, 0.86) 
+
+(0.36, 0.64) 
+
+(0.64, 0.36) 
+
+(0.86, 0.14) 
+
+(0.00, 1.00) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 7 - VS ('0.500', '0.500') 
+
+Cl. 0 - VS ('0.000', '1.000') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.21, 0.79) 
+
+(0.64, 0.36) 
+
+(0.71, 0.28) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.000', '1.000') 
+
+Cl. 7 - VS ('0.500', '0.500') 
+
+Cl. 9 - VS ('0.643', '0.357') 
+
+Learned Pareto Front Figure 2: FF environment. Pareto front and clusters learned with PbMORL with the different 10 seeds. Black squares indicate the known Pareto front of the environment in terms of the alignment with the two values. White dots depict weights which policies are in the learned front with each method. Coloured white dots indicate the value system weights identifying each learned cluster (in the legend). Note that not all of the latter are necessarily efficient. 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.01, 0.99) 
+
+(0.63, 0.37) 
+
+(0.33, 0.67) 
+
+(0.91, 0.09) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.007', '0.993') 
+
+Cl. 7 - VS ('0.532', '0.468') 
+
+Cl. 4 - VS ('0.328', '0.672') 
+
+Cl. 9 - VS ('1.000', '0.000') 
+
+Learned Pareto Front 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.82, 0.18) 
+
+(0.35, 0.65) 
+
+(0.45, 0.56) 
+
+(0.15, 0.85) (0.01, 0.99) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 5 - VS ('0.902', '0.098') 
+
+Cl. 2 - VS ('0.354', '0.646') 
+
+Cl. 4 - VS ('0.556', '0.444') 
+
+Cl. 0 - VS ('0.009', '0.991') 
+
+Learned Pareto Front 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.68, 0.32) 
+
+(0.38, 0.62) 
+
+(0.90, 0.10) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.001', '0.999') 
+
+Cl. 1 - VS ('0.681', '0.319') 
+
+Cl. 2 - VS ('0.381', '0.619') 
+
+Cl. 5 - VS ('0.902', '0.098') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.56, 0.44) 
+
+(0.41, 0.59) 
+
+(0.89, 0.11) 
+
+(0.00, 1.00) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 1 - VS ('0.559', '0.441') 
+
+Cl. 3 - VS ('0.703', '0.297') 
+
+Cl. 9 - VS ('0.348', '0.652') 
+
+Cl. 7 - VS ('0.890', '0.110') 
+
+Cl. 0 - VS ('0.000', '1.000') 
+
+Learned Pareto Front 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.71, 0.29) 
+
+(0.85, 0.15) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.002', '0.998') 
+
+Cl. 2 - VS ('0.348', '0.652') 
+
+Cl. 6 - VS ('0.542', '0.458') 
+
+Cl. 5 - VS ('0.876', '0.124') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.83, 0.17) 
+
+(0.32, 0.68) 
+
+(1.00, 0.00) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.002', '0.998') 
+
+Cl. 3 - VS ('0.548', '0.452') 
+
+Cl. 8 - VS ('0.320', '0.680') 
+
+Cl. 9 - VS ('1.000', '0.000') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.81, 0.19) 
+
+(0.81, 0.19) 
+
+(0.28, 0.72) 
+
+(0.49, 0.51) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.002', '0.998') 
+
+Cl. 9 - VS ('1.000', '0.000') 
+
+Cl. 6 - VS ('0.282', '0.718') 
+
+Cl. 2 - VS ('0.487', '0.513') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.79, 0.21) 
+
+(0.11, 0.89) 
+
+(0.37, 0.63) 
+
+(0.00, 1.00) 
+
+(0.58, 0.42) (1.00, 0.00) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 7 - VS ('0.366', '0.634') 
+
+Cl. 0 - VS ('0.002', '0.998') 
+
+Cl. 1 - VS ('0.581', '0.419') 
+
+Cl. 3 - VS ('1.000', '0.000') 
+
+Learned Pareto Front 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.21, 0.79) 
+
+(0.74, 0.26) 
+
+(0.38, 0.62) 
+
+(0.00, 1.00) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 3 - VS ('0.741', '0.259') 
+
+Cl. 5 - VS ('0.588', '0.412') 
+
+Cl. 8 - VS ('0.906', '0.094') 
+
+Cl. 9 - VS ('0.377', '0.623') 
+
+Cl. 0 - VS ('0.003', '0.997') 
+
+Learned Pareto Front 4.5 5.0 5.5 6.0 6.5 7.0 7.5 
+
+Professionalism 
+
+4.0 
+
+4.2 
+
+4.4 
+
+4.6 
+
+4.8 
+
+5.0 
+
+5.2 
+
+5.4 
+
+> Proximity
+
+(0.00, 1.00) 
+
+(0.78, 0.23) 
+
+(0.87, 0.13) 
+
+(0.27, 0.73) 
+
+Learned Pareto Front Comparison 
+
+Known Pareto Front 
+
+Cl. 0 - VS ('0.003', '0.997') 
+
+Cl. 3 - VS ('0.538', '0.462') 
+
+Cl. 9 - VS ('1.000', '0.000') 
+
+Cl. 6 - VS ('0.269', '0.731') 
+
+Learned Pareto Front Figure 3: FF environment. Pareto front and clusters learned with SVSL-P with the different 10 seeds. Black squares indicate the known Pareto front of the environment in terms of the alignment with the two values. White dots depict weights which policies are in the learned front with each method. Coloured white dots indicate the value system weights identifying each learned cluster (in the legend). Note that not all of the latter are necessarily efficient.

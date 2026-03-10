@@ -1,0 +1,1535 @@
+Title: GSS: Gated Subspace Steering for Selective Memorization Mitigation in LLMs
+
+URL Source: https://arxiv.org/pdf/2602.08901v1
+
+Published Time: Tue, 10 Feb 2026 03:44:10 GMT
+
+Number of Pages: 34
+
+Markdown Content:
+GSS: Gated Subspace Steering for Selective Memorization Mitigation in LLMs 
+
+Xuanqi Zhang 1,2,∗, Haoyang Shang 3,∗, Xiaoxiao Li 1,2,†
+
+> 1
+
+University of British Columbia , 2Vector Institute , 3 Independent Researcher 
+
+> †
+
+Corresponding author , ∗Equal Contribution 
+
+Abstract: Large language models (LLMs) can memorize and reproduce training sequences verbatim – a tendency that undermines both generalization and privacy. Existing mitigation methods apply interventions uniformly, degrading performance on the majority of tokens that generalize normally. We show empirically that memorization is sparse, intermittent, and token-conditioned , suggesting that effective mitigation requires context-aware intervention rather than static parameter modification. To this end, we propose a novel and effective selective memorization mitigation method – Gated Subspace Steering (GSS), which decomposes intervention into a probe (detecting memorization-relevant activations) and a steer (applying targeted correction only when the probe exceeds a threshold). The optimal probe-steer pair emerges from a principled optimization framework based on optimal subspace steering . Experiments on four benchmarks show GSS matches or exceeds state-of-the-art memorization reduction while requiring 100-1000 × less compute than optimization-based alternatives. Furthermore, we provide new theoretical insights into the geometry of memorization in neural representations. 
+
+# 1 Introduction 
+
+When language models memorize training data verbatim, they become vulnerable: memorized sequences can be extracted by adversaries, limit generalization to novel inputs, and may reproduce copyrighted or sensitive content Shi et al. (2024); Nasr et al. (2025); Xiong et al. (2025). This memorization often occurs when adapting LLMs to downstream tasks through additional training or task-specific data Howard and Ruder (2018); Guo et al. (2019); Wen et al. (2023). While such adaptation often improves performance on particular downstream tasks, it can also increase the tendency of models to memorize training-specific sequences, especially when the data distribution is narrow, repetitive, or overrepresented Carlini et al. (2021); Graves et al. (2021); Lee et al. (2022). As a result, instead of learning abstract patterns or transferable representations, models may perform poorly on novel or distribution-shifted inputs Bayat et al. (2024); Chang et al. (2024). A natural question is how memorization should be mitigated without sacrificing the benefits of fine-tuning. Existing approaches address related but distinct problems: Machine unlearning Cao and Yang (2015); Bourtoule et al. (2021) focuses on removing the influence of specific data points to satisfy regulatory requirements. For example, NPO Zhang et al. (2024) utilizes a simple alignment-inspired loss function for LLM unlearning that addresses the catastrophic collapse issue of gradient ascent. Knowledge editing Wang et al. (2024); Feng et al. (2025) aims to update individual 1
+
+> arXiv:2602.08901v1 [cs.LG] 9 Feb 2026
+
+factual associations in a localized manner. For instance, SERAC Mitchell et al. (2022) edits specific facts by using an external retrieval-based module at inference time, allowing targeted and reversible changes without updating the weights. While effective in their respective settings, these methods target particular data points, facts, or copyrighted material. 
+
+Memorization mitigation Chang et al. (2024); Suri et al. (2025); Chen et al. (2024); Gupta et al. (2025) targets a behavior: the model’s tendency to reproduce training sequences verbatim rather than generalize. To address this issue, methods such as ZeroOut Chang et al. (2024); Zeiler and Fergus (2014) locate attributed neuron based on the memorization loss. Among these methods, Activation Steering has recently emerged as a lightweight alternative which modifies a model’s behavior by adding a steering vector to the hidden states during inference Marks and Tegmark (2023); Rimsky et al. (2024); Hegazy et al. (2025). By shifting the internal representations toward a desired concept (e.g., honesty or safety), steering can effectively modulate high-level traits. However, existing steering techniques typically apply a static intervention: a constant vector is added to every token position throughout the entire generation process. The static approach is ill-suited for mitigating memorization for two primary reasons. Meanwhile, researchers found that memorization is non-uniform and long-tail Barbulescu and Triantafillou (2024); Cheng (2025). A model may generate a dozen tokens of original, generalized content before encountering a specific trigger that activates a memorized sequence. Thus, a single-vector approach lacks the precision required to suppress verbatim recall without collateral damage to the model’s broader capabilities. These observations motivate a fundamental design principle: detection and correction should be decoupled. Prior steering methods Wang et al. (2025a); Turner et al. (2023) conflate these operations by using the same direction for both sensing memorization and actuating correction. We show that this coupling is suboptimal when memorization is sparse and incurs unnecessary collateral damage on non-memorized tokens. Effective intervention requires two capabilities: (1) detection : identifying at each token position whether the model’s prediction is driven by generalization or by verbatim recall, and (2) selective mitigation : applying intervention only at those moments while preserving generalized computation. Within this framework, we further propose Gated Subspace Steering (GSS) as a concrete and principled instantiation. GSS instantiates the probe as a learned low-rank subspace that detects memorization, and the steer removes only the memorization-relevant component of the activation. This design is motivated by two considerations: (i) memorization typically manifests along multiple correlated directions rather than a single vector, and (ii) steering preserve non-memorized components and avoid overcorrection inherent to vector-based steering. We show that the optimal probe–steer pair under this formulation arises naturally from an activation-level optimization objective and admits a closed-form solution. Our contributions are as follows: 
+
+• We empirically characterize memorization as a token-conditioned and sparsely occurring behavioral phenomenon .Our analysis does not require an explicitly specified retain set, revealing a fundamental distinction between memorization mitigation and content-targeted model modification. 
+
+• We introduce a probe–steer framework for activation-space intervention that operates entirely at inference time. The framework decouples when to intervene from how to intervene, and provides a unified view of prior steering approaches. 
+
+• We propose GSS, an activation subspace steering method that conditionally suppresses memorization-aligned components in hidden representations while reserves generalizability components. 
+
+• We provide theoretical analysis connecting memorization to geometric structure in activation space, showing that the optimal intervention emerges from generalized singular value decomposition of the memorization matrix relative to the generalization covariance. 
+
+• Across four benchmarks, we show that GSS consistently reduces memorization while preserving task performance, outperforming or matching state-of-the-art baselines. Crucially, our method incurs negligible inference-time overhead and is significantly faster than other approaches. 2(a) Heavy-tailed distribution of token-level memorization. (b) Duration of memorization bursts.      
+
+> Figure 1 Token-level memorization statistics. (a) Histogram of consecutive tokens with memorization signal ( 𝜔 𝑡 >0). (b) Right-skewed heavy-tailed distribution, indicating memorization is driven by a small fraction of high-magnitude tokens.
+
+# 2 Related Work 
+
+## 2.1 Memorization in Language Models 
+
+Prior work shows that LLMs can memorize rare training examples and reproduce them verbatim at inference time Carlini et al. (2019); Dang and Mohaisen (2025); Zhang et al. (2025a). Carlini et al. Carlini et al. (2019) propose the exposure metric to quantify how much more likely a model is to generate a specific sequence than expected under a random baseline. Subsequent work extends this analysis across architectures and scales Carlini et al. (2022); Ruzzetti et al. (2025); Huang et al. (2024); Zhang et al. (2025b), identifying training-data duplication, model size, and training duration as key drivers of memorization. In parallel, black-box extraction attacks Carlini et al. (2021) demonstrate that memorization can lead to the recovery of verbatim training data, including personally identifiable information, from models such as GPT-2 Radford et al. (2019). 
+
+## 2.2 Activation Steering and Representation Engineering 
+
+Activation steering intervenes directly on internal activations at inference time to control model behavior without modifying parameters. A common paradigm is contrastive activation addition Rimsky et al. (2024); Marks and Tegmark (2023), where a direction 𝑢 is extracted from differences between contrasting datasets or prompts and added to intermediate representations as ℎ ← ℎ + 𝛼𝑢 . Related approaches interpret specific directions as encoding semantic attributes or task signals Lee et al. (2025); Wang et al. (2025a); Hegazy et al. (2025). Most existing methods adopt the same direction with a fixed or globally scaled intervention Zhao et al. (2025); Wu et al. (2025). Such symmetry applies interventions uniformly and limits applicability when the target behavior is sparse and context-dependent. These limitations motivate conditional and gated interventions driven by internal signals rather than uniform shifts. 
+
+# 3 Pilot Study: Token-Level Memorization 
+
+We first establish empirically that memorization operates at token granularity, motivating our approach. 
+
+## 3.1 Memorization Signal 
+
+Following Morris et al. (2025), we characterize memorization using a token-level confidence gap signal between a fine-tuned model and a reference model. This signal provides a proxy for identifying positions where the model exhibits behavior beyond generalization. 33. STEER:    
+
+> Memorization Matrix Probe Directions
+> Fintuned
+> Model
+> Reference
+> Model Generalization Manifold
+> Extract
+> from
+> Steer Directions No Memorization
+> Gated Subspace
+
+Memorization Subspace Caliberation  Selective Gating   
+
+> 1. PROBE: Signal Strength
+> 2. GATE:
+> YES NO
+> Training Data Figure 2
+
+(Top) Gated Subspace Steering (GSS) Overview. (a) From memorization signals 𝜔 𝑡 , we derive decoupled Probe ( 𝑢 𝑘 )and Steer ( 𝑣 𝑘 ) directions from the Memorization Matrix ( M) and Generalization Manifold ( Σgen ) via Generalized SVD. (b) During inference, the gating mechanism G computes the signal strength ⟨ℎ, 𝑢 𝑘 ⟩; the steering vector is applied only when this it exceeds a safety threshold 𝜀 .
+
+Definition 3.1 (Token-level Memorization Signal) . Given a sequence 𝑥 1: 𝑇 , the token-level memorization signal at position 𝑡 is defined as the log-likelihood ratio between the fine-tuned model 𝑝 𝜃 and a reference model 𝑝 ref :
+
+𝜔 𝑡 ≜ log 𝑝 𝜃 (𝑥 𝑡 | 𝑥 <𝑡 ) − log 𝑝 ref (𝑥 𝑡 | 𝑥 <𝑡 ). (1) This definition can be derived by approximating the sequence-level information-theoretic memorization measure with token-wise excess code length under standard coding interpretations; we provide the full derivation MI → cross-entropy →
+
+𝜔 𝑡 in Appendix A.4. Intuitively, 𝜔 𝑡 measures the relative confidence gain of the fine-tuned model over the reference at token 𝑡 . While small or smooth increases may reflect improved capability, memorization typically appears as large, isolated spikes in 𝜔 𝑡 . We classify a token as memorization-dominant if 𝜔 𝑡 > 𝜀 (with 𝜀 = 0 by default), and generalization-dominant otherwise. This decomposition localizes memorization to specific token positions, enabling targeted analysis and intervention. 
+
+## 3.2 Empirical Observations 
+
+We fine-tune Qwen3 on GSM8K Cobbe et al. (2021), analyzing 𝜔 𝑡 across sequences (More results are in Appendix G.2). Two key observations emerge: 
+
+Observation 1: Temporal sparsity. In figure 1a, the memorization signal deviates from a Gaussian distribution around mean, instead exhibiting a heavy tail where mass is concentrated in a few high-magnitude tokens (only 18 .7% > mean ). Memorization is a sparse exception, while generalization remains dominant even in over fine-tuned models. 
+
+Observation 2: Token-level intermittency. In figure 1b, memorization is not a sustained state but a highly fragmented process (mean burst length is 1.64 tokens.). Even within sequences containing verbatim training data, the model frequently alternates between memorization and generalization (e.g., 60.8% of bursts are single tokens), which implies that effective intervention must be capable of rapid activation and deactivation, rather than suppressing a continuous sequence. Taken together, these observations indicate that memorization is not well characterized as a uniform or persistent property of the model. Instead, it is a sparse and token-conditioned phenomenon that is selectively expressed at particular positions, while the majority of tokens remain dominated by generalizable structure. Crucially, this form of memorization does not require explicit specification of retained data or replacement targets, and can be identified and mitigated directly from the model’s token-level behavior during inference. 4Unconstrained Shift 
+
+> Shift -> Utility Degradation!
+> Normal (Orig) Normal (Steered) Mem (Orig) Mem (Steered)
+> (a) Naive Steering
+
+h' ← h - α · u
+
+> Gate Threshold (ε) Safe Subspace (Preserved)
+> Memorization Mitigation
+> Preserved
+> Normal (Orig) Normal (Steered) Mem (Orig) Mem (Steered)
+> (b) Selective Subspace Steering
+
+h' ← h - α · 𝒢 (⟨h,u⟩>ε) vFigure 3 Geometric Visualization. A comparison of intervention in the activation space. (a) Naive Steering applies a constant subtraction to all tokens, resulting in an “Unconstrained Shift” that inadvertently degrades generalized representations (shifting blue points). (b) Gated Subspace Steering establishes a “Safe Subspace”, where the intervention activates for memorized tokens (orange) that violate the gate threshold, effectively mitigating memorization while preserving the generalization manifold. 
+
+# 4 Method 
+
+Building on the temporal sparsity and intermittency of memorization observed in Section 3, we propose Gated Subspace Steering (GSS) , an inference-time intervention framework guided by three design principles: (i) selectivity —intervene only at token positions exhibiting memorization, (ii) decoupling —separate the detection of memorization from its correction, and (iii) optimality —derive probe–steer directions from a principled objective rather than heuristic construction. These principles jointly aim to mitigate memorization while strictly bounding interference with generalized computation. We now formalize this framework. 
+
+## 4.1 Problem Formulation 
+
+Let ℎ ∈ R𝑑 denote the hidden state at layer 𝑙 . Standard activation steering methods Marks and Tegmark (2023); Stoehr et al. (2024); Zhao et al. (2025) apply a fixed additive intervention 
+
+ℎ′ = ℎ − 𝛼𝑣, (2) uniformly across tokens and layers. However, according to Section 3, uniform steering induces unnecessary perturbations on the majority of tokens that generalize normally, leading to degraded utility as shown in Fig. 3. To achieve selective intervention, we introduce a token-local gating mechanism . Given a probe direction 𝑢 , we monitor the scalar |𝑢 ⊤ ℎ|, which serves as a detection signal for memorization-prone activations. When this signal exceeds a threshold 𝜖 , we apply a corrective update: 
+
+ℎ′ = ℎ − G  |𝑢 ⊤ ℎ| > 𝜖  · 𝑣. (3) Here, 𝑢 functions as a probe that detects memorization, while 𝑣 specifies the corresponding steer direction. Given the gated intervention structure, the remaining question is how to choose effective probe–steer directions. We require two complementary properties. First, the intervention should be maximally effective when applied to memorization-prone tokens. Let D𝑚𝑒𝑚 denote a set of token positions identified as memorized (i.e., a positive memorization signal). For a token-level activation ℎ with gradient 𝑔 = ∇ℎ L𝑚𝑒𝑚 , where L𝑚𝑒𝑚 corresponds to the standard language modeling cross-entropy loss evaluated at the selected token position, a small perturbation Δℎ induces a first-order change ΔL𝑚𝑒𝑚 ≈ 𝑔 ⊤Δℎ. Accounting for the probe magnitude that triggers the intervention, this leads to the objective 
+
+Eℎ∼D 𝑚𝑒𝑚 [( 𝑢 ⊤ ℎ)( 𝑔 ⊤𝑣 )] = 𝑢 ⊤M𝑣, (4) 5where M = Eℎ∼D 𝑚𝑒𝑚 [ℎ𝑔 ⊤] is the memorization matrix , capturing how activation perturbations translate to loss reduction on memorized tokens. Second, to preserve generalized computation, the probe should remain largely inactive on non-memorized tokens. We model the geometry of generalized activations via their covariance 
+
+Σ𝑔𝑒𝑛 = Eℎ∼D 𝑔𝑒𝑛 [( ℎ − 𝜇 )( ℎ − 𝜇 )⊤], (5) and impose a variance budget 𝑢 ⊤Σ𝑔𝑒𝑛 𝑢 ≤ 𝛿 , which ensures that the probe activates on at most a 𝛿 -fraction of generalized tokens by Chebyshev’s inequality. 
+
+## 4.2 Optimal Subspace Steering 
+
+According to Eq. 3, the inference-time intervention is formalized as identifying a low-rank probe–steer operator. We consider a rank-𝑘 linear intervention parameterized by a set of probe and steer directions. A sign-adaptive rank-𝑘 
+
+correction takes the form 
+
+Δℎ = −
+
+> 𝐾
+
+∑︁ 
+
+> 𝑘 =1
+
+(𝑢 ⊤ 
+
+> 𝑘
+
+ℎ) 𝑣 𝑘 , 𝑘 = 1, . . . , 𝐾, (6) where each scalar steering 𝑢 ⊤ 
+
+> 𝑘
+
+ℎ acts as an independent, mode-wise detection signal. To characterize directions that are most effective for suppressing memorization, we first consider an ungated linear surrogate of the intervention in Eq. (6) .Substituting Δℎ = − Í𝐾 𝑘 =1 (𝑢 ⊤ 
+
+> 𝑘
+
+ℎ) 𝑣 𝑘 and taking expectation over memorized tokens yields 
+
+E−𝑔 ⊤Δℎ =
+
+> 𝐾
+
+∑︁ 
+
+> 𝑘 =1
+
+E𝑢 ⊤ 
+
+> 𝑘
+
+ℎ 𝑔 ⊤𝑣 𝑘 
+
+ =
+
+> 𝐾
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑢 ⊤ 
+
+> 𝑘
+
+M𝑣 𝑘 , (7) where M = E𝑡 ∼D 𝑚𝑒𝑚 [ℎ𝑡 𝑔 ⊤ 
+
+> 𝑡
+
+] is the memorization matrix. This formulation highlights that each probe–steer pair contributes independently to the expected first-order reduction in memorization loss. To prevent unintended interference with generalized representations, we constrain each probe direction to remain mostly inactive on generalized tokens. For a single probe direction 𝑢 𝑖 , we impose a variance budget 
+
+Eℎ∼D 𝑔𝑒𝑛 [( 𝑢 ⊤ 
+
+> 𝑘
+
+ℎ)2] = 𝑢 ⊤ 
+
+> 𝑘
+
+Σ𝑔𝑒𝑛 𝑢 𝑘 ≤ 𝛿, (8) which follows from a distribution-agnostic Chebyshev bound. Importantly, since the inference-time intervention operates via independent probe directions, we impose this constraint on each probe individually rather than on the entire subspace. To fix the scale of the steer directions and avoid degenerate rescalings between probes and steers, we additionally impose 
+
+∥𝑣 𝑘 ∥2 = 1 for all 𝑘 .Combining the memorization alignment objective with the direction-wise safety constraints yields the following rank-𝑘 
+
+constrained maximization problem: 
+
+max   
+
+> {𝑢 𝑘 ,𝑣 𝑘 }𝑘 𝑘 =1
+> 𝐾
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑢 ⊤ 
+
+> 𝑘
+
+M𝑣 𝑘 
+
+s.t. 𝑢 ⊤ 
+
+> 𝑘
+
+Σ𝑔𝑒𝑛 𝑢 𝑘 ≤ 𝛿, 𝑘 = 1, . . . , 𝐾, 
+
+∥𝑣 𝑘 ∥2 = 1, 𝑘 = 1, . . . , 𝐾. 
+
+(9) Optimizing each direction remains nontrivial due to the anisotropic, ellipsoidal constraint imposed by Σ𝑔𝑒𝑛 . The key insight is that the ellipsoidal constraint 𝑢 ⊤Σgen 𝑢 ≤ 𝛿 can be transformed into a spherical constraint via whitening, thereby reducing the problem to a standard singular value decomposition (SVD). Although the objective in Eq. (9) is additive, the rank-𝑘 solution is obtained by the top-𝑘 singular vectors of the whitened memorization matrix M𝑜 𝑝 = 𝐿 −1M. These directions are orthogonal in the whitened space, corresponding to Σ𝑔𝑒𝑛 -orthogonality in the original space, and thus do not degenerate to repeated selection of the leading mode. For numerical stability in high dimensions, standard diagonal regularization is applied to Σ𝑔𝑒𝑛 during whitening. 6Table 1 Taxonomy of baseline methods. We categorize methods by their intervention target ( 𝜃 vs. ℎ). Parameter-space methods include Unlearning (via optimization or localization), Model Editing, and Task Arithmetic. Inference Intervention methods operate on internal activations without modifying weights, categorized into Ablation (suppressing features) and Steering (redirecting representations). 
+
+Paradigm Target Methods & References 
+
+Unlearning Params 𝜃 Optimization: GA Jang et al. (2023), NPO Zhang et al. (2024) 
+
+Localization: Greedy, SOU, Durable, Subnet, BalancedSub Sakarvadia et al. (2024) 
+
+Model Editing Params 𝜃 ROME Meng et al. (2022a), MEMIT Meng et al. (2022b) 
+
+Task Arithmetic Params 𝜃 TaskVector Ilharco et al. (2022) 
+
+Inference-time Activations ℎ Ablation: Zero, Slimming, Hard Concrete, IG Chang et al. (2024); 
+
+Steering: LUNAR Shen et al. (2025), AlphaSteer Sheng et al. (2025), Ours 
+
+Theorem 4.1 (Optimal Probe–Steer Direction) . Let Σ𝑔𝑒𝑛 = 𝐿𝐿 ⊤ be the Cholesky decomposition of the generalization covariance matrix. Consider the direction-wise optimization problem 
+
+max  
+
+> 𝑢,𝑣
+
+𝑢 ⊤M𝑣 s.t. 𝑢 ⊤Σ𝑔𝑒𝑛 𝑢 ≤ 𝛿, ∥𝑣 ∥2 = 1. (10) 
+
+Under the transformation ˜𝑢 = 𝐿 ⊤𝑢 and M𝑜 𝑝 = 𝐿 −1M, this problem reduces to 
+
+max  
+
+> ˜𝑢,𝑣
+
+˜𝑢 ⊤M𝑜 𝑝 𝑣 s.t. ∥ ˜𝑢 ∥22 ≤ 𝛿, ∥𝑣 ∥2 = 1. (11) 
+
+An optimal solution is given by 
+
+𝑢 ∗ = √𝛿 ˜𝑢 1, 𝑣 ∗ = ˜𝑣 1, (12) 
+
+where ˜𝑢 1, ˜𝑣 1 are the leading left and right singular vectors of the whitened memorization matrix M𝑜 𝑝 = 𝐿 −1M.
+
+Proof is provided in Appendix A. The optimal probe direction 𝑢 is not simply the top singular vector of M (the “most memorization-sensitive” direction), but rather the direction that achieves the best sensitivity per unit of activation on generalized tokens. The whitening by Σ𝑔𝑒𝑛 penalizes directions on safe tokens. Similarly, 𝑣 targets the direction of maximum loss reduction, which may differ from 𝑢 when the memorization matrix M is asymmetric. When 𝑢 = 𝑣 is enforced, as in prior steering methods, we recover mean difference steering as a special case. 
+
+## 4.3 Inference-Time Adaptive Gating 
+
+With the optimal probe-steer direction {𝑢 ∗ 
+
+> 𝑘
+
+, 𝑣 ∗ 
+
+> 𝑘
+
+}𝐾 𝑘 =1 identified, We scale the steering vector by an adaptive coefficient 
+
+𝛼 𝑘 = ⟨𝑢 ∗ 
+
+> 𝑘
+
+, 𝑣 ∗ 
+
+> 𝑘
+
+⟩⟨𝑢 ∗ 
+
+> 𝑘
+
+, 𝑣 ∗ 
+
+> 𝑘
+
+⟩2 + 𝛿 , (13) Derivation are provided in Appendix A.2. We apply the adaptive coefficient along the steer direction: 
+
+ℎ′ = ℎ − 𝛼 𝑘 𝐾 ∑︁ 
+
+> 𝑘 =1
+
+I(| 𝑢 ∗ 
+
+> 𝑘
+> ⊤
+
+ℎ| > 𝜖 𝑘 ) 𝑣 ∗ 
+
+> 𝑘
+
+. (14) As a result, activations that remain within the generalization manifold are left unchanged while memorization-aligned components are selectively removed. Computational complexity is provided in Appendix B. 
+
+# 5 Experiments 
+
+## 5.1 Experimental Setup 
+
+We evaluate our proposed intervention across three distinct settings to assess memorization suppression, scalability, and downstream utility. First, we utilize the TinyMem Suri et al. (2025) suite which is developed for memorization mitigation 7Table 2 TinyMem Models Sakarvadia et al. (2024). Comparison of memorization mitigation strategies on multiplicative math and language models under noise and backdoor settings. The results are averaged with 3 seeds. Metrics include (𝑛, 𝑘 )-memorization, test accuracy / perplexity , and wall-clock time of the mitigation pipeline (seconds).                                                                                                                                                                                                                                                                                                     
+
+> Method Math Model Language Model
+> Noise Backdoor Noise Backdoor %Mem ↓Acc ↑Time ↓%Mem ↓Acc ↑Time ↓%Mem ↓Perp ↓Time ↓%Mem ↓Perp ↓Time ↓
+> Baseline model 34.55 97.00 –99.44 96.81 –17.60 57.73 –100.00 58.45 –Spectral norm reg 0.17 96.84 12254.19 99.89 96.68 1131.51 0.00 57.92 10850.23 100.00 90.42 238.58 Loss truncation 30.58 96.97 2391.10 99.67 99.96 347.73 0.00 57.92 16080.35 100.00 58.45 6005.13 Both FT 0.00 97.17 28.45 0.00 91.36 20.35 0.00 51.63 1680.25 0.00 59.19 1629.64 Clean FT 0.00 59.66 2.84 0.00 70.71 2.91 0.00 70.41 6.35 0.00 77.19 6.36 Extra FT 0.00 73.22 27.33 0.00 74.63 18.58 0.00 52.00 1670.09 0.00 63.60 1624.24 HC 0.00 74.97 0.24 0.00 75.02 0.26 0.00 57.15 0.25 100.00 70.94 0.69 Slim 0.00 63.34 1.47 0.00 57.12 1.41 0.00 57.10 0.42 100.00 70.40 0.89 Act 0.00 60.22 0.37 0.00 78.89 0.27 0.00 71.32 0.37 100.00 70.98 0.43 IG 24.30 96.98 2657.29 46.67 54.19 1586.46 0.00 57.12 1647.10 0.00 102.72 1612.51 Zero 22.15 96.86 11.91 99.44 73.44 12.10 0.00 57.12 16.47 100.00 70.44 63.05 Greedy 12.73 96.19 17.62 46.67 54.19 18.46 0.00 102.72 1612.51 100.00 119.35 217.96 SOU 0.81 87.02 313.45 78.89 76.11 449.80 26.00 57.28 573.71 100.00 70.74 585.08 Durable 13.72 96.45 2.78 0.00 65.63 3.23 2.80 57.52 0.73 100.00 73.43 3.36 Durable-agg 14.71 96.41 2.60 24.69 86.18 3.08 0.40 68.47 0.75 100.00 85.14 3.33 Subnet 20.33 96.91 0.48 0.00 28.66 0.46 14.80 57.28 0.41 94.87 70.83 1.00 BalancedSub 0.66 91.97 7.29 0.00 92.01 6.96 0.80 57.14 299.59 0.00 71.86 917.96 TaskVector 0.00 89.31 0.37 9.44 93.20 0.37 16.80 57.71 0.45 100.00 70.41 0.67 NPO 0.56 27.26 0.57 0.00 4.88 0.56 0.00 229.45 1.28 0.00 858.15 1.38 AlphaSteer 24.30 96.98 6.35 0.92 61.24 2.09 0.00 64.29 15.82 0.00 76.08 18.74 Lunar 24.28 96.97 1.15 0.00 58.69 1.27 0.00 67.36 14.93 0.00 75.96 17.61 Ours 0.00 96.98 0.001 0.00 96.82 0.001 0.00 63.13 0.002 0.00 63.17 0.003
+
+evaluation. To analyze scalability, we examine performance on Pythia-2.8B and Pythia-6.9B. To demonstrate efficacy in realistic production environments, we fine-tune Llama-3.2-1B and Qwen3-0.6B on the GSM8K (reasoning) Xie et al. (2025) and UltraChat Ding et al. (2023) (dialogue) benchmarks. All experiments are conducted on a single NVIDIA H100-80G GPU, comparing against the baselines detailed in Table 1. We evaluate our method along: 
+
+• Memorization reduction : measured using (𝑛, 𝑘 )-memorization Suri et al. (2025); Carlini et al. (2021). 
+
+• Task performance : perplexity on held-out test sets and downstream task accuracy. 
+
+• Efficiency : wall-clock time of the mitigation pipeline. 
+
+Definition 5.1 ((𝑛, 𝑘 )-Memorization) . Let 𝑠 = (𝑥 1, . . . , 𝑥 𝑛 ) be an 𝑛 -token sequence that appears in the training set of a language model 𝑀 . We say that 𝑠 is (𝑛, 𝑘 )-memorized by 𝑀 if, when prompted with the prefix (𝑥 1, . . . , 𝑥 𝑘 ), the model reproduces the remaining tokens (𝑥 𝑘 +1, . . . , 𝑥 𝑛 ) exactly using greedy decoding. We apply GSS at layer 4 for TinyMem models and layer 18 for Pythia models (Layer Selection Ablation is provided in Appendix G). The memorization matrix 𝑀 is constructed using 1,000 sequences exhibiting (𝑛, 𝑘 )-memorization, while the generalization covariance Σgen is estimated from 1,000 held-out validation sequences. The gating threshold 𝜀 is set to the 95th percentile of |⟨ ℎ, 𝑢 ⟩| on the validation set. The sensitivity of reference model is provided in Appendix H. 
+
+## 5.2 Experimental Results on TinyMem 
+
+As shown in Table 2, our method consistently achieves complete memorization suppression across all settings. While some baselines reach zero memorization in isolated cases, they are often at the cost of catastrophic utility loss. Neuron-and weight-level pruning methods (HC, Slim, Act) also suppress memorization but substantially degrade accuracy, particularly on math tasks that require precise algorithmic structure. In contrast, our method preserves near-baseline accuracy on math models and stable perplexity on language models, demonstrating selective suppression without disrupting learned computation. Backdoor settings further highlight the limitations of static interventions. Many baselines that perform well under noise fail completely under backdoor perturbations, often reverting to 100% memorization (e.g., HC, Slim, Act, Zero, Greedy 8Table 3 Comparison of memorization mitigation strategies on Pythia models across (𝑛, 𝑘 )-memorization, test perplexity, and time. Lower is better. The results are averaged with three seeds.                                                                    
+
+> Pythia 2.8B Pythia 6.9B Method % Mem ↓PPL ↓Time ↓% Mem ↓PPL ↓Time ↓
+> Baseline 52.87 21.75 –89.31 19.46 –HC 44.55 21.35 2.25 87.55 17.56 36.01 Slim 14.46 23.41 1.96 33.46 18.90 280.35 Act 14.46 24.43 13.01 30.30 18.34 36.02 Durable 6.93 35.49 17.44 14.65 23.34 44.34 Durable-agg 7.52 32.35 231.43 10.98 34.40 320.60 Subnet 8.01 32.20 48.75 84.95 17.16 519.44 BalancedSub 5.94 31.52 2068.77 86.73 17.15 233.42
+> Ours 6.93 28.26 0.16 6.96 29.15 0.21
+
+on language backdoor). Our method remains effective under backdoor conditions. Moreover, our method introduces a negligible inference-time overhead, making it suitable as a lightweight deployment-time safeguard rather than a costly retraining procedure. 
+
+## 5.3 Experimental Results on Pythia 
+
+Table 3 compares a wide range of memorization mitigation methods on Pythia-2.8B and Pythia-6.9B, including neuron pruning, weight pruning, and activation-based interventions. Aggressive approaches such as Greedy and Durable 
+
+substantially suppress memorization but severely degrade perplexity, particularly on Pythia-6.9B. In contrast, our method reduces memorization from 89 .31% to 6.96% with perplexity 29 .15 on Pythia-6.9B, markedly outperforming Greedy-and Durable-style methods. This improvement is obtained with negligible runtime overhead ( 0.21 s), as the intervention operates purely at inference time without parameter updates or iterative optimization. 
+
+## 5.4 Pareto Frontier Analysis on Modern LLMs 
+
+To rigorously evaluate the efficiency of our intervention, we conduct a comprehensive Pareto analysis. Specifically, we sweep the learning rate for Unlearning methods (e.g., GA), the regularization weight for localization methods (e.g., BalancedSub), and the intervention magnitude for Editing methods (e.g., ROME). For these experiments, we employ a Rank-1 configuration for our method to demonstrate its effectiveness even under minimal subspace constraints. figure 4 visualizes the Pareto frontier across methods and our method achieves the Pareto frontier within its effective range. 
+
+Reasoning Tasks (GSM8K). On complex reasoning benchmarks (figure 4A and B), we observe a clear hierarchy. 
+
+Unlearning methods (e.g., GA) struggle significantly; their curves show a steep vertical drop, indicating that the parameter updates required to erase memorization catastrophically damage the model’s logical reasoning chain. Knowledge Editing methods (ROME, MEMIT) show better stability but hit a performance ceiling. In contrast, our method establishes a superior frontier. Notably, we observe a slight utility boost (scores exceeding 1.0) at moderate steering strengths. This suggests that for reasoning tasks, memorization acts as overfitting noise; by selectively projecting it out via a gated subspace, we recover latent generalization capabilities on the test set. 
+
+Dialogue Tasks (UltraChat). For dialogue generation ( figure 4c and d), Unlearning methods prove surprisingly effective, likely because open-ended dialogue is more robust to global parameter perturbations. However, our method continues to outperform Knowledge Editing baselines. Crucially, in the moderate-memorization region (where memorization is not severe), our GSS maintains the most favorable trade-off, enabling precise removal of memorized sequences with slight utility boost. 
+
+## 5.5 Ablation study on the gating threshold 𝜖 .
+
+In GSS, 𝜖 serves as the sensitivity boundary for triggering interventions (i.e., intervention occurs only when |𝑠 𝑡 ,𝑘 | > 𝜖 ). As shown in Fig. 5, the Accuracy (red dashed line) remains robust ( ∼ 97% ) across the entire range, demonstrating that our Gated Subspace Steering effectively disentangles memorization intervention from general capabilities. 9Figure 4 Pareto Frontier Analysis. The plots visualize the trade-off between memorization reduction measured (x-axis, normalized by baseline) and downstream utility measured in log-likelihood (y-axis, normalized by baseline). The ideal method occupies the top-right corner. (Top: GSM8K) On reasoning tasks, our method dominates the frontier. We observe utility recovery where mild steering improves performance ( > 1.0). (Bottom: UltraChat) Our method consistently outperforms Editing baselines and maintains a Pareto frontier in the high-utility regime 
+
+## 5.6 Ablation study on Rank choices. 
+
+We analyze the impact of subspace rank 𝑘 on the mitigation-utility trade-off in Figure 6. While all ranks perform similarly in the low-utility region, lower ranks ( 𝑘 ≤ 5) clearly outperform higher ranks ( 𝑘 ≥ 5) in the high-utility regime. This confirms that memorization manifests to be low-dimensional; increasing 𝑘 captures spurious directions that degrade generalization. 
+
+# 6 Conclusion 
+
+We characterize memorization in language models as a sparse and token-conditioned phenomenon . Distinct from classical machine unlearning and knowledge editing, memorization arises intermittently rather than as a static property of model parameters, motivating targeted and conditional intervention. Our proposed GSS decomposes memorization mitigation into probing and steering, with the optimal probe–steer directions derived from a principled optimization framework. Experiments demonstrate state-of-the-art memorization reduction with minimal impact on utility. 
+
+Acknowledgment. This work was partially funded by the NSERC Discovery Grant RGPIN-2022-05316, NSERC Alliance Grant ALLRP 602633-24, Tri-Agency Canada IITP, and the Ministry of Science and ICT (No. RS-2024-00445087), CIFAR AI Chair Awards, and Canada Research Chair Fellowship. 10 0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Epsilon
+> 0.00
+> 1.00
+> 2.00
+> 3.00
+> 4.00
+> 5.00
+> 6.00
+> 7.00
+> 8.00
+> 9.00
+> 10.00
+> n-k Memorization
+> n-k Memorization
+> Accuracy
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Accuracy
+
+(a) TinyMem 0.0 0.2 0.4 0.6 0.8 1.0  
+
+> Epsilon
+> 0.090
+> 0.100
+> 0.110
+> 0.120
+> n-k Memorization
+> n-k Memorization
+> Perplexity
+> 30.8
+> 31.0
+> 31.2
+> 31.4
+> 31.6
+> Perplexity
+
+(b) Pythia_2.8B 
+
+Figure 5 Ablation study on 𝜖 in the TinyMem math and Pythia 2.8B models. 
+
+Figure 6 Ablation Study on Subspace Rank ( 𝑘 ). We visualize the Pareto frontier of utility score vs. memorization reduction on Qwen and Llama. While curves are clustered in the low-utility region, lower ranks ( 𝑘 < 5) achieve better performance in the high-utility regime. 
+
+11 References 
+
+George-Octavian Barbulescu and Peter Triantafillou. To each (textual sequence) its own: Improving memorized-data unlearning in large language models. arXiv preprint arXiv:2405.03097 , 2024. Reza Bayat, Mohammad Pezeshki, Elvis Dohmatob, David Lopez-Paz, and Pascal Vincent. The pitfalls of memorization: When memorization hurts generalization. arXiv preprint arXiv:2412.07684 , 2024. Lucas Bourtoule, Varun Chandrasekaran, Christopher A Choquette-Choo, Hengrui Jia, Adelin Travers, Baiwu Zhang, David Lie, and Nicolas Papernot. Machine unlearning. In 2021 IEEE symposium on security and privacy (SP) , pages 141–159. IEEE, 2021. Yinzhi Cao and Junfeng Yang. Towards making systems forget with machine unlearning. In 2015 IEEE symposium on security and privacy , pages 463–480. IEEE, 2015. Nicholas Carlini, Chang Liu, Úlfar Erlingsson, Jernej Kos, and Dawn Song. The secret sharer: Evaluating and testing unintended memorization in neural networks. In 28th USENIX security symposium (USENIX security 19) , pages 267–284, 2019. Nicholas Carlini, Florian Tramer, Eric Wallace, Matthew Jagielski, Ariel Herbert-Voss, Katherine Lee, Adam Roberts, Tom Brown, Dawn Song, Ulfar Erlingsson, et al. Extracting training data from large language models. In 30th USENIX security symposium (USENIX Security 21) , pages 2633–2650, 2021. Nicholas Carlini, Daphne Ippolito, Matthew Jagielski, Katherine Lee, Florian Tramer, and Chiyuan Zhang. Quantifying memorization across neural language models. In The Eleventh International Conference on Learning Representations , 2022. Ting-Yun Chang, Jesse Thomason, and Robin Jia. Do localization methods actually localize memorized data in llms? a tale of two benchmarks. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers) , pages 3190–3211, 2024. Bowen Chen, Namgi Han, and Yusuke Miyao. A multi-perspective analysis of memorization in large language models. arXiv preprint arXiv:2405.11577 , 2024. Ruizhe Chen, Jianfei Yang, Huimin Xiong, Jianhong Bai, Tianxiang Hu, Jin Hao, Yang Feng, Joey Tianyi Zhou, Jian Wu, and Zuozhu Liu. Fast model debias with machine unlearning. Advances in Neural Information Processing Systems , 36:14516–14539, 2023. Xiaoyu Cheng. Approaching memorization in large language models. 2025. Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168 , 2021. Trung Cuong Dang and David Mohaisen. Memories retrieved from many paths: A multi-prefix framework for robust detection of training data leakage in large language models. arXiv preprint arXiv:2511.20799 , 2025. Ning Ding, Yulin Chen, Bokai Xu, Yujia Qin, Shengding Hu, Zhiyuan Liu, Maosong Sun, and Bowen Zhou. Enhancing chat language models by scaling high-quality instructional conversations. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing , pages 3029–3051, 2023. Yujie Feng, Li-Ming Zhan, Zexin Lu, Yongxin Xu, Xu Chu, Yasha Wang, Jiannong Cao, Philip S Yu, and Xiao-Ming Wu. Geoedit: Geometric knowledge editing for large language models. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing , pages 13401–13416, 2025. Kunihiko Fukushima. Visual feature extraction by a multilayered network of analog threshold elements. IEEE Transactions on Systems Science and Cybernetics , 5(4):322–333, 2007. Leo Gao, Stella Biderman, Sid Black, Laurence Golding, Travis Hoppe, Charles Foster, Jason Phang, Horace He, Anish Thite, Noa Nabeshima, et al. The pile: An 800gb dataset of diverse text for language modeling. arXiv preprint arXiv:2101.00027 , 2020. Laura Graves, Vineel Nagisetty, and Vijay Ganesh. Amnesiac machine learning. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 35, pages 11516–11524, 2021. Yunhui Guo, Honghui Shi, Abhishek Kumar, Kristen Grauman, Tajana Rosing, and Rogerio Feris. Spottune: transfer learning through adaptive fine-tuning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 4805–4814, 2019. Mansi Gupta, Nikhar Waghela, Sarthak Gupta, Shourya Goel, and Sanjif Shanmugavelu. Pruning as a defense: Reducing memorization in large language models. arXiv preprint arXiv:2502.15796 , 2025. Amr Hegazy, Mostafa Elhoushi, and Amr Alanwar. Guiding giants: Lightweight controllers for weighted activation steering in llms. 
+
+arXiv preprint arXiv:2505.20309 , 2025. 
+
+12 Jeremy Howard and Sebastian Ruder. Universal language model fine-tuning for text classification. arXiv preprint arXiv:1801.06146 ,2018. Chenhui Hu, Pengfei Cao, Yubo Chen, Kang Liu, and Jun Zhao. Wilke: Wise-layer knowledge editor for lifelong knowledge editing. 
+
+arXiv preprint arXiv:2402.10987 , 2024. Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. ICLR , 1(2):3, 2022. Jing Huang, Diyi Yang, and Christopher Potts. Demystifying verbatim memorization in large language models. arXiv preprint arXiv:2407.17817 , 2024. Jiahao Huo, Yibo Yan, Xu Zheng, Yuanhuiyi Lyu, Xin Zou, Zhihua Wei, and Xuming Hu. Mmunlearner: Reformulating multimodal machine unlearning in the era of multimodal large language models. arXiv preprint arXiv:2502.11051 , 2025. Gabriel Ilharco, Marco Tulio Ribeiro, Mitchell Wortsman, Suchin Gururangan, Ludwig Schmidt, Hannaneh Hajishirzi, and Ali Farhadi. Editing models with task arithmetic. arXiv preprint arXiv:2212.04089 , 2022. Joel Jang, Dongkeun Yoon, Sohee Yang, Sungmin Cha, Moontae Lee, Lajanugen Logeswaran, and Minjoon Seo. Knowledge unlearning for mitigating privacy risks in language models. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 14389–14408, 2023. Houcheng Jiang, Junfeng Fang, Ningyu Zhang, Guojun Ma, Mingyang Wan, Xiang Wang, Xiangnan He, and Tat-seng Chua. Anyedit: Edit any knowledge encoded in language models. arXiv preprint arXiv:2502.05628 , 2025. Yuxin Jiang, Yufei Wang, Chuhan Wu, Wanjun Zhong, Xingshan Zeng, Jiahui Gao, Liangyou Li, Xin Jiang, Lifeng Shang, Ruiming Tang, et al. Learning to edit: Aligning llms with knowledge editing. arXiv preprint arXiv:2402.11905 , 2024. Bruce W Lee, Inkit Padhi, Karthikeyan Natesan Ramamurthy, Erik Miehling, Pierre Dognin, Manish Nagireddy, and Amit Dhurandhar. Programming refusal with conditional activation steering. In The Thirteenth International Conference on Learning Representations ,2025. Katherine Lee, Daphne Ippolito, Andrew Nystrom, Chiyuan Zhang, Douglas Eck, Chris Callison-Burch, and Nicholas Carlini. Deduplicating training data makes language models better. In Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 8424–8445, 2022. Samuel Marks and Max Tegmark. The geometry of truth: Emergent linear structure in large language model representations of true/false datasets. arXiv preprint arXiv:2310.06824 , 2023. Kevin Meng, David Bau, Alex Andonian, and Yonatan Belinkov. Locating and editing factual associations in gpt. Advances in neural information processing systems , 35:17359–17372, 2022a. Kevin Meng, Arnab Sen Sharma, Alex Andonian, Yonatan Belinkov, and David Bau. Mass-editing memory in a transformer. arXiv preprint arXiv:2210.07229 , 2022b. Eric Mitchell, Charles Lin, Antoine Bosselut, Christopher D Manning, and Chelsea Finn. Memory-based model editing at scale. In 
+
+International Conference on Machine Learning , pages 15817–15831. PMLR, 2022. John X Morris, Chawin Sitawarin, Chuan Guo, Narine Kokhlikyan, G Edward Suh, Alexander M Rush, Kamalika Chaudhuri, and Saeed Mahloujifar. How much do language models memorize? arXiv preprint arXiv:2505.24832 , 2025. Milad Nasr, Javier Rando, Nicholas Carlini, Jonathan Hayase, Matthew Jagielski, A Feder Cooper, Daphne Ippolito, Christopher A Choquette-Choo, Florian Tramèr, and Katherine Lee. Scalable extraction of training data from aligned, production language models. In The Thirteenth International Conference on Learning Representations , 2025. Thanh Tam Nguyen, Thanh Trung Huynh, Zhao Ren, Phi Le Nguyen, Alan Wee-Chung Liew, Hongzhi Yin, and Quoc Viet Hung Nguyen. A survey of machine unlearning. ACM Transactions on Intelligent Systems and Technology , 16(5):1–46, 2025. Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language models are unsupervised multitask learners. OpenAI blog , 1(8):9, 2019. Nina Rimsky, Nick Gabrieli, Julian Schulz, Meg Tong, Evan Hubinger, and Alexander Turner. Steering llama 2 via contrastive activation addition. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 15504–15522, 2024. Elena Sofia Ruzzetti, Giancarlo A Xompero, Davide Venditti, and Fabio Massimo Zanzotto. Private memorization editing: Turning memorization into a defense to strengthen data privacy in large language models. arXiv preprint arXiv:2506.10024 , 2025. 
+
+13 Mansi Sakarvadia, Aswathy Ajith, Arham Khan, Nathaniel Hudson, Caleb Geniesse, Kyle Chard, Yaoqing Yang, Ian Foster, and Michael W Mahoney. Mitigating memorization in language models. arXiv preprint arXiv:2410.02159 , 2024. Ali Satvaty, Anna Visman, Dan Seidel, Suzan Verberne, and Fatih Turkmen. Memorization is language-sensitive: Analyzing memorization and inference risks of llms in a multilingual setting. In Proceedings of the First Workshop on Large Language Model Memorization (L2M2) , pages 106–126, 2025. William F Shen, Xinchi Qiu, Meghdad Kurmanji, Alex Iacob, Lorenzo Sani, Yihong Chen, Nicola Cancedda, and Nicholas D Lane. Lunar: Llm unlearning via neural activation redirection. Thirty-nineth Conference on Neural Information Processing Systems ,2025. Leheng Sheng, Changshuo Shen, Weixiang Zhao, Junfeng Fang, Xiaohao Liu, Zhenkai Liang, Xiang Wang, An Zhang, and Tat-Seng Chua. Alphasteer: Learning refusal steering with principled null-space constraint. arXiv preprint arXiv:2506.07022 , 2025. Dan Shi, Tianhao Shen, Yufei Huang, Zhigen Li, Yongqi Leng, Renren Jin, Chuang Liu, Xinwei Wu, Zishan Guo, Linhao Yu, et al. Large language model safety: A holistic survey. arXiv preprint arXiv:2412.17686 , 2024. Niklas Stoehr, Kevin Du, Vésteinn Snæbjarnarson, Robert West, Ryan Cotterell, and Aaron Schein. Activation scaling for steering and interpreting language models. arXiv preprint arXiv:2410.04962 , 2024. Manan Suri, Nishit Anand, and Amisha Bhaskar. Mitigating memorization in llms using activation steering. arXiv preprint arXiv:2503.06040 , 2025. Ayush K Tarun, Vikram S Chundawat, Murari Mandal, and Mohan Kankanhalli. Fast yet effective machine unlearning. IEEE Transactions on Neural Networks and Learning Systems , 35(9):13046–13055, 2023. Alexander Matt Turner, Lisa Thiergart, Gavin Leech, David Udell, Juan J Vazquez, Ulisse Mini, and Monte MacDiarmid. Steering language models with activation engineering. arXiv preprint arXiv:2308.10248 , 2023. Han Wang, Gang Wang, and Huan Zhang. Steering away from harm: An adaptive approach to defending vision language model against jailbreaks. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 29947–29957, 2025a. Lingzhi Wang, Xingshan Zeng, Jinsong Guo, Kam-Fai Wong, and Georg Gottlob. Selective forgetting: Advancing machine unlearning techniques and evaluation in language models. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pages 843–851, 2025b. Peng Wang, Ningyu Zhang, Bozhong Tian, Zekun Xi, Yunzhi Yao, Ziwen Xu, Mengru Wang, Shengyu Mao, Xiaohan Wang, Siyuan Cheng, et al. Easyedit: An easy-to-use knowledge editing framework for large language models. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 3: System Demonstrations) , pages 82–93, 2024. Jiaxin Wen, Pei Ke, Hao Sun, Zhexin Zhang, Chengfei Li, Jinfeng Bai, and Minlie Huang. Unveiling the implicit toxicity in large language models. arXiv preprint arXiv:2311.17391 , 2023. Yuxin Wen, Yangsibo Huang, Tom Goldstein, Ravi Kumar, Badih Ghazi, and Chiyuan Zhang. Quantifying cross-modality memorization in vision-language models. arXiv preprint arXiv:2506.05198 , 2025. Zhengxuan Wu, Aryaman Arora, Atticus Geiger, Zheng Wang, Jing Huang, Dan Jurafsky, Christopher D Manning, and Christopher Potts. Axbench: Steering llms? even simple baselines outperform sparse autoencoders. arXiv preprint arXiv:2501.17148 , 2025. Chulin Xie, Yangsibo Huang, Chiyuan Zhang, Da Yu, Xinyun Chen, Bill Yuchen Lin, Bo Li, Badih Ghazi, and Ravi Kumar. On memorization of large language models in logical reasoning. In Proceedings of the 14th International Joint Conference on Natural Language Processing and the 4th Conference of the Asia-Pacific Chapter of the Association for Computational Linguistics , pages 2742–2785, 2025. Alexander Xiong, Xuandong Zhao, Aneesh Pappu, and Dawn Song. The landscape of memorization in llms: Mechanisms, measurement, and mitigation. arXiv preprint arXiv:2507.05578 , 2025. Xiaoyu Xu, Xiang Yue, Yang Liu, Qingqing Ye, Huadi Zheng, Peizhao Hu, Minxin Du, and Haibo Hu. Unlearning isn’t deletion: Investigating reversibility of machine unlearning in llms. arXiv preprint arXiv:2505.16831 , 2025. Jin Yao, Eli Chien, Minxin Du, Xinyao Niu, Tianhao Wang, Zezhou Cheng, and Xiang Yue. Machine unlearning of pre-trained large language models. arXiv preprint arXiv:2402.15159 , 2024. Matthew D Zeiler and Rob Fergus. Visualizing and understanding convolutional networks. In European conference on computer vision , pages 818–833. Springer, 2014. Ruiqi Zhang, Licong Lin, Yu Bai, and Song Mei. Negative preference optimization: From catastrophic collapse to effective unlearning. 
+
+arXiv preprint arXiv:2404.05868 , 2024. 
+
+14 Terry Jingchen Zhang, Gopal Dev, Ning Wang, Nicole Ni, Wenyuan Jiang, Yinya Huang, Bernhard Schölkopf, Mrinmaya Sachan, and Zhijing Jin. Beyond memorization: Reasoning-driven synthesis as a mitigation strategy against benchmark contamination. In First Workshop on Foundations of Reasoning in Language Models , 2025a. Zhaohan Zhang, Ziquan Liu, and Ioannis Patras. Get confused cautiously: Textual sequence memorization erasure with selective entropy maximization. In Proceedings of the 31st International Conference on Computational Linguistics , pages 10924–10939, 2025b. Weixiang Zhao, Jiahe Guo, Yulin Hu, Yang Deng, An Zhang, Xingyu Sui, Xinyang Han, Yanyan Zhao, Bing Qin, Tat-Seng Chua, et al. Adasteer: Your aligned llm is inherently an adaptive jailbreak defender. arXiv preprint arXiv:2504.09466 , 2025. 
+
+15 Appendix 
+
+Summary. The Table list of this appendix is listed as follows: 
+
+• Sec. A : Detailed derivations and theoretical proofs, including the geometry-aware constrained optimization, whitening-based SVD solution, adaptive steering coefficient, excess code length interpretation, and rank-𝐾 optimality results. 
+
+• Sec. B : Computational and memory complexity analysis. 
+
+• Sec. C : Complete algorithmic description of Gated Subspace Steering, covering token classification, subspace calibration, and inference-time gating. 
+
+• Sec. D : Methodological connections to LoRA and interpretation of activation steering as context-dependent low-rank adaptation. 
+
+• Sec. E : Geometry-aware whitening analysis, providing theoretical motivation and empirical visualization of memo-rization separation in anisotropic latent spaces. 
+
+• Sec. F : Experimental setup details, including dataset construction, baseline protocols, and evaluation settings. 
+
+• Sec. G : Additional experimental results and ablation studies, including layer selection, gating analysis, and qualitative examples. 
+
+• Sec. H : Sensitivity analysis with respect to the choice, capacity, and training stage of the reference model. 
+
+• Sec. I : Ablation comparing gated and ungated interventions, analyzing the effect of token-level gating on memorization suppression and utility preservation. 
+
+• Sec. J : Broader impact discussion, limitations, and future research directions. 
+
+# A Detailed Derivation and Proofs 
+
+We unify the notation such that 𝑢 ∈ R𝑑 denotes the Probe direction (subject to safety constraints) and 𝑣 ∈ R𝑑 denotes the Steer direction (unit norm), consistent with the problem formulation in the main text. 
+
+## A.1 Derivation of the Optimal Subspace 
+
+Here we provide the detailed proof for Theorem 4.1, demonstrating how the constrained optimization problem over an ellipsoidal region reduces to a standard Singular Value Decomposition (SVD) via a whitening transformation. 
+
+A.1.1 Primal Optimization Problem 
+
+Recall the optimization objective defined in Eq. (15). We seek to maximize the alignment with the aggregated memorization matrix 𝑀 𝑚𝑒𝑚 while keeping the probe’s variance on the generalization manifold Σ𝑔𝑒𝑛 bounded: 
+
+max  
+
+> 𝑢,𝑣
+
+J ( 𝑢, 𝑣 ) = 𝑢 ⊤ 𝑀 𝑚𝑒𝑚 𝑣 
+
+s.t. 𝑢 ⊤Σ𝑔𝑒𝑛 𝑢 ≤ 𝛿, 
+
+∥𝑣 ∥2 = 1.
+
+(15) Since Σ𝑔𝑒𝑛 = E[ℎℎ ⊤] is a covariance matrix, it is symmetric positive semi-definite (PSD). We assume Σ𝑔𝑒𝑛 is full-rank (strictly positive definite) to ensure invertibility. In practice, a small jitter 𝛾𝐼 can be added for numerical stability. 
+
+A.1.2 Change of Basis via Whitening 
+
+To solve this, we transform the constraint into a canonical form. Let Σ𝑔𝑒𝑛 = 𝐿𝐿 ⊤ be the Cholesky decomposition, where 
+
+𝐿 is a lower triangular matrix. We introduce a change of variables for the probe vector 𝑢 . Let: 
+
+˜𝑢 = 𝐿 ⊤𝑢 ⇐⇒ 𝑢 = 𝐿 −⊤ ˜𝑢. (16) 16 Substituting this into the safety constraint: 
+
+𝑢 ⊤Σ𝑔𝑒𝑛 𝑢 = (𝐿 −⊤ ˜𝑢 )⊤ (𝐿𝐿 ⊤)( 𝐿 −⊤ ˜𝑢 ) = ˜𝑢 ⊤ (𝐿 −1 𝐿 )( 𝐿 ⊤ 𝐿 −⊤ ) ˜𝑢 = ˜𝑢 ⊤ 𝐼 ˜𝑢 = ∥ ˜𝑢 ∥22. (17) Thus, the ellipsoidal constraint 𝑢 ⊤Σ𝑔𝑒𝑛 𝑢 ≤ 𝛿 is transformed into an isotropic ball constraint ∥ ˜𝑢 ∥22 ≤ 𝛿 in the transformed space. 
+
+A.1.3 Transforming the Objective 
+
+Next, we substitute 𝑢 = 𝐿 −⊤ ˜𝑢 into the objective function: 
+
+J ( ˜𝑢, 𝑣 ) = (𝐿 −⊤ ˜𝑢 )⊤ 𝑀 𝑚𝑒𝑚 𝑣 = ˜𝑢 ⊤ (𝐿 −1 𝑀 𝑚𝑒𝑚 )𝑣. (18) Let us define the Whitened Memorization Matrix as: 
+
+𝑀 𝑜 𝑝 := 𝐿 −1 𝑀 𝑚𝑒𝑚 . (19) The optimization problem can now be rewritten in terms of ˜𝑢 and 𝑣 :
+
+max  
+
+> ˜𝑢,𝑣
+
+˜𝑢 ⊤ 𝑀 𝑜 𝑝 𝑣 
+
+s.t. ∥ ˜𝑢 ∥2 ≤ √𝛿, 
+
+∥𝑣 ∥2 = 1.
+
+(20) 
+
+A.1.4 Solution via SVD 
+
+The objective ˜𝑢 ⊤ 𝑀 𝑔𝑒𝑜 𝑣 represents a bilinear form. By the definition of the Singular Value Decomposition (SVD), for any matrix 𝐴 , the unit vectors maximizing 𝑥 ⊤ 𝐴𝑦 are the principal left and right singular vectors of 𝐴 .Let the SVD of the whitened matrix be 𝑀 𝑔𝑒𝑜 = 𝑈 Λ𝑉 ⊤, where ˜𝑢 1 (the first column of 𝑈 ) and ˜𝑣 1 (the first column of 𝑉 )correspond to the largest singular value 𝜎 1.1. Optimal Direction for ˜𝑢 : The direction maximizing the inner product is ˜𝑢 ∗ 
+
+> 𝑑𝑖𝑟
+
+= ˜𝑢 1. Since the objective is linear in magnitude and we wish to maximize it, we scale this vector to the boundary of the feasible set (the √𝛿 -ball): 
+
+˜𝑢 ∗ = √𝛿 · ˜𝑢 1. (21) 2. Optimal Direction for 𝑣 : The optimal steering direction is simply the principal right singular vector: 
+
+𝑣 ∗ = ˜𝑣 1. (22) 
+
+A.1.5 Recovering the Original Coordinates 
+
+Finally, we map the optimal probe ˜𝑢 ∗ back to the original representation space using the inverse change of basis 
+
+𝑢 = 𝐿 −⊤ ˜𝑢 :
+
+𝑢 ∗ = 𝐿 −⊤ (√𝛿 · ˜𝑢 1) = √𝛿𝐿 −⊤ ˜𝑢 1. (23) This concludes the derivation. The solution implies that the optimal probe 𝑢 ∗ is the direction that, after accounting for the correlation structure of the generalization data ( 𝐿 −1), aligns best with the memorization matrix. 
+
+## A.2 Derivation of the Adaptive Coefficient 𝛼 
+
+We derive the adaptive intervention coefficient 𝛼 used in our gated activation steering mechanism. Unlike prior fixed-strength projection methods, 𝛼 is token-dependent and only activates when a memorization-related signal exceeds a calibrated threshold. Let ℎ ∈ R𝑑 denote the activation at a target layer and token position. Our method learns a probe–steer pair (𝑢, 𝑣 ), where: 
+
+𝑢 acts as a sensor detecting memorization-related activations, and 𝑣 specifies the direction along which memorization manifests . The intervention takes the form 
+
+ℎ′ = ℎ − 𝛼 𝑣, (24) 17 where 𝛼 ≥ 0 is determined adaptively at inference time. We require that after intervention, the probe response along 𝑣 
+
+does not exceed a safe margin 𝜖 :
+
+⟨ℎ′, 𝑢 ⟩ ≤ 𝜖 . (25) Substituting Eq. (24) yields 
+
+⟨ℎ, 𝑢 ⟩ − 𝛼 ⟨𝑣, 𝑢 ⟩ ≤ 𝜖 . (26) Rather than using the boundary solution of the inequality in Eq. (26) , we derive a numerically stable coefficient by fitting the post-intervention probe response to the desired target level. Specifically, we choose 𝛼 to minimize a Tikhonov-regularized residual: 
+
+𝛼 ★ = arg min 
+
+> 𝛼 ∈R
+
+
+
+⟨ℎ, 𝑢 ⟩ − 𝛼 ⟨𝑣, 𝑢 ⟩ − 𝜖 
+
+2
+
++ 𝛿 𝛼 2, (27) where 𝛿 > 0 prevents instability when ⟨𝑣, 𝑢 ⟩ is small. Taking the derivative of Eq. (27) and setting it to zero: 
+
+0 = 𝜕 𝜕𝛼 
+
+
+
+⟨ℎ, 𝑢 ⟩ − 𝛼 ⟨𝑣, 𝑢 ⟩ − 𝜖 
+
+2
+
++ 𝛿𝛼 2
+
+
+
+= −2⟨𝑣, 𝑢 ⟩
+
+
+
+⟨ℎ, 𝑢 ⟩ − 𝛼 ⟨𝑣, 𝑢 ⟩ − 𝜖 
+
+
+
++ 2𝛿𝛼. (28) Rearranging gives 
+
+𝛼 𝑘 = ⟨𝑢 𝑘 , 𝑣 𝑘 ⟩⟨𝑢 𝑘 , 𝑣 𝑘 ⟩2 + 𝛿 , (29) 
+
+## A.3 Proof of Theorem Optimal Solution 
+
+We aim to solve the following constrained bilinear maximization problem: 
+
+max  
+
+> 𝑢,𝑣
+
+𝐽 (𝑢, 𝑣 ) = 𝑢 ⊤M𝑣 
+
+s.t. 𝑢 ⊤Σ𝑔𝑒𝑛 𝑢 ≤ 𝛿, 
+
+∥𝑣 ∥2 = 1.
+
+(30) 
+
+Step 1: Cholesky Factorization of the Constraint. 
+
+Since Σ𝑔𝑒𝑛 is a symmetric positive definite covariance matrix, we can perform the Cholesky decomposition: 
+
+Σ𝑔𝑒𝑛 = 𝐿𝐿 ⊤, (31) where 𝐿 is a lower triangular, invertible matrix. Substituting this into the safety constraint inequality: 
+
+𝑢 ⊤Σ𝑔𝑒𝑛 𝑢 = 𝑢 ⊤ (𝐿𝐿 ⊤)𝑢 
+
+= (𝑢 ⊤ 𝐿 )( 𝐿 ⊤𝑢 )
+
+= (𝐿 ⊤𝑢 )⊤ (𝐿 ⊤𝑢 )
+
+= ∥𝐿 ⊤𝑢 ∥22.
+
+(32) Thus, the constraint becomes ∥𝐿 ⊤𝑢 ∥22 ≤ 𝛿 .
+
+Step 2: Change of Variables (Whitening Transformation). 
+
+To simplify the geometry of the feasible set, we introduce a change of variables. Let: 
+
+˜𝑢 = 𝐿 ⊤𝑢. (33) Using the property of the inverse matrix ( 𝐴𝐵 )−1 = 𝐵 −1 𝐴 −1 and transpose ( 𝐴 ⊤)−1 = ( 𝐴 −1)⊤ := 𝐴 −⊤ , we can express the original variable 𝑢 as: 
+
+𝑢 = (𝐿 ⊤)−1 ˜𝑢 = 𝐿 −⊤ ˜𝑢. (34) 18 Under this transformation, the constraint simplifies to an isotropic ball: 
+
+∥ ˜𝑢 ∥22 ≤ 𝛿 =⇒ ∥ ˜𝑢 ∥2 ≤ √𝛿. (35) 
+
+Step 3: Transforming the Objective Function. 
+
+We now substitute 𝑢 = 𝐿 −⊤ ˜𝑢 into the objective function 𝐽 (𝑢, 𝑣 ). Applying the transpose rule ( 𝐴𝐵 )⊤ = 𝐵 ⊤ 𝐴 ⊤:
+
+𝑢 ⊤M𝑣 = (𝐿 −⊤ ˜𝑢 )⊤M𝑣 
+
+= ˜𝑢 ⊤ (𝐿 −⊤ )⊤M𝑣 
+
+= ˜𝑢 ⊤ 
+
+(𝐿 −1)⊤⊤
+
+M𝑣 
+
+= ˜𝑢 ⊤ 𝐿 −1M𝑣. 
+
+(36) Let us define the Whitened Memorization Matrix as M𝑜 𝑝 := 𝐿 −1M. The optimization problem is now reformulated in the whitened space: 
+
+max  
+
+> ˜𝑢,𝑣
+
+˜𝑢 ⊤M𝑜 𝑝 𝑣 
+
+s.t. ∥ ˜𝑢 ∥2 ≤ √𝛿, 
+
+∥𝑣 ∥2 = 1.
+
+(37) 
+
+Step 4: Solving the Inner Optimization over ˜𝑢 .
+
+Consider a fixed unit vector 𝑣 . The objective is the inner product between ˜𝑢 and the vector 𝑤 = M𝑜 𝑝 𝑣 :
+
+max    
+
+> ∥˜𝑢 ∥2≤√𝛿
+
+⟨ ˜𝑢, 𝑤 ⟩. (38) By the Cauchy-Schwarz inequality, ⟨ ˜𝑢, 𝑤 ⟩ ≤ ∥ ˜𝑢 ∥2 ∥𝑤 ∥2. The maximum is achieved when ˜𝑢 is perfectly aligned with 𝑤 
+
+and lies on the boundary of the feasible set (maximum magnitude). Thus, the optimal ˜𝑢 ∗ (conditional on 𝑣 ) is: 
+
+˜𝑢 ∗ (𝑣 ) = √𝛿 · M𝑜 𝑝 𝑣 
+
+∥M𝑜 𝑝 𝑣 ∥2
+
+. (39) Substituting this back, the objective value becomes: 
+
+𝐽 ( ˜𝑢 ∗ (𝑣 ), 𝑣 ) =
+
+√𝛿 (M𝑜 𝑝 𝑣 )⊤
+
+∥M𝑜 𝑝 𝑣 ∥2
+
+
+
+M𝑜 𝑝 𝑣 = √𝛿 ∥M𝑜 𝑝 𝑣 ∥22
+
+∥M𝑜 𝑝 𝑣 ∥2
+
+= √𝛿 ∥M𝑜 𝑝 𝑣 ∥2. (40) 
+
+Step 5: Solving the Outer Optimization over 𝑣 .
+
+The problem reduces to maximizing the norm of the matrix-vector product: 
+
+max   
+
+> ∥𝑣 ∥2=1
+
+√𝛿 ∥M𝑜 𝑝 𝑣 ∥2. (41) By the definition of the induced matrix 2-norm (spectral norm), this maximum is achieved when 𝑣 corresponds to the direction of the largest singular value of M𝑜 𝑝 . Let the Singular Value Decomposition (SVD) of M𝑜 𝑝 be: 
+
+M𝑜 𝑝 = ˜𝑈 Λ ˜𝑉 ⊤ =∑︁ 
+
+> 𝑖
+
+𝜎 𝑖 ˜𝑢 𝑖 ˜𝑣 ⊤ 
+
+> 𝑖
+
+. (42) The optimal steer direction is the first right singular vector: 
+
+𝑣 ∗ = ˜𝑣 1. (43) Correspondingly, the optimal direction for ˜𝑢 aligns with the first left singular vector ˜𝑢 1:
+
+˜𝑢 ∗ = √𝛿 · ˜𝑢 1. (44) 
+
+Step 6: Reverting to Original Coordinates. 
+
+Finally, we map the solution ˜𝑢 ∗ back to the original probe space using the relation derived in Step 2 ( 𝑢 = 𝐿 −⊤ ˜𝑢 ): 
+
+𝑢 ∗ = 𝐿 −⊤ (√𝛿 ˜𝑢 1) = √𝛿𝐿 −⊤ ˜𝑢 1. (45) 
+
+□
+
+19 A.4 Proof of Theorem Excess code length 
+
+Setup. To motivate the token-level surrogate used in the main text, we begin by revisiting the information-theoretic definition of memorization. We start from the information-theoretic definition: 
+
+Mem (𝑋 ) ≜ 𝐼 (𝑋 ; Θ | Θref ) = 𝐻 (𝑋 | Θref ) − 𝐻 (𝑋 | Θ). (46) The difficulty is that 𝐻 (𝑋 | Θ) and 𝐻 (𝑋 | Θref ) involve expectations over the conditional distributions of parameters (e.g., posteriors) and are not directly computable for large models. We therefore derive a standard computable surrogate. 
+
+Step 1: Coding interpretation of entropy. By the Shannon source coding theorem, the optimal expected code length for samples from a distribution 𝑞 using an optimal code is 𝐻 (𝑞 ). More generally, when encoding samples from 𝑞 with a code designed for a model distribution 𝑝 , the expected codelength equals the cross-entropy: 
+
+E𝑥 ∼𝑞 
+
+ − log 𝑝 (𝑥 ) = 𝐻 (𝑞 ) + KL (𝑞 ∥ 𝑝 ). (47) Thus, − log 𝑝 (𝑥 ) can be interpreted as a (model-based) code length for 𝑥 , and its expectation under the data distribution yields a codelength proxy. 
+
+Step 2: Cross-entropy surrogates for conditional entropies. Let 𝑝 data denote the data-generating distribution. We approximate conditional entropies by cross-entropies under trained models: 
+
+𝐻 (𝑋 | Θ) ≈ E𝑥 ∼ 𝑝 data 
+
+ − log 𝑝 𝜃 (𝑥 ), (48) 
+
+𝐻 (𝑋 | Θref ) ≈ E𝑥 ∼ 𝑝 data 
+
+ − log 𝑝 ref (𝑥 ), (49) where 𝑝 𝜃 represents the trained model instance and 𝑝 ref represents a reference model intended to capture generalizable structure. This is a standard operationalization used when the true conditional entropies are intractable. 
+
+Step 3: Deriving excess code length / log-likelihood ratio. Substituting Eqs. (48)–(49) into the MI-based definition yields: 
+
+Mem (𝑋 ) ≈ E𝑥 ∼ 𝑝 data 
+
+h
+
+− log 𝑝 ref (𝑥 )
+
+i
+
+− E𝑥 ∼ 𝑝 data 
+
+h
+
+− log 𝑝 𝜃 (𝑥 )
+
+i
+
+= E𝑥 ∼ 𝑝 data 
+
+h
+
+log 𝑝 𝜃 (𝑥 ) − log 𝑝 ref (𝑥 )
+
+i
+
+= E𝑥 ∼ 𝑝 data 
+
+
+
+log 𝑝 𝜃 (𝑥 )
+
+𝑝 ref (𝑥 )
+
+
+
+≜ Mem ( 𝑝 𝜃 | 𝑝 ref ). (50) This proves the first claim. 
+
+Step 4: Token-wise decomposition for autoregressive LMs. For autoregressive language models, 𝑝 𝜃 (𝑥 ) = Î𝑇 𝑡 =1 𝑝 𝜃 (𝑥 𝑡 |
+
+𝑥 <𝑡 ), hence 
+
+log 𝑝 𝜃 (𝑥 )
+
+𝑝 ref (𝑥 ) =
+
+> 𝑇
+
+∑︁ 
+
+> 𝑡 =1
+
+(log 𝑝 𝜃 (𝑥 𝑡 | 𝑥 <𝑡 ) − log 𝑝 ref (𝑥 𝑡 | 𝑥 <𝑡 )) , (51) which yields a token-level contribution 𝜔 𝑡 = log 𝑝 𝜃 (𝑥 𝑡 | 𝑥 <𝑡 ) − log 𝑝 ref (𝑥 𝑡 | 𝑥 <𝑡 ). This completes the proof. Derivation of the Token-wise Memorization Decomposition Starting from the excess code length view, 
+
+Mem ( 𝑝 𝜃 | 𝑝 ref ) ≈ E𝑥 ∼D [log 𝑝 𝜃 (𝑥 ) − log 𝑝 ref (𝑥 )] , (52) where the approximation follows from interpreting entropy via cross-entropy (expected code length) under a chosen sequence distribution D. For an autoregressive LM, the chain rule gives an exact factorization 
+
+log 𝑝 𝜃 (𝑥 ) =
+
+> 𝑇
+
+∑︁ 
+
+> 𝑡 =1
+
+log 𝑝 𝜃 (𝑥 𝑡 | 𝑥 <𝑡 ), log 𝑝 ref (𝑥 ) =
+
+> 𝑇
+
+∑︁ 
+
+> 𝑡 =1
+
+log 𝑝 ref (𝑥 𝑡 | 𝑥 <𝑡 ). (53) 20 Substituting yields the token-wise decomposition 
+
+Mem ( 𝑝 𝜃 | 𝑝 ref ) ≈ 
+
+> 𝑇
+
+∑︁ 
+
+> 𝑡 =1
+
+E𝑥 ∼D [log 𝑝 𝜃 (𝑥 𝑡 | 𝑥 <𝑡 ) − log 𝑝 ref (𝑥 𝑡 | 𝑥 <𝑡 )] , (54) which motivates defining the token-level memorization signal 𝜔 𝑡 ≜ log 𝑝 𝜃 (𝑥 𝑡 | 𝑥 <𝑡 ) − log 𝑝 ref (𝑥 𝑡 | 𝑥 <𝑡 ).
+
+Theorem A.1 (Optimal Memorization Suppression Subspace) . Consider the optimization 
+
+max   
+
+> Δ𝐻 ∈R𝑑 ×𝑑
+
+⟨𝑀, Δ𝐻 ⟩𝐹 s.t. rank (Δ𝐻 ) ≤ 𝐾, ∥Δ𝐻 ∥𝐹 ≤ 1, (55) 
+
+where ⟨𝐴, 𝐵 ⟩𝐹 ≜ tr ( 𝐴 ⊤ 𝐵 ). Let 𝑀 = 𝑈 Σ𝑉 ⊤ be the SVD with singular values 𝜎 1 ≥ · · · ≥ 𝜎 𝑑 ≥ 0. Then an optimal solution is achieved by choosing Δ𝐻 whose left/right singular subspaces align with the top-𝐾 singular vectors of 𝑀 , i.e., 
+
+Δ𝐻 ★ = 𝑈 𝐾 Λ𝑉 ⊤ 
+
+> 𝐾
+
+for some diagonal Λ, and the optimal value equals ∥𝜎 1: 𝐾 ∥2. In particular, one maximizer is 
+
+Δ𝐻 ★ = 𝑈 𝐾 
+
+ Σ𝐾 
+
+∥Σ𝐾 ∥𝐹 
+
+
+
+𝑉 ⊤ 
+
+> 𝐾
+
+. (56) 
+
+Proof. Let the SVDs be 𝑀 = 𝑈 Σ𝑉 ⊤ and Δ𝐻 = ˜𝑈 Λ ˜𝑉 ⊤, where Λ = diag (𝜆 1, . . . , 𝜆 𝑑 ) with 𝜆 1 ≥ · · · ≥ 𝜆 𝑑 ≥ 0 and 
+
+𝜆 𝑘 = 0 for all 𝑘 > 𝐾 (because rank (Δ𝐻 ) ≤ 𝐾 ). Using cyclicity of trace, 
+
+⟨𝑀, Δ𝐻 ⟩𝐹 = tr (𝑀 ⊤Δ𝐻 ) = tr (𝑉 Σ𝑈 ⊤ ˜𝑈 Λ ˜𝑉 ⊤)
+
+= tr 
+
+
+
+Σ (𝑈 ⊤ ˜𝑈 )
+
+| {z }
+
+> ≜𝑄
+
+Λ ( ˜𝑉 ⊤𝑉 )
+
+| {z }
+
+> ≜𝑅
+
+
+
+, (57) where 𝑄 and 𝑅 are orthogonal matrices. By the von Neumann trace inequality, for any matrices 𝐴, 𝐵 , tr ( 𝐴 ⊤ 𝐵 ) ≤ Í𝑖 𝑠 𝑖 ( 𝐴 )𝑠 𝑖 (𝐵 ), where 𝑠 𝑖 (·) denotes singular values sorted in nonincreasing order. Applying it to (57) yields 
+
+⟨𝑀, Δ𝐻 ⟩𝐹 ≤
+
+> 𝑑
+
+∑︁ 
+
+> 𝑖 =1
+
+𝜎 𝑖 𝜆 𝑖 =
+
+> 𝐾
+
+∑︁ 
+
+> 𝑖 =1
+
+𝜎 𝑖 𝜆 𝑖 , (58) since 𝜆 𝑖 = 0 for 𝑖 > 𝐾 .Now impose the Frobenius constraint: ∥Δ𝐻 ∥2 
+
+> 𝐹
+
+= Í𝑑 𝑖 =1 𝜆 2 
+
+> 𝑖
+
+= Í𝐾 𝑖 =1 𝜆 2 
+
+> 𝑖
+
+≤ 1. By Cauchy–Schwarz, 
+
+> 𝐾
+
+∑︁ 
+
+> 𝑖 =1
+
+𝜎 𝑖 𝜆 𝑖 ≤
+
+> 𝐾
+
+∑︁ 
+
+> 𝑖 =1
+
+𝜎 2
+
+> 𝑖
+
+!1/2 𝐾 ∑︁ 
+
+> 𝑖 =1
+
+𝜆 2
+
+> 𝑖
+
+!1/2
+
+≤
+
+> 𝐾
+
+∑︁ 
+
+> 𝑖 =1
+
+𝜎 2
+
+> 𝑖
+
+!1/2
+
+= ∥𝜎 1: 𝐾 ∥2. (59) Finally, the upper bound in (59) is achievable by (i) aligning singular vectors, i.e. ˜𝑈 = 𝑈 and ˜𝑉 = 𝑉 so that equality holds in von Neumann’s inequality, and (ii) choosing 𝜆 𝑖 = 𝜎 𝑖 /∥ 𝜎 1: 𝐾 ∥2 for 𝑖 ≤ 𝐾 and 0 otherwise, which saturates Cauchy–Schwarz and satisfies ∥Δ𝐻 ∥𝐹 = 1. This yields the closed form in (56) . Therefore, Δ𝐻 ★ lies in the span of the top-𝐾 singular vectors of 𝑀 and is optimal for (55). 
+
+## A.5 Linear vs. ReLU Gating Approximation 
+
+While the derivation in Appendix A.1 assumes a linear system for tractability, in practice we use a one-sided ReLU Fukushima (2007) gate to only target specific activations: Gate (ℎ) = ReLU (𝑢 ⊤ ℎ − 𝜏 ). (60) The solution (𝑢 ∗, 𝑣 ∗) derived under linear assumptions provides the optimal “first-order” direction for the non-linear gate. The geometric alignment determined by 𝑀 𝑔𝑒𝑜 captures the axis of maximum variation. Even with a ReLU nonlinearity, the principal axis 𝑢 ∗ remains the direction that maximizes the expected value E[ReLU (𝑢 ⊤ ℎ) · ( ℎ⊤𝑣 )] , assuming the data distribution is locally symmetric around the decision boundary. 21 B Computational Complexity Analysis 
+
+The computational overhead of Gated Subspace Steering (GSS) is bifurcated into a one-time offline calibration phase and an inference-time intervention phase. We demonstrate that while the calibration involves matrix decompositions, the per-token inference overhead is negligible relative to the Transformer backbone. 
+
+## B.1 Offline Calibration Phase 
+
+The offline construction of the steering subspace involves computing the statistics and performing decomposition. Let 𝑁 
+
+be the number of tokens in the calibration corpus D, 𝑑 be the hidden dimension, and 𝐾 be the subspace rank. 
+
+• Statistic Estimation: Computing the covariance 𝚺 𝑔𝑒𝑛 ∈ R𝑑 ×𝑑 and the matrix M ∈ R𝑑 ×𝑑 requires 𝑂 (𝑁 𝑑 2)
+
+operations. This is highly parallelizable and performed once per model. 
+
+• Geometry-Aware Decomposition: 
+
+1. The Cholesky decomposition of 𝚺 𝑔𝑒𝑛 takes 𝑂 (𝑑 3).2. The SVD of the whitened matrix ˜M takes 𝑂 (𝑑 3).For a standard LLM (e.g., 𝑑 = 4096 ), these 𝑂 (𝑑 3) operations take only a few seconds on a modern GPU/CPU, making the offline phase computationally feasible even for large-scale models. 
+
+## B.2 Online Inference Phase 
+
+The core strength of GSS lies in its minimal impact on generation latency. During a single forward pass at layer 𝑙 , the intervention ForwardStep (ℎ(𝑙 ) 
+
+> 𝑡
+
+) introduces the following operations: 1. Projection: Computing 𝑠 𝑡 ,𝑘 = (𝑢 ∗ 
+
+> 𝑘
+
+)⊤ ℎ(𝑙 ) 
+
+> 𝑡
+
+for 𝑘 = 1, . . . , 𝐾 requires 𝐾 inner products, resulting in 𝑂 (𝐾𝑑 )
+
+complexity. 2. Gated Accumulation: The conditional update Δℎ = Í 𝜆 · 𝑠 𝑡 ,𝑘 · 𝑣 ∗ 
+
+> 𝑘
+
+involves 𝐾 scalar-vector multiplications, also resulting in 𝑂 (𝐾𝑑 ) complexity. 
+
+Relative Overhead. A standard Transformer layer is dominated by the Multi-Head Attention (MHA) and Feed-Forward Network (FFN) projections, which scale as 𝑂 (𝑑 2). The relative overhead Γ of GSS per token is: 
+
+Γ = Complexity (GSS )
+
+Complexity (Transformer Layer ) ≈ 𝑂 (𝐾𝑑 )
+
+𝑂 (𝑑 2) = 𝑂 
+
+ 𝐾 𝑑 
+
+
+
+(61) In practical settings where 𝐾 ≪ 𝑑 (e.g., 𝐾 = 50 , 𝑑 = 4096 ), the overhead is Γ ≈ 1.2% . Furthermore, since 𝑈 ∗ and 𝑉 ∗
+
+are fixed after calibration, the operation can be implemented as a single fused kernel, further minimizing I/O latency. 
+
+## B.3 Memory Complexity 
+
+GSS requires storing two basis matrices 𝑈 ∗, 𝑉 ∗ ∈ R𝑑 ×𝐾 and a threshold vector ®𝜖 ∈ R𝐾 . The total memory footprint is 
+
+𝑂 (2𝐾𝑑 ). Given 𝐾 ≪ 𝑑 , this is several orders of magnitude smaller than the model weights, typically occupying less than 1MB of VRAM, making it suitable for resource-constrained deployment. 22 C Algorithm 
+
+Algorithm 1 Gated Subspace Steering (GSS)  
+
+> 1:
+
+Input: Pre-trained LLM 𝑝 𝜃 , reference model 𝑝 ref , target layer 𝑙  
+
+> 2:
+
+Data: Training or calibration corpus D 
+
+> 3:
+
+Hyperparameters: Subspace rank 𝐾 , variance budget 𝛿  
+
+> 4:
+
+// Phase 0: Token Classification via Memorization Signal  
+
+> 5:
+
+for each sequence 𝑥 ∈ D do  
+
+> 6:
+
+for each token position 𝑡 do  
+
+> 7:
+
+𝜔 𝑡 ← log 𝑝 𝜃 (𝑥 𝑡 | 𝑥 <𝑡 ) − log 𝑝 ref (𝑥 𝑡 | 𝑥 <𝑡 ) 
+
+> 8:
+
+if 𝜔 𝑡 > 0 then  
+
+> 9:
+
+assign ℎ(𝑙 ) 
+
+> 𝑡
+
+→ D 𝑚𝑒𝑚  
+
+> 10:
+
+else  
+
+> 11:
+
+assign ℎ(𝑙 ) 
+
+> 𝑡
+
+→ D 𝑔𝑒𝑛  
+
+> 12:
+
+end if  
+
+> 13:
+
+end for  
+
+> 14:
+
+end for  
+
+> 15:
+
+// Phase 1: Offline Subspace Construction  
+
+> 16:
+
+Procedure: CalibrateSubspace( D𝑚𝑒𝑚 , D𝑔𝑒𝑛 ) 
+
+> 17:
+
+1. Compute Statistics:  
+
+> 18:
+
+𝚺 𝑔𝑒𝑛 ← Eℎ∼D 𝑔𝑒𝑛 [( ℎ(𝑙 ) − 𝜇 )( ℎ(𝑙 ) − 𝜇 )⊤] 
+
+> 19:
+
+M ← Eℎ∼D 𝑚𝑒𝑚 [ℎ(𝑙 ) (∇ ℎ(𝑙 ) L𝑚𝑒𝑚 )⊤] 
+
+> 20:
+
+2. Geometry-Aware Decomposition:  
+
+> 21:
+
+𝐿 ← Cholesky (𝚺 𝑔𝑒𝑛 ) 
+
+> 22:
+
+˜M ← 𝐿 −1M 
+
+> 23:
+
+˜𝑈, 𝑆, ˜𝑉 ← SVD ( ˜M) 
+
+> 24:
+
+3. Extract Optimal Directions:  
+
+> 25:
+
+𝑈 ∗ ← √𝛿 𝐿 −⊤ ˜𝑈 :,1: 𝐾  
+
+> 26:
+
+𝑉 ∗ ← ˜𝑉 :,1: 𝐾  
+
+> 27:
+
+4. Calibrate Thresholds:  
+
+> 28:
+
+for 𝑘 = 1 to 𝐾 do  
+
+> 29:
+
+𝑆 𝑔𝑒𝑛 ← {|( 𝑢 ∗ 
+
+> 𝑘
+
+)⊤ ℎ| : ℎ ∈ D 𝑔𝑒𝑛 } 
+
+> 30:
+
+𝜖 𝑘 ← Percentile (𝑆 𝑔𝑒𝑛 , 99% ) 
+
+> 31:
+
+end for  
+
+> 32:
+
+Output: 𝑈 ∗, 𝑉 ∗, {𝜖 𝑘 } 
+
+> 33:
+
+// Phase 2: Inference-Time Intervention  
+
+> 34:
+
+Procedure: ForwardStep( ℎ(𝑙 ) 
+
+> 𝑡
+
+, 𝑈 ∗, 𝑉 ∗, {𝜖 𝑘 }) 
+
+> 35:
+
+Δℎ ← 0 
+
+> 36:
+
+for 𝑘 = 1 to 𝐾 do  
+
+> 37:
+
+𝑠 𝑡 ,𝑘 ← ( 𝑢 ∗ 
+
+> 𝑘
+
+)⊤ ℎ(𝑙 ) 
+
+> 𝑡
+> 38:
+
+if |𝑠 𝑡 ,𝑘 | > 𝜖 𝑘 then  
+
+> 39:
+
+Δℎ ← Δℎ + 𝑠 𝑡 ,𝑘 · 𝑣 ∗ 
+
+> 𝑘
+> 40:
+
+end if  
+
+> 41:
+
+end for  
+
+> 42:
+
+Output: ℎ(𝑙 ) 
+
+> 𝑡
+
+− Δℎ
+
+# D Methodological Connections 
+
+## D.1 Connection to LoRA 
+
+We elaborate on the connection between gated activation steering and low-rank adaptation (LoRA). 23 D.1.1 LoRA Recap 
+
+LoRA Hu et al. (2022) fine-tunes a pretrained model by learning low-rank updates: 
+
+𝑊 ′ = 𝑊 + 𝐵𝐴 (62) where 𝐵 ∈ R𝑑 ×𝑟 , 𝐴 ∈ R𝑟 ×𝑑 , and 𝑟 ≪ 𝑑 .During inference: 
+
+𝑦 = 𝑊 ′𝑥 = 𝑊𝑥 + 𝐵𝐴𝑥 (63) The key idea is that task adaptation can be captured by a low-rank subspace. 
+
+D.1.2 Activation Steering as Dynamic LoRA 
+
+Consider our intervention without gating: 
+
+ℎ′ 
+
+> 𝑡
+
+= ℎ𝑡 − ⟨ ℎ𝑡 , 𝑣 ⟩ · 𝑢 = (𝐼 − 𝑢𝑣 𝑇 )ℎ𝑡 (64) If applied before a weight matrix 𝑊 :
+
+𝑊 ℎ ′ 
+
+> 𝑡
+
+= 𝑊 (𝐼 − 𝑢𝑣 𝑇 )ℎ𝑡 (65) 
+
+= (𝑊 − 𝑊𝑢𝑣 𝑇 )ℎ𝑡 (66) 
+
+= (𝑊 + Δ𝑊 )ℎ𝑡 (67) where Δ𝑊 = −𝑊𝑢𝑣 𝑇 is rank-1. 
+
+Key difference from LoRA: 
+
+1. Direction : LoRA adds Δ𝑊 = 𝐵𝐴 ; we subtract a specific rank-1 matrix determined by the memorization geometry. 2. Optimization : LoRA learns 𝐵, 𝐴 through gradient descent on a task loss; we derive 𝑢, 𝑣 through closed-form SVD based on memorization analysis. 3. Dynamics : LoRA is static ( Δ𝑊 fixed); we are dynamic (effective Δ𝑊 varies with ℎ𝑡 through gating). 
+
+D.1.3 Dynamic LoRA Formulation 
+
+With gating G:
+
+ℎ′ 
+
+> 𝑡
+
+= ℎ𝑡 − G(⟨ ℎ𝑡 , 𝑣 ⟩) · 𝑢 (68) The effective weight update is: 
+
+Δ𝑊 𝑡 = −G(⟨ ℎ𝑡 , 𝑣 ⟩) · 𝑊𝑢𝑣 𝑇 (69) This is a context-dependent rank-1 update that varies with each token. 
+
+Why is this better than static LoRA for memorization? 
+
+Static LoRA cannot distinguish between memorized and generalized tokens—it applies the same modification uniformly. Our approach: 1. Activates strongly ( G large) when ⟨ℎ𝑡 , 𝑣 ⟩ is large (indicating memorization) 2. Deactivates ( G ≈ 0) when ⟨ℎ𝑡 , 𝑣 ⟩ is small (indicating generalization) 3. Achieves selective intervention without degrading normal inference 24 (a) eps=0.3 (b) eps=0.6 (c) eps=0.9 (d) eps=1.2 Figure 7 Visualization of Latent Geometry with and without GSS Whitening. (a) In the unwhitened space, the memorization signal (colored by 𝜔 ) is eclipsed by high-variance noise along the major principal components. (b) GSS whitening L−1 recovers an isotropic geometry, enabling the gating thresholds (dashed lines) to isolate memorized tokens based on signal-to-noise ratio rather than raw variance. Red and blue hues indicate high and low memorization scores, respectively. 
+
+## D.2 Multi-Rank Extension 
+
+We can extend to rank-𝑘 by using the top 𝑘 singular vector pairs: 
+
+ℎ′ 
+
+> 𝑡
+
+= ℎ𝑡 −
+
+> 𝑘
+
+∑︁ 
+
+> 𝑖 =1
+
+G(⟨ ℎ𝑡 , 𝑣 𝑖 ⟩) · 𝑢 𝑖 (70) This is equivalent to a dynamic rank-𝑘 LoRA: 
+
+Δ𝑊 𝑡 = −𝑊 
+
+> 𝑘
+
+∑︁ 
+
+> 𝑖 =1
+
+G(⟨ ℎ𝑡 , 𝑣 𝑖 ⟩) · 𝑢 𝑖 𝑣 𝑇 𝑖 (71) In practice, rank-1 is often sufficient, and higher ranks provide diminishing returns (see ablations in section 5). 
+
+# E Geometry-Aware Whitening for Memorization Separation 
+
+In this section, we provide a theoretical and empirical justification for the whitening transform L−1 employed in Phase 1 of Algorithm 1. We argue that the inherent anisotropy of LLM activation distributions necessitates a geometry-aware approach to isolate subtle memorization signals from dominant background variance. 
+
+## E.1 The Challenge of Anisotropic Latent Geometry 
+
+Large Language Models exhibit "narrow cone" hidden state distributions, where a few principal components capture the vast majority of the variance 𝚺 . Let ℎ ∈ R𝑑 be a hidden state, and 𝜔 (ℎ) be a latent property (e.g., memorization strength). In practice, the direction 𝑣 mem associated with 𝜔 often aligns with the low-variance axes (minor components) of 𝚺 .When applying a steering probe 𝑢 in the original space, the projection 𝑠 = 𝑢 ⊤ ℎ is susceptible to high-variance noise. The Signal-to-Noise Ratio (SNR) can be characterized as: SNR raw = Var (𝑢 ⊤ ℎsignal )
+
+Var (𝑢 ⊤ ℎnoise ) ≈ 𝑢 ⊤M𝑢 𝑢 ⊤𝚺 𝑔𝑒𝑛 𝑢 . (72) 25 Table 4 Comparison of Unlearning and Editing Methods in Terms of Prior Supervision Requirements.                         
+
+> Method Requires Forget Set Requires Reference / Retain Set Granularity Primary Mechanism
+> LUNAR ✓✓Sequence-level Contrastive activation redirection GA / NPO ✓×Sequence-level Gradient ascent on forget loss DPO (Unlearning) ✓×Sequence-level Preference optimization (IDK vs. answer) ROME / MEMIT ××Fact-level Local parameter editing Ours ××Token-level Memorization-aware steering
+
+In an anisotropic setting where the eigenvalues of 𝚺 𝑔𝑒𝑛 span several orders of magnitude, a hard threshold |𝑠 | > 𝜖 will predominantly trigger on task-irrelevant fluctuations along major components, leading to high false-positive rates in the gating mechanism. 
+
+## E.2 Whitening as Signal-to-Noise Optimization 
+
+GSS addresses this by performing a Cholesky-based whitening transform. Let 𝚺 𝑔𝑒𝑛 = LL ⊤. We map the hidden states to a canonical space: ℎwhite = L−1 ℎ. In this space, the covariance becomes isotropic, Cov (ℎwhite ) ≈ I, which effectively "equalizes" the energy across all dimensions. The SVD in Phase 1 then extracts the optimal steering basis 𝑈 ∗ from the whitened memorization matrix ˜M. This ensures that the gating threshold 𝜖 𝑘 corresponds to a statistical distance (Mahalanobis distance) rather than a raw Euclidean magnitude. As demonstrated in Figure 7, whitening transforms the skewed, mixed-signal distribution into a spherical geometry where the memorization signal 𝜔 becomes linearly separable. 
+
+## E.3 Synthetic Empirical Verification 
+
+To visualize this effect, we conducted a synthetic experiment . We generated ℎ ∼ N ( 0, 𝚺 ) with a condition number 
+
+𝜅 (𝚺 ) > 50 and embedded a weak signal 𝜔 .
+
+• Unwhitened View: The latent cloud is highly elongated. The gating region (defined by ±𝜖 ) is flooded by noise from the high-variance axis, failing to isolate points with high 𝜔 values. 
+
+• Whitened View: The distribution is rescaled into a unit sphere. The high-𝜔 points (color-coded in red/blue) align clearly along the extracted steering axis. The gating mechanism now acts as a precise filter, selecting only tokens where the semantic signal exceeds the normalized variance budget. This transformation is critical for steering: it ensures that the intervention Δℎ is applied only when the model deviates from its generative manifold toward a memorized state, preserving general capabilities while effectively suppressing unwanted knowledge leakage. 
+
+# F Experimental Setup Details 
+
+## F.1 Machine Unlearning 
+
+Machine unlearning aims to remove the influence of a subset of training data from a trained model without retraining from scratch Nguyen et al. (2025); Yao et al. (2024); Chen et al. (2023); Tarun et al. (2023); Xu et al. (2025); Huo et al. (2025); Wang et al. (2025b). While exact unlearning requires the updated model to be indistinguishable from one retrained on the retained data, such guarantees are generally infeasible for large neural networks. As a result, most practical methods adopt approximate unlearning, including gradient ascent on a designated forget set or influence-based approximations of parameter updates. These approaches primarily operate in parameter space and rely on global optimization signals, which often lead to instability, over-forgetting, or performance degradation on retained data. Moreover, they are less effective when the undesired knowledge is sparse or manifests through localized behaviors such as memorization, motivating alternatives that target internal representations more directly. 
+
+## F.2 Knowledge Editing 
+
+Knowledge editing focuses on modifying specific behaviors or factual associations of pretrained language models while preserving overall performance Hu et al. (2024); Jiang et al. (2024, 2025). Representative methods such as ROME Meng 26 et al. (2022a) and MEMIT Meng et al. (2022b) follow a locate-and-edit paradigm, identifying internal components responsible for a target fact and applying targeted weight updates. While effective for explicit, human-interpretable factual knowledge, these methods assume that the edited behavior can be localized to a small set of parameters and expressed as a direct counterfactual replacement. In contrast, behaviors such as memorization or data leakage are often distributed across tokens and contexts, making them difficult to address via parameter editing alone. This has motivated representation-level interventions, which aim to control model behavior by manipulating hidden activations rather than permanently modifying weights. 
+
+## F.3 Main Baseline Methods 
+
+This section describes all baseline methods evaluated in our experiments. Unless otherwise specified, all methods are applied to the same base model, use identical prompts and decoding settings, and are evaluated with the same memorization and utility metrics. 
+
+Task Vector. Task Vector constructs a parameter-space direction by fine-tuning a copy of the base model on memorization-related data and subtracting the resulting weight difference from the original model. Formally, a task vector is computed as Δ𝜃 = 𝜃 ft − 𝜃 , and the edited model is obtained via 𝜃 ′ = 𝜃 − 𝛼 Δ𝜃 . This method performs a global parameter update and does not adapt interventions to individual tokens or contexts. Given a pre-trained language model with parameters 𝜃 , we construct a task vector using the following steps: 1. Model Copy. We create a deep copy of the original model, denoted 𝜃 ft .2. Fine-tuning on Unlearn Set. The copied model is fine-tuned on the unlearning dataset Dunlearn using standard causal language modeling loss for a small number of epochs. This step is intentionally short and aims only to capture the parameter update direction associated with the memorized samples, rather than to reach full convergence. 3. Task Vector Construction. The task vector is defined as the parameter difference 
+
+Δ𝜃 = 𝜃 ft − 𝜃. (73) 4. Model Arithmetic (Unlearning). The final unlearned model is obtained by subtracting the scaled task vector: 
+
+𝜃 ′ = 𝜃 − 𝛼 Δ𝜃, (74) where 𝛼 > 0 controls the strength of unlearning. Unless otherwise specified, we use AdamW with learning rate 1 × 10 −2, batch size 32 , no weight decay, and fine-tune for 
+
+10 epochs. The scaling factor 𝛼 is tuned per experiment and reported in the corresponding tables. Task vectors are computed using a full-parameter difference across all layers. To ensure a non-trivial effect in large models, we apply an additional global scaling factor to the task vector during subtraction. This does not change the direction of the update, only its magnitude, and follows common practice in task arithmetic baselines. Task Vector unlearning applies a global, static parameter update and does not condition on token-level context. As a result, it may incur substantial collateral damage on non-memorized inputs, particularly when aggressive scaling is required to suppress memorization. 
+
+Negative Preference Optimization (NPO). NPO suppresses memorization by optimizing model parameters to reduce the likelihood of memorized outputs relative to preferred alternatives. The method relies on preference-style objectives and requires access to explicit negative samples or preference pairs. Interventions are applied through parameter updates rather than inference-time control. For each sequence 𝑥 in the unlearning set Dunlearn , we first compute the sequence-level log-probability under the original model 𝑝 𝜃 :
+
+log 𝑝 ref (𝑥 ) =∑︁ 
+
+> 𝑡
+
+log 𝑝 𝜃 (𝑥 𝑡 | 𝑥 <𝑡 ). (75) These reference log-probabilities are pre-computed once and cached to avoid repeated forward passes during training. 27 During training, we optimize the model to reduce the likelihood of unlearn samples relative to the reference using the following loss: 
+
+LNPO = −E𝑥 ∼D unlearn [log 𝜎 (𝛽 (log 𝑝 ref (𝑥 ) − log 𝑝 𝜃 (𝑥 )))] , (76) where 𝜎 (·) denotes the sigmoid function and 𝛽 controls the sharpness of the preference margin. This objective penalizes the model whenever it assigns higher likelihood to unlearn samples than the reference model. To mitigate catastrophic forgetting, we incorporate a retain loss computed on a separate reference dataset Dretain :
+
+Lretain = E𝑥 ∼D retain [− log 𝑝 𝜃 (𝑥 )] . (77) The final optimization objective is: 
+
+L = LNPO + 𝜆 retain Lretain , (78) where 𝜆 retain is a large constant weighting the retain constraint. To prevent model collapse, we monitor the retain loss throughout training. If the retain loss exceeds three times its initial value, training is terminated early. This emergency stop is necessary due to the aggressive nature of preference-based objectives on small unlearning datasets. By default, we apply LoRA adapters during NPO optimization to restrict updates to a low-rank subspace of attention parameters. This substantially improves training stability and reduces collateral damage. After optimization, LoRA weights are merged back into the base model to produce a standard dense model for evaluation. Unless otherwise specified, we use AdamW with learning rate 1 × 10 −5, batch size 16 , weight decay 0.01 , 𝛽 = 0.1,and retain weight 𝜆 retain = 50 . Models are trained for 5 epochs. NPO applies a sequence-level preference signal and does not distinguish token-level memorization from benign generalization within a sequence. As a result, strong retain regularization and early stopping are required to maintain model utility. 
+
+LUNAR (Activation Redirection). We include LUNAR as an inference-level unlearning baseline that mitigates memorization by explicitly redirecting internal representations at a selected transformer block. LUNAR operates by fitting the edited model’s hidden activations on unlearn samples to a target activation constructed from a reference distribution. Given a target layer 𝑙 , we first collect block-level hidden activations ℎ(𝑙 ) ∈ R𝐵 ×𝑆 ×𝐷 using forward hooks. For each batch, activations are averaged over the sequence dimension, yielding a batch-level representation in R𝐵 ×𝐷 . We compute mean activations separately for the unlearning set Dunlearn and the reference set Dref :
+
+𝑎 𝑓 = E𝑥 ∼D unlearn 
+
+ℎ(𝑙 ) (𝑥 ) , 𝑎 ref = E𝑥 ∼D ref 
+
+ℎ(𝑙 ) (𝑥 ) . (79) The unlearning direction is defined as the difference between reference and unlearn activations: 
+
+𝑟 = 𝑎 ref − 𝑎 𝑓 . (80) This vector specifies the desired displacement in activation space. To implement redirection, we optimize the down-projection matrix 𝑊 down (corresponding to the MLP output projection) at layer 𝑙 , while freezing all other parameters. A frozen copy of the original model is used to provide a stable target. For each unlearn batch, the objective minimizes: 
+
+L = ℎ(𝑙 ) 
+
+> 𝜃
+
+(𝑥 ) − 
+
+
+
+ℎ(𝑙 ) 
+
+> 𝜃 0
+
+(𝑥 ) + 𝑟 
+
+ 22 , (81) where 𝜃 0 denotes the original model parameters and 𝜃 the edited parameters. This ensures a non-degenerate objective by anchoring the target to the base model’s activations rather than a constant vector. Optimization is performed using AdamW for a small number of epochs. Only the MLP down-projection weights at the selected layer receive gradients; all other parameters remain frozen. Forward hooks are removed after optimization to produce a standard dense model. Unless otherwise specified, LUNAR is applied to the middle transformer layer. LUNAR applies a static, layer-wise redirection that does not condition on token-level memorization signals. The same redirection is applied uniformly across all unlearn inputs, which may introduce collateral effects on non-memorized tokens. 28 Other Baselines. All remaining baselines are implemented by closely following the experimental protocols and design choices described in prior work Suri et al. (2025). We adopt their default architectures, optimization objectives, and hyperparameter settings whenever applicable, and only make minimal adjustments to ensure compatibility with our models and datasets. 
+
+## F.4 Memorized Data Extraction for Pythia Models 
+
+To construct datasets of memorized content for the Pythia 2.8B and 6.9B models, we adopt the extraction methodology proposed by Suri et al. (2025); Chang et al. (2024). It is important to distinguish the criteria for memorization: while Chang et al. (2024) employ a relaxed definition where the model need only “nearly reconstruct” the suffix from a prefix, our work adheres to the stricter Definition 2.1. Specifically, we require the language model to reproduce the suffix 
+
+verbatim via greedy decoding. Consequently, we filter the sequences identified by Chang et al. (2024) to isolate those satisfying our rigorous conditions with context parameters 𝑛 = 72 and 𝑘 = 32 .As expected, the plot demonstrates an inverse correlation where memorization accumulates as model perplexity— calculated here over a subset of 1,632 randomly sampled sequences from The Pile Gao et al. (2020) following the sampling protocol of Chang et al. (2024)—decreases effectively. 
+
+# G Additional Experimental Results 
+
+## G.1 Results on the Sanitation Dataset. 
+
+Table 6 reports results on the Sanitation dataset following the EasyEdit Wang et al. (2024) evaluation protocol. We compare our method with representative model editing approaches (SERAC, IKE, AdaLoRA, MEND, ROME, MEMIT) as well as a steering baseline based on mean activation directions. Across metrics, our method achieves competitive locality and fluency while attaining the lowest memorization rate. In particular, compared to prior editing methods, our approach reduces the memorization rate to 0.1191 , matching or slightly improving over MEMIT ( 0.1197 ) and substantially outperforming other baselines. At the same time, our method preserves strong locality ( 0.2015 ) and maintains fluency comparable to existing approaches, indicating a favorable trade-off between memorization suppression and utility preservation under the EasyEdit framework. 
+
+## G.2 Full Pilot Study Results 
+
+Figure 8 provides additional empirical analysis of the token-level memorization signal 𝜔 𝑡 across models and datasets. 
+
+Distributional behavior. Figures 8 compare the empirical distributions of 𝜔 𝑡 on normal data and memorized data, respectively. On normal data, the distributions are approximately symmetric around zero, with a large fraction of tokens lying close to the mean. In contrast, memorized data exhibits a pronounced right-skewed distribution, where only a small fraction of tokens contribute large positive 𝜔 𝑡 values, while the majority remain near zero. This indicates that memorization is not driven by uniformly elevated confidence, but by sparse, high-magnitude events at specific token positions. 
+
+Burst statistics. Figure 8(c) analyzes the temporal structure of memorization by measuring the length of consecutive token bursts with 𝜔 𝑡 > 0. Across models and datasets, memorization occurs in short bursts, with most bursts spanning one or two tokens. Longer bursts are rare and contribute marginally to the overall mass. These results suggest that memorization is highly intermittent, with frequent transitions between memorization-dominant and generalization-dominant tokens even within memorized sequences. Overall, these observations further support the view that memorization is a temporally sparse and token-local phenomenon, motivating inference-time interventions that can activate and deactivate at fine temporal resolution. 
+
+## G.3 Layer Selection 
+
+Figure 9 analyzes the signal strength of the memorization probe across layers. We observe that the ratio of memorization energy to generalization peaks in the middle-to-late layers (e.g., layers 15–20). This indicates that memorization is most separable from general semantic features at this depth, making these layers optimal for targeted intervention. 29 (a) Normal data 𝜔 𝑡 distribution. (b) Memorized data 𝜔 𝑡 distribution.   
+
+> (c) Memorized data burst plot.
+> Figure 8 Additonal Pilot Study Results
+
+## G.4 Qualitative Results 
+
+We show representative contract question–answering examples generated by Pythia-6.9B in Fig. 10. Before steering, the model exhibits memorization-aligned artifacts, including nonsensical token repetitions, malformed strings, and spurious numeric outputs (highlighted in red). After applying gated activation steering, these artifacts are selectively suppressed while preserving the overall semantic structure and correctness of the responses. This visualization illustrates that memorization manifests intermittently at the token level and can be mitigated without degrading coherent generation. 
+
+## G.5 Hyperparameter Configurations 
+
+We performed a comprehensive grid search to identify optimal hyperparameters for the Pythia-2.8B and Pythia-6.9B models. The search spaces for the various unlearning methods are detailed below: 
+
+• BalancedSubnet: ratio ∈ { 10 −5, 10 −4, 10 −3, 10 −2, 0.05 , 0.1, 0.25 , 0.3}, epochs ∈ { 1, 10 , 20 }, loss weight ∈ { 0.9, 0.7, 0.5},learning rate ∈ { 10 −4, 10 −3 }.
+
+• Subnet: ratio ∈ { 10 −5, 10 −4, 10 −3, 10 −2, 0.05 , 0.1, 0.25 , 0.3}, epochs ∈ { 1, 10 , 20 }, learning rate ∈ { 10 −4, 10 −3 }.
+
+• HC, Slim: ratio ∈ { 10 −5, 10 −4, 10 −3, 10 −2, 0.05 , 0.1}, epochs ∈ { 1, 10 , 20 }, learning rate ∈ { 10 −4, 10 −3 }.
+
+• Greedy: ratio = 10 −5, learning rate ∈ { 10 −4, 10 −3 }.30 Table 5 Performance comparison on LLama and Qwen models, categorized by method type. We report the best Memorization Reduction Percentage (Red. %) with Utility ≥ 0.9.
+
+Category Method LLama (Red. %) Qwen (Red. %) Ultrachat GSM8K Ultrachat GSM8K Unlearning  GA 95.5 4.5 3.3 0.0 Task Vector 77.0 25.1 66.0 25.4 DPO 95.7 1.3 82.4 7.3 SimNPO 95.5 2.2 78.8 7.2 NPO 88.8 2.2 71.5 6.9 
+
+> Editing
+
+ROME 38.0 7.8 8.6 14.5 MEMIT 7.5 2.2 2.2 8.7 Balanced Subnet 34.8 1.4 1.0 12.8 LUNAR 30.0 9.0 42.7 1.0 
+
+Ours 48.0 33.5 51.4 35.2  
+
+> Figure 9
+
+Ablation study on layer selection. Left onw shows the result for Qwen3-0.6b on GSM8K; and right one shows the result for Llama-3.2-1b on Ultrachat. The distinguishability of memorization signals peaks in middle-to-late layers, guiding our layer selection for efficient gating. For Llama-3.2-1b, due to its architectural differences, the first layer also demonstrates significant effects. 
+
+• Act: ratio ∈ { 10 −4, 10 −3, 10 −2, 0.05 , 0.1}, learning rate ∈ { 10 −4, 10 −3 }.
+
+• Durable, Durable-agg: ratio ∈ { 10 −5, 10 −4, 10 −3, 10 −2, 0.05 , 0.1}, learning rate ∈ { 10 −4, 10 −3 }.
+
+# H Sensitivity to the Choice of Reference Model 
+
+Our method relies on a reference model to define a token-level memorization signal 𝜔 𝑡 = log 𝑝 𝜃 (𝑥 𝑡 | 𝑥 <𝑡 ) − log 𝑝 ref (𝑥 𝑡 |
+
+𝑥 <𝑡 ), which is used to localize memorization-and construct the steering subspace. Since 𝜔 𝑡 explicitly depends on the reference model, it is important to understand how sensitive the resulting steering vectors are to the choice of reference. In this appendix, we analyze this sensitivity along two orthogonal axes: the training stage (epoch) and the capacity 
+
+(number of layers) of the reference model. 
+
+Epoch-based sensitivity analysis. Figure 11 reports the effect of the reference model training stage on memorization mitigation under two reference capacities (4 and 8 layers). Several consistent trends can be observed. First, for both reference capacities, mitigation is strongest when the reference model is relatively distant from the target (e.g., Epoch 50), and generally degrades as the reference epoch increases. This behavior aligns with the definition of the memorization signal 𝜔 𝑡 , whose magnitude and support shrink as the predictive distributions of the reference and target models become more similar. 31 Figure 10 Qualitative comparison of model responses before and after activation steering.  
+
+> Table 6 Results on Sanitation Wang et al. (2024) Dataset
+
+DataSet Metric SERAC IKE AdaLoRA MEND ROME MEMIT Steering (Mean) Ours 
+
+Sanitation Locality ↑ 0.1722 0.1751 0.2218 0.1650 0.1783 0.1650 0.1545 0.2015 Fluency ↑ 5.9431 6.0052 5.4572 6.0315 5.4952 5.5251 5.7143 5.5742 Mem. Rate ↓ 0.3617 0.4229 0.2840 0.3617 0.2859 0.1197 0.1632 0.1191 Second, mitigation does not decrease monotonically with the reference epoch. For example, under the 4-layer reference, memorization drops from 20 .17% at Epoch 300 to 6.94% at Epoch 400, while a similar non-monotonic pattern is observed for the 8-layer reference, where mitigation weakens at Epoch 350 before increasing again at later epochs. This suggests that the effectiveness of the induced steering subspace is not solely determined by the number of tokens identified as memorized, but also by the coherence of the remaining memorization signal. Third, we observe a systematic difference between reference capacities. The 4-layer reference exhibits more frequent degenerate or near-degenerate cases at late epochs (e.g., Epoch 500), whereas the 8-layer reference continues to induce a non-trivial steering effect even when the reference is close to the target. This indicates that a sufficiently expressive reference model is required to reliably anchor the memorization signal across training stages. Finally, across all reference configurations, clean accuracy remains unchanged, indicating that the observed variation in mitigation performance is not driven by utility degradation. Overall, these results highlight a trade-off between signal sparsity and signal purity as the reference model approaches the target, and further emphasize the role of reference capacity in stabilizing memorization localization. 
+
+# I Ungated vs Gated Subspace Steering 
+
+Figure 12 studies the impact of the proposed gating mechanism under varying noise levels. Each subplot compares model perplexity between the gated and ungated variants while keeping the memorization rate fixed at zero. Across all noise settings, the gated model consistently achieves lower perplexity than the ungated counterpart. Moreover, as the number of noise samples increases, both variants exhibit a gradual increase in perplexity, reflecting the increased difficulty of the task; however, the performance gap between gated and ungated models remains stable. These results indicate that the gating mechanism does not introduce additional optimization instability and can preserve, or slightly improve, utility even under noisy conditions. 32 Table 7 Deviation Score (DS) on Pythia 2.8B . We define DS 𝜆 = 100 √︁ 𝑚 2 + 𝜆 · PPLDeg 2 where 𝑚 = %Mem /100 and PPLDeg =
+
+max (0, PPL /PPL base − 1) with PPL base = 21 .75 . Lower is better.                                     
+
+> Method DS 0.01 ↓DS 0.05 ↓DS 0.1↓
+> Baseline 52.87 52.87 52.87 HC 9.85 13.47 16.95 Slim 31.89 31.92 31.95 Act 9.35 10.93 12.62 Greedy 14.58 32.45 45.87 Durable 9.38 15.73 21.14 Durable-agg 8.96 13.24 17.15 Subnet 9.34 13.40 17.18 BalancedSubnet 7.45 11.67 15.40
+> Ours 7.54 9.38 11.26
+
+Table 8 Deviation Score (DS) on Pythia 6.9B . We define DS 𝜆 = 100 √︁ 𝑚 2 + 𝜆 · PPLDeg 2 where 𝑚 = %Mem /100 and PPLDeg =
+
+max (0, PPL /PPL base − 1) with PPL base = 19 .46 . Lower is better.                                     
+
+> Method DS 0.01 ↓DS 0.05 ↓DS 0.1↓
+> Baseline 89.31 89.31 89.31 HC 87.55 87.55 87.55 Slim 33.46 33.46 33.46 Act 30.30 30.30 30.30 Greedy 7.89 17.42 24.59 Durable 14.79 15.31 15.95
+> Durable-agg 13.40 20.38 26.65 Subnet 84.95 84.95 84.95 BalancedSubnet 86.73 86.73 86.73
+> Ours 8.56 13.13 17.22
+
+# J Broader Impact and Limitations 
+
+## J.1 Societal Implications 
+
+Memorization mitigation has important implications for: 
+
+• Privacy : Reducing verbatim reproduction of training data 
+
+• Copyright : Mitigating potential reproduction of copyrighted material 
+
+• Fairness : Reducing biases encoded in memorized training patterns 
+
+• Robustness : Improving generalization to out-of-distribution inputs However, we acknowledge potential dual-use concerns: 
+
+• Techniques that mitigate memorization could obscure training data sources, complicating model auditing 
+
+• Selective memorization reduction could be misused to hide specific training data while maintaining overall performance 
+
+• Over-aggressive memorization mitigation might remove useful factual knowledge 
+
+## J.2 Limitations 
+
+Our approach has several limitations: 1. Requires reference model : Computing 𝜔 𝑡 requires access to a reference model (typically the pretrained model), which may not always be available. 2. Computational overhead : SVD computation is 𝑂 (𝑑 3) per layer, which can be expensive for very large models. However, this is a one-time cost. 3. Inference overhead : Gating computation adds 𝑂 (𝑑 ) operations per token, though this is negligible compared to the forward pass. 4. Threshold sensitivity : Performance can be sensitive to the choice of threshold 𝜖 , requiring some tuning. 33 50 100 150 200 250 300 350 400 450 500 
+
+> Reference Model Epoch
+> 0
+> 5
+> 10
+> 15
+> 20
+> Memorization Rate (%)
+> 4-layer reference model
+> 8-layer reference model
+> Clean reference model
+
+Figure 11 Sensitivity to the choice of reference model. Memorization rate as a function of the reference checkpoint epoch for 4-layer and 8-layer reference models. Using a clean (pretrained) reference consistently suppresses memorization to zero while preserving clean accuracy. In contrast, partially trained reference models exhibit non-monotonic sensitivity: mitigation initially weakens as memorization signals become diffuse, but partially recovers at later epochs as the remaining signal becomes more concentrated. Clean accuracy remains constant (96.98%) across all settings. 
+
+(a) 500 noise samples (b) 800 noise samples (c) 1000 noise samples (d) 1300 noise samples 
+
+(e) 1600 noise samples (f) 1900 noise samples (g) 2200 noise samples (h) 2500 noise samples 
+
+Figure 12 Ablation study the effect of Gating mechanism, the memorization rates are maintained at 0. 
+
+5. Layer selection : Effectiveness depends on choosing appropriate layers for intervention, which may require domain knowledge or empirical validation. 
+
+## J.3 Future Directions 
+
+Promising directions for future work include: 
+
+• Multi-modal extension : Applying gated steering to vision-language models. Mitigating Memorization in vision-language models Wen et al. (2025). 
+
+• Online learning : Updating (𝑢, 𝑣 ) continuously during deployment 
+
+• Theoretical analysis : Deriving generalization bounds for memorization mitigation 
+
+• Privacy guarantees : Establishing formal privacy guarantees (e.g., differential privacy) for our approach 
+
+• Multilingual : Memorization patterns vary across languages Satvaty et al. (2025), and we can extend our general pipeline in the multilingual setting. 34
