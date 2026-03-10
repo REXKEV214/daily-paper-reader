@@ -1,0 +1,726 @@
+Title: U-CAN: Utility-Aware Contrastive Attenuation for Efficient Unlearning in Generative Recommendation
+
+URL Source: https://arxiv.org/pdf/2602.23400v1
+
+Published Time: Mon, 02 Mar 2026 01:01:28 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# U-CAN: Utility-Aware Contrastive Attenuation for Efficient Unlearning in Generative Recommendation 
+
+# Zezheng Wu 
+
+wzz@mails.guet.edu.cn Guilin University of Electronic Technology Guilin, China 
+
+# Rui Wang 
+
+wangrui377@outlook.com University of Southampton Southampton, United Kingdom 
+
+# Xinghe Cheng 
+
+jnuchengxh@hotmail.com Jinan University Guangzhou, China 
+
+# Yang Shao 
+
+Syyyang@mails.guet.edu.cn Guilin University of Electronic Technology Guilin, China 
+
+# Qing Yang 
+
+gtyqing@hotmail.com Guilin University of Electronic Technology Guilin, China 
+
+# Jiapu Wang ∗
+
+jiapuwang9@gmail.com Nanjing University of Science and Technology Nanjing, China 
+
+# Jingwei Zhang ∗
+
+gtzjw@hotmail.com Guilin University of Electronic Technology Guilin, China 
+
+## Abstract 
+
+Generative Recommendation (GenRec) typically leverages Large Language Models (LLMs) to redefine personalization as an instruction-driven sequence generation task. However, fine-tuning on user logs inadvertently encodes sensitive attributes into model parame-ters, raising critical privacy concerns. Existing Machine Unlearning (MU) techniques struggle to navigate this tension due to the Pol-ysemy Dilemma , where neurons superimpose sensitive data with general reasoning patterns, leading to catastrophic utility loss un-der traditional gradient or pruning methods. To address this, we propose Utility-aware Contrastive Attenuatio N (U-CAN), a pre-cision unlearning framework that operates on low-rank adapters. U-CAN quantifies risk by contrasting activations and focuses on neurons with asymmetric responses that are highly sensitive to the forgetting set but suppressed on the retention set. To safeguard performance, we introduce a utility-aware calibration mechanism that combines weight magnitudes with retention-set activation norms, assigning higher utility scores to dimensions that contribute strongly to retention performance. Unlike binary pruning, which often fragments network structure, U-CAN develop adaptive soft attenuation with a differentiable decay function to selectively down-scale high-risk parameters on LoRA adapters, suppressing sensitive retrieval pathways and preserving the topological connectivity of reasoning circuits. Experiments on two public datasets across seven metrics demonstrate that U-CAN achieves strong privacy forgetting, utility retention, and computational efficiency 1.
+
+> ∗Corresponding author.
+> 1Code is available: https://anonymous.4open.science
+> KDD ’26, Jeju, Korea
+> 2026.
+
+## CCS Concepts 
+
+• Information systems → Recommender systems ; • Comput-ing methodologies → Machine learning .
+
+## Keywords 
+
+Generative Recommendation, Machine Unlearning, Large Language Model, Privacy Forgotten 
+
+ACM Reference Format: 
+
+Zezheng Wu, Rui Wang, Xinghe Cheng, Yang Shao, Qing Yang, Jiapu Wang, and Jingwei Zhang. 2026. U-CAN: Utility-Aware Contrastive Attenuation for Efficient Unlearning in Generative Recommendation. In Proceedings of ACM SIGKDD (KDD ’26). ACM, New York, NY, USA, 15 pages. 
+
+## 1 Introduction 
+
+Generative Recommendation (GenRec) [ 16 , 25 , 52 , 63 ] is a para-digm shift in recommender systems, where Large Language Models (LLMs) serve as the generative backbone to model user intent and item semantics, enabling recommendations via semantic reasoning rather than pure ranking [ 36 , 39 , 61 ]. When models are fine tuned on user interactions, improved personalization arises from param-eters encoding user specific preferences and attributes, which in turn raises the risk of attribute inference or data extraction, and the central challenge is to remove user dependent information while preserving general recommendation capability [1, 6, 35, 38, 44]. Machine Unlearning (MU) [ 4 , 23 , 42 , 48 ] addresses this need by removing the influence of designated training data from a trained model, aiming for targeted forgetting without sacrificing model utility. However, existing methodologies [ 11 , 32 , 33 , 58 ] frequently encounter a fundamental tension between forget and utility. As depicted in Fig. 1(A), gradient based approaches [ 7 , 8], despite their adaptability, often suffer from “ Directional Collapse ”, while their  
+
+> arXiv:2602.23400v1 [cs.LG] 26 Feb 2026 KDD ’26, August, 2026, Jeju, Korea Zezheng Wu, Rui Wang, Xinghe Cheng, Yang Shao, Qing Yang, Jiapu Wang, and Jingwei Zhang
+
+Figure 1: Comparison of our proposed U-CAN (C) with tradi-tional methods (A,B). The traditional methods either distort shared parameters via gradient updates or break functional pathways via hard pruning, whereas we locate risky neurons via activation difference comparison and suppress high-risk parameters with continuous soft decay, achieving more pre-cise forgetting while preserving general reasoning ability. 
+
+adaptive parameter updates spill into shared reasoning representa-tions and lead to a sharp drop in recommendation quality. Mean-while, as depicted in Fig. 1(B), pruning-based strategies [ 58 ], despite being effective at identifying high saliency parameters, often suffer from “ Structural Damage ”, while their indiscriminate zeroing out fragments the model structure and severs the functional pathways essential for general reasoning. Crucially, in GenRec models, parameters rarely sequester privacy information in isolation. Instead, sensitive concepts are encoded within superposed activations that concurrently facilitate general linguistic syntax, narrative coherence, and domain-specific knowl-edge. This intrinsic entanglement constitutes a Polysemy Dilemma :parameters that respond strongly to privacy-related interactions concurrently determine the quality of ordinary recommendations. As elucidated by the Catastrophic Forgetting panel in Figure 1, sen-sitive features exist as distributed superpositions across syntactic neurons rather than distinct modular units [ 18 ]. Within this highly entangled space, gradient-ascent methods [ 8, 57 ] attempt to reverse the influence of the forget set, yet these updates navigate exceed-ingly sharp trajectories within the coupled loss landscape, causing perturbations to propagate from privacy-critical regions into shared functional reasoning spaces. Pruning-based methods instead identify high-saliency units or weights for binary deletion. As illustrated by the Reasoning Break-down panel in Figure 1, such hard deletion breaks activation path-ways at the structural level. Under the polysemy regime, the pruned neurons also carry non-sensitive semantics [15, 49], so indiscrimi-nate zeroing reduces utility even when privacy leakage is mitigated. Both classes of methods therefore lack a mechanism that can local-ize risk at the level of fine-grained activations while preserving the topological connectivity that supports overall performance. To bridge the gap between precise erasure and structural stabil-ity, we propose Utility-aware Contrastive Attenuatio N (U-CAN), an unlearning framework tailored for generative recommendation. Unlike approaches that directly threshold raw activations or rely on rigid binary masks, U-CAN combines contrastive activation analysis with structure-preserving parameter approximation. We introduce a contrastive activation-difference score to quantify how strongly each neuron responds to sensitive versus general inputs, which enables precise isolation of risk-related neurons. To reconcile privacy erasure and utility maintenance, a utility-aware calibra-tion module integrates weight magnitudes with activation norms to protect parameters that are important for reasoning. Finally, instead of hard pruning, U-CAN applies an adaptive soft attenua-tion scheme that uses a continuous decay function to down-scale high-risk parameters on LoRA adapters. This design supports one-shot suppression of privacy-related responses while preserving the connectivity of reasoning pathways that sustain general utility. The main contributions of this paper are summarized as follows: 
+
+• We introduce U-CAN, an unlearning framework for GenRec that feature a synergistic dual-screening mechanism. By harmoniz-ing contrastive activation analysis with utility-aware structural calibration, U-CAN effectively disentangles privacy-sensitive re-sponses from essential reasoning behaviors within the entangled representation space; 
+
+• We develop an adaptive soft attenuation strategy based on a differ-entiable decay function. Unlike rigid binary pruning, this mecha-nism facilitates precise down-scaling of high-risk parameters on LoRA adapters, successfully suppressing sensitive retrieval path-ways while rigorously preserving the topological connectivity of underlying reasoning circuits in the model; 
+
+• We provide a comprehensive empirical validation across diverse public datasets. Our results demonstrate that U-CAN achieves excellent unlearning performance across seven critical evaluation metrics, attaining a strong balance of privacy forgetting, utility retention, and one-shot operational efficiency without requiring secondary training. 
+
+## 2 Related Work 
+
+Unlearning in GenRec can be discussed along two complementary lines: one reviews the current landscape of GenRec and its privacy-related risk factors, and the other line investigates which machine unlearning approaches can effectively eliminate the impact of these risk factors. Accordingly, this section focuses on two themes: (i) Generative Recommendation and (ii) Machine Unlearning. 
+
+## 2.1 Generative Recommendation 
+
+Generative Recommendation (GenRec) formulates recommenda-tions as a language modeling task [ 2, 7, 9, 10 , 20 , 45 – 47 , 51 , 60 ]: user interaction histories and item attributes are serialized into token sequences, and predictions are produced via autoregressive generation rather than through conventional embedding-based retrieval-and-ranking pipelines. Within this framework, LLMs nat-urally underpin GenRec by reducing reliance on massive item-id embedding tables through tokenized item representations, thus im-proving coverage of long-tail and newly introduced items in certain settings. Early representative work such as P5 [ 17 ] directly converts user interaction histories into natural language prompts, enabling a unified generative recommendation framework. Subsequent meth-ods, including TallRec [ 2] and LLaRA [ 28 ], further incorporate parameter-efficient fine-tuning mechanisms such as Adapters or LoRA, which significantly reduce domain adaptation cost while U-CAN: Utility-Aware Contrastive Attenuation for Efficient Unlearning in Generative Recommendation KDD ’26, August, 2026, Jeju, Korea 
+
+Figure 2: The overall framework of U-CAN. The pipeline orchestrates three integral modules. (1) Contrastive Activation isolates entangled features by leveraging activation gaps to pinpoint privacy-sensitive neurons. (2) Utility Significance quantifies parameter importance by fusing static weight magnitudes with dynamic input intensities, ensuring core capabilities remain intact. (3) Adaptive Soft Attenuation scales down risk parameters using a continuous decay curve, maintaining network connectivity and avoiding the abrupt damage caused by binary pruning. 
+
+preserving large model capability. Meanwhile, LlamaRec [ 52 ] intro-duces an LLM-based two-stage generative recommendation frame-work, where decoupled candidate generation and reranking deliver strong performance and inference efficiency. Although prior studies demonstrate the effectiveness of gen-erative paradigms for recommendation, they primarily focus on modeling capability and training efficiency, leaving privacy risks underexplored, especially those arising when personalized fine-tuning memorizes sensitive user interactions [ 22 , 38 ]. Therefore, selectively removing the influence of privacy-related interactions from model behaviour while maintaining generative recommenda-tion utility remains a central open challenge in GenRec. 
+
+## 2.2 Machine Unlearning 
+
+Machine Unlearning (MU) was originally proposed to comply with data protection regulations such as the right to be forgotten [4,5 ]. Its primary objective is to eliminate the influence of targeted training data points from the model parameters [ 12 , 30 , 38 , 54 –56 ,59 ]. While foundational unlearning paradigms were predominantly tailored for discriminative tasks such as image classification [ 19 ], the exponential proliferation of LLMs has necessitated a strategic pivot toward generative unlearning. This evolution addresses the multifaceted risks inherent in modern foundation models, ranging from the propagation of toxic content to severe privacy leakage and copyright violations [6, 13, 23]. The most fundamental paradigm in unlearning is Gradient As-cent (GA), which updates parameters by maximizing prediction loss on a designated forget set [23 ]. However, GA is highly sensi-tive to hyperparameters and often triggers catastrophic forgetting on desired knowledge [ 14 ]. To stabilize this process, research has transitioned toward preference-based objectives [ 31 ]. Specifically, Negative Preference Optimization (NPO) adapts the Direct Prefer-ence Optimization framework [ 40 ] for unlearning. By anchoring optimization to a reference model, it effectively steers distributions away from undesirable outputs while precluding the instability associated with unbounded loss. Other common baselines employ random labeling or mismatch objectives to replace specific knowl-edge with generic responses [29]. Recent studies emphasize that effective unlearning requires a precise understanding of the interaction between data and model components [ 27 , 29 ]. This localization-based unlearning paradigm proceeds by identifying specific parameters or computational units important to the target knowledge [ 14 , 50 ]. Building on this, Zhang et al. [ 58 ] introduced LLM-Eraser, a two-stage method that uses selective pruning and contrastive distillation to disentangle desired and undesired knowledge. By pruning only those parameters crucial to the undesired domain, such methods effectively minimize the performance deficit on general tasks. The evaluation of LLM unlearning remains intrinsically chal-lenging, as the definitive benchmark of exact retraining is computa-tionally prohibitive for large-scale models [ 33 ]. While conventional metrics quantify erasure within the target scope and utility on unre-lated tasks, they frequently overlook the global parameter coupling induced by gradient updates [ 58 ]. This gap is further amplified in KDD ’26, August, 2026, Jeju, Korea Zezheng Wu, Rui Wang, Xinghe Cheng, Yang Shao, Qing Yang, Jiapu Wang, and Jingwei Zhang 
+
+Generative Recommendation, where personalized fine-tuning on se-quential user interactions is performed under frequent updates and tight utility constraints, yet most existing studies emphasize mod-eling capacity and efficiency rather than how interaction traces are memorized, re-triggered, and reflected in recommendation-specific behaviors. In particular, evaluation protocols for unlearning in the GenRec setting remain limited, where forgetting should be assessed not only by task-agnostic probes but also by changes in recom-mendation outputs attributable to the targeted interaction history. Such an entanglement in high dimensions makes the isolation of sensitive features from the shared semantic space exceptionally difficult. Consequently, indiscriminate hard pruning strategies [ 32 ]risk severing the dense synaptic pathways essential for general reasoning [62], precipitating significant structural degradation. 
+
+## 3 Preliminaries and Problem Definition 
+
+Machine Unlearning (MU). MU aims to surgically eliminate the influence of specific data from a pre-trained model 𝑓 𝜃 without the need for full retraining. We define the original training set as D =
+
+D𝑟 ∪D 𝑓 , where D𝑓 denotes the forgetting target and D𝑟 represents the retention data. The core objective is to efficiently optimize the model parameters from 𝜃 to 𝜃 ∗ such that the information from D𝑓 
+
+is effectively erased. Theoretically, the unlearning process is successful if the distri-bution of the updated parameters 𝜃 ∗ closely approximates that of a model retrained exclusively on the retention set. We formalize the retrain-on-retain reference as: 
+
+𝜃 𝑟 = arg min  
+
+> 𝜃
+
+L( 𝜃 ; D𝑟 ), (1) and require 𝑃 (𝜃 ∗) ≈ 𝑃 (𝜃 | D 𝑟 ). This distributional equivalence ensures erasure for privacy information associated with D𝑓 and sustains generalization and utility within the retention set D𝑟 .
+
+Low-Rank Adaptation (LoRA). LoRA [ 21 ] is a parameter-efficient adaptation mechanism on top of a frozen pre-trained back-bone. Let the backbone parameters be 𝜃 0 and the trainable adapter parameters be 𝜙 . Consider a representative linear layer with input 
+
+𝑥 and output 𝑜 . LoRA keeps the original weight matrix 𝑊 0 ∈ R𝑑 1 ×𝑑 2
+
+fixed and adds a rank-𝑟 update parameterized by two learnable matrices 𝑊 𝐵 ∈ R𝑑 1 ×𝑟 and 𝑊 𝐴 ∈ R𝑟 ×𝑑 2 :
+
+𝑜 = 𝑊 0𝑥 + 𝑊 𝐵 𝑊 𝐴 𝑥, (2) where 𝑟 ≪ min (𝑑 1, 𝑑 2). This design introduces 𝑑 1𝑟 + 𝑟𝑑 2 trainable parameters, which is substantially smaller than the 𝑑 1𝑑 2 parameters of the full matrix 𝑊 0. During adaptation, optimization updates only 𝑊 𝐵 ,𝑊 𝐴 while leaving 𝑊 0 and thus 𝜃 0 unchanged. We denote the resulting model as 𝑓 (𝑥 ; 𝜃 0, 𝜙 ), where task-specific changes are stored compactly in the adapter checkpoint 𝜙 .
+
+Problem Definition. A user requests removal of a small set of interactions D−𝑟 ⊂ D from an already-deployed PEFT LLMRec model 𝑓 (· ; 𝜃 0, 𝜙 ★) trained on D, where |D −𝑟 | is typically tiny under continual personalization. Let the remaining data be D𝑟 = D \ D −𝑟 .The gold standard for exact unlearning is retrain-on-remain 
+
+𝜙 ★ 
+
+> 𝑟
+
+= arg min  
+
+> 𝜙
+
+Lrec (𝜃 0, 𝜙 ; D𝑟 ),
+
+which is often computationally impractical to run per request. The goal of unlearning is to compute an updated adapter ˜𝜙 such that 
+
+𝑓 (· ; 𝜃 0, ˜𝜙 ) behaves close to 𝑓 (· ; 𝜃 0, 𝜙 ★ 
+
+> 𝑟
+
+) on recommendation outputs, while being (i) efficient enough to respond promptly to frequent deletion requests and (ii) utility-preserving on the remaining popu-lation, measured by minimal degradation of top-𝐾 recommendation quality on D𝑟 . Formal mathematical notations are summarized in the Appendix A.1. 
+
+## 4 Methodology 
+
+In this section, we propose a novel Utility-aware Contrastive At-tenuatioN (U-CAN) framework suitable for GenRec tasks. We first formalize Unlearning under LoRA , where a frozen backbone is augmented with a trainable adapter and all updates are confined to this adapter. Buil ding on this setting, U-CAN comprises three main stages: Contrastive Activation identifies sensitive neurons from activation discrepancies between forgetting and retention sets; Utility Significance uses a structural approximation strategy to assess how parameters contribute to reasoning by combining weight magnitudes with input activation norms; and Adaptive Soft Attenuation performs one-shot soft masking by rescaling weights according to their continuous risk sores. The overall framework is illustrated in Figure 2. 
+
+## 4.1 Unlearning under LoRA 
+
+Unlearning under LoRA applies a low-rank adapter 𝜙 on top of a frozen pre-trained backbone with parameters 𝜃 0, yielding the parameterization 𝑓 (· ; 𝜃 0, 𝜙 ). All updates and unlearning interven-tions are confined to 𝜙 while 𝜃 0 remains fixed, which provides a consistent interface for subsequent activation analysis and targeted parameter modification. A frozen backbone 𝜃 0 combined with a trainable adapter 𝜙 de-fines the LoRA model 𝑓 (· ; 𝜃 0, 𝜙 ) and its induced conditional distri-bution 𝑃 (· | ·) . A downstream fine-tuning dataset is denoted by D
+
+and is partitioned into a retention set D𝑟 and a forgetting set D𝑓 :
+
+D = D𝑟 ∪ D 𝑓 , D𝑟 ∩ D 𝑓 = ∅, (3) where D𝑓 corresponds to samples that must be removed. Training on D yields a deployed adapter 𝜙 ★ and the model 𝑓 (· ; 𝜃 0, 𝜙 ★).
+
+Unlearning Signals. Given a frozen backbone with parameters 
+
+𝜃 0 and a deployed adapter 𝜙 ★ trained on D = D𝑟 ∪ D 𝑓 , LoRA unlearning yields an updated adapter ˜𝜙 via U (·) :
+
+˜𝜙 = U  𝜙 ★; 𝜃 0, D𝑟 , D𝑓 
+
+ , (4) where Δ𝜃 0 = 0. To represent inference in a consistent prompting structure, we use a prompt template T (·) together with a binary token mask 𝑀 that selects valid positions for token-level computa-tions. For each layer 𝑙 , let 𝐻 𝑙 𝑡 (𝑥 ; 𝜃 0, 𝜙 ) denote the activation at token position 𝑡 produced by 𝑓 (· ; 𝜃 0, 𝜙 ) on the templated input T ( 𝑥 ). We aggregate token-level activations over positions with 𝑀 𝑡 = 1 to obtain a layer-wise activation vector: 
+
+𝑣 𝑙 (𝑥 ; 𝜃 0, 𝜙 ) = Agg 
+
+ 𝐻 𝑙 𝑡 (𝑥 ; 𝜃 0, 𝜙 ) : 𝑀 𝑡 = 1
+
+
+
+, (5) where Agg (·) denotes a generic token-wise aggregation operator over positions. Using the deployed adapter 𝜙 ★, we compute the U-CAN: Utility-Aware Contrastive Attenuation for Efficient Unlearning in Generative Recommendation KDD ’26, August, 2026, Jeju, Korea 
+
+activation summaries on the forgetting and retention subsets as 
+
+𝑣 𝑙 𝑖 ≡ E(𝑥 ) ∈ D 𝑖 
+
+𝑣 𝑙 (𝑥 ; 𝜃 0, 𝜙 ★) , (6) where 𝑖 ∈ { 𝑓 , 𝑟 }, which represents the forget and retain sides. These layer-wise signals provide a direct interface for subsequent local-ization, where candidate parameters are identified by contrasting the activation responses induced by D𝑓 and D𝑟 under the same de-ployed adapter, and then used to guide localized parameter updates that implement U (·) .
+
+## 4.2 Contrastive Activation 
+
+Sensitive parameter representation identification constitutes a pri-mary challenge in efficient MU for LLMs. High-dimensional spaces induce intense knowledge entanglement, where individual units simultaneously encode private data and general reasoning capabili-ties. This polysemy thwarts direct localization. To address this, we analyze model activation disparities to identify candidate sensitive regions. 
+
+Contrastive Activation Feature Extraction. Compared to raw activation analysis, contrastive activation specifically focuses on isolating neuronal responses that are preferentially associated with D𝑓 . As illustrated in the Figure 2, we initiate the process by collecting token-level activations 𝐻 𝑙 𝑡 (𝑥 ; 𝜃 0, 𝜙 ★) at each linear layer 
+
+𝑙 via forward propagation on the forgetting set D𝑓 and retention set D𝑟 , respectively. To eliminate input-specific noise and capture stable knowledge representations, we formulate the privacy activation vector 𝑣 𝑙 𝑓 and the general activation vector 𝑣 𝑙 𝑟 by computing the average response intensity along the token dimension. Crucially, we mask system-prompt tokens so that aggregation depends only on the user inter-action sequence, and we instantiate Agg (·) as the masked average: 
+
+𝑣 𝑙 𝑖 = E𝑥 ∈ D 𝑖 
+
+" Í𝑡 𝑀 𝑡 𝐻 𝑙 𝑡 (𝑥 ; 𝜃 0, 𝜙 ★)
+
+Í𝑡 𝑀 𝑡 
+
+#
+
+, (7) where 𝑖 ∈ { 𝑓 , 𝑟 }, which represents the forget and retain sides, respectively. 𝑀 denotes the binary sequence mask ( 𝑀 𝑡 ∈ { 0, 1}), which filters out system prompts and retains only the tokens corre-sponding to the user interaction history. To characterize the selective response of neurons to privacy features, we formulate a contrastive activation difference metric. For the 𝑗 -th neuron in the 𝑙 -th layer, its preliminary risk score is calculated as follows: 
+
+𝑟 𝑙 𝑔𝑎𝑝,𝑗 = ReLU (𝑣 𝑙 𝑓 ,𝑗 − 𝛾 · 𝑣 𝑙 𝑟,𝑗 ), (8) where 𝑣 𝑙 𝑓 ,𝑗 and 𝑣 𝑙 𝑟,𝑗 are the specific activation intensities , and the parameter 𝛾 ∈ R+ is defined as the tolerance margin. Introduc-ing 𝛾 yields a dynamic threshold that down-weights the general-activation component, thereby highlighting neurons that respond strongly to privacy signals but weakly to general tasks. We further apply ReLU to retain only positive activation gains and suppress negative-correlation interference. The resulting gap scores are min– max normalized as: 
+
+˜𝑟 𝑙 𝑔𝑎𝑝,𝑗 = 𝑟 𝑙 𝑔𝑎𝑝,𝑗 − min (r𝑙 𝑔𝑎𝑝 )
+
+max (r𝑙 𝑔𝑎𝑝 ) − min (r𝑙 𝑔𝑎𝑝 ) + 𝜖 . (9) Subsequently, intra-layer Min-Max normalization is applied to these raw scores, yielding the normalized candidate risk distribution 
+
+˜𝑟 𝑙 𝑔𝑎𝑝 ∈ [ 0, 1].
+
+## 4.3 Utility Significance 
+
+To prevent the intensity of privacy sensitivity in a neuron from ob-scuring the risks associated with the contribution to overall model performance, U-CAN designs independent strategies to evaluate utility significance. Inspired by recent pruning research [ 41 ], U-CAN employs a structural approximation strategy that integrates weight magnitudes with input activation norms to identify the contribution of parameters to reasoning. Specifically, the importance score 𝑟 𝑙 𝑖𝑚𝑝,𝑗 for the 𝑗 -th neuron in layer 𝑙 is calculated as the mean structural sensitivity: 
+
+𝑟 𝑙 𝑖𝑚𝑝,𝑗 = 1
+
+𝑑 𝑜𝑢𝑡 
+
+∥𝑊 𝑙  
+
+> ·,𝑗
+
+∥1 · ∥ 𝑋 𝑙   
+
+> ·𝑗
+
+∥2 ≜ E 𝑖 
+
+
+
+|𝑊 𝑙 𝑖,𝑗 | · √︄∑︁  
+
+> 𝑥 ∈ D 𝑟
+
+ 𝐻 𝑙 𝑗 (𝑥 )2 + 𝜖 
+
+
+
+,
+
+(10) where 𝑊 𝑙  
+
+> ·,𝑗
+
+denotes the column vector corresponding to the 𝑗 -th neuron, and ∥𝑋 𝑙   
+
+> ·𝑗
+
+∥2 represents the 𝐿 2 norm of input activations accumulated over the retention set 𝐷 𝑟 . The term 1 
+
+> 𝑑 𝑜𝑢𝑡
+
+enforces structural column-wise aggregation and defines the 𝑗 -th input di-mension as an atomic unit. Since this dimension encodes specific features for user preferences, the utility evaluation corresponds to the feature propagation path. To align with efficient deployment paradigms, U-CAN incorpo-rates a 4-bit 𝑁 𝐹 4 quantization-aware design. We define a dynamic dequantization operator D (·) to transiently recover high-precision weight proxies ˜𝑊 :
+
+˜𝑊 𝑙  
+
+> ·,𝑗
+
+= D 𝑄 (𝑊 𝑙  
+
+> ·,𝑗
+
+), S𝑞 
+
+, (11) where 𝑄 (·) and S𝑞 denote the quantized weights and quantiza-tion state, respectively. Furthermore, to circumvent GPU memory bottlenecks when processing extensive retention sets, we formu-late an IO-aware streaming aggregation protocol. We partition the retention set 𝐷 𝑟 into a sequence of mini-batches 𝐷 𝑟 = Ð𝑀 𝑘 =1 B𝑘 .The scalar activation norm in Eq. 10 is then reconstructed via an iterative state update mechanism using a global accumulator vector 
+
+S ∈ R𝑑 𝑖𝑛 :
+
+S(𝑘 ) ← S(𝑘 −1) +∑︁ 
+
+> x∈ B 𝑘
+
+ x𝑙 ⊙ x𝑙 , ∥𝑋 𝑙   
+
+> ·𝑗
+
+∥2 ≈√︃ S(𝐾 ) 
+
+> 𝑗
+
++ 𝜖, (12) where ⊙ denotes the element-wise product, S(0) = 0, and x𝑙 ∈ R𝑑 𝑖𝑛 
+
+represents the activation vector for a single sample. Finally, the actual importance score is obtained by substituting the dequantized proxy ˜𝑊 and the streaming activation norm into Eq. 10. To implement balanced risk hedging, we construct a utility-aware calibration mechanism that recalibrates the preliminary risk scores derived in Section 4.2. For candidate neurons exhibiting high activation discrepancy, their final forgetting weight is adjusted to reconcile privacy erasure with utility preservation. We define the refined risk score 𝑅 𝑑𝑖𝑚 through a weighted subtraction process: 
+
+𝑅 𝑙  
+
+> dim ,𝑗
+
+= Z
+
+
+
+ReLU 
+
+h
+
+𝜆 · N ( ˜𝑟 (𝑙 ) 
+
+> gap ,𝑗
+
+) − ( 1 − 𝜆 ) · N ( ˜𝑟 (𝑙 ) 
+
+> imp ,𝑗
+
+)
+
+i  
+
+, (13) where N (·) denotes the Min-Max normalization operator ensuring metrics map to [0, 1], and ReLU (𝑥 ) = max (0, 𝑥 ) eliminates negative KDD ’26, August, 2026, Jeju, Korea Zezheng Wu, Rui Wang, Xinghe Cheng, Yang Shao, Qing Yang, Jiapu Wang, and Jingwei Zhang 
+
+Table 1: Main results (forget vs. retain) on ML-100k and Pantry. We report Recall (R), MRR (M), and NDCG (N) at 𝐾 ∈ { 5, 10 }, plus an trade-off score at @10. Best results are in bold. - denotes unavailable results. All unlearning methods operate on LlamaRec and are not compared to LlamaRec itself. ‘Retraining’ denotes full retraining of LlamaRec. Datasets Models Trade-off@10 ↑ Unlearning Effectiveness ↓ Utility Preservation ↑                                                                                                                                                                       
+
+> R@10 M@10 N@10 R@5 M@5 N@5 R@10 M@10 N@10 R@5 M@5 N@5 ML-100k LlamaRec -0.2381 0.0811 0.1176 0.1429 0.0684 0.0868 0.1180 0.0456 0.0623 0.0704 0.0394 0.0471 Retraining 13.9416 0.1999 0.0602 0.0926 0.1200 0.0498 0.0671 0.1131 0.0422 0.0586 0.0626 0.0355 0.0421
+> GA -3.8209 0.2303 0.0825 0.1171 0.1569 0.0729 0.0936 0.1030 0.0321 0.0485 0.0622 0.0332 0.0380 NPO -4.3017 0.2248 0.0874 0.1198 0.1581 0.0779 0.0977 0.1030 0.0321 0.0485 0.0622 0.0331 0.0379 Llama-Eraser 17.4917 0.1714 0.0449 0.0741 0.0838 0.0334 0.0459 0.1032 0.0354 0.0511 0.0639 0.0302 0.0384 U-CAN (Ours) 29.4548 0.1435 0.0408 0.0639 0.0534 0.0292 0.0352 0.1098 0.0337 0.0514 0.0672 0.0380 0.0376 Pantry LlamaRec -0.0416 0.0168 0.0226 0.0287 0.0152 0.0185 0.0464 0.0193 0.0257 0.0332 0.0175 0.0214 Retraining 1.5523 0.0380 0.0086 0.0191 0.0228 0.0068 0.0148 0.0318 0.0104 0.0153 0.0172 0.0085 0.0107 GA -23.7418 0.0416 0.0168 0.0226 0.0283 0.0151 0.0184 0.0416 0.0123 0.0158 0.0131 0.0076 0.0115 NPO -23.8512 0.0416 0.0168 0.0226 0.0288 0.0152 0.0186 0.0416 0.0123 0.0157 0.0131 0.0075 0.0114 Llama-Eraser -7.1262 0.0347 0.0154 0.0201 0.0275 0.0145 0.0177 0.0406 0.0128 0.0193 0.0252 0.0108 0.0143 U-CAN (Ours) 14.6441 0.0356 0.0131 0.0184 0.0220 0.0113 0.0139 0.0469 0.0177 0.0245 0.0305 0.0154 0.0192
+
+risk values derived from high-utility neurons. Z(·) represents the final re-normalization, and 𝜆 acts as a balancing coefficient. 
+
+## 4.4 Adaptive Soft Attenuation 
+
+Adaptive soft attenuation applies continuous, dimension-wise scal-ing to suppress privacy-sensitive components without the irre-versible connection removal induced by hard pruning. Instead of binary masks, the intervention is driven by risk scores 𝑅 through a decay function parameterized by 𝛼 and 𝛽 , which attenuates param-eters smoothly as a function of risk magnitude. Given local risk scores 𝑅 𝑙 𝑑𝑖𝑚,𝑗 , we first select candidate dimen-sions by thresholding. To account for heterogeneous score scales across layers, we normalize risk scores independently within each layer to [0, 1] and define the intervention set 
+
+Ω = {( 𝑙, 𝑗 ) | 𝑅 𝑙 𝑑𝑖𝑚,𝑗 > 𝜏 𝑟𝑖𝑠𝑘 }, (14) where 𝜏 𝑟𝑖𝑠𝑘 is the sensitivity threshold. For (𝑙, 𝑗 ) ∈ Ω, U-CAN replaces binary gating with score-proportional decay by assigning a retention factor 
+
+𝛼 𝑙 𝑗 = 𝛼 max · 1 − 𝑅 𝑙 𝑑𝑖𝑚,𝑗 − 𝜏 𝑟𝑖𝑠𝑘 
+
+1 − 𝜏 𝑟𝑖𝑠𝑘 + 𝜖 
+
+!𝛽 
+
+, (15) where 𝛼 max bounds the maximum retained magnitude and 𝛽 con-trols the decay curvature. This mapping yields a non-linear sup-pression profile: larger risk scores induce stronger attenuation. We apply the retention factors as an in-place parameter trans-formation, using column-wise scaling for each weight dimension. For the weight matrix 𝑊 𝑙 ∈ R𝑑 out ×𝑑 in at layer 𝑙 , the retention factor 
+
+𝛼 𝑙 ∈ R𝑑 in is applied to each column 𝑗 as follows: 
+
+𝑊 𝑙 𝑗 = 𝑊 𝑙 𝑗 · 𝛼 𝑙 𝑗 , (16) where 𝑊 𝑙 𝑗 refers to the 𝑗 -th column of the weight matrix, and 𝛼 𝑙 𝑗 is the scaling factor for the 𝑗 -th input dimension. This operation is a one-shot transformation and does not require further optimization or backpropagation, making it architecture-agnostic and applicable to PEFT modules. This operation confines the intervention to the adapter parameters, keeping the pretrained backbone unchanged. To minimize inference-time overhead, we fuse the attenuation fac-tors directly into the parameters. as shown by: 
+
+𝑊 𝑙  
+
+> final
+
+= 𝑊 𝑙 ⊙
+
+
+
+𝛼 𝑙 
+
+, (17) where ⊙ denotes element-wise multiplication with 𝛼 𝑙 broadcast along input columns, thereby folding the attenuation factors into 
+
+𝑊 𝑙 to yield the final modified weights. Detailed pseudocodes and theoretical analysis are shown in Appendix A.2 and A.3. 
+
+## 5 Experiment 
+
+In our experiments, we aim to answer the following research ques-tions: RQ1: Compared with state-of-the-art unlearning methods, can U-CAN achieve more precise unlearning while preserving Gen-Rec performance? RQ2: What is the contribution of each compo-nent in U-CAN ? RQ3: How does U-CAN compare with state-of-the-art unlearning methods in terms of unlearning efficiency? RQ4: 
+
+How do different hyperparameters affect the performance of U-CAN ?
+
+## 5.1 Experiment Setup 
+
+5.1.1 Datasets. ML-100K and Pantry are used as benchmarks from the movie and e-commerce domains. ML-100K contains 100K user-item interactions, while Pantry is an Amazon Reviews subset on groceries and household supplies with 32,992 products. Following standard sequential recommendation preprocessing [ 53 ], interac-tions are sorted chronologically, a 5-core filter is applied to retain users and items with at least five interactions, and items without titles are removed. Details of datasets are in Appendix B.1. 
+
+5.1.2 Benchmarks. U-CAN is compared with 1) the deployed back-bone LlamaRec [ 52 ], a two-stage sequential recommender com-prising a lightweight retriever and a prompt-based LLM reranker; and 2) representative unlearning methods, including Retraining (retraining the backbone on D𝑟 from scratch), GA [ 8 ], NPO [ 57 ], and LLM-Eraser [ 58 ]. The detailed settings of each baseline are provided in Appendix B.2. U-CAN: Utility-Aware Contrastive Attenuation for Efficient Unlearning in Generative Recommendation KDD ’26, August, 2026, Jeju, Korea 
+
+5.1.3 Evaluate Metric. Our objective is to achieve precise and ef-ficient unlearning for GenRec while preserving recommendation performance. Therefore, we evaluate unlearning outcomes using seven metrics: KL divergence [ 26 ], prediction shift [ 37 ], and Per-plexity [ 3 ] (PPL) characterize distributional and behavioral changes induced by unlearning, while @10 ranking metrics (Recall [ 34 ], MRR [ 43 ], and NDCG [ 24 ]) capture recommendation-quality varia-tions on both forgetting and retention sides. Trade-off@10 is ad-ditionally defined to compactly summarize the forgetting–utility balance implied by the @10 ranking metrics. In addition, execution time and model throughput quantify the operational efficiency of the unlearning process. Full metric definitions and implementation details are deferred to the Appendix B.3. 
+
+5.1.4 Parameter Setting, U-CAN performs unlearning by updating the LoRA modules while keeping the pretrained backbone fixed. In the Utility Significance and Adaptive Soft Attenuation stages, the tolerance margin 𝛾 , risk-fusion coefficient 𝜆 , sensitivity threshold 
+
+𝜏 risk , maximum retained magnitude 𝛼 max , and decay curvature 𝛽 
+
+are set as follows: 𝛾 = 0.5, 𝜆 = 0.3, 𝜏 risk = 0.2, 𝛼 max = 0.1, and 
+
+𝛽 = 2.0. All experiments are conducted on a cluster equipped with Intel Xeon CPUs and a single NVIDIA V100 GPU. 
+
+## 5.2 RQ1: Main Results 
+
+The main results are reported in Table 1. We evaluate each method along two axes: forgetting effectiveness on the forget set, where lower values indicate stronger erasure, and utility preservation on the retain set, where higher values indicate better recommenda-tion quality. We also report Trade-off@10, a composite metric that rewards strong forgetting with minimal utility degradation. (1) Retraining is a strong but expensive reference, since it up-dates the full backbone on the retention set, making deployment in GenRec difficult to scale. In contrast, U-CAN operates in a single pass on adapters without any retraining, yet still matches retraining on overall forgetting–utility balance and surpasses it on several key metrics across both datasets. This indicates that targeted soft attenuation can recover much of the benefit of retraining while avoiding its substantial computational cost. (2) GA and NPO yield negative Trade-off@10, with marked retain-side utility drops and dataset-dependent forget-set gains, indicating that loss-level gradient updates in an entangled repre-sentation space perturb shared parameters beyond privacy-critical regions and distort general recommendation patterns. By contrast, U-CAN derives localized intervention signals from contrastive acti-vations between D𝑓 and D𝑟 and applies soft attenuation on LoRA adapters, achieving stronger and more stable forgetting with sub-stantially smaller retain-side degradation. (3) Llama-Eraser achieves stronger forgetting than gradient-based baselines, but its trade-off scores vary more across datasets, indicating higher utility cost in some settings. This aligns with hard-masking interventions, where removing a coarse subset of parameters also disrupts representations shared with retain behav-ior and amplifies utility degradation. In contrast, U-CAN combines utility-aware calibration with continuous soft attenuation to more selectively suppress forget-related activations while limiting retain-set drops, and thus yields the most stable forgetting–utility balance in our evaluation. 
+
+## 5.3 RQ1: Privacy Effectiveness Studies 
+
+Table 2: Unlearning results on ML-100k and Pantry. Higher indicates stronger forgetting effect. Models KL Divergence ↑ Pred. Shift (%) ↑ PPL ↑
+
+ML Pantry ML Pantry ML Pantry GA 0.00 0.00 0.10 0.56 18.91 17.74 NPO 0.00 0.00 0.38 0.95 18.90 17.77 LLM-erase 0.11 0.14 6.28 18.76 21.86 18.71 U-CAN 0.13 0.41 6.54 25.41 23.83 69.67 
+
+To distinguish substantive erasure from superficial suppression, Table 2 reports three forgetting-set signals—KL divergence, Predic-tion Shift, and PPL—that capture output-distribution change and uncertainty. Across both ML-100k and Pantry, U-CAN consistently induces the largest distributional deviation and uncertainty increase on forgotten data, with especially strong effects on Pantry. (1) GA and NPO show near-zero KL divergence and only mar-ginal prediction shift on both datasets, with PPL almost unchanged, indicating that gradient-based objective updates barely alter the forgetting-set distribution. Given that machine unlearning aims for the post-unlearning distribution to match that of training without the forget data [ 4 ], this distributional inertia suggests incomplete removal. In contrast, U-CAN leverages contrastive activations be-tween forget and retain data to localize forget-specific responses and apply targeted intervention, yielding consistently larger KL divergence and prediction shift; this also accords with the secu-rity view that memorization is associated with abnormally low PPL on specific sequences [ 6], as U-CAN drives PPL upward on the forgetting set, reflecting reduced confidence in the removed content. (2) LLM-erase raises KL divergence and prediction shift over GA and NPO, indicating that selective pruning can change forget-set outputs, yet PPL on Pantry remains close to gradient baselines, sug-gesting residual high-confidence likelihood on forgotten sequences. In contrast, U-CAN yields the largest prediction shift and a sharp PPL surge on Pantry (69.67), implying a substantial likelihood col-lapse on the forget set rather than a mild redistribution. We also evaluate basic plot understanding, narrative generation, and rec-ommendation quality retention after applying different unlearning methods, as detailed in Appendix C.2. 
+
+## 5.4 RQ2: Ablation Studies 
+
+Table 3 isolates the effect of each U-CAN component. The full con-figuration induces the strongest distributional shift on the forget side while maintaining the best effectiveness–utility trade-off, sug-gesting that contrastive localization, utility-aware screening, and soft attenuation are complementary rather than interchangeable. (1) On the left, full U-CAN attains the largest KL divergence, pre-diction shift, and PPL on ML-100k and Pantry, with a particularly large PPL increase on Pantry. “w/o C” yields the weakest KL and prediction shift and consistently lower PPL, indicating that raw ac-tivation statistics alone provide an insufficient privacy-localization KDD ’26, August, 2026, Jeju, Korea Zezheng Wu, Rui Wang, Xinghe Cheng, Yang Shao, Qing Yang, Jiapu Wang, and Jingwei Zhang 
+
+Table 3: Ablation of U-CAN. Each variant removes one component: “w/o F" without the utility-significance estimation used for risk calibration; "w/o C" without contrastive screening and computes risk scores from forgetting-set activations only; "w/o H" without adaptive soft attenuation with a hard intervention via binary weight zero. Variant Privacy Disruption Unlearning / Utility KL Divergence ↑ Pred. Shift (%) ↑ PPL ↑ Unlearning Effectiveness ↓ Utility Preservation ↑
+
+ML Pantry ML Pantry ML Pantry R@10 M@10 N@10 R@10 M@10 N@10 w/o F 0.06 0.16 4.06 18.10 22.23 19.97 0.2070 0.0714 0.1031 0.1197 0.0468 0.0636 
+
+w/o C 0.01 0.17 1.86 17.69 19.73 18.02 0.1502 0.0418 0.0661 0.0770 0.0252 0.0374 w/o H 0.08 0.19 4.96 18.70 20.81 23.73 0.1536 0.0422 0.0671 0.0820 0.0254 0.0386 U-CAN 0.13 0.42 6.54 25.41 23.83 69.67 0.1435 0.0408 0.0639 0.1098 0.0337 0.0515 
+
+signal. “w/o F” likewise reduces KL, prediction shift, and PPL rela-tive to the full model, consistent with poorer separation between risk-relevant and utility-critical dimensions. “w/o H” markedly suppresses the PPL rise on Pantry, showing that continuous, risk-weighted suppression, rather than mild probability redistribution, drives the high-uncertainty regime on forgotten data. (2) Table 3 right shows that full U-CAN attains the lowest forget-side Recall@10, MRR@10, and NDCG@10, while preserving utility better than “w/o C“ and “w/o H“. Both “w/o C“ and “w/o H“ incur a pronounced utility degradation relative to the full model, support-ing that contrastive localization and soft attenuation are critical for reducing collateral damage during unlearning. By comparison, “w/o F“ preserves the highest utility but shows the weakest un-learning effectiveness, indicating that disabling utility-significance estimation for risk calibration weakens forgetting. 
+
+## 5.5 RQ3: Efficiency Studies 
+
+Figure 3: Execution time (left) and throughput (right) for unlearning methods on ML-100k and Pantry. 
+
+Figure 3 reports execution time and throughput of unlearning baselines and U-CAN on ML-100k and Pantry, characterizing com-putational efficiency and scalability trade-offs. (1) Runtime advantage. GA and NPO consistently incur the largest latency on both datasets with near-identical curves, indi-cating a structural efficiency ceiling: objective-level unlearning requires repeated backward passes and parameter updates under frequent forget requests. In contrast, U-CAN maintains a clear run-time lead by replacing global gradient optimization with forward-only localization, extracting contrastive activation gaps between 
+
+D𝑓 and D𝑟 and performing utility-aware screening in activation space to sidestep the backpropagation bottleneck. (2) Throughput advantage. The throughput results mirror the runtime trend. GA and NPO remain throughput-limited, consistent with their reliance on gradient computation over multiple opti-mization steps. LLM-erase is more efficient than gradient-based baselines, yet throughput still lags behind U-CAN and the runtime gap further widens on Pantry, a pattern consistent with the ad-ditional optimization overhead of selective localization compared with contrastive activation-based localization in U-CAN. U-CAN sustains the highest throughput on both datasets by applying risk-driven, dimension-wise soft attenuation instead of binary masks that disrupt shared representations and require costly recovery. 
+
+## 5.6 RQ4: Hyper-Parameter Sensitivity Studies 
+
+Figure 4: Impact of Risk Threshold on Unlearning Effec-tivenes. 
+
+Figure 4 studies sensitivity to the risk-threshold hyperparam-eter that controls how aggressively neurons are selected by the dual screening module. Across ML-100k and Pantry, increasing the threshold consistently strengthens forgetting, indicating that U-CAN provides a stable and interpretable knob to trade intervention intensity against residual forget-set performance. On ML-100k, all three forget-set retrieval metrics decrease as the threshold increases, indicating progressively stronger suppres-sion of forget-associated retrieval behavior under stricter selection. The drop is most pronounced for Recall@10, while MRR@10 and U-CAN: Utility-Aware Contrastive Attenuation for Efficient Unlearning in Generative Recommendation KDD ’26, August, 2026, Jeju, Korea 
+
+NDCG@10 follow the same direction with smoother declines, sug-gesting that raising the threshold primarily reduces coarse hit-rate first and then further weakens ranking quality among the remaining hits. A similar monotone decline appears on Pantry: increasing 𝜏 𝑟𝑖𝑠𝑘 
+
+consistently lowers Recall@10, MRR@10, and NDCG@10, and the curves compress at the strictest setting, suggesting diminishing returns once most high-risk units are already covered. The consis-tent trends across metrics and datasets indicate that 𝜏 𝑟𝑖𝑠𝑘 provides a stable handle on the fraction of risk-scored neurons selected by dual screening, and that soft attenuation converts broader neuron coverage into deeper forgetting without noticeable oscillation or dataset-specific instability. We further analyze the sensitivity of the fusion weight 𝜆 on ML-100k, with detailed results reported in Appendix C.1. 
+
+## 6 Conclusion 
+
+In this paper, we introduce Utility-aware Contrastive Attenuation (U-CAN), an unlearning framework for LLM-based generative rec-ommendation that addresses the tension between precise privacy removal and preserving general capabilities. U-CAN operates on LoRA adapters and uses a dual screening mechanism: contrastive activation gaps between forget and retain interactions localize privacy-specific neurons, while a utility module combines adapter weight columns with retain-set activations to score the contribu-tion of each hidden dimension to reasoning and recommendation quality. These privacy and utility signals parameterize a differen-tiable decay function, which an adaptive soft attenuation scheme applies to selectively reduce high-risk dimensions in a single pass, avoiding the structural damage and performance collapse while maintaining the connectivity of shared reasoning pathways. Ex-periments on two publicly available datasets assess U-CAN with seven evaluation metrics and indicate strong privacy forgetting, utility retention, and computational efficiency. Appendix D further analyzes the limitations of U-CAN. 
+
+## References 
+
+[1] Guojia An, Jie Zou, Jiwei Wei, Chaoning Zhang, Fuming Sun, and Yang Yang. 2025. Beyond Whole Dialogue Modeling: Contextual Disentanglement for Con-versational Recommendation. In Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval . Association for Computing Machinery, New York, NY, USA, 31–41. [2] Keqin Bao, Jizhi Zhang, Yang Zhang, Wenjie Wang, Fuli Feng, and Xiangnan He. 2023. Tallrec: An effective and efficient tuning framework to align large language model with recommendation. In Proceedings of the 17th ACM conference on recommender systems . Association for Computing Machinery, Singapore, 1007– 1014. [3] Yoshua Bengio, Réjean Ducharme, Pascal Vincent, and Christian Jauvin. 2003. A neural probabilistic language model. Journal of machine learning research 3, Feb (2003), 1137–1155. [4] Lucas Bourtoule, Varun Chandrasekaran, Christopher A Choquette-Choo, Hen-grui Jia, Adelin Travers, Baiwu Zhang, David Lie, and Nicolas Papernot. 2021. Machine Unlearning. In 2021 IEEE Symposium on Security and Privacy . IEEE, Los Alamitos, CA, USA, 141–159. [5] Yinzhi Cao and Junfeng Yang. 2015. Towards Making Systems Forget with Machine Unlearning. In Proceedings of the 2015 IEEE Symposium on Security and Privacy . IEEE, USA, 463–480. [6] Nicholas Carlini, Florian Tramèr, Eric Wallace, Matthew Jagielski, Ariel Herbert-Voss, Katherine Lee, Adam Roberts, Tom Brown, Dawn Song, Úlfar Erlings-son, Alina Oprea, and Colin Raffel. 2021. Extracting Training Data from Large Language Models. In 30th USENIX Security Symposium . USENIX Association, Vancouver, BC, Canada, 2633–2650. [7] Sungmin Cha, Sungjun Cho, Dasol Hwang, and Moontae Lee. 2025. Towards Robust and Parameter-Efficient Knowledge Unlearning for LLMs. In The Thir-teenth International Conference on Learning Representations . Proceedings of the International Conference on Learning Representations, Singapore. [8] Shuwen Chai and Jinghui Chen. 2022. One-Shot Neural Backdoor Erasing via Ad-versarial Weight Masking. In Advances in Neural Information Processing Systems .Curran Associates, Inc., Red Hook, NY, USA, 22285–22299. [9] Xinghe Cheng, Zihan Zhang, Jiapu Wang, Liangda Fang, Chaobo He, Quanlong Guan, Shirui Pan, and Weiqi Luo. 2025. Education-Oriented Graph Retrieval-Augmented Generation for Learning Path Recommendation. arXiv preprint arXiv:2506.22303 (2025). arXiv:2506.22303 [cs.IR] [10] Xinghe Cheng, Xufang Zhou, Liangda Fang, Chaobo He, Yuyu Zhou, Weiqi Luo, Zhiguo Gong, and Quanlong Guan. 2025. NR4DER: Neural Re-ranking for Diversified Exercise Recommendation. In Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval .Association for Computing Machinery, New York, NY, USA, 1738–1747. [11] Damai Dai, Li Dong, Yaru Hao, Zhifang Sui, Baobao Chang, and Furu Wei. 2022. Knowledge Neurons in Pretrained Transformers. In Proceedings of the 60th An-nual Meeting of the Association for Computational Linguistics . Association for Computational Linguistics, Dublin, Ireland, 8493–8502. [12] Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. 2023. QLoRA: Efficient Finetuning of Quantized LLMs. In Thirty-seventh Conference on Neural Information Processing Systems . Neural Information Processing Systems Foundation, Inc., New Orleans, LA, USA, 1–28. [13] Ronen Eldan and Mark Russinovich. 2024. Who’s Harry Potter? Approximate Un-learning for LLMs. In The Twelfth International Conference on Learning Representa-tions . Proceedings of the International Conference on Learning Representations, Vienna, Austria. [14] Chongyu Fan, Jiancheng Liu, Yihua Zhang, Eric Wong, Dennis Wei, and Sijia Liu. 2024. SalUn: Empowering Machine Unlearning via Gradient-based Weight Saliency in Both Image Classification and Generation. In The Twelfth Interna-tional Conference on Learning Representations . Proceedings of the International Conference on Learning Representations, Vienna, Austria. [15] Jonathan Frankle and Michael Carbin. 2019. The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks. In The Seventh International Confer-ence on Learning Representations . Proceedings of the International Conference on Learning Representation, New Orleans, LA, USA. [16] Shijie Geng, Shuchang Liu, Zuohui Fu, Yingqiang Ge, and Yongfeng Zhang. 2022. Recommendation as Language Processing (RLP): A Unified Pretrain, Personalized Prompt & Predict Paradigm (P5). In Proceedings of the 16th ACM Conference on Recommender Systems . Association for Computing Machinery, New York, NY, USA, 299–315. [17] Shijie Geng, Shuchang Liu, Zuohui Fu, Yingqiang Ge, and Yongfeng Zhang. 2022. Recommendation as language processing (rlp): A unified pretrain, personalized prompt & predict paradigm (p5). In Proceedings of the 16th ACM conference on recommender systems . Association for Computing Machinery, Seattle, WA, USA, 299–315. [18] Mor Geva, Roei Schuster, Jonathan Berant, and Omer Levy. 2021. Transformer Feed-Forward Layers Are Key-Value Memories. In Proceedings of the 2021 Con-ference on Empirical Methods in Natural Language Processing . Association for Computational Linguistics, Online and Punta Cana, Dominican Republic, 5484– 5495. [19] Antonio A. Ginart, Melody Y. Guan, Gregory Valiant, and James Y. Zou. 2019. Making AI Forget You: Data Deletion in Machine Learning. In Advances in Neural Information Processing Systems . Curran Associates, Inc., Red Hook, NY, USA, 3518–3531. [20] Lei Guo, Ziang Lu, Junliang Yu, Quoc Viet Hung Nguyen, and Hongzhi Yin. 2024. Prompt-enhanced federated content representation learning for cross-domain recommendation. In Proceedings of the ACM Web Conference 2024 . Association for Computing Machinery, Singapore, 3139–3149. [21] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2022. LoRA: Low-Rank Adaptation of Large Language Models. In Proceedings of the Tenth International Conference on Learn-ing Representations . Proceedings of the International Conference on Learning Representations, Online. [22] Zhiyu Hu, Yang Zhang, Minghao Xiao, Wenjie Wang, Fuli Feng, and Xiangnan He. 2025. Exact and efficient unlearning for large language model-based recom-mendation. IEEE Transactions on Knowledge and Data Engineering 37 (2025), 5866 – 5877. [23] Joel Jang, Dongkeun Yoon, Sohee Yang, Sungmin Cha, Moontae Lee, Lajanugen Logeswaran, and Minjoon Seo. 2023. Knowledge Unlearning for Mitigating Privacy Risks in Language Models. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics . Association for Computational Linguistics, Toronto, Canada, 14389–14408. [24] Kalervo Järvelin and Jaana Kekäläinen. 2002. Cumulated gain-based evaluation of IR techniques. ACM Transactions on Information Systems (TOIS) 20, 4 (2002), 422–446. KDD ’26, August, 2026, Jeju, Korea Zezheng Wu, Rui Wang, Xinghe Cheng, Yang Shao, Qing Yang, Jiapu Wang, and Jingwei Zhang 
+
+[25] Sara Kemper, Justin Cui, Kai Dicarlantonio, Kathy Lin, Danjie Tang, Anton Ko-rikov, and Scott Sanner. 2024. Retrieval-Augmented Conversational Recommen-dation With Prompt-Based Semi-Structured Natural Language State Tracking. In Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval . Association for Computing Machinery, New York, NY, USA, 2786–2790. [26] Solomon Kullback and Richard A Leibler. 1951. On information and sufficiency. 
+
+The annals of mathematical statistics 22, 1 (1951), 79–86. [27] Yuyuan Li, Chaochao Chen, Xiaolin Zheng, Junlin Liu, and Jun Wang. 2024. Making Recommender Systems Forget: Learning and Unlearning for Erasable Recommendation. Knowledge-Based Systems 283 (2024), 111124. [28] Jiayi Liao, Sihang Li, Zhengyi Yang, Jiancan Wu, Yancheng Yuan, Xiang Wang, and Xiangnan He. 2024. Llara: Large language-recommendation assistant. In 
+
+Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval . Association for Computing Machinery, Washington, DC, USA, 1785–1795. [29] Sijia Liu, Yuanshun Yao, Jinghan Jia, Stephen Casper, Nathalie Baracaldo, Peter Hase, Yuguang Yao, Chris Yuhao Liu, Xiaojun Xu, Hang Li, Kush R. Varshney, Mohit Bansal, Sanmi Koyejo, and Yang Liu. 2025. Rethinking Machine Unlearning for Large Language Models. Nature Machine Intelligence 7 (2025), 181–194. [30] Shih-Yang Liu, Chien-Yi Wang, Hongxu Yin, Pavlo Molchanov, Yu-Chiang Frank Wang, Kwang-Ting Cheng, and Min-Hung Chen. 2024. DoRA: weight-decomposed low-rank adaptation. In Proceedings of the 41st International Con-ference on Machine Learning (ICML’24, Vol. 235) . Proceedings of International Conference on Machine Learning, Vienna, Austria, 32100–32121. [31] Ximing Lu, Sean Welleck, Jack Hessel, Liwei Jiang, Lianhui Qin, Peter West, Prithviraj Ammanabrolu, and Yejin Choi. 2022. QUARK: Controllable Text Gener-ation with Reinforced Unlearning. In Advances in Neural Information Processing Systems . Curran Associates, Inc., Red Hook, NY, USA, 27591–27609. [32] Xinyin Ma, Gongfan Fang, and Xinchao Wang. 2023. LLM-Pruner: On the Struc-tural Pruning of Large Language Models. In Advances in Neural Information Processing Systems . Curran Associates, Inc., Red Hook, NY, USA, 21702–21720. [33] Pratyush Maini, Zhili Feng, Avi Schwarzschild, Zachary Chase Lipton, and J. Zico Kolter. 2024. TOFU: A Task of Fictitious Unlearning for LLMs. In First Conference on Language Modeling . Proceedings of Language Modeling, Philadelphia, PA, USA. [34] Christopher D Manning. 2008. Introduction to information retrieval . Cambridge University Press, Cambridge. [35] Milad Nasr, Javier Rando, Nicholas Carlini, Jonathan Hayase, Matthew Jagielski, A. Feder Cooper, Daphne Ippolito, Christopher A. Choquette-Choo, Florian Tramèr, and Katherine Lee. 2025. Scalable Extraction of Training Data from Aligned, Production Language Models. In The Thirteenth International Conference on Learning Representations . Proceedings of the International Conference on Learning Representations, Singapore. [36] Humza Naveed, Asad Ullah Khan, Shi Qiu, Muhammad Saqib, Saeed Anwar, Muhammad Usman, Naveed Akhtar, Nick Barnes, and Ajmal Mian. 2025. A com-prehensive overview of large language models. ACM Transactions on Intelligent Systems and Technology 16, 5 (2025), 1–72. [37] Seth Neel, Aaron Roth, and Saeed Sharifi-Malvajerdi. 2021. Descent-to-delete: Gradient-based methods for machine unlearning. In Algorithmic Learning Theory .Proceedings of Machine Learning Research, Cambridge, MA, USA, 931–962. [38] Thanh Tam Nguyen, Thanh Trung Huynh, Zhao Ren, Phi Le Nguyen, Alan Wee-Chung Liew, Hongzhi Yin, and Quoc Viet Hung Nguyen. 2025. A Survey of Machine Unlearning. ACM Transactions on Intelligent Systems and Technology 16 (2025), 108:1–108:46. [39] Shirui Pan, Linhao Luo, Yufei Wang, Chen Chen, Jiapu Wang, and Xindong Wu. 2024. Unifying large language models and knowledge graphs: A roadmap. IEEE Transactions on Knowledge and Data Engineering 36, 7 (2024), 3580–3599. [40] Rafael Rafailov, Archit Sharma, Eric Mitchell, Stefano Ermon, Christopher D. Manning, and Chelsea Finn. 2023. Direct Preference Optimization: Your Language Model Is Secretly a Reward Model. In Advances in Neural Information Processing Systems . Curran Associates, Inc., Red Hook, NY, USA, 53728–53741. [41] Mingjie Sun, Zhuang Liu, Anna Bair, and J. Zico Kolter. 2024. A Simple and Effective Pruning Approach for Large Language Models. In The Twelfth Interna-tional Conference on Learning Representations . Proceedings of the International Conference on Learning Representations, Vienna, Austria. [42] Yiling Tao, Shuyi Wang, Jiaxi Yang, and Guido Zuccon. 2025. Unlearning for Federated Online Learning to Rank: A Reproducibility Study. In Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval . Association for Computing Machinery, New York, NY, USA, 3377–3386. [43] Ellen M Voorhees et al . 1999. The trec-8 question answering track report.. In 
+
+Trec , Vol. 99. National Institute of Standards and Technology, Gaithersburg, MD, USA, 77–82. [44] Bo Wang, Weiyi He, Shenglai Zeng, Zhen Xiang, Yue Xing, Jiliang Tang, and Pengfei He. 2025. Unveiling Privacy Risks in LLM Agent Memory. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) . Association for Computational Linguistics, Stroudsburg, PA, USA, 25241–25260. [45] Jiapu Wang, Zheng Cui, Boyue Wang, Shirui Pan, Junbin Gao, Baocai Yin, and Wen Gao. 2024. IME: Integrating Multi-Curvature Shared and Specific Embedding for Temporal Knowledge Graph Completion. In Proceedings of the ACM Web Conference 2024 . Association for Computing Machinery, New York, NY, USA, 1954–1962. [46] Jiapu Wang, Kai Sun, Linhao Luo, Wei Wei, Yongli Hu, Alan W Liew, Shirui Pan, and Baocai Yin. 2024. Large language models-guided dynamic adaptation for temporal knowledge graph reasoning. Advances in Neural Information Processing Systems 37 (2024), 8384–8410. [47] Jiapu Wang, Boyue Wang, Meikang Qiu, Shirui Pan, Bo Xiong, Heng Liu, Linhao Luo, Tengfei Liu, Yongli Hu, Baocai Yin, et al . 2023. A survey on temporal knowledge graph completion: Taxonomy, progress, and prospects. arXiv preprint arXiv:2308.02457 (2023). [48] Lingzhi Wang, Xingshan Zeng, Jinsong Guo, Kam-Fai Wong, and Georg Gottlob. 2025. Selective Forgetting: Advancing Machine Unlearning Techniques and Evaluation in Language Models. In Proceedings of the AAAI Conference on Artificial Intelligence . Association for the Advancement of Artificial Intelligence, Palo Alto, CA, USA, 843–851. [49] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, Chia-Wei Chen, et al . 2022. Chain-of-Thought Prompting Elicits Reasoning in Large Language Models. In Advances in Neural Information Processing Systems . Curran Associates, Inc., Red Hook, NY, USA, 24824–24837. [50] Xinwei Wu, Junzhuo Li, Minghui Xu, Weilong Dong, Shuangzhi Wu, Chao Bian, and Deyi Xiong. 2023. DEPN: Detecting and Editing Privacy Neurons in Pre-trained Language Models. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing . Association for Computational Linguis-tics, Singapore, 2875–2886. [51] Chaoqun Yang, Xinyu Lin, Wenjie Wang, Yongqi Li, Teng Sun, Xianjing Han, and Tat-Seng Chua. 2025. Earn: Efficient inference acceleration for llm-based generative recommendation by register tokens. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining . Association for Computing Machinery, Toronto, ON, Canada, 3483–3494. [52] Zhenrui Yue, Sara Rabhi, Gabriel de Souza Pereira Moreira, Dong Wang, and Even Oldridge. 2023. LlamaRec: Two-Stage Recommendation Using Large Language Models for Ranking. In Proceedings of the 1st Workshop on Generative Recommen-dation at CIKM ’23 . Association for Computing Machinery, Birmingham, United Kingdom. [53] Zhenrui Yue, Huimin Zeng, Ziyi Kou, Lanyu Shang, and Dong Wang. 2022. Defending Substitution-Based Profile Pollution Attacks on Sequential Recom-menders. In Proceedings of the 16th ACM Conference on Recommender Systems .Association for Computing Machinery, New York, NY, USA, 59–70. [54] He Zhang, Bang Wu, Xiangwen Yang, Xingliang Yuan, Xiaoning Liu, and Xun Yi. 2025. Dynamic Graph Unlearning: A General and Efficient Post-Processing Method via Gradient Transformation. In WWW . ACM, Sydney, NSW, Australia, 931–944. [55] He Zhang, Bang Wu, Xingliang Yuan, Shirui Pan, Hanghang Tong, and Jian Pei. 2024. Trustworthy Graph Neural Networks: Aspects, Methods, and Trends. Proc. IEEE 112, 2 (2024), 97–139. [56] He Zhang, Xingliang Yuan, and Shirui Pan. 2024. Unraveling Privacy Risks of In-dividual Fairness in Graph Neural Networks. In ICDE . IEEE, Utrecht, Netherlands, 1712–1725. [57] Ruiqi Zhang, Licong Lin, Yu Bai, and Song Mei. 2024. Negative Preference Opti-mization: From Catastrophic Collapse to Effective Unlearning. In First Conference on Language Modeling . Proceedings of Language Modeling, Philadelphia, PA, USA. [58] Shengming Zhang, Le Zhang, Jingbo Zhou, Zhi Zheng, and Hui Xiong. 2025. LLM-Eraser: Optimizing Large Language Model Unlearning through Selective Pruning. In Proceedings of the 31st ACM SIGKDD International Conference on Knowledge Discovery and Data Mining . Association for Computing Machinery, New York, NY, USA, 1960–1971. [59] Yang Zhang, Zhiyu Hu, Yimeng Bai, Jiancan Wu, Qifan Wang, and Fuli Feng. 2024. Recommendation Unlearning via Influence Function. ACM Transactions on Recommender Systems 3 (2024), 1–23. [60] Yi Zhang, Yiwen Zhang, Yu Wang, Tong Chen, and Hongzhi Yin. 2025. Towards distribution matching between collaborative and language spaces for generative recommendation. In Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval . Association for Computing Machinery, Padua, Italy, 2006–2016. [61] Wayne Xin Zhao, Kun Zhou, Junyi Li, Tianyi Tang, Xiaolei Wang, Yupeng Hou, Yingqian Min, Beichen Zhang, Junjie Zhang, Zican Dong, et al . 2023. A survey of large language models. arXiv preprint arXiv:2303.18223 1, 2 (2023). [62] Zexuan Zhong, Zhengxuan Wu, Christopher Manning, Christopher Potts, and Danqi Chen. 2023. MQuAKE: Assessing Knowledge Editing in Language Models via Multi-Hop Questions. In Proceedings of the 2023 Conference on Empirical Meth-ods in Natural Language Processing . Association for Computational Linguistics, Singapore, 15686–15702. U-CAN: Utility-Aware Contrastive Attenuation for Efficient Unlearning in Generative Recommendation KDD ’26, August, 2026, Jeju, Korea    
+
+> [63] Yutao Zhu, Huaying Yuan, Shuting Wang, Jiongnan Liu, Wenhan Liu, Chenlong Deng, Haonan Chen, Zheng Liu, Zhicheng Dou, and Ji-Rong Wen. 2025. Large Language Models for Information Retrieval: A Survey. ACM Transactions on Information Systems 44 (2025), 1–54.
+
+## Appendix A Model A.1 Mathematical Notations 
+
+Table 4: Summary of Notations Notation Description 
+
+𝑓 (· ; 𝜃 0, 𝜙 ) LoRA-based GenRec model 
+
+𝜃 0 Frozen backbone parameters 
+
+𝜙 /𝜙 ★ Adapter / Deployed adapter parameters 
+
+𝑃 (·) Induced probability distribution 
+
+T (·) Prompt template 
+
+𝑥 /𝑦 Textual context / Target item 
+
+D, D𝑓 , D𝑟 Full / Forget / Retain set 
+
+𝐻 𝑙 (𝑥 ; 𝜃 0, 𝜙 ★) Layer-𝑙 token activations 
+
+𝑣 𝑙 𝑓 /𝑣 𝑙 𝑟 Privacy / General activation vector at layer 𝑙 𝑀 𝑡 Binary mask for system prompts 
+
+𝛾 Tolerance margin for filtering 
+
+𝑟 𝑙 𝑔𝑎𝑝,𝑗 Raw activation-gap score of dim 𝑗 
+
+˜𝑟 𝑙 𝑔𝑎𝑝,𝑗 Normalized gap score of dim 𝑗 𝑊 𝑙  
+
+> :,𝑗
+
+Column-𝑗 adapter weight at layer 𝑙 
+
+∥𝑋 𝑙 𝑗 ∥2 𝐿 2-norm of retain activations on dim 𝑗 𝑟 𝑙 𝑖𝑚𝑝,𝑗 Utility importance score of dim 𝑗 
+
+D (·) Dequantization operator for weights 
+
+𝑅 𝑙 𝑑𝑖𝑚,𝑗 Fused risk score of dim 𝑗 
+
+N (·) Layer-wise Min–Max normalization 
+
+𝑍 (·) Global re-normalization operator 
+
+𝜆 Risk–utility fusion coefficient 
+
+Ω Set of identified high-risk dimensions 
+
+𝜏 𝑟𝑖𝑠𝑘 Risk sensitivity threshold 
+
+𝛼 𝑙 𝑗 Retention factor of dim 𝑗 at layer 𝑙 𝛼 max Upper bound of retention factor 
+
+𝛽 Decay curvature parameter For clarity and ease of understanding, the mathematical nota-tions used throughout this paper are summarized in Table 4. 
+
+## A.2 Pseudocode 
+
+We illustrate the pseudocode of U-CAN in Algorithm 1. 
+
+## A.3 Theoretical Analysis of U-CAN 
+
+In conducting a theoretical analysis of U-CAN, we examine how its activation- and weight-driven construction functions as an op-erational mechanism for privacy-oriented unlearning, restricting attention to implications that follow directly from the scoring and intervention definitions. 
+
+• Selective activation-gap screening. U-CAN aggregates token activations into masked layer-wise summaries shared by D𝑓 and D𝑟 , then defines a margin-based gap ReLU  (𝑣 𝑓 −
+
+Algorithm 1: Utility-aware Contrastive Attenuation (U-CAN) 
+
+Input: Model M (4-bit NF4), Datasets D𝑓 , D𝑟 , Params 
+
+𝛾, 𝜆, 𝜏, 𝛽 
+
+Output: Unlearned Model M∗
+
+// Stage 1: IO-Aware Streaming Statistics  
+
+> 1
+
+Initialize accumulators v𝑓 , v𝑟 , S ← 0; 
+
+> 2
+
+Compute mean activations v𝑓 , v𝑟 and utility norm 
+
+S ← Í(𝑥 ⊙ 𝑥 ) via batched forward passes; 
+
+// Stage 2: Layer-wise Risk Evaluation & Intervention  
+
+> 3
+
+foreach layer 𝑙 ∈ M do 
+
+// Quantization-Robust Sensitivity Analysis  
+
+> 4
+
+˜𝑊 ← D ( 𝑄 (𝑊 (𝑙 ) ), S𝑞 ); 
+
+> 5
+
+r𝑖𝑚𝑝 ← 1 
+
+> 𝑑 𝑜𝑢𝑡
+
+∥ ˜𝑊 ∥1 ⊙ √S(𝑙 ) ;
+
+// Risk Fusion and Thresholding  
+
+> 6
+
+r𝑔𝑎𝑝 ← ReLU (v(𝑙 ) 
+
+> 𝑓
+
+− 𝛾 v(𝑙 ) 
+
+> 𝑟
+
+); 
+
+> 7
+
+R𝑑𝑖𝑚 ← Z( Fusion (r𝑔𝑎𝑝 , r𝑖𝑚𝑝 )) ; 
+
+> 8
+
+if R𝑑𝑖𝑚 > 𝜏 𝑟𝑖𝑠𝑘 then  
+
+> 9
+
+𝜶 ← 𝛼 max · ( 1 − R𝑑𝑖𝑚 −𝜏 𝑟𝑖𝑠𝑘   
+
+> 1−𝜏 𝑟𝑖𝑠𝑘 +𝜖
+
+)𝛽 ; // Soft Decay // Architectural Agnostic Update  
+
+> 10
+
+if is LoRA Adapter then 𝑊 𝐴 ← 𝑊 𝐴 ⊙ 𝜶 ; 
+
+> 11
+
+else 𝑊 ← 𝑊 ⊙ 𝜶 ; 
+
+> 12
+
+𝜶 ← ⊮ ; // Structural Mask Baking  
+
+> 13
+
+end  
+
+> 14
+
+end  
+
+> 15
+
+return M
+
+𝑣 𝑟 ) − 𝛾 . By nonnegativity, negative forget–retain contrasts are zeroed, so only dimensions with sufficiently positive masked contrast contribute nonzero gap mass and enter downstream risk formation. 
+
+• Risk fusion enables bounded, thresholded selection. U-CAN forms a utility proxy by multiplying the adapter column magnitude with retained-set activation usage, then normal-izes it together with the activation-gap proxy and fuses them via weight 𝜆 . Applying ReLU enforces nonnegativity and re-normalization yields 𝑅 risk on a comparable (bounded under min–max normalization) scale; only positive fused values receive nonzero pre-risk mass. The intervention set is then fixed by the rule 𝑅 risk > 𝜏 risk , so 𝜏 risk deterministically con-trols which dimensions undergo the subsequent parameter rescaling. 
+
+• Adapter-only attenuation via column-wise rescaling. 
+
+U-CAN freezes the backbone 𝜃 0 and intervenes only on the deployed adapter by assigning each selected dimension a retention factor 𝛼 (𝑅 risk , 𝜏 risk ; 𝛼 max , 𝛽 ) and rescaling the corre-sponding adapter column. By construction, 𝛼 ≤ 𝛼 max and is monotone non-increasing in 𝑅 risk over the intervened range, so higher-risk dimensions are attenuated at least as strongly KDD ’26, August, 2026, Jeju, Korea Zezheng Wu, Rui Wang, Xinghe Cheng, Yang Shao, Qing Yang, Jiapu Wang, and Jingwei Zhang 
+
+as lower-risk ones under fixed (𝜏 risk , 𝛼 max , 𝛽 ). This multiplica-tive column scaling directly shrinks the adapter’s column-wise contribution for the same inputs, without requiring any gradient-based update. 
+
+## B Experiment Setup B.1 Datasets 
+
+To strictly evaluate the efficacy of privacy erasure and utility preser-vation, we conduct experiments on two representative benchmarks covering movie and e-commerce domains: 
+
+• ML-100K 2: A widely used benchmark dataset for movie recommendation, containing approximately 100,000 user-item interactions. 
+
+• Pantry 3: A subset of the Amazon Review dataset focusing on groceries and household supplies, comprising 32,992 distinct products. Data preprocessing follows standard protocols in sequential rec-ommendation [53]. We organize user interactions chronologically and apply a 5-core filter, recursively retaining only users and items with at least five interactions. Items lacking textual titles are ex-cluded to ensure semantic consistency for the LLM. To simulate a stringent unlearning scenario where users request removal of part of their history, we randomly sample 25% of user interaction records on each dataset as the forgetting set D𝑓 , and use the remaining 75% as the retention set D𝑟 .
+
+## B.2 Benchmarks 
+
+We evaluate our framework against a comprehensive set of base-lines, including the backbone model and the state-of-the-art un-learning strategies: 
+
+1) Backbone Framework: 
+
+• LlamaRec [ 52 ]: A two-stage sequential recommender that integrates a lightweight retriever with a prompt-based LLM reranker. It maps logits to candidate probabilities via a ver-balizer, ensuring efficient inference. We utilize LlamaRec as the foundation for our privacy pruning research, employing 
+
+Llama-2-7b 4 as the base generator. Its resource-constrained nature lends significant engineering value to privacy studies in practical deployment scenarios. 
+
+2) Unlearning Baselines: 
+
+• Retraining : The model is retrained from scratch solely on the retention set ( 𝐷 𝑟 ). This approach represents the theoreti-cal upper bound for unlearning effectiveness (zero privacy leakage) and serves as the benchmark for utility preserva-tion. 
+
+• GA (Gradient Ascent) [ 8]: A fundamental unlearning ap-proach that reverses the training objective. It maximizes cross-entropy loss on the forgetting set to shift parameters from the target distribution. 
+
+> 2https://cseweb.ucsd.edu/~jmcauley/datasets/amazon_v2/
+> 3https://amazon-reviews-2023.github.io/
+> 4https://huggingface.co/meta-llama/Llama-2-7b
+
+• NPO (Negative Preference Optimization) [ 57 ]: Reformulates unlearning as a negative alignment task. It employs a sigmoid-bounded objective to suppress target information while reg-ularizing updates to maintain model stability. 
+
+• LLM-Eraser [58 ]: A state-of-the-art framework that local-izes undesired memories via neuron scoring and soft masks. It combines selective pruning with contrastive distillation to erase sensitive knowledge without compromising general capabilities. 
+
+## B.3 Evaluation Indicators 
+
+To strictly assess the trade-off between privacy erasure and knowl-edge preservation, we adopt a multi-dimensional evaluation pro-tocol covering recommendation utility, distributional divergence, and generation uncertainty. 
+
+B.3.1 Utility and Performance Metrics. For the recommendation task, we employ three standard metrics: Recall@K , NDCG@K 
+
+(Normalized Discounted Cumulative Gain), and MRR@K (Mean Reciprocal Rank). In our experiments, 𝐾 is set to 10. 
+
+• Recall@K measures the proportion of relevant items suc-cessfully identified within the top-𝐾 recommendations. 
+
+• NDCG@K evaluates the ranking quality by emphasizing hits at higher ranks, reflecting the position bias inherent in user browsing. 
+
+• MRR@K focuses on the reciprocal rank of the first relevant item, indicating the model’s ability to prioritize the ground truth. 
+
+Trade-off@10 is additionally defined to compactly summarize the forgetting–utility balance implied by the @10 ranking metrics. The specific calculations are as follows: 
+
+Trade − off@10 = Δ%Forget@10 − Δ%Retain@10 , (18) 
+
+Δ%Forget@10 = 𝐸 10 (𝜃 𝑜 ) − 𝐸 10 (𝜃 𝑢 )
+
+𝐸 10 (𝜃 𝑜 ) , (19) 
+
+Δ%Retain@10 = 𝑈 10 (𝜃 𝑜 ) − 𝑈 10 (𝜃 𝑢 )
+
+𝑈 10 (𝜃 𝑜 ) , (20) where 𝐸 10 (𝜃 𝑜 ) and 𝑈 10 (𝜃 𝑜 ) represent the average @10 scores (Recall, MRR, NDCG) on the forget and retain sets for the original model, while 𝐸 10 (𝜃 𝑢 ) and 𝑈 10 (𝜃 𝑢 ) denote those of the unlearned model. It is crucial to note that the interpretation of these metrics de-pends on the target data subset. On the Retention Set ( 𝐷 𝑟 ), higher values indicate better preservation of general reasoning capabilities and generalization. Conversely, on the Forgetting Set ( 𝐷 𝑓 ), sig-nificantly lower values denote effective disruption of the retrieval pathways associated with sensitive information. 
+
+B.3.2 Operational Efficiency Metrics. To evaluate the scalability of unlearning frameworks in real-world deployment scenarios, we monitor computational overhead through three distinct dimensions: 
+
+Execution Time. We record the total wall-clock time required to complete the unlearning process on the specified forgetting set. This metric captures the end-to-end latency, encompassing forward passe and parameter updates. 
+
+Model Throughput. Defined as the number of data samples processed per second (samples/sec) during the unlearning phase. Unlike raw execution time, throughput normalizes performance U-CAN: Utility-Aware Contrastive Attenuation for Efficient Unlearning in Generative Recommendation KDD ’26, August, 2026, Jeju, Korea 
+
+against dataset size, offering a direct measure of the algorithm’s processing speed and its capacity to handle high-frequency data deletion requests. 
+
+B.3.3 Unlearning Verification Metrics. Beyond surface-level per-formance drops, we introduce three specific indicators to quantify the depth of memory erasure and the distributional shift of the unlearned model 𝑀 𝜃 ∗ compared to the original model 𝑀 𝜃 .
+
+Kullback-Leibler (KL) Divergence. To measure the distribu-tional distance between the unlearned model and the reference state , we compute the KL Divergence on the forgetting set. A higher divergence from the original model when processing sen-sitive queries suggests the unlearning procedure has successfully altered the model’s statistical profile, detaching it from the memo-rized private data. 
+
+𝐷 𝐾𝐿 (𝑃 𝜃 || 𝑃 𝜃 ∗ ) =∑︁  
+
+> 𝑦 ∈ V
+
+𝑃 𝜃 (𝑦 |𝑥 ) log 𝑃 𝜃 (𝑦 |𝑥 )
+
+𝑃 𝜃 ∗ (𝑦 |𝑥 ) (21) 
+
+Prediction Shift. This metric quantifies the tangible behavioral change of the model by calculating the percentage of input sam-ples in 𝐷 𝑓 where the top-1 generated token or recommended item changes after the unlearning operation. A high Prediction Shift indicates that the model’s deterministic preference for the sensitive data has been fundamentally altered. Shift = 1
+
+|𝐷 𝑓 |∑︁ 𝑥 ∈𝐷 𝑓 
+
+I(arg max 𝑃 𝜃 (𝑦 |𝑥 ) ≠ arg max 𝑃 𝜃 ∗ (𝑦 |𝑥 )) (22) 
+
+Perplexity (PPL). We utilize Perplexity to evaluate the model’s uncertainty regarding the forgotten sequences. Since LLMs tend to exhibit anomalously low perplexity for memorized training data, a sharp increase in PPL on the Forgetting Set implies that the specific parametric memories have been dissolved into high-entropy noise, rendering the information resistant to extraction. 
+
+Table 5: Hyperparameter Sensitivity Analysis of Fusion Weight 𝜆 on ML-100k. The optimal configuration is high-lighted in bold. Value Unlearning Effectiveness Utility Preservation 
+
+R@10 M@10 N@10 R@10 M@10 N@10 
+
+𝜆 = 0.9 0.2270 0.0802 0.1145 0.1180 0.0432 0.0606 
+
+𝜆 = 0.7 0.2237 0.0803 0.1140 0.1180 0.0431 0.0605 
+
+𝜆 = 0.5 0.1869 0.0641 0.0925 0.1049 0.0310 0.0480 
+
+𝜆 = 0.3 0.1435 0.0408 0.0639 0.1098 0.0337 0.0515 
+
+## C Experiments C.1 RQ4: Sensitivity Analysis of Fusion Parameter 
+
+The fusion parameter 𝜆 acts as the main regulator of our selection mechanism, controlling the relative weight of contrastive activation gaps and utility significance in the fused risk score. To examine how sensitive U-CAN is to this trade-off, we vary 𝜆 and report the corresponding unlearning and utility metrics on ML-100k in Table 5. Table 5 reveals a clear inverse relationship between the fusion weight 𝜆 and unlearning effectiveness on ML-100k. As 𝜆 decreases from 0.9 to 0.3, the forget-set retrieval metrics (R@10/M@10/N@10) drop monotonically, indicating progressively stronger suppression of privacy-sensitive behaviour. This pattern is consistent with the Polysemy Dilemma. For large 𝜆 , the fused score is dominated by raw activation gaps and thus flags not only privacy-specific units but also polysemous dimensions that are heavily reused by general recommendation tasks. When 𝜆 is reduced, the utility-aware com-ponent has greater influence and down-weights neurons that are important for retain-side performance, filtering out many such false positives. The remaining high-risk set is therefore concentrated on dimensions with strong privacy activation but limited contribu-tion to core utility. Under the optimal setting 𝜆 = 0.3, this screen-ing produces the lowest forget-side retrieval scores while keeping utility-preservation metrics close to the baseline, suggesting that U-CAN can intervene more surgically on genuinely privacy-critical parameters without incurring noticeable degradation on the retain set. 
+
+## C.2 Qualitative Case Studies 
+
+Table 6 examines whether unlearning methods preserve basic plot understanding and structured narrative generation after unlearning. Table 7 evaluates compositional, audience-specific recommendation for a child user, probing how well each method balances content safety with explanatory recommendation quality. (1) As shown in Table 6, for both the free form plot explanation and the five sentence structured summary of Toy Story , GA and LLM Erase capture the main premise and the jealousy to reconciliation arc. However, their outputs are often short, only loosely ordered, or linguistically degraded, and they frequently fail to satisfy the requested sentence structure or to cover the full story arc. In con-trast, U CAN generates more complete and coherent narratives that introduce the key characters, conflict, development, and resolution, and it follows a clearer sentence to sentence progression, suggest-ing that unlearning does not cause an obvious collapse in basic narrative planning. (3) As shown in Table 7, in the audience-specific recommendation task for a 10-year-old child, GA fails to follow the instruction at all, returning only “Pixar” without concrete titles or justifications. LLM-Erase lists plausible Pixar films with reasons grounded in historical or adult-oriented themes rather than child-appropriate criteria. U-CAN, however, recommends two family-friendly Pixar movies and explicitly motivates them with child-centric factors such as humor, adventure, friendship, and teamwork, demonstrating better compositional reasoning about both content suitability and explanation structure. 
+
+## D Limitation 
+
+Although U-CAN shows promising results on GenRec with LoRA adapters, it has certain limitations. First, our study confines the pri-vacy evaluation to forgetting-set metrics and empirical extraction or inference tests rather than formal guarantees such as differential privacy. This leaves open whether the observed benefits carry over KDD ’26, August, 2026, Jeju, Korea Zezheng Wu, Rui Wang, Xinghe Cheng, Yang Shao, Qing Yang, Jiapu Wang, and Jingwei Zhang 
+
+Table 6: Qualitative comparison of basic narrative understanding and structured narrative generation. Teal text highlights successful behavior, and red text highlights failure cases. User Instruction GA LLM-Erase U-CAN (Ours) 
+
+“Explain the plot of the movie Toy Story.” 
+
+Returns: “Toy Story is about a group of toys who come to life when humans are not around. The main character, Woody, is a cowboy doll who is Andy’s favorite toy. When Buzz Lightyear, a space ranger action figure, comes to town, he becomes Andy’s new favorite toy and Woody feels threatened.” 
+
+(Failure: Accurately captures Toy Story’s core premise and inciting conflict but omits the later plot and resolution.) Returns: “Woody is jealous that Buzz Lightyear has become his boy’s favorite new toy, so he tries to sabotage him until they team up against Sid and Woody learns how special the kid really loves him...I think?” 
+
+(Failure: Linguistic degradation.) Returns: “Toy Story is a 1995 American computer-animated buddy comedy film produced by Pixar Animation Studios and released by Walt Disney Pictures. It was directed by John Lasseter from a screenplay by Pixar’s director team, the Andersen/Lasseter/Gruwell trio, from a story by Lasseter and Pete Docter. The film was Pixar’s first feature-length film and was originally released on November 22, 1995. It was the first fully computer-animated feature film.” 
+
+(Success: Maintains high fluency and factual correctness, showing no signs of model collapse.) 
+
+“Explain the plot of the movie Toy Story in five logically ordered sentences, making sure each sentence follows naturally from the previous one.” 
+
+Returns: “The movie Toy Story is about a group of toys that come to life when humans are not around. The main character is Woody, a cowboy doll who is Andy’s favorite toy. When Andy gets a new toy, Buzz Lightyear, Woody becomes jealous and tries to get rid of him. However, Woody eventually realizes that he needs Buzz and the two become friends.” 
+
+(Failure: Mostly accurate and coherent summary of the main plot, but only in four sentences instead of the requested five.) Returns: “The movie Toy Story is about a cowboy doll named Woody who is jealous when his owner Andy gets a new toy called Buzz Lightyear. Woody tries to get rid of Buzz but fails and they become friends. Woody’s jealousy comes back when Buzz becomes more popular than him. Woody tries to get rid of Buzz again but fails and they become friends again.” 
+
+(Failure: Captures Woody’s jealousy toward Buzz and their eventual friendship in a roughly ordered way, but uses only four sentences.) Returns: “The story is about a cowboy doll named Woody who lives with Andy and his family. He has to compete for attention against Buzz Lightyear, another new toy that was given as a gift on Andy’s birthday. When they are both accidentally thrown out into the yard by Andy, Woody tries to get back inside before he gets lost or destroyed while Buzz goes off looking for other people to play with him. Eventually, after many adventures together (and some alone), they become friends instead of enemies like at first when it seemed like there could only be one winner between them because no matter what happened during their time apart from each other; whether good things happen or bad ones do too - everything always ends up being okay again eventually!” 
+
+(Success: Captures the key characters, conflict, and overall story arc.) to alternative datasets or stricter privacy notions. Second, we have not yet systematically assessed U-CAN in other domains, modali-ties, or more complex reasoning tasks, nor against stronger adaptive adversaries. Extending the framework along these axes remains an important direction for future work. U-CAN: Utility-Aware Contrastive Attenuation for Efficient Unlearning in Generative Recommendation KDD ’26, August, 2026, Jeju, Korea 
+
+Table 7: Qualitative comparison on compositional reasoning for audience-specific recommendations. User Instruction GA LLM-Erase U-CAN (Ours) 
+
+“List two family-friendly Pixar movies that are suitable for a 10-year-old child. For each movie, write one short sentence explaining why it is appropriate for children.” 
+
+Returns: “ Pixar” 
+
+(Failure: Ignoring to satisfy both the request to list two specific movies and to justify why they are appropriate for children.) Returns: “[Toy Story] - The first Pixar movie ever made, and still one of the best. It’s a great introduction to the world of animation. [Up] - A heartwarming story about a man who loses his wife but finds love again. ” 
+
+(Failure: Selects two suitable Pixar films with plausible reasons, but grounds them in historical and adult-focused themes rather than child-appropriate criteria.) Returns: “[Toy Story] - The first Pixar movie was released in 1995 and was the first feature-length computer-animated film. It tells the story of a group of toys who come to life when humans aren’t around. The movie has a lot of humor and adventure, and it teaches kids about friendship and teamwork. [Up] - Released in 2009, Up is another Pixar classic that tells the story of an elderly man who goes on an adventure with a young boy. The movie has a lot of heart and teaches kids about overcoming obstacles and following their dreams.” 
+
+(Success: Correctly lists two family-friendly Pixar movies and provides appropriate child-oriented justifications for each.)

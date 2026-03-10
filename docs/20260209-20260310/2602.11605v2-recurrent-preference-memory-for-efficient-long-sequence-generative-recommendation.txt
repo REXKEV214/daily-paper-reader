@@ -1,0 +1,1174 @@
+Title: Recurrent Preference Memory for Efficient Long-Sequence Generative Recommendation
+
+URL Source: https://arxiv.org/pdf/2602.11605v2
+
+Published Time: Mon, 16 Feb 2026 01:43:44 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Recurrent Preference Memory for Efficient Long-Sequence Generative Recommendation 
+
+Yixiao Chen 1, Yuan Wang 2, Yue Liu 2, Qiyao Wang 2, Ke Cheng 2, Xin Xu 2, Juntong Yan 2, Shuojin Yang 1,Meng-Hao Guo 1, Jun Zhang 2, Huan Yu 2, Jie Jiang 2 
+
+> 1
+
+Tsinghua University, China; 2 Tencent Inc., China 
+
+Abstract 
+
+Generative recommendation (GenRec) models typically model user behavior via full attention, but scaling to lifelong sequences is hin-dered by prohibitive computational costs and noise accumulation from stochastic interactions. To address these challenges, we intro-duce Rec2PM , a framework that compresses long user interaction histories into compact Preference Memory tokens. Unlike traditional recurrent methods that suffer from serial training, Rec2PM employs a novel self-referential teacher-forcing strategy: it leverages a global view of the history to generate “reference memories,” which serve as supervision targets for parallelized recurrent updates. This al-lows for fully parallel training while maintaining the capability for iterative updates during inference. Additionally, by representing memory as token embeddings rather than extensive KV caches, Rec2PM achieves extreme storage efficiency. Experiments on large-scale benchmarks show that Rec2PM significantly reduces inference latency and memory footprint while achieving superior accuracy compared to full-sequence models. Analysis reveals that the Pref-erence Memory functions as a denoising Information Bottleneck ,effectively filtering interaction noise to capture robust long-term interests. 
+
+CCS Concepts 
+
+• Information systems → Recommender systems .
+
+Keywords 
+
+Generative Recommendation, Long-Sequence Modeling, Preference Memory, Context Compression 
+
+1 Introduction 
+
+Generative Recommendation (GenRec) has emerged as a promising paradigm, leveraging the Transformer architecture to model user behavior as a sequential generation task [ 36 , 37 ]. By capturing com-plex dependencies within historical interaction sequences, GenRec demonstrates strong capability in predicting the next item a user is likely to interact with. However, scaling GenRec to lifelong user histories remains fun-damentally challenging: interaction sequences can easily span thou-sands or even tens of thousands of tokens. Long histories create two coupled issues. First , the quadratic cost of standard self-attention ( 𝑂 (𝐿 2)) makes full life-cycle model-ing prohibitively expensive in industrial serving, forcing systems to truncate to a short recent window and lose long-term prefer-ence signals. Second , user behaviors are stochastic and noisy (e.g., accidental clicks). Even if full-context computation were feasible, directly attending to the entire raw history may amplify such noise, distracting the model from the underlying preference structure and consequently weakening its generalization ability. Parametric Memory  
+
+> (Model Weights)
+> Memory Encoder
+> Decoder
+
+Preference Memory 
+
+> (Memory State)
+
+Working Memory 
+
+> (Recent Interactions)
+
+Next Item 
+
+Long History 
+
+Figure 1: A generative recommendation system constructed based on a Tripartite Memory Mechanism. 
+
+To make long-sequence GenRec practical, we argue that a rec-ommender should separate what it conditions on by persistence and granularity , rather than treating the entire raw history as a mono-lithic context. Concretely, we adopt a tripartite memory decomposition (Fig-ure 1). Working Memory is the recent raw interaction sequence, where high-fidelity details are most important for capturing short-term intent shifts. Preference Memory is a compact, persistent representation extracted from the long archived history, intended to summarize the user’s long-term interests. Finally, Parametric Memory refers to the static model weights shared across users, including the encoder/compressor and the autoregressive decoder for next-item prediction. The core design choice is to compress the massive archived history into compact preference memory that behave like learn-able tokens: they can be concatenated with Working Memory and processed by standard attention with a cost comparable to short-context modeling. Importantly, this compression also forms an 
+
+information bottleneck : by forcing the model to write history into a limited number of slots, preference memory can filter noisy behav-iors and retain preference-relevant signals for prediction. In large-scale deployment, Preference Memory must be persisted on a per-user basis to avoid repeatedly re-encoding the full inter-action history at every step. However, this setting imposes two core system requirements: the memory must support continuous incremental updates as new interactions arrive (Incremental Up-date), and its representation must remain sufficiently compact to meet the storage constraints of billion-scale user bases (Storage Efficiency). Furthermore, since memory updates at inference time are inherently performed iteratively segment by segment, naively unrolling this recurrent process during training inevitably leads to serial computation graphs, substantially increasing training cost 
+
+> arXiv:2602.11605v2 [cs.IR] 13 Feb 2026
+
+Conference’17, July 2017, Washington, DC, USA Chen et al. Training Inference            
+
+> i0i1i11 q
+> Decoder
+> (as Encoder)
+> …i12 i13 i14 i15
+> i13 i14 i15 i16
+> Decoder KV
+> (only q)
+
+(a) Token Memory (One -off)                                                                                      
+
+> i0i1i2i3qm0i4i5i6i7q
+> Decoder
+> i1i2i3i4m0i5i6i7i8m1
+> Decoder
+> m1i8i9i10 i11 q
+> i9i10 i11 i12 m2
+> Decoder
+> m2i12 i13 i14 i15 q
+> i13 i14 i15 i16 m3
+> Decoder
+> i0i1i2i3qm0i4i5i6i7q
+> Decoder
+> i1i2i3i4m0i5i6i7i8m1
+> Decoder
+> m1i8i9i10 i11 q
+> i9i10 i11 i12 m2
+> Decoder
+> m2i12 i13 i14 i15 q
+> i13 i14 i15 i16 m3
+> Decoder
+> m0m1m0
+> i0i1i11 q
+> Decoder
+> ( as Encoder )
+> …
+> mi12 i13 i14 i15
+> i13 i14 i15 i16
+> Decoder
+
+(b) Token Memory (Overwriting) 
+
+(c) Token Memory (Appending )
+
+(d ) KV Memory (One -off) (e) KV Memory (Overwriting ) (f) KV Memory (Appending)                                            
+
+> i0i1i2i3qi4i5i6i7qi8i9i10 i11 qi12 i13 i14 i15
+> i0
+> i1
+> i2
+> i3
+> q
+> i4
+> i5
+> i6
+> i7
+> q
+> i8
+> i9
+> i10
+> i11
+> q
+> i12
+> i13
+> i14
+> i15
+> i0i1i2i3qi4i5i6i7qi8i9i10 i11 qi12 i13 i14 i15
+> i0
+> i1
+> i2
+> i3
+> q
+> i4
+> i5
+> i6
+> i7
+> q
+> i8
+> i9
+> i10
+> i11
+> q
+> i12
+> i13
+> i14
+> i15
+> i0i1i11 q…i12 i13 i14 i15
+> …
+> …
+> …
+> …
+> …
+> …
+> …
+> i0
+> i1
+> i11
+> q
+> i12
+> i13
+> i14
+> …i15
+
+Figure 2: Taxonomy of Memory Compression Paradigms. Representative methods: (a) ICAE [ 8 ], (b) RMT [ 3], (c) AutoCom-pressors [6], (d) Gist [22], (e)(Hypothetical scheme for comparison), (f) PersRec [38] and Anchor [24]. For (e) and (f), only the training-time attention mask is shown. 
+
+and causing optimization instability. As a result, efficiently training persisted Preference Memory becomes a key challenge. Existing solutions in Large Language Models (LLMs) and sequen-tial recommendation struggle to simultaneously satisfy the require-ments of incremental updates and storage efficiency for persisted memory. As shown in Figure 2, storage-friendly token-memory designs often come at the cost of serially unrolled training, while mask-parallel approaches typically rely on persisting per-layer KV caches. To bridge this gap, we propose Rec2PM (Recommendation with Recurrent Preference Memory) for efficient long-sequence generative recommendation. Rec2PM represents Preference Mem-ory as compact compact token embeddings that can be persisted per user and updated iteratively at inference time. More impor-tantly, to avoid serial unrolling during training, Rec2PM introduces a self-referential teacher-forcing objective that enables fully parallel optimization of recurrent updates, while maintaining memory in a storage-efficient token format. We further posit that preference memory serve as an effective Information Bottleneck. By compressing history, Rec2PM naturally filters out stochastic noise inherent in long interaction sequences. Consequently, our memory-augmented model captures long-term interests efficiently and, in certain scenarios, can outperform models that directly attend to the full raw sequence. Our contributions are summarized as follows: 
+
+• We introduce Rec2PM, a generative recommendation frame-work that compresses long user interaction histories into compact Preference Memory tokens. This design enables effi-cient persistence of users’ long-term interests and iterative updates during inference, overcoming the latency bottle-necks of full-attention models while avoiding the high stor-age costs of KV-cache-based approaches. 
+
+• We propose a novel self-referential teacher-forcing training strategy that enables fully parallel optimization of recurrent memory updates. This approach leverages global history supervision to avoid the instability and serial computation costs associated with traditional BPTT unrolling. 
+
+• Experimental results demonstrate that Rec2PM significantly reduces computational and storage costs while achieving superior recommendation accuracy. We further show that Preference Memory serves as an effective denoising Infor-mation Bottleneck , filtering out stochastic noise from long interaction sequences. 
+
+2 Related Works 2.1 Generative Recommendation 
+
+The rapid advancement of large language models (LLMs) [ 1, 10 ,31 , 33 , 34 ] has profoundly impacted sequence modeling across di-verse domains. Originally designed for natural language generation, pretrained autoregressive Transformers have demonstrated excep-tional generalization capabilities and scalability, prompting their adoption beyond NLP. In the realm of recommender systems, these Recurrent Preference Memory for Efficient Long-Sequence Generative Recommendation Conference’17, July 2017, Washington, DC, USA 
+
+developments have catalyzed a shift from traditional embedding-based retrieval and multi-stage ranking pipelines [ 5, 12 , 29 , 40 ]toward unified generative formulations, which reframe recommen-dation as a sequence generation problem [36]. 
+
+ID-based methods. Representative approaches [ 11 , 15 , 30 , 41 ] uti-lize recurrent or self-attention mechanisms to capture temporal dependencies in user interactions. Recently, HSTU [ 36 ] further for-mulates recommendation as a sequence transduction task within a generative framework, demonstrating significant power-law scal-ing properties. 
+
+LLM-based methods. To overcome the limitations of atomic iden-tifiers, [ 2, 27 ] introduce semantic IDs and multi-token generation strategies. [ 4, 9] reformulate recommendation as a language mod-eling task. More recently, several studies [ 14 , 21 , 25 , 39 ] have pro-posed unified architectures that integrate retrieval and ranking into end-to-end generative frameworks. 
+
+2.2 Long-Sequence Modeling 
+
+Long-context modeling for LLMs and sequential recommendation increasingly falls under the broader umbrella of context compression :reducing the effective context length while preserving task-relevant information [19, 28, 42]. 
+
+Hard compression. Approaches that directly prune redundant tokens from the context [13, 18]. While effective at cutting cost, it is less applicable to recommendation, where identifying redundant historical items without harming preference signals is difficult. 
+
+Soft compression. A richer line of work learns continuous latent summaries to replace the original context. Early solutions [ 7, 23 , 26 ]extend the receptive field by caching and compressing hidden states across segments, but still require heavy hidden/KV buffers. More recent methods distill context into compact representations. In LLMs, ICAE [ 8] trains an encoder to map a long prompt into a handful of token embeddings, while 500xCompressor [ 20 ] similarly uses an encoder but outputs per-layer KV caches of special tokens. Gist [ 22 ] takes a different route: an attention mask distills context into KV caches at designated gist positions in a standard forward pass. In recommendation, KuaiFormer [ 21 ] compresses early- and mid-stage interactions into token embeddings. These methods are mainly one-off compression and do not specify how to update the compressed state under streaming inputs. RMT [ 3 ] introduces read-write memory tokens that are carried and overwritten across segments, enabling recurrently updates, while AutoCompressors [ 6] appends newly compressed tokens over time. These token-based memory designs are storage-efficient, but training their update mechanisms typically requires serial unrolling, yielding long back-propagation paths and optimization instability. Meanwhile, Gist [ 22 ] enables fully parallel training through masking, but only supports single-pass compression. Recent works such as PersRec [ 38 ] (recommendation) and Anchor [ 24 ] (LLMs) segment the sequence in the training mask, allowing segment-wise inference by storing KV caches at anchor positions. However, un-der our formulation, persisting per-layer KV caches as preference memory—even for a few anchors—is substantially more expensive per user than storing token embeddings. Beyond sequence compression, some approaches address comple-mentary problems. [ 17 ] compresses discrete prompts into learned continuous vectors for LLM-based recommendation. [ 35 ] uses reg-ister tokens to compress information within the first 𝑘 layers and then runs subsequent layers only on these tokens. 
+
+Relation to our memory framework. Among these methods, those that persist compressed states across inference steps map onto our memory framework. Figure 2 summarizes representative designs by persisted format (token embeddings vs. KV caches) and update mechanism (one-off vs. overwriting updates vs. appending updates). Compared with these memory schemes, Rec2PM supports parallel training and recurrent updates at inference time, and persists light-weight token embeddings as preference memory rather than KV caches. 
+
+3 Methodology 
+
+In this section, we present Rec2PM , our recurrent preference mem-ory framework for generative recommendation. We first formulate the problem and the general memory-augmented setting. Next, we detail our architecture, focusing on the learnable atomic memory states and the associated encoding and updating mechanisms. Fi-nally, we introduce our self-referential training strategy, which enables efficient parallel training while maintaining the integrity of recurrent memory updates. 
+
+3.1 Problem Formulation 
+
+3.1.1 Autoregressive Modeling for Sequential Recommendation. Let 
+
+I denote the set of items. For each user, the interaction history is represented as a sequence 𝑆 = {𝐼 0, 𝐼 1, . . . , 𝐼 𝑛 −1 }, where 𝐼 𝑖 ∈ I is the item interacted with at time step 𝑖 . The goal of a generative recommender is to model the probability distribution of the next item 𝐼 𝑛 conditioned on the historical sequence 𝑆 :
+
+𝑃 (𝐼 𝑛 |𝑆 ) = 𝑃 (𝐼 𝑛 |𝐼 0, 𝐼 1, . . . , 𝐼 𝑛 −1; 𝜃 ) (1) where 𝜃 denotes the model parameters. For autoregressive modeling over the entire sequence, we max-imize the likelihood of each next interaction conditioned on its prefix. Concretely, given a minibatch of 𝐵 sequences, we minimize the negative log-likelihood: 
+
+L𝐴𝑅 = −
+
+> 𝐵 −1
+
+∑︁ 
+
+> 𝑗 =0
+> 𝑛 −1
+
+∑︁ 
+
+> 𝑖 =1
+
+log 𝑃 (𝐼 𝑗,𝑖 | 𝐼 𝑗, 0: 𝑖 −1; 𝜃 ), (2) where 𝑛 is the sequence length, and 𝐼 𝑗, 0: 𝑖 −1 denotes the prefix subsequence {𝐼 𝑗, 0, . . . , 𝐼 𝑗,𝑖 −1 }.This probability is typically modeled using a Transformer-based architecture. To strictly enforce the autoregressive property, a causal attention mask is applied within the self-attention mecha-nism. 
+
+3.1.2 Preference Memory for Lifelong Sequences. In real-world recommendation scenarios, user interaction sequences can be ex-tremely long. To manage this complexity, we adopt a memory-augmented approach where historical information is maintained in a compressed preference memory. We segment the user’s history sequence 𝑆 into fixed-length seg-ments. Let 𝐿 𝑠𝑒𝑔 denote the length of each segment. The sequence Conference’17, July 2017, Washington, DC, USA Chen et al. 
+
+𝑆 is partitioned into 𝑆 = {𝑆 0, 𝑆 1, . . . , 𝑆 𝑘 }, where each completed segment 𝑆 𝑗 (for 𝑗 < 𝑘 ) contains exactly 𝐿 𝑠𝑒𝑔 interactions, and the final segment 𝑆 𝑘 contains the remaining interactions ( |𝑆 𝑘 | ≤ 𝐿 𝑠𝑒𝑔 ). Formally, when predicting the item at step 𝑖 , the user’s history is divided into two parts: 
+
+• 𝑆 ℎ𝑖𝑠𝑡 : all completed segments before the current one( 𝑆 ℎ𝑖𝑠𝑡 =
+
+{𝑆 0, . . . , 𝑆 𝑘 −1 }). We denote 𝑀 𝑘 −1 as the preference memory that compresses information from these historical segments. 
+
+• 𝑆 𝑟𝑒𝑐𝑒𝑛𝑡 : the current segment 𝑆 𝑘 , which contains the most recent interactions that have not yet been compressed. The prediction of the next item 𝐼 𝑖 depends on both the com-pressed preference memory of the past and the detailed recent context: 
+
+𝑃 (𝐼 𝑖 |𝑆 ) ≈ 𝑃 (𝐼 𝑖 |𝑀 𝑘 −1, 𝑆 𝑘 ) (3) When the current segment 𝑆 𝑘 reaches the full length 𝐿 𝑠𝑒𝑔 , a memory update is triggered. The content of 𝑆 𝑘 is compressed and merged into the preference memory, transitioning it from 𝑀 𝑘 −1 to 
+
+𝑀 𝑘 .
+
+3.2 Learnable Tokens as Preference Memory 
+
+In this work, we introduce Atomic Memory State 𝑚 to explic-itly capture long-term user interests. This atomic memory state is derived by interacting a set of global learnable parameters with the user’s input context. We denote these parameters as Memory Queries Vectors , 𝑄 𝑚𝑒𝑚 ∈ R𝐶 ×𝑑 , where 𝐶 represents the number of memory slots and 𝑑 is the embedding dimension. We define a generic memory encoding operation that transforms an input context into a compressed preference memory. By con-catenating the input context with the memory queries and feeding them into a Memory Encoder, we extract the token embeddings cor-responding to the query positions as the resulting atomic memory state 𝑚 :
+
+𝐻 = Encoder ([ 𝐸 𝑒𝑛𝑐𝑜𝑑𝑒 ; 𝑄 𝑚𝑒𝑚 ]) 
+
+𝑚 = 𝐻 |𝐸 𝑒𝑛𝑐𝑜𝑑𝑒 |+ 1: |𝐸 𝑒𝑛𝑐𝑜𝑑𝑒 |+ 𝐶 
+
+(4) Here, 𝐸 𝑒𝑛𝑐𝑜𝑑𝑒 represents the source information to be compressed. Consequently, 𝑚 and 𝑄 𝑚𝑒𝑚 share the same shape R𝐶 ×𝑑 . Crucially, 
+
+𝑄 𝑚𝑒𝑚 functions as a memory extractor learned globally during training (Parametric Memory), whereas 𝑚 models personalized long-term interests for a specific user during inference (Preference Memory). The proposed memory mechanism operates in two phases: initial-ization (cold start) and recurrent update (streaming). We introduce two update variants: Overwriting and Appending . Let 𝑚 𝑘 denote the atomic memory generated at step 𝑘 , and 𝑀 𝑘 denote the effective memory context available after step 𝑘 .
+
+• Overwriting Mode: Overwriting the previous preference memory with the most recent atomic memory state: 𝑀 𝑘 =
+
+𝑚 𝑘 . This yields a constant-size preference memory. 
+
+• Appending Mode: Appending the new atomic memory to the existing preference memory: 𝑀 𝑘 = [𝑀 𝑘 −1;𝑚 𝑘 ]. This yields a growable preference memory. 
+
+Initialization. When a user sequence begins, the first segment 
+
+𝑆 0 serves as the initial context. We treat 𝑆 0 as the input 𝐸 𝑒𝑛𝑐𝑜𝑑𝑒 in the encoding operation. 
+
+𝐸 𝑒𝑛𝑐𝑜𝑑𝑒, 0 = 𝑆 0 (5) 
+
+𝑄 𝑚𝑒𝑚 interact with the raw items in 𝑆 0 via the encoder to generate the initial atomic memory state 𝑚 0. Ideally, 𝑀 0 = 𝑚 0 for both modes. 
+
+Recurrent Update. As the user interacts with more items, the system maintains a working context 𝑆 𝑟𝑒𝑐𝑒𝑛𝑡 (corresponding to the current segment 𝑆 𝑘 ). Once 𝑆 𝑘 reaches the predefined segment length 
+
+𝐿 𝑠𝑒𝑔 , a memory update is triggered. To capture both long-term his-tory and recent dynamics, we construct the input context 𝐸 𝑒𝑛𝑐𝑜𝑑𝑒,𝑘 
+
+by concatenating the previous preference memory 𝑀 𝑘 −1 with the newly completed segment 𝑆 𝑘 :
+
+𝐸 𝑒𝑛𝑐𝑜𝑑𝑒,𝑘 = [𝑀 𝑘 −1; 𝑆 𝑘 ] (6) We then apply the encoding operation to obtain the atomic memory state 𝑚 𝑘 . We subsequently update 𝑀 𝑘 according to the chosen mode (Overwriting or Appending). 
+
+Memory Utilization for Prediction. To predict the next item within the current segment 𝑆 𝑘 , the Decoder requires access to both the compressed preference memory and the detailed recent interactions. We construct the decoder input by concatenating them: 
+
+𝐸 𝑑𝑒𝑐𝑜𝑑𝑒,𝑘 = [𝑀 𝑘 −1; 𝑆 𝑘 ] (7) The decoder processes this sequence via causal self-attention, where each position in 𝑆 𝑘 attends to 𝑀 𝑘 −1 and preceding tokens in 𝑆 𝑘 to predict the next item. 
+
+Unified Architecture. Although memory updating and item pre-diction are conceptually distinct operations (one generates 𝑚 𝑘 , the other generates predictions for 𝑆 𝑘 ), they share the same input con-text structure. We therefore implement them within a single unified architecture where the Memory Encoder and Generative Decoder share parameters. To maximize efficiency, we perform both tasks in a single forward pass by constructing a joint sequence: 
+
+𝐸 𝑢𝑛𝑖 𝑓 𝑖𝑒𝑑,𝑘 = [𝑀 𝑘 −1; 𝑆 𝑘 ; 𝑄 𝑚𝑒𝑚 ] (8) Under standard causal masking, the tokens in 𝑆 𝑘 attend to 𝑀 𝑘 −1
+
+and their predecessors to predict the next items, while the tokens in 𝑄 𝑚𝑒𝑚 (positioned at the end) naturally attend to both 𝑀 𝑘 −1 and the full 𝑆 𝑘 to generate the updated atomic memory state 𝑚 𝑘 . This unified design ensures that memory representations are directly op-timized for the prediction objective and reduces the computational overhead of memory maintenance. 
+
+3.3 Training 
+
+While our Preference Memory architecture inherently supports recurrent updates, training this mechanism sequentially presents significant challenges. Figures 2(b) and (c) illustrate the serially unrolled token-memory paradigm typically employed in recurrent memory models [3, 6]. Training in this sequential manner faces two critical issues. First, it necessitates maintaining long gradient chains across multiple steps for Back-Propagation Through Time (BPTT), resulting in pro-hibitive computational overhead. Second, even when mitigating computational costs with techniques like stop-gradients [ 6], se-quential training remains vulnerable to error accumulation. This Recurrent Preference Memory for Efficient Long-Sequence Generative Recommendation Conference’17, July 2017, Washington, DC, USA i0 i1 i2 i3 q i4 i5 i6 i7 q i8 i9 i10 i11 q i12 i13 i14 i15 q                                                                                           
+
+> Decoder
+> m0m1m2m3
+> i0i1i2i3qm0i4i5i6i7m1i8i9i10 i11 m2i12 i13 i14 i15 qqq
+> Decoder
+> i1i2i3i4m0i5i6i7i8i9i10 i11 i12 i13 i14 i15 i16 m1m2m3
+> Causal Causal Causal Causal
+> LAR Lcon
+> i0i1i2i3qm0i4i5i6i7m0i8i9i10 i11 m0i12 i13 i14 i15 qqq
+> Decoder
+> i1i2i3i4m0i5i6i7i8i9i10 i11 i12 i13 i14 i15 i16 m1m2m3
+> Causal Causal Causal Causal
+> LAR Lcon
+> m1m1m2
+
+Step 1 Step 2
+
+Overwriting Mode                   
+
+> Appending Mode
+> i0i1i2i3qi4i5i6i7qi8i9i10 i11 qi12 i13 i14 i15
+> i0
+> i1
+> i2
+> i3
+> q
+> i4
+> i5
+> i6
+> i7
+> q
+> i8
+> i9
+> i10
+> i11
+> q
+> i12
+> i13
+> i14
+> i15
+> q
+> q
+
+Figure 3: Illustration of the proposed two-stage parallel training paradigm. Stage 1 generates global reference memories by attending to raw history. Stage 2 performs parallel optimization for incremental updates (in Overwriting or Appending modes) under the supervision of the reference memories. 
+
+instability complicates optimization and often leads to suboptimal convergence. Mask-parallel approaches [ 22 , 38 ], as shown in Figure 2(d-f), rely on caching Key-Value pairs for all history layers as. While effec-tive for parallelism, this results in a memory footprint significantly larger than our compact token embeddings, violating our storage constraints. To reconcile the conflict between efficient parallel train-ing and compact memory states, we propose a self-referential train-ing strategy inspired by teacher forcing, as illustrated in Figure 3. In this paradigm, the model generates its own “teacher" signals by attending to the global history, using them to supervise the updates. 
+
+3.3.1 Parallel Training via Self-Referential Teacher Forcing. Given a user sequence partitioned into segments 𝑆 = {𝑆 0, 𝑆 1, . . . , 𝑆 𝑘 }, we process the data in two passes: 
+
+Step 1: Global Reference Generation. First, we construct a global “reference" memory by allowing the model to view the raw history directly. We interleave 𝑄 𝑚𝑒𝑚 into the full sequence of segments: 
+
+𝐸 𝑔𝑙𝑜𝑏𝑎𝑙 = [𝑆 0; 𝑄 𝑚𝑒𝑚 ; 𝑆 1; 𝑄 𝑚𝑒𝑚 ; . . . ; 𝑆 𝑘 ; 𝑄 𝑚𝑒𝑚 ] (9) We apply a customized attention mask to 𝐸 𝑔𝑙𝑜𝑏𝑎𝑙 where tokens can attend to their causal history of raw items ( 𝑆 0: 𝑖 ) but are prevented from attending to preceding 𝑄 𝑚𝑒𝑚 tokens. Consequently, the output of 𝑄 𝑚𝑒𝑚 at the end of segment 𝑆 ℎ is equivalent to compressing the entire raw prefix [𝑆 0, . . . , 𝑆 ℎ ] directly. We denote this output as the Reference Memory , 𝑚 (𝑟𝑒 𝑓 ) 
+
+> ℎ
+
+. Since 𝑚 (𝑟𝑒 𝑓 ) 
+
+> ℎ
+
+is derived from the full raw history, we consider it a low-error atomic memory state. Also, we denote 𝑀 (𝑟𝑒 𝑓 ) 
+
+> ℎ
+
+= 𝑚 (𝑟𝑒 𝑓 ) 
+
+> ℎ
+
+for Overwriting and 𝑀 (𝑟𝑒 𝑓 ) 
+
+> ℎ
+
+=
+
+[𝑚 (𝑟𝑒 𝑓 ) 
+
+> 0
+
+; 𝑚 (𝑟𝑒 𝑓 ) 
+
+> 1
+
+; . . . ; 𝑚 (𝑟𝑒 𝑓 ) 
+
+> ℎ
+
+] for Appending. 
+
+Step 2: Parallel Prediction & Update. In the second step, we simu-late the recurrent update process in parallel. We divide the sequence into independent subsequences. For each segment 𝑆 ℎ , we construct the input by combining ( 𝑀 (𝑟𝑒 𝑓 ) 
+
+> ℎ−1
+
+) from the previous step with the current segment: 
+
+𝐸 𝑙𝑜𝑐𝑎𝑙,ℎ = [𝑀 (𝑟𝑒 𝑓 ) 
+
+> ℎ−1
+
+; 𝑆 ℎ ; 𝑄 𝑚𝑒𝑚 ] (10) These subsequences are processed in parallel by the Decoder. Within each subsequence: 
+
+• The tokens in 𝑆 ℎ perform causal attention to predict the next items, supervised by the autoregressive loss L𝐴𝑅 .
+
+• The 𝑄 𝑚𝑒𝑚 tokens attend to 𝑀 (𝑟𝑒 𝑓 ) 
+
+> ℎ−1
+
+and 𝑆 ℎ to generate the 
+
+Updated Memory , 𝑚 (𝑢𝑝𝑑 ) 
+
+> ℎ
+
+.
+
+Optimization Objective. The updated memory 𝑚 (𝑢𝑝𝑑 ) 
+
+> ℎ
+
+represents the state obtained via a single update step. To ensure the recurrent memory mechanism remains stable over long sequences, we en-force consistency between the updated memory and the reference memory. We minimize the Mean Squared Error (MSE) between them: 
+
+L𝑐𝑜𝑛 = 1
+
+𝑘 
+
+> 𝑘
+
+∑︁ 
+
+> ℎ=0
+
+∥𝑚 (𝑟𝑒 𝑓 ) 
+
+> ℎ
+
+− 𝑚 (𝑢𝑝𝑑 ) 
+
+> ℎ
+
+∥2 (11) The final training objective combines the recommendation task with the memory consistency constraint: 
+
+L = L𝐴𝑅 + 𝜆 L𝑐𝑜𝑛 (12) where 𝜆 is a hyperparameter balancing the two terms. This ap-proach allows us to train on all segments in parallel while ensuring the preference memory effectively captures the global history. 
+
+3.3.2 Justification of the Training Paradigm. The effectiveness of this strategy stems from the synergy between the two objectives and the teacher-forcing nature of the architecture. We articulate the rationale as follows: 
+
+Implicit Supervision for High-Quality Compression. The autore-gressive loss L𝐴𝑅 acts on items conditioned on 𝑀 (𝑟𝑒 𝑓 ) 
+
+> ℎ−1
+
+. To minimize prediction error, the model is compelled during Stage 1 to compress Conference’17, July 2017, Washington, DC, USA Chen et al. 
+
+all essential information from the raw prefix into the reference memory. This ensures that our “Teacher” signal is semantically rich and accurate. 
+
+Supervision for Recurrent Updates. The consistency loss L𝑐𝑜𝑛 
+
+explicitly ensures that the update operation mimics the global com-pression. It forces the model to learn how to transition from 𝑀 ℎ−1
+
+to 𝑀 ℎ without losing information, effectively transferring the com-pression capability of the global view to the recurrent updater. 
+
+Stabilization via Teacher Forcing. Crucially, during Stage 2, the generation of the updated memory 𝑚 (𝑢𝑝𝑑 ) 
+
+> ℎ
+
+is conditioned on the high-quality reference 𝑀 (𝑟𝑒 𝑓 ) 
+
+> ℎ−1
+
+, rather than a rolled-out state with accumulated errors. This decouples the training steps and prevents the “drift” phenomenon often seen in RNN training, effectively applying Teacher Forcing to the memory mechanism for stable and efficient convergence. 
+
+3.3.3 Discussion: Implicit Supervision vs. Reconstruction. We delib-erately exclude an explicit reconstruction loss (e.g., forcing pref-erence memory to reconstruct raw history [ 8, 20 ]). From an In-formation Bottleneck [ 32 ] perspective, our goal is to maximize predictive information 𝐼 (𝑀 ; 𝑌 ) subject to a capacity constraint im-posed by the limited memory tokens. Explicit reconstruction forces the maximization of 𝐼 (𝑀 ; 𝑆 ℎ𝑖𝑠𝑡 ), compelling the memory to encode high-entropy noise (e.g., random clicks) alongside valid interests. Given the tight memory bottleneck, this leads to capacity contention ,where noise displaces predictive signals. By relying solely on the implicit supervision from the autoregressive task ( L𝐴𝑅 ), the De-coder acts as a critic, guiding the memory to discard noise and retain only the latent intent necessary for future prediction. 
+
+4 Experiments 4.1 Main Experiments Settings 
+
+4.1.1 Datasets and preprocessing. We conduct our experiments on the MerRec dataset [ 16 ], a large-scale real-world benchmark collected from the Mercari C2C platform. Crucially for our study, un-like many traditional datasets dominated by short sessions, MerRec contains a significant proportion of extremely long user interaction sequences. This makes it an ideal testbed for evaluating the capabil-ity of recommendation models to capture long-term dependencies from extensive historical contexts. To strictly evaluate long-sequence modeling capabilities, we filter for users with at least 1003 interactions. For each user, we truncate the interaction sequence to the most recent 1003 items. We adopt a leave-one-out evaluation strategy: for each user’s sequence, the second-to-last interaction is reserved for validation, the last interaction is used for testing, and the preceding interactions form the training set. 
+
+4.1.2 Context length settings. To rigorously evaluate the impact of context length, we define two input settings for backbone baselines without memory: 
+
+• Short : We set 𝐿 short =200 . To prevent data wastage during training, we partition the long training prefix (length 𝐿 full )into non-overlapping chunks of length 𝐿 short , treating each chunk as an independent training instance. During evalua-tion, only the most recent 𝐿 short interactions are used. 
+
+• Full : We set 𝐿 full =1000 . We feed the entire training prefix into the model and optimize the standard autoregressive next-item prediction objective ( L𝐴𝑅 ) over the sequence. For all memory-augmented variants, we maintain an input length of 𝐿 full but process the sequence in segments of length 𝐿 seg =200 .This results in 𝐿 full /𝐿 seg segments per user. During inference, the model updates the preference memory segment-by-segment and generates predictions based on the output of the final segment. 
+
+4.1.3 Backbones and compared methods. We instantiate memory mechanisms on top of two representative sequential recommen-dation backbones: SASRec [ 15 ] and HSTU [ 36 ]. The comparison includes two baselines without persisted preference memory and six memory-augmented variants: 
+
+• Short/Full : Baselines without preference memory. 
+
+• Tok-Serial-O/A : token-memory with serially unrolled train-ing (Figure 2(b,c)) [ 3, 6]. We evaluate both overwriting (O) and appending (A) updates at inference. 
+
+• KV-Mask-O/A : KV-cache memory with mask-parallel train-ing (Figure 2(e,f)) [ 22 , 24 , 38 ]. The attention mask forces cross-segment information flow to go through designated memory positions; we evaluate both overwriting (O) and appending (A) updates at inference. 
+
+• Rec2PM-O/A (ours): token-memory with parallel training via our proposed self-referential teacher-forcing objective. At inference time, Rec2PM follows the same overwriting(O) and appending(A) update rules as Tok-Serial. 
+
+4.1.4 Hyperparameters and metrics. We set the embedding dimen-sion to 64 for all models. For SASRec, we employ 4 layers with 4
+
+attention heads, while for HSTU, we use 16 layers with 8 heads. Models are trained with a learning rate of 10 −3, batch size of 8,and a weight decay of 0.1, using an early-stopping patience of 10 
+
+epochs. The memory slots number is set to 𝐶 =4. For our proposed method, the consistency loss weight is set to 𝜆 =1.Performance is evaluated using Hit Rate (H@K) and NDCG (N@K). For all experiments conducted on the MerRec dataset, we report the average results over five independent runs using fixed random seeds ranging from 0 to 4. 
+
+4.2 Main results 
+
+Based on the results in Table 1, we make the following observations: 
+
+Memory as a Denoiser. Both memory-augmented models and the Full baseline significantly outperform the Short baseline, confirm-ing that user history contains valuable information for predicting future interactions. Notably, despite having a much smaller effective context window than Full, memory-based models achieve compa-rable or even superior performance. We attribute this to the noisy nature of user interaction data in recommendation systems. Di-rect attention over extremely long sequences (as in Full) is prone to distraction by irrelevant stochastic behaviors. As discussed in Section 3.3.3, the Preference Memory acts as an Information Bottle-neck, compressing history into limited slots. This forces the model to distill only the most salient semantic information while filtering Recurrent Preference Memory for Efficient Long-Sequence Generative Recommendation Conference’17, July 2017, Washington, DC, USA 
+
+Table 1: Main results on the MerRec long-sequence benchmark. We compare our Rec2PM against token-memory baselines with serially unrolled training (Tok-Serial-*) and KV-cache baselines with mask-parallel training (KV-Mask-*) on two backbones (SASRec and HSTU). The best results are in bold and the second best results are underlined. Method SASRec [15] HSTU [36] H@1 H@10 H@50 N@10 N@50 H@1 H@10 H@50 N@10 N@50 
+
+Short 14.10 40.96 57.59 26.68 30.39 13.94 41.67 59.08 26.86 28.88 Full 14.43 42.40 59.31 27.44 31.23 14.24 42.77 60.37 27.47 31.41 Tok-Serial-O 14.57 42.56 59.66 27.62 31.46 14.65 43.75 61.03 28.20 32.07 Tok-Serial-A 14.49 42.56 59.70 27.58 31.43 14.45 43.60 61.02 28.01 31.91 KV-Mask-O 14.73 42.32 59.31 27.60 31.41 14.56 43.64 61.07 28.08 32.00 KV-Mask-A 14.72 42.35 59.37 27.56 31.37 14.64 43.59 60.88 28.10 31.97 Rec2PM-O 14.79 43.12 59.92 28.05 31.82 15.04 44.20 61.23 28.66 32.48 
+
+Rec2PM-A 14.73 42.76 59.74 27.81 31.62 14.87 44.13 61.16 28.50 32.31 out noise, often yielding better generalization than attending to the raw long sequence. 
+
+Ineffectiveness of Appending. Across all variants, appending schemes do not improve performance over overwriting schemes and of-ten degrade it slightly. This further supports the noise hypothesis: overwriting updates compel the model to discard less relevant in-formation to make room for new updates, maintaining a strict bottleneck. In contrast, appending updates accumulate historical states, weakening the bottleneck effect and retaining more noise. Furthermore, unlike in LLMs where specific retrieval from distant history is crucial, sequential recommendation is dominated by re-cency effects [ 21 ]. Appending memory may distract the attention mechanism with stale history, reducing the focus on more critical recent interactions. 
+
+Superiority of Rec2PM.. Finally, our Rec2PM-O scheme consis-tently outperforms other memory baselines. Compared to token-memory with serially unrolled training (Tok-Serial), Rec2PM ben-efits from our parallel training paradigm with Teacher Forcing, which mitigates the error accumulation inherent in serial training. Compared to KV-cache memory with mask-parallel training (KV-Mask), Rec2PM offers better information flow. In KV-Mask schemes, information from previous segments is restricted by the attention mask and may not be fully propagated to the Query Tokens’ KV cache at lower layers. In contrast, Rec2PM explicitly provides the mature, pre-computed token embeddings of the previous segment at the input layer, allowing the current segment to attend to the full historical context from the very first transformer layer. 
+
+4.3 In-Depth Analysis 
+
+4.3.1 One-time Full-sequence Compression. As discussed in Sec-tion 3.3, our proposed parallel training strategy trains the model to perform incremental memory updates while aligning them with a global reference derived from the raw history. This implies that the model should theoretically support both iterative updates and one-time global compression. To verify this, we directly evaluate the trained Rec2PM-O model from Section 4.2 (without fine-tuning) under a One-time compression setting: we compress the entire prefix sequence into the preference memory in a single forward pass and use it to predict items in the final segment. 
+
+Table 2: Performance comparison of the trained Rec2PM-O model under two inference protocols: standard Iterative 
+
+updates vs. One-off compression. In the One-off setting, we compress all segments (except the last one) into the prefer-ence memory in a single step, which is then concatenated with the final segment for prediction. Results are reported on MerRec with the HSTU backbone. H@1 H@10 H@50 N@50 
+
+Iterative 15.04 44.20 61.23 32.48 One-off 15.05 44.20 61.23 32.48 The results, presented in Table 2, show that the one-time com-pression yields performance remarkably consistent with the stan-dard iterative inference. This demonstrates the robustness of our memory mechanism and validates the effectiveness of the consis-tency loss in aligning the incremental state with the global history representation. 
+
+Table 3: Ablation study on the consistency loss ( L𝑐𝑜𝑛 ). We compare the default Rec2PM-O (with 𝜆 =1) against a variant trained without consistency loss ( 𝜆 =0). Results are reported on MerRec with the HSTU backbone. H@1 H@10 H@50 N@50 
+
+Rec2PM-O 15.04 44.20 61.23 32.48 Rec2PM-O w/o L𝑐𝑜𝑛 14.43 43.38 61.20 31.86 
+
+4.3.2 Ablation on Consistency Loss. To further demonstrate the effectiveness of the Consistency Loss, we removed L𝑐𝑜𝑛 from the training of Rec2PM-O, retaining only L𝐴𝑅 (setting 𝜆 =0). The results shown in Table 3 indicate a performance drop when the consistency loss is removed. This degradation occurs because, without L𝑐𝑜𝑛 , the model only receives supervision for the one-time global compression (propagated via L𝐴𝑅 to Step 1) during training, leaving the update mechanism in Step 2 unsupervised. Consequently, the model fails to learn the transition from 𝑀 ℎ−1Conference’17, July 2017, Washington, DC, USA Chen et al. 
+
+to 𝑀 ℎ . This discrepancy between the training objective and the iterative inference requirement leads to poor performance, thereby highlighting the necessity of the consistency loss. 
+
+Table 4: Impact of memory slots number on the performance of Rec2PM-O. We compare the performance of Rec2PM-O with different number of memory slots 𝐶 = {1, 2, 4, 8, 16 } on MerRec with the HSTU backbone. H@1 H@10 H@50 N@50 
+
+Full 14.24 42.77 60.37 31.41 Rec2PM-O 𝐶 = 1 15.05 44.14 60.92 32.42 Rec2PM-O 𝐶 = 2 14.89 44.38 61.22 32.44 Rec2PM-O 𝐶 = 4 15.04 44.20 61.23 32.48 Rec2PM-O 𝐶 = 8 14.80 44.18 61.45 32.36 Rec2PM-O 𝐶 = 16 14.72 44.10 61.19 32.30 
+
+4.3.3 Impact of Memory Slots Number. We explore the impact of the number of memory slots on performance. As shown in Table 4, overall, our method exhibits stable performance across different numbers of memory slots and consistently outperforms the Full baseline on the MerRec dataset. One observation is that perfor-mance degrades slightly when the number of memory slots is ex-tremely small ( 𝐶 = 1) or extremely large ( 𝐶 = 16 ). We hypothesize that when the number of slots is too small, the capacity is insuf-ficient to adequately maintain preference information from the historical interaction sequence. Conversely, when the number of slots is too large, the Memory fails to serve as an effective informa-tion bottleneck, introducing noise that interferes with attention. 
+
+4.3.4 Efficiency Analysis. We evaluate the computational and stor-age efficiency on MerRec with the HSTU backbone (Short: 200, Full: 1000; memory variants: 𝐿 seg =200 with the first four segments compressed and persisted as Preference Memory). Table 5 shows that memory-based variants achieve latency comparable to Short (∼10ms) while Full is substantially slower (135ms). Moreover, Rec2PM is far more storage-efficient than KV-Mask methods. 
+
+4.4 Evaluation on Industrial Dataset 
+
+We further validate our method on a large-scale proprietary dataset collected from a major commercial content recommendation service. More details are provided in Appendix A.1. We follow a realistic chronological split (train on multiple weeks of logs and evaluate on the subsequent day). We use HSTU-Full with a context length of 2048 as the primary full-context baseline, along with shorter-context variants with different input lengths. For our Rec2PM method, we perform only one-time compression: we compress the long history (the first 1948 interactions) into 𝐶 =20 memory slots, and concate-nate them with the most recent 100 interactions for next-item prediction. As shown in Table 6, the memory-based approach (Rec2PM) out-performs the full-sequence attention baseline (HSTU-Full). More-over, without a Preference Memory, simply increasing the raw context length yields diminishing returns and can even slightly de-grade performance (e.g., Seq-500 vs. Seq-1000). Overall, these find-ings again corroborate our earlier analysis: the Preference Memory 
+
+Table 5: Efficiency comparison on MerRec (HSTU). The Stor-age column reports the per-user preference memory foot-print, and the Latency column reports the model-internal inference time on an NVIDIA H20 GPU with batch size 64. Method Storage Latency 
+
+Short – 9ms Full – 135ms KV-Mask-O 32KB 10ms KV-Mask-A 128KB 10ms Rec2PM-O 1KB 10ms Rec2PM-A 4KB 10ms 
+
+Table 6: Main results on the industrial dataset. The best re-sults are in bold and the second best results are underlined. Model H@1 H@10 H@50 H@1000 HSTU-Full 0.21 1.88 6.18 31.81 Seq-50 0.17 1.89 5.83 30.88 Seq-100 0.18 1.84 6.04 31.17 Seq-200 0.20 1.95 6.20 31.42 Seq-500 0.19 2.12 6.55 32.32 Seq-1000 0.20 1.95 6.25 31.97 
+
+Rec2PM 0.21 2.08 6.64 33.06 
+
+serves as an information bottleneck that distills salient user inter-ests and filters noise, whereas attending to longer uncompressed histories may amplify noise rather than add useful signal. 
+
+5 Conclusion 
+
+In this paper, we introduced Rec2PM , a scalable framework de-signed to overcome the computational bottlenecks in long-sequence generative recommendation. By compressing extensive user his-tories into compact Preference Memory tokens, Rec2PM enables efficient storage of long-term interests without extensive KV caches. A key innovation of our work is the self-referential teacher-forcing training paradigm, which successfully bridges the gap between par-allelizable training and recurrent inference, allowing the model to learn high-quality memory updates without the instability and inef-ficiency of serial unrolling. Empirical results validate that Rec2PM significantly outperforms existing baselines in accuracy while re-ducing the per-user memory footprint by orders of magnitude. Furthermore, our analysis confirms that the Preference Memory functions as a critical Information Bottleneck , effectively denoising stochastic user behaviors to retain only the most predictive signals. We believe Rec2PM provides a robust foundation for deploying lifelong user modeling in real-world recommendation systems. 
+
+References     
+
+> [1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Floren-cia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al .2023. Gpt-4 technical report. arXiv preprint arXiv:2303.08774
+> (2023). [2] Prabhat Agarwal, Anirudhan Badrinath, Laksh Bhasin, Jaewon Yang, Edoardo Botta, Jiajing Xu, and Charles Rosenberg. 2025. Pinrec: Outcome-conditioned,
+
+Recurrent Preference Memory for Efficient Long-Sequence Generative Recommendation Conference’17, July 2017, Washington, DC, USA 
+
+multi-token generative retrieval for industry-scale recommendation systems. 
+
+arXiv preprint arXiv:2504.10507 (2025). [3] Aydar Bulatov, Yury Kuratov, and Mikhail Burtsev. 2022. Recurrent memory transformer. Advances in Neural Information Processing Systems 35 (2022), 11079– 11091. [4] Junyi Chen, Lu Chi, Bingyue Peng, and Zehuan Yuan. 2024. Hllm: Enhancing sequential recommendations via hierarchical large language models for item and user modeling. arXiv preprint arXiv:2409.12740 (2024). [5] Heng-Tze Cheng, Levent Koc, Jeremiah Harmsen, Tal Shaked, Tushar Chandra, Hrishi Aradhye, Glen Anderson, Greg Corrado, Wei Chai, Mustafa Ispir, et al .2016. Wide & deep learning for recommender systems. In Proceedings of the 1st workshop on deep learning for recommender systems . 7–10. [6] Alexis Chevalier, Alexander Wettig, Anirudh Ajith, and Danqi Chen. 2023. Adapt-ing language models to compress contexts. arXiv preprint arXiv:2305.14788 (2023). [7] Zihang Dai, Zhilin Yang, Yiming Yang, Jaime G Carbonell, Quoc Le, and Ruslan Salakhutdinov. 2019. Transformer-xl: Attentive language models beyond a fixed-length context. In Proceedings of the 57th annual meeting of the association for computational linguistics . 2978–2988. [8] Tao Ge, Jing Hu, Lei Wang, Xun Wang, Si-Qing Chen, and Furu Wei. 2023. In-context autoencoder for context compression in a large language model. arXiv preprint arXiv:2307.06945 (2023). [9] Shijie Geng, Shuchang Liu, Zuohui Fu, Yingqiang Ge, and Yongfeng Zhang. 2022. Recommendation as language processing (rlp): A unified pretrain, personalized prompt & predict paradigm (p5). In Proceedings of the 16th ACM conference on recommender systems . 299–315. [10] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu, Shirong Ma, Peiyi Wang, Xiao Bi, et al . 2025. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 (2025). [11] Balázs Hidasi, Alexandros Karatzoglou, Linas Baltrunas, and Domonkos Tikk. 2015. Session-based recommendations with recurrent neural networks. arXiv preprint arXiv:1511.06939 (2015). [12] Po-Sen Huang, Xiaodong He, Jianfeng Gao, Li Deng, Alex Acero, and Larry Heck. 2013. Learning deep structured semantic models for web search using clickthrough data. In Proceedings of the 22nd ACM international conference on Information & Knowledge Management . 2333–2338. [13] Huiqiang Jiang, Qianhui Wu, Chin-Yew Lin, Yuqing Yang, and Lili Qiu. 2023. Llmlingua: Compressing prompts for accelerated inference of large language models. arXiv preprint arXiv:2310.05736 (2023). [14] Junguang Jiang, Yanwen Huang, Bin Liu, Xiaoyu Kong, Xinhang Li, Ziru Xu, Han Zhu, Jian Xu, and Bo Zheng. 2025. Large Language Model as Universal Retriever in Industrial-Scale Recommender System. arXiv preprint arXiv:2502.03041 (2025). [15] Wang-Cheng Kang and Julian McAuley. 2018. Self-attentive sequential recom-mendation. In 2018 IEEE international conference on data mining (ICDM) . IEEE, 197–206. [16] Lichi Li, Zainul Abi Din, Zhen Tan, Sam London, Tianlong Chen, and Ajay Dap-tardar. 2025. MerRec: A Large-scale Multipurpose Mercari Dataset for Consumer-to-Consumer Recommendation Systems. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.1 (Toronto ON, Canada) 
+
+(KDD ’25) . Association for Computing Machinery, New York, NY, USA, 2371–2382. doi:10.1145/3690624.3709394 [17] Lei Li, Yongfeng Zhang, and Li Chen. 2023. Prompt distillation for efficient llm-based recommendation. In Proceedings of the 32nd ACM international conference on information and knowledge management . 1348–1357. [18] Yucheng Li, Bo Dong, Frank Guerin, and Chenghua Lin. 2023. Compressing context to enhance inference efficiency of large language models. In Proceedings of the 2023 conference on empirical methods in natural language processing . 6342– 6353. [19] Zongqian Li, Yinhong Liu, Yixuan Su, and Nigel Collier. 2025. Prompt compression for large language models: A survey. In Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers) . 7182–7195. [20] Zongqian Li, Yixuan Su, and Nigel Collier. 2025. 500xcompressor: Generalized prompt compression for large language models. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) .25081–25091. [21] Chi Liu, Jiangxia Cao, Rui Huang, Kai Zheng, Qiang Luo, Kun Gai, and Guorui Zhou. 2024. KuaiFormer: Transformer-Based Retrieval at Kuaishou. arXiv preprint arXiv:2411.10057 (2024). [22] Jesse Mu, Xiang Li, and Noah Goodman. 2023. Learning to compress prompts with gist tokens. Advances in Neural Information Processing Systems 36 (2023), 19327–19352. [23] Tsendsuren Munkhdalai, Manaal Faruqui, and Siddharth Gopal. 2024. Leave no context behind: Efficient infinite context transformers with infini-attention. 
+
+arXiv preprint arXiv:2404.07143 101 (2024). [24] Jianhui Pang, Fanghua Ye, Derek Wong, Xin He, Wanshun Chen, and Longyue Wang. 2024. Anchor-based large language models. In Findings of the Association for Computational Linguistics: ACL 2024 . 4958–4976. [25] Junyan Qiu, Ze Wang, Fan Zhang, Zuowu Zheng, Jile Zhu, Jiangke Fan, Teng Zhang, Haitao Wang, and Xingxing Wang. 2025. One Model to Rank Them All: Unifying Online Advertising with End-to-End Learning. arXiv preprint arXiv:2505.19755 (2025). [26] Jack W Rae, Anna Potapenko, Siddhant M Jayakumar, and Timothy P Lillicrap. 2019. Compressive transformers for long-range sequence modelling. arXiv preprint arXiv:1911.05507 (2019). [27] Shashank Rajput, Nikhil Mehta, Anima Singh, Raghunandan Hulikal Keshavan, Trung Vu, Lukasz Heldt, Lichan Hong, Yi Tay, Vinh Tran, Jonah Samost, et al .2023. Recommender systems with generative retrieval. Advances in Neural Information Processing Systems 36 (2023), 10299–10315. [28] Luohe Shi, Hongyi Zhang, Yao Yao, Zuchao Li, and Hai Zhao. 2024. Keep the cost down: A review on methods to optimize LLM’s KV-cache consumption. arXiv preprint arXiv:2407.18003 (2024). [29] Xiaoyuan Su and Taghi M Khoshgoftaar. 2009. A survey of collaborative filtering techniques. Advances in artificial intelligence 2009, 1 (2009), 421425. [30] Fei Sun, Jun Liu, Jian Wu, Changhua Pei, Xiao Lin, Wenwu Ou, and Peng Jiang. 2019. BERT4Rec: Sequential recommendation with bidirectional encoder rep-resentations from transformer. In Proceedings of the 28th ACM international conference on information and knowledge management . 1441–1450. [31] Gemini Team, Rohan Anil, Sebastian Borgeaud, Jean-Baptiste Alayrac, Jiahui Yu, Radu Soricut, Johan Schalkwyk, Andrew M Dai, Anja Hauth, Katie Millican, et al . 2023. Gemini: a family of highly capable multimodal models. arXiv preprint arXiv:2312.11805 (2023). [32] Naftali Tishby, Fernando C Pereira, and William Bialek. 2000. The information bottleneck method. arXiv preprint physics/0004057 (2000). [33] Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yas-mine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhos-ale, et al . 2023. Llama 2: Open foundation and fine-tuned chat models. arXiv preprint arXiv:2307.09288 (2023). [34] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, et al . 2025. Qwen3 technical report. arXiv preprint arXiv:2505.09388 (2025). [35] Chaoqun Yang, Xinyu Lin, Wenjie Wang, Yongqi Li, Teng Sun, Xianjing Han, and Tat-Seng Chua. 2025. Earn: Efficient inference acceleration for llm-based generative recommendation by register tokens. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 . 3483–3494. [36] Jiaqi Zhai, Lucy Liao, Xing Liu, Yueming Wang, Rui Li, Xuan Cao, Leon Gao, Zhao-jie Gong, Fangda Gu, Michael He, et al . 2024. Actions speak louder than words: Trillion-parameter sequential transducers for generative recommendations. arXiv preprint arXiv:2402.17152 (2024). [37] Jun Zhang, Yi Li, Yue Liu, Changping Wang, Yuan Wang, Yuling Xiong, Xun Liu, Haiyang Wu, Qian Li, Enming Zhang, et al . 2025. GPR: Towards a Generative Pre-trained One-Model Paradigm for Large-Scale Advertising Recommendation. 
+
+arXiv preprint arXiv:2511.10138 (2025). [38] Qiang Zhang, Hanchao Yu, Ivan Ji, Chen Yuan, Yi Zhang, Chihuang Liu, Xiaolong Wang, Christopher E Lambert, Ren Chen, Chen Kovacs, et al . 2026. Efficient Sequential Recommendation for Long Term User Interest Via Personalization. 
+
+arXiv preprint arXiv:2601.03479 (2026). [39] Guorui Zhou, Jiaxin Deng, Jinghao Zhang, Kuo Cai, Lejian Ren, Qiang Luo, Qian-qian Wang, Qigen Hu, Rui Huang, Shiyao Wang, et al . 2025. OneRec Technical Report. arXiv preprint arXiv:2506.13695 (2025). [40] Guorui Zhou, Xiaoqiang Zhu, Chenru Song, Ying Fan, Han Zhu, Xiao Ma, Yanghui Yan, Junqi Jin, Han Li, and Kun Gai. 2018. Deep interest network for click-through rate prediction. In Proceedings of the 24th ACM SIGKDD international conference on knowledge discovery & data mining . 1059–1068. [41] Kun Zhou, Hui Wang, Wayne Xin Zhao, Yutao Zhu, Sirui Wang, Fuzheng Zhang, Zhongyuan Wang, and Ji-Rong Wen. 2020. S3-rec: Self-supervised learning for se-quential recommendation with mutual information maximization. In Proceedings of the 29th ACM international conference on information & knowledge management .1893–1902. [42] Zixuan Zhou, Xuefei Ning, Ke Hong, Tianyu Fu, Jiaming Xu, Shiyao Li, Yuming Lou, Luning Wang, Zhihang Yuan, Xiuhong Li, et al . 2024. A survey on efficient inference for large language models. arXiv preprint arXiv:2404.14294 (2024). 
+
+A Experiments on Industrial Dataset 
+
+We conducted experiments on a large-scale industrial dataset to evaluate the scheme of compressing user interaction sequences into Preference Memory. In this section, we provide a detailed descrip-tion of the industrial dataset and present additional experimental results. Conference’17, July 2017, Washington, DC, USA Chen et al. 
+
+A.1 Dataset Statistics 
+
+We conduct experiments on a large-scale industrial dataset col-lected from a short-video platform. To reflect the real-world data distribution, we use logs from 2025/04/01 to 2025/05/16 for training and 2025/05/17 for testing. The raw data contains over 500 billion interactions. Detailed statistics are summarized in Table 7. 
+
+Table 7: Statistics of the industrial dataset. Statistic Value 
+
+Users ≈ 500 Million Items > 550 Million Interactions > 500 Billion Time Range (Train) 2025/04/01 – 2025/05/16 Time Range (Test) 2025/05/17 Avg. Sequence Length 1,147 Max. Sequence Length 2,048 Data Size (Disk) ≈ 200 TB 
+
+A.2 Experimental Settings 
+
+We use the HSTU backbone with a context length of 2048 as the primary full-context baseline, along with shorter-context variants with different input lengths. For our preference memory mecha-nism, we perform only one-time compression: we compress the long history (the first 1948 interactions) into 𝐶 =20 memory slots, and concatenate them with the most recent 100 interactions for next-item prediction. 
+
+A.3 Implicit vs. Explicit Supervision 
+
+We verify our core theoretical claim in Section 3.3.3: that explicit reconstruction is harmful for the model to fully store useful user long-term preferences in the limited memory. 
+
+Table 8: Impact of Supervision Signals (HR@1000). Adding reconstruction loss degrades performance, supporting the Information Bottleneck principle. Variant HR@1000 Rel. Change 
+
+Implicit Supervision Only 0.3306 -Adding L𝑅𝑒𝑐 0.3243 -1.9% Specifically, we compare our Implicit Supervision strategy against a variant trained with explicit reconstruction objectives. As shown in Table 8, adding the explicit Reconstruction Loss ( L𝑅𝑒𝑐 ) degrades performance (-1.9%). This validates the Capacity Contention theory: forcing the lim-ited memory to reconstruct raw history compels it to waste capacity on memorizing noise. By relying solely on implicit supervision, the memory is free to ignore irrelevant details and focus purely on predictive patterns. 0.058 
+
+> 0.060
+> 0.062
+> 0.064
+> 0.066
+> 0.068
+
+Low High 
+
+Inference Latency (normalized )
+
+Memor y
+
+HSTU -Full 
+
+HSTU -Short 
+
+(L=100)      
+
+> ~92% Latency Reduction
+> +7% Relative Accuracy
+> HitRatio@50  (Accuracy)
+> Memory
+> HSTU -Ful l
+> HSTU -Shor t
+> 100 < L < 2048
+
+(L=2048) 
+
+Figure 4: Efficiency-Accuracy Trade-off. 
+
+A.4 Robustness to Temporal Overlap 
+
+We also evaluate the model’s robustness to temporal inconsistency. In practical streaming engineering, due to log delays, there is often an overlap between the history compressed in Memory and the recent sequence input to the model. We test this scenario in Table 9. 
+
+Table 9: Robustness to Temporal Overlap (HR@1000). Variant HR@1000 Rel. Change 
+
+No Overlap 0.3306 -Temporal Overlap 0.3283 -0.7% The performance drop is negligible (0.3306 → 0.3283). This demonstrates high robustness: the Decoder’s attention mechanism automatically learns to ignore redundant information in the Mem-ory if it is already present in the recent interactions. 
+
+A.5 Efficiency Analysis: The Pareto Frontier 
+
+To visualize the trade-off, we plot Inference Latency vs. HitR@50 (Figure 4). HSTU-Full occupies the high-accuracy, high-latency re-gion, while HSTU-Short occupies the low-accuracy, low-latency region. Compressing user historical interaction sequences into Pref-erence Memory dominates the Pareto frontier, achieving 107% of HSTU-Full’s accuracy while incurring only 8% of the inference latency. This drastic efficiency gain allows for the deployment of larger, deeper models within the same latency budget. 
+
+A.6 Visualization of Preference Memory 
+
+To interpret the internal mechanisms of Preference Memory, we vi-sualize the attention weights of the 𝑄 𝑚𝑒𝑚 across sequence positions (Figure 5) and item categories (Figure 6). The results demonstrate that Preference Memory automatically disentangles user history into distinct temporal and semantic patterns. Recurrent Preference Memory for Efficient Long-Sequence Generative Recommendation Conference’17, July 2017, Washington, DC, USA 0 200 400 600 800 1000 1200                                                                                                                   
+
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 0
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 1
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 2
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 3
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 4
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 5
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 6
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 7
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 8
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 9
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 10
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 11
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 12
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 13
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 14
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 15
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 16
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 17
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 18
+> 0200 400 600 800 1000 1200
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> Token 19
+
+User 4 - Attention Value of 20 Summary Tokens 
+
+Sequence Index 
+
+> Attention Value
+
+Figure 5: Temporal Disentanglement of Preferen. The attention weights across sequence positions reveal specialized temporal roles: Token 0 retains early history (User Identity), Tokens 16/19 focus on recent interactions (Working Memory), and Tokens 3/14 capture diverse periodic patterns (Long-term Habits). 
+
+Temporal Specialization (Figure 5): The attention distributions reveal that 𝑄 𝑚𝑒𝑚 spontaneously adopt specialized temporal roles 
+
+• Recent Attention : Tokens 16, 17, and 19 exhibit strong attention peaks at the sequence tail. These queries capture the immediate intent shifts and the most recent user context. 
+
+• Early History Retention : In contrast, Token 0 focuses almost exclusively on the sequence start (indices 0-200). This suggests it retains “first impressions" or foundational user attributes, preventing the forgetting of core user identity. 
+
+• Periodic Patterns : Tokens 3, 6, 8, 12, and 14 show dis-tributed spikes across the entire history. Notably, they cap-ture different frequencies—some sparse (Token 3) and others dense (Token 6)—indicating the model tracks diverse recur-ring habits rather than scanning uniformly. 
+
+• Hybrid Functionality : Token 7 demonstrates a fusion of roles. It displays both periodic historical spikes and a surge in recent attention, effectively bridging long-term patterns with immediate relevance. Semantic Specialization(Figure 6): The memory slots also achieve high-level semantic disentanglement, evolving into “domain ex-perts" for specific categories 
+
+• Domain Expertise : Specific tokens evolve into “domain experts" with highly concentrated attention. For instance, Token 10 dedicates nearly all its attention mass to “Internet Short Drama," while Token 8 specializes in “Securities" and Token 9 in “Insurance". 
+
+• Sparsity and Noise Filtering : Crucially, these tokens main-tain lower weights for unrelated categories. This sparsity confirms that the limited memory capacity (C=20) forces the model to strictly filter noise, retaining only the most salient semantic signals via the Information Bottleneck principle. 
+
+• Orthogonal Representation : The distinct semantic focus of these “experts" suggests that Preference Memory learns a disentangled basis for user interests. By minimizing redun-dancy between slots, the model constructs a complex user profile through the composition of independent attributes, effectively avoiding interference between diverse topics. Conclusion: In summary, the Preference Memory go beyond sim-ple compression to structurally organize user history. By dynami-cally assigning specialized roles—ranging from temporal anchors to semantic experts—the model constructs a compact, disentangled, and comprehensive representation of lifelong interests. 
+
+Received 20 February 2007; revised 12 March 2009; accepted 5 June 2009 Conference’17, July 2017, Washington, DC, USA Chen et al. 0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 0 
+
+Auto Sales 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 1 
+
+Dating & Photography 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 2 
+
+Internet Short Drama 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 3 
+
+Unknown 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 4 
+
+Beauty & Entertainment 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 5 
+
+Education 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 6 
+
+Securities 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 7 
+
+Internet Short Drama 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 8 
+
+Securities 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 9 
+
+Insurance 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 10 
+
+Internet Short Drama 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 11 
+
+Unknown 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 12 
+
+Travel 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 13 
+
+Internet Short Drama 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 14 
+
+Travel 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 15 
+
+Dating & Photography 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 16 
+
+Dating & Photography 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 17 
+
+Business Services 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 18 
+
+Internet Short Drama 
+
+0.00 
+
+0.01 
+
+0.02 
+
+0.03 
+
+0.04 
+
+0.05 
+
+0.06 
+
+Token 19 
+
+Internet Short Drama 
+
+User 4 - Industry Attention Distribution of 20 Summary Tokens 
+
+Industry Category 
+
+> Average Attention Value
+
+Figure 6: Semantic Specialization and Orthogonality. The attention distribution across item categories demonstrates that memory slots evolve into “Domain Experts” (e.g., Token 10 for Social Drama, Token 17 for Business). The sparsity of the attention weights confirms that Preference Memory learns a disentangled and noise-robust representation of user interests.

@@ -1,0 +1,1137 @@
+Title: Communication-Efficient Personalized Adaptation via Federated-Local Model Merging
+
+URL Source: https://arxiv.org/pdf/2602.18658v1
+
+Published Time: Tue, 24 Feb 2026 01:13:29 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+Yinan Zou 1 Md Kamran Chowdhury Shisher 1 Christopher G. Brinton 1 Vishrant Tripathi 1
+
+## Abstract 
+
+Parameter-efficient fine-tuning methods, such as LoRA, offer a practical way to adapt large vision and language models to client tasks. However, this becomes particularly challenging under task-level heterogeneity in federated deployments. In this regime, personalization requires balancing 
+
+general knowledge with personalized knowledge ,yet existing approaches largely rely on heuris-tic mixing rules and lack theoretical justification. Moreover, prior model merging approaches are also computation and communication intensive, making the process inefficient in federated set-tings. In this work, we propose P OTARA , a princi-pled framework for federated personalization that constructs a personalized model for each client by merging two complementary models: (i) a feder-ated model capturing general knowledge , and (ii) a local model capturing personalized knowledge .Through the construct of linear mode connectiv-ity, we show that the expected task loss admits a variance trace upper bound, whose minimization yields closed-form optimal mixing weights that guarantee a tighter bound for the merged model than for either the federated or local model alone. Experiments on vision and language benchmarks show that P OTARA consistently improves person-alization while reducing communication, leading to a strong performance-communication trade-off. 
+
+## 1. Introduction 
+
+Large vision models (LVMs) and large language models (LLMs) have achieved remarkable progress, enabling their widespread adoption across diverse downstream applica-tions (Zhao et al., 2023; Awais et al., 2025). Adapting pre-trained models to domain specific tasks typically re-quires fine-tuning on task relevant data, but full parameter 
+
+> 1
+
+Elmore Family School of Electrical and Computer Engi-neering, Purdue University. Correspondence to: Yinan Zou 
+
+<zou211@purdue.edu >.
+
+Preprint. 
+
+fine-tuning is computationally expensive and impractical at scale. To mitigate this cost, parameter-efficient fine-tuning methods have been developed, among which low-rank adap-tation (LoRA) (Hu et al., 2022) has become particularly popular. Domain specific fine-tuning of large models often requires large heterogeneous datasets which are typically split across organizations and cannot be centralized due to privacy and security constraints. Federated learning (FL) (McMahan et al., 2017) addresses this issue by enabling collaborative training while keeping raw data local. Federated large model fine-tuning (Zhang et al., 2024) inte-grates FL with LoRA, allowing clients to update and commu-nicate only LoRA modules while jointly learning a global model. Despite its promise, federated LoRA fine-tuning faces pronounced task heterogeneity : different clients may pursue distinct, and sometimes even conflicting, objectives. In such settings, the knowledge required by each client nat-urally decomposes into two complementary components: (i) general knowledge that can be transferred across clients and tasks, and (ii) personalized knowledge that is specific to each client’s local data and task. 
+
+Challenges. A central challenge is how to balance cross-client general knowledge and client-specific personalized knowledge . It remains unclear, from a principled theoreti-cal perspective, how much emphasis should be placed on general versus personalized knowledge when forming the final client model. Although recent methods attempt to pro-vide a solution (Yang et al., 2024; Bian et al., 2026), they lack theoretical justification, leaving a gap for theoretically-grounded solutions. Additionally, communication is the primary bottleneck in FL, and LoRA-based training still requires the repeated transmission of parameters across many rounds. These considerations call for an approach that (i) explicitly control the general-personalized trade-off in a principled manner and (ii) achieve favorable perfor-mance–communication trade-off in realistic federated de-ployments. 
+
+1.1. Contributions 
+
+Motivated by these limitations, this work aims to develop a framework for efficient federated fine-tuning under task heterogeneity. Our key contributions are as follows: 1
+
+> arXiv:2602.18658v1 [cs.LG] 20 Feb 2026 Communication-Efficient Personalized Adaptation via Federated-Local Model Merging
+
+• We propose P OTARA 1, a federated LoRA personaliza-tion framework to jointly (i) achieve an effective trade-off between federation and personalization, and (ii) balance communication efficiency with performance. POTARA constructs a personalized model for each client by merging two complementary models: a col-laborative federated model that captures general knowl-edge across all clients, and a local fine-tuning model that emphasizes personalized knowledge .• To determine the mixing weight between the federated model and the local model, we develop a rigorous anal-ysis grounded in linear mode connectivity (LMC). We show that, within an LMC basin around the optimum, the expected excess task losses of the federated model, the local model, and their merged model admits an up-per bound in which the key term is a variance trace (see Theorem 3.6). Minimizing this bound yields closed-form optimal mixing weights, which guarantee that the merged model achieves the tighter bound than both the federated model and the local model (see Lemma 3.7). • We conduct extensive experiments on vision and lan-guage benchmarks. The experimental results show that our method achieves superior performance com-pared to baseline methods while significantly reducing communication overhead, thereby offering a favorable performance-communication trade-off. 
+
+1.2. Related Work Model Merging. Model merging aims to combine multiple task-specific models into a single model without additional training. Wortsman et al. (2022) utilized averaged parame-ters to construct the merged model. To account for parame-ter importance, Matena & Raffel (2022) proposed weighted fusion, where merging weights are derived from the Fisher information matrix (Fisher, 1922). Jin et al. (2023) formu-lated model merging as a linear regression problem and ob-tained a closed-form solution. Instead of averaging weights, Ilharco et al. (2023) introduced task vectors by subtract-ing the pre-trained parameters from each fine-tuned model, and then linearly combining these task vectors to form a merged model. Yadav et al. (2023) proposed to reduces conflicts in task vectors (Ilharco et al., 2023) by trimming low-magnitude updates, resolving sign disagreements, and merging disjoint parameter subsets with consistent signs. Yu et al. (2024) further explored this issue by randomly dropping a subset of fine-tuned weights and rescaling the remainder, yielding sparse task vectors that alleviate de-structive interference. Most existing methods (Ilharco et al., 2023; Yadav et al., 2023; Yu et al., 2024; Qi et al., 2025;   
+
+> 1POTARA derives its name from the Potara fusion in Dragon Ball, where two independent entities are merged into a single, and more powerful form.
+
+Stoica et al., 2025) select merging weights via heuristic tun-ing (e.g., grid search), which is computation intensive. In contrast, our approach derives the optimal mixing weights from theory, substantially improving efficiency by elim-inating expensive per-client weight sweeps and repeated evaluations. 
+
+Personalized Federated Learning. Personalized federated learning aims to overcome the limitation of a single global model by adapting client models to their local data distribu-tion (Tan et al., 2022). Common approaches include meta learning (Fallah et al., 2020; Chen et al., 2018), partial model personalization (Collins et al., 2021; Pillutla et al., 2022), multi-task learning (Smith et al., 2017; Li et al., 2021), hy-pernetworks (Shamsian et al., 2021), and clustering (Duan et al., 2021; Ghosh et al., 2020). A related study on per-sonalized FL and model merging, FedMerge (Chen et al., 2026), proposed a multi-model FL framework in which the server maintains a pool of global models, and each client obtains a personalized model by merging these server-side models. However, the server stores multiple global mod-els and perform gradient-based updates for each model in the pool, both the storage and computation overhead on the server scale linearly with the number of global models. In contrast, our method follows a single-model paradigm where the server maintains only one global model and the server only needs to average the local models, making it sub-stantially more resource efficient for large model fine-tuning. Moreover, the above methods primarily address statistical heterogeneity (e.g., label distribution skew) and are typi-cally evaluated on conventional small model architectures. In contrast, we study a more realistic and challenging regime for large model adaptation, where heterogeneity manifests not only in label diversity but also in task diversity across clients. 
+
+Federated Fine-Tuning. FedIT (Zhang et al., 2024) inte-grated LoRA with FedAvg and is one of the earliest efforts to combine parameter-efficient adaptation with federated opti-mization. Subsequent works studied federated LoRA under differential privacy (Sun et al., 2024), the asymmetric roles of LoRA matrices (Guo et al., 2025), and heterogeneous-rank LoRA matrices (Fang et al., 2025; Cho et al., 2024; Bai et al., 2024; Wang et al., 2024). Hao et al. (2025); Qi et al. (2024) studied personalization under label-distribution heterogeneity while still assuming task-homogeneous adap-tation. Considering task heterogeneity, Yang et al. (2024); Bian et al. (2026) introduced global and local LoRA mod-ules and combine them via a dynamic mixer. Although em-pirically effective, such designs lack theoretical justification for determining the appropriate mixing weights between these two LoRA modules. In contrast, our method derives the optimal mixing weight from a principled theoretical analysis. 2Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+## 2. Preliminaries and Notation 
+
+In this section, we introduce the preliminary concepts and notation used throughout the paper, including LoRA, feder-ated fine-tuning, and linear mode connectivity. 
+
+2.1. Parameter-Efficient Fine-Tuning: LoRA 
+
+Consider a pre-trained model with parameters WPre ∈
+
+Rm×n. We denote ∆W ∈ Rm×n as the trainable update matrix during fine-tuning. Instead of updating all parameters in ∆W, LoRA (Hu et al., 2022) decomposes ∆W into two low-rank matrices A ∈ Rr×n and B ∈ Rm×r , where 
+
+r ≪ min( m, n ). This decomposition allows the fine-tuning to focus on the significantly smaller low-rank matrices A
+
+and B instead of the full matrix ∆W. Consequently, the total number of trainable parameters is reduced from m × n
+
+to r × (m + n). The model parameters after fine-tuning are given by: 
+
+WFT = WPre + ∆ W = WPre + BA , (1) where A is typically initialized with random Gaussian val-ues and B is initialized to zero (Hu et al., 2022; Hayou et al., 2024). 
+
+2.2. Federated LoRA Fine-Tuning 
+
+FedIT (Zhang et al., 2024) integrates LoRA (Hu et al., 2022) with the FedAvg (McMahan et al., 2017) frame-work. The procedure of FedIT is summarized in Algo-rithm 1. FedIT aims to minimize a global loss function subject to the consensus constraints B(1) = . . . = B(N )
+
+and A(1) = . . . = A(N ) where B(i) and A(i) denotes the LoRA matrices at client i. Consequently, it ultimately yields a single model shared across all clients. 
+
+Algorithm 1 FedIT 
+
+1: Initialize : Per-trained model WPre , initialized LoRA modules {B0, A0};
+
+2: for communication round t = 0 , 1, . . . , T − 1 do 
+
+3: Server broadcasts the current global LoRA modules 
+
+{Bt, At} to all clients. 
+
+4: for each client i = 1 , . . . , N in parallel do 
+
+5: Client i keeps pre-trained model WPre frozen and updates only LoRA modules to obtain 
+
+{B(i),t , A(i),t }.
+
+6: Client i uploads its local LoRA modules 
+
+{B(i),t , A(i),t } to the server. 
+
+7: end for 
+
+8: Server updates the global LoRA modules via 
+
+B(i),t +1 = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+B(i),t , A(i),t +1 = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+A(i),t .
+
+9: end for Federated Model Training    
+
+> Local Model Training
+> Model Merging
+> = Average
+> Federated Model
+> Local Model Local Model Local Model
+> ⊕
+> ⊕
+> ⊕
+> Client 1
+> Client 2
+> Client 3
+> Model Merging
+
+Figure 1. Illustration of P OTARA . We train a FedIT model via FL and train local fine-tuning models. We obtain the final personalized model by weighted merging these FedIT and local models. 
+
+2.3. Linear Mode Connectivity 
+
+Prior works (Draxler et al., 2018; Garipov et al., 2018) show that the minima found by two independently trained neural networks can be connected by a simple path along which the loss or accuracy remains nearly constant. This phenomenon is referred to as mode connectivity. Subsequent studies (Na-garajan & Kolter, 2019; Frankle et al., 2020) further show that when neural networks are trained from the same initial-ization, the resulting well-trained models can be connected by a linear path, known as linear mode connectivity (LMC). We restate the definition of LMC used in (Frankle et al., 2020; Zhou et al., 2023). 
+
+Definition 2.1. (Frankle et al., 2020; Zhou et al., 2023) Given a dataset D and two well-trained models W1 and 
+
+W2 such that f (W1; D) ≈ f (W2; D), we say that W1
+
+and W2 are linearly connected if they satisfy 
+
+f (λ1W1 + λ2W2; D) ≈ f (W1; D),
+
+∀ λ1, λ 2 ≥ 0, λ 1 + λ2 = 1 , (2) where f (W; D) denotes the loss of model W on dataset D.In Definition 2.1, two models W1 and W2 are linearly connected if the loss of the interpolated mode remains nearly unchanged. In other words, W1 and W2 lie within the same flat basin of the loss landscape, and their linear interpolation remains inside this basin (Neyshabur et al., 2020). 
+
+## 3. Our Method: P OTARA 
+
+In this section, we propose P OTARA , which achieves a principled trade-off between federation and personalization while simultaneously balancing communication efficiency and performance. 
+
+3.1. Motivation 
+
+In large model fine-tuning, different clients usually hold data from distinct tasks (e.g., question classification ver-sus sentiment analysis) (Fallah et al., 2020; Collins et al., 3Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+2021; Bian et al., 2026; Yang et al., 2024; Tian et al., 2023). In such task-heterogeneous settings, consensus-based FL methods often underperform, since enforcing a single shared solution neglects both task diversity and the need for client-specific adaptation. A trivial alternative is to let each client fine-tune independently without communication. However, the number of local data samples is typically insufficient to train a satisfactory model in practical settings. By ex-changing information across clients, each client can exploit transferable knowledge learned elsewhere to improve its own model. Accordingly, personalized federated fine-tuning aims to learn a client-specific model that effectively com-bines general knowledge across clients with personalized knowledge adapted to the client’s local task. 
+
+3.2. Federated-Local Model Merging 
+
+Model merging provides a lightweight mechanism for com-bining complementary capabilities from multiple fine-tuned models without additional joint training. Building on this idea, we propose P OTARA , which constructs a personal-ized model for each client by merging two complementary models: • a collaborative FedIT model learned through cross-client communication, • a purely local model fine-tuned only on that client's data. Intuitively, the FedIT model captures general knowledge 
+
+distilled from all clients. In contrast, the local model em-phasizes personalized knowledge tailored to the client’s task and distribution. By merging them, P OTARA yields a client-specific model that simultaneously leverages fed-eration and personalization, offering an effective trade-off between these two objectives. Specifically, we denote the task vector (Ilharco et al., 2023) of client i’s locally fine-tuned model as θ(i)Local =
+
+B(i)Local A(i)Local , and the task vector of the FedIT model as 
+
+θFedIT = BFedIT AFedIT . For each client i, we form the merged task vector by a convex combination: 
+
+θ(i)Merge = λ(i)FedIT θFedIT + λ(i)Local θ(i)Local , (3) where λ(i)FedIT , λ (i)Local ≥ 0 denote the mixing weights for client i and λ(i)FedIT + λ(i)Local = 1 . Then, the final model for each client is given by 
+
+W(i)Final = WPre + θ(i)Merge . (4) A natural question then arises: how to choose the mixing weights λ(i)FedIT and λ(i)Local ? This choice is critical, as it governs the trade-off between leveraging general knowledge 
+
+from FedIT and preserving personalized knowledge from local fine-tuning. Next, we present our weighting strategy for determining λ(i)FedIT and λ(i)Local in a principled manner. 
+
+3.3. Determination of Mixing Weights 
+
+In the preliminaries, we recalled the standard definition of LMC, which characterizes the phenomenon in terms of the loss remaining nearly constant along the linear interpolation path. To obtain a local geometric characterization of LMC, we introduce the notion of LMC basin below. 
+
+Definition 3.1. For a given radius δ > 0, define the LMC basin around the optimum W∗ as 
+
+Uδ = W : ∥W − W∗∥ ≤ δ . (5) Two models W1 and W2 exhibit linear mode connectivity in Uδ if all their convex combination lies entirely in Uδ , i.e., 
+
+λ1W1 + λ2W2 ∈ U δ , ∀ λ1, λ 2 ≥ 0, λ 1 + λ2 = 1 . (6) We assume that the FedIT and each local model exhibit LMC within the LMC basin, i.e., the entire linear interpolation path between them remains inside the basin. 
+
+Assumption 3.2. Let Uδ be the LMC basin in Definition 3.1. For each client i, we assume that WPre + λ(i)FedIT θFedIT +
+
+λ(i)Local θ(i)Local ∈ Uδ , ∀ λ(i)FedIT , λ (i)Local ≥ 0, λ (i)FedIT +
+
+λ(i)Local = 1 .
+
+Throughout our analysis, we focus on the behavior of the loss landscape within the LMC basin and make the follow-ing standard assumptions on optimization. 
+
+Assumption 3.3. The task loss function L is locally Lip-schitz smooth within the LMC basin Uδ . There exist con-stants L > 0 such that 
+
+L(y) ≤ L (x) + ∇L (x)⊤(y − x) + L
+
+2 ∥y − x∥2,
+
+∀ x, y ∈ U δ . (7) Equivalently, the Hessian of L is bounded within the LMC basin, i.e., ∇2L(x) ⪯ L I, ∀ x ∈ U δ .
+
+Assumption 3.4. (Nesterov & Polyak, 2006; Carmon et al., 2018) The Hessian of the task loss within the LMC basin is LH -Lipschitz continuous if ∥∇ 2L(y) − ∇ 2L(x)∥ ≤ 
+
+LH ∥y − x∥, ∀ x, y ∈ U δ , where LH > 0 is a constant. In the following, we show that the model obtained by merg-ing the FedIT model and the local model yields a person-alized performance gain. For clarity, we omit the client index. We use the Laplace approximation to approximate the task vectors of FedIT (i.e., θFedIT ) and local fine-tuning (i.e., 4Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+θLocal ) as Gaussian distributions: 
+
+θFedIT ∼ N (μFedIT , ΣFedIT ), (8) 
+
+θLocal ∼ N (μLocal , ΣLocal ), (9) where μFedIT and μLocal denote the MAP parameter es-timates of the corresponding task vectors, and ΣFedIT =
+
+F−1 
+
+> μFedIT
+
+and ΣLocal = F−1 
+
+> μLocal
+
+are given by the inverses of their Fisher information matrices. The full derivation is provided in Appendix A.1. We further assume a joint Gaussian distribution of FedIT and local task vectors, which introduces an explicit cross-covariance term. 
+
+Assumption 3.5. (Wang et al., 2025) We assume that 
+
+(θFedIT , θLocal ) follow a joint Gaussian distribution: 
+
+θFedIT 
+
+θLocal 
+
+
+
+∼ N 
+
+  μFedIT 
+
+μLocal 
+
+
+
+,
+
+ΣFedIT ΣCross 
+
+Σ⊤ 
+
+> Cross
+
+ΣLocal 
+
+  
+
+, (10) where ΣCross denotes the cross-covariance matrix between the two task vectors. We assume that FedIT task and lo-cal task are correlated, therefore, the cross-covariance ma-trix satisfies ΣCross ⪰ 0. Furthermore, we assume that 
+
+ΣCross ⪯ ΣFedIT and ΣCross ⪯ ΣLocal .The conditions ΣCross ⪯ ΣFedIT and ΣCross ⪯ ΣLocal 
+
+indicate that the cross-covariance is not larger than the marginal variances, i.e., the shared uncertainty does not dominate each model’s own uncertainty. With the joint Gaussian model in Assumption 3.5, we can derive the Gaussian distribution of the merged task vector: 
+
+θMerge ∼ N (μMerge , ΣMerge ), (11) where 
+
+μMerge = λFedIT μFedIT + λLocal μLocal , (12) 
+
+ΣMerge = λ2FedIT ΣFedIT + λ2Local ΣLocal 
+
++ λFedIT λLocal (ΣCross + Σ⊤
+
+> Cross
+
+). (13) We now present an expected excess loss bound for FedIT, Local, and their merged model. 
+
+Theorem 3.6. Under Definition 3.1, Assumption 3.2, 3.3, 3.4, and 3.5, for i ∈ { FedIT , Local , Merge }, it holds that 
+
+E[L(WPre + θi) − L (W∗)] ≤
+
+ L
+
+2 + LH
+
+6 δ
+
+
+
+δ2
+
++
+
+ L
+
+2 + LH
+
+6 δ
+
+
+
+tr( Σi). (14) 
+
+Proof sketch of Theorem 3.6. To bound the expected excess loss, we expand L around the optimum W∗. Let 
+
+ϕ = WPre + θMerge − W∗ and H = ∇2L(W∗). By Lemma 2.2 in (Carmon et al., 2018), we have 
+
+L(WPre +θMerge ) ≤ L (W∗)+ 12 ϕ⊤Hϕ+ LH 
+
+> 6
+
+∥ϕ∥32. (15) By E[ϕ⊤Hϕ] = ( Eϕ)⊤H(Eϕ)+tr( H Cov( ϕ)) , we obtain 
+
+E[L(WPre + θMerge ) − L (W∗)] 
+
+≤ 12 (WPre +μMerge −W∗)⊤H(WPre + μMerge − W∗)+ 12 tr( HΣ Merge ) + LH 
+
+> 6
+
+E∥ϕ∥32. (16) Due to ∥ϕ∥2 ≤ δ, we have ∥ϕ∥32 ≤ δ∥ϕ∥22 and hence 
+
+E∥ϕ∥32 ≤ δ E∥ϕ∥22. Moreover, E∥ϕ∥22 = ∥Eϕ∥22 +tr(Cov( ϕ)) = ∥WPre + μMerge − W∗∥22 + tr( ΣMerge ).Finally, using H ⪯ LI yields the bound in terms of δ2
+
+and tr( ΣMerge ). The same argument applies to θFedIT and 
+
+θLocal individually. The full derivation is provided in Ap-pendix A.2. □
+
+Theorem 3.6 indicates that the excess loss upper bound is primarily controlled by the trace term. For the merged model, tr( ΣMerge ) depends on the mixing weights 
+
+(λFedIT , λ Local ). In the following, we minimize this trace term to obtain the optimal mixing weights in closed form. 
+
+Lemma 3.7. Minimizing the trace term tr( ΣMerge ) yields the optimal mixing weights, given by 
+
+λ∗ 
+
+> FedIT
+
+= b − ca + b − 2c , λ∗ 
+
+> Local
+
+= a − ca + b − 2c , (17) 
+
+where a = tr( ΣFedIT ), b = tr( ΣLocal ), c = tr( ΣCross ).
+
+At this optimum, the merged trace is smaller than those of the two individual models: 
+
+tr( ΣMerge ) ≤ min {tr( ΣFedIT ), tr( ΣLocal )}. (18) At the optimal weights (λ∗
+
+> FedIT
+
+, λ ∗
+
+> Local
+
+) in Lemma 3.7, 
+
+tr( ΣMerge ) attains its minimum. Moreover, this minimum satisfies tr( ΣMerge ) ≤ min {tr( ΣFedIT ), tr( ΣLocal )}.Therefore, by Theorem 3.6 and Lemma 3.7, the merged model admits an excess loss upper bound that is tighter than the bounds for FedIT or local fine-tuning alone. 
+
+3.4. Estimation of Fisher Information Matrix 
+
+In Section 3.3, we established that ΣFedIT = F−1 
+
+> μFedIT
+
+and 
+
+ΣLocal = F−1 
+
+> μLocal
+
+, i.e., each posterior variance is given by the inverse Fisher information matrix. To reduce the computation cost, we adopt a diagonal approximation of the Fisher information matrix (Matena & Raffel, 2022). The diagonal Fisher matrix evaluated at the posterior mean μi is given by 
+
+bFμi= diag 
+
+ 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+Ey∼pμi (y|xn)
+
+h ∇μi log pμi (y|xn)⊙2i
+
+,
+
+(19) 5Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+where N is the mini-batch size to estimate the Fisher infor-mation and (·)⊙2 denotes the element-wise square operator. Consequently, the posterior variance can be approximated as Σi ≈ (bFμi )−1.To approximate the cross-covariance between the two task vectors, we compute per-sample gradients under μFedIT 
+
+and μLocal , estimate their coordinate-wise variances and covariance, and obtain a gradient correlation coefficient ρk
+
+for each parameter dimension. We then construct a diagonal approximation 
+
+(ΣCross )kk ≈ ρk
+
+p(ΣFedIT )kk (ΣLocal )kk , (20) where k denotes the parameter coordinate and ρk is clipped to ensure ΣCross ⪰ 0 and ΣCross ⪯ ΣFedIT , ΣLocal . Fur-ther details on the estimation procedure and computation times are provided in the Appendix B and F. 
+
+3.5. Communication Overhead Comparison 
+
+We denote T as the number of communication rounds. FedIT (Zhang et al., 2024) uploads both A and B each round, yielding per-client overhead O(r(m + n)T ). FedSA (Guo et al., 2025) uploads only A, yielding O(rnT ). FFA-LoRA (Sun et al., 2024) uploads only B, yielding O(rmT ).FedDPA (Yang et al., 2024) uploads one of two locally trained LoRA modules per round, yielding O(r(m + n)T ).FedALT (Bian et al., 2026) uploads the local LoRA mod-ule each round, yielding O(r(m + n)T ). For P OTARA ,clients upload both A and B only during the FedIT phase, so the overhead is O(r(m + n)TFedIT ), where TFedIT denotes the number of communication rounds required to train the FedIT model. The communication overhead comparison is summarized in Table 1. POTARA achieves consistent performance gains even under a reduced communication budget. A detailed performance-communication trade-off is reported in Section 4.3.  
+
+> Table 1. Communication Overhead Comparison.
+
+Method Communication Overhead 
+
+FedIT O(r(m + n)T )
+
+FedSA O(rnT )
+
+FFA-LoRA O(rmT )
+
+FedALT O(r(m + n)T )
+
+FedDPA O(r(m + n)T )
+
+POTARA O(r(m + n)TFedIT )
+
+## 4. Experiments 
+
+In this section, we evaluate and compare the performance of the proposed P OTARA against baseline methods on vision and language benchmarks. The baseline methods include Local fine-tuning (Hu et al., 2022), FedIT (Zhang et al., 2024), FFA-LoRA (Sun et al., 2024), FedSA (Guo et al., 2025), FedDPA (Yang et al., 2024), FedALT (Bian et al., 2026), and Fisher Merging (Matena & Raffel, 2022). 
+
+4.1. Vision Benchmark 
+
+We adopt ViT-B/16 (Dosovitskiy et al., 2021) as the pre-trained model. To simulate label heterogeneity, we partition CIFAR-100 across clients using a Dirichlet distribution with concentration parameter α = 0 .5. For each client, we con-struct both the training and test splits according to the same Dirichlet-based partition. Unless otherwise specified, we consider 10 clients. All federated baselines are trained for 600 communication rounds. For both Fisher merging and the proposed P OTARA , we first train the FedIT model and the local fine-tuning model for 400 and 300 rounds, respec-tively, and then merge the two models to obtain the final model. As shown in Table 2, the proposed P OTARA achieves the best overall performance among all baseline methods, outperforming the strongest baseline, FedDPA, by an aver-age accuracy margin of 3.41. Moreover, P OTARA reduces the communication cost by 33.3% compared to FedDPA, FedALT, and FedIT. See Section 4.3 and Figure 2a for a detailed performance-communication trade-off analysis. 
+
+4.2. Language Benchmark 
+
+We next evaluate P OTARA on LLM and NLP benchmark. We adopt LLaMA-3.2-3B-Instruct (Dubey et al., 2024) as the pre-trained model and construct a task-heterogeneous setting by assigning each client a distinct task from the commonsense reasoning benchmark (Hu et al., 2023) and report accuracy for all tasks. Each client has 1,000 training examples and 500 test examples. All federated baseline methods are trained for 600 communication rounds, while the local fine-tuning baseline is trained for 300 rounds to pre-vent overfitting. Since Fisher merging requires estimating Fisher information for all model parameters, it is compu-tationally prohibitive for LLMs with over 1B parameters. In contrast, P OTARA computes Fisher information only for the LoRA module, substantially reducing the number of parameters involved and making the computation tractable. For P OTARA , we train FedIT for 50 rounds and local fine-tuning for 300 rounds, and then merge the resulting models to obtain the final personalized model for each client. As reported in Table 3, P OTARA consistently outperforms all baselines across the evaluated NLP tasks. In particular, POTARA achieves the highest average accuracy, improving upon the strongest baseline by 1.85. Moreover, P OTARA 
+
+achieves these improvements with a very small communica-tion overhead. See Section 4.3 and Figure 2b for a detailed performance-communication trade-off analysis. The gains observed across both large vision (ViT) and language mod-els (LLaMA) demonstrate that P OTARA generalizes well across model families, parameter scales, and task types. 6Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+Table 2. Test accuracy on personalized CIFAR-100 benchmark. P OTARA obtains consistent improvement over the baselines across all clients.                                                                                                                                                                      
+
+> Personalized CIFAR-100 benchmark (ViT-B/16 model) Methods Client 1 Client 2 Client 3 Client 4 Client 5 Client 6 Client 7 Client 8 Client 9 Client 10 Avg.
+> Local 60.01 ±0.48 59.78 ±0.94 63.26 ±2.68 61.79 ±2.06 61.26 ±1.07 56.46 ±4.77 60.62 ±1.72 61.79 ±1.75 58.75 ±2.82 60.53 ±4.29 60.43 ±0.93
+> FFA-LoRA 39.96 ±3.87 44.55 ±2.91 42.36 ±6.53 40.14 ±2.98 42.85 ±1.62 38.62 ±0.80 41.50 ±3.63 40.03 ±2.37 44.07 ±1.86 41.08 ±6.12 41.52 ±2.44
+> FedSA 62.24 ±0.44 63.11 ±1.41 61.79 ±5.53 61.16 ±2.72 59.44 ±0.99 59.17 ±1.94 61.11 ±1.54 59.73 ±0.45 59.71 ±2.02 61.24 ±4.27 60.87 ±0.97
+> FedIT 62.55 ±2.33 60.53 ±2.37 60.30 ±4.86 59.48 ±3.38 62.07 ±3.63 59.99 ±1.51 61.93 ±3.14 62.73 ±1.52 63.60 ±3.15 59.61 ±3.35 61.28 ±0.29
+> FedDPA 62.80 ±1.46 60.51 ±2.79 61.22 ±4.81 62.41 ±2.87 61.54 ±2.43 60.31 ±1.71 63.24 ±1.94 62.09 ±2.13 62.74 ±1.82 61.14 ±4.61 61.80 ±0.96
+> Fish Merging 62.19 ±2.68 62.08 ±1.94 65.29 ±3.14 61.65 ±2.59 62.54 ±1.40 60.89 ±1.62 61.53 ±1.97 60.85 ±1.09 60.40 ±1.90 59.78 ±3.65 61.72 ±0.31
+> POTARA 66.32 ±1.11 66.55 ±0.94 67.26 ±4.70 63.43 ±1.79 65.86 ±1.39 62.93 ±0.28 66.37 ±1.76 64.60 ±1.20 65.15 ±0.76 63.68 ±3.34 65.21 ±1.08
+
+Table 3. Test accuracy on commonsense reasoning benchmark. As in Table 2, P OTARA obtains consistent improvements. 
+
+Commonsense reasoning benchmark (Llama-3.2-3B-Instruct model) Methods ARC-c ARC-e BoolQ HellaSwag OBQA PIQA SIQA WinoGrande Avg. 
+
+Local 72.13 ±0.90 86.20 ±1.66 66.27 ±2.78 68.93 ±1.54 75.40 ±0.75 77.27 ±1.36 66.13 ±1.64 64.07 ±2.37 72.05 ±0.25 
+
+FFA-LoRA 73.27 ±0.50 85.53 ±0.52 64.80 ±0.91 57.73 ±2.78 73.87 ±0.50 79.07 ±1.52 62.00 ±7.09 54.13 ±1.18 68.80 ±0.77 
+
+FedSA 71.53 ±1.25 84.67 ±1.05 64.27 ±2.36 64.93 ±2.73 74.87 ±0.93 77.73 ±0.81 66.53 ±1.39 64.67 ±2.84 71.15 ±0.62 
+
+FedIT 74.27 ±0.62 85.93 ±1.46 66.87 ±1.18 64.93 ±1.05 74.33 ±1.64 78.80 ±1.77 69.87 ±1.09 60.53 ±1.75 71.94 ±0.42 
+
+FedALT 72.73 ±0.46 85.00 ±0.35 64.27 ±0.58 68.33 ±0.92 76.67 ±0.12 79.00 ±0.00 65.53 ±0.58 60.33 ±4.39 71.48 ±0.58 
+
+FedDPA 74.73 ±1.25 87.60 ±0.99 63.80 ±1.23 65.73 ±1.39 77.07 ±0.50 80.40 ±1.88 67.87 ±0.66 61.47 ±0.66 72.33 ±0.37 
+
+POTARA 75.20 ±1.28 87.80 ±1.31 67.87 ±0.57 71.73 ±2.23 78.47 ±1.04 78.80 ±2.36 69.00 ±1.18 64.53 ±2.00 74.18 ±0.29 
+
+(a) Personalized CIFAR-100 benchmark 
+
+(b) Commonsense reasoning benchmark 
+
+Figure 2. Performance-communication trade-off across different benchmarks. P OTARA (t) denotes our method where the FedIT model obtained at communication round t is used for merging. POTARA achieves strong performance with substantially lower communication overhead than baselines. 
+
+4.3. Performance-Communication Trade-Off 
+
+In this subsection, we compare the communication overhead of all methods. In ViT-B/16 model, the LoRA adaptation in-troduces 147,456 parameters to the A matrices and 147,456 parameters to the B matrices, with each equivalent to 0.59 MB when stored in float32 precision. In LLaMa-3.2-3B-Instruct model, the LoRA adaptation introduces 2,064,384 parameters to the A matrices and 1,146,880 parameters to the B matrices, with equivalent to 8.26 MB and 4.59 MB when stored in float32 precision. P OTARA (t) denotes our method where the FedIT model obtained at communica-tion round t is used for merging with the local model at round 300. Fig. 2 shows that P OTARA consistently achieves the best performance-communication trade-off. In partic-ular, P OTARA attains the highest accuracy while requiring substantially less communication than FedIT, FedALT, and FedDPA. Moreover, compared to low-communication base-lines, FedSA and FFA-LoRA, P OTARA delivers clear perfor-mance gains at comparable overhead, demonstrating robust communication efficiency across different backbones and benchmarks. 
+
+4.4. Performance Gain of Model Merging 
+
+In this subsection, we show the performance gain by model merging over the FedIT and local models. Specifically, we compare the merged model P OTARA with the FedIT model and the local model. For the vision benchmark, P OTARA 
+
+is obtained by merging the FedIT model trained for 400 rounds with the local model trained for 300 rounds. Table 4 shows that P OTARA achieves 65 .21 accuracy, improving the local baseline by 9.32 and the FedIT baseline by 7.33 .For the commonsense reasoning benchmark, P OTARA is obtained by merging the FedIT model trained for 50 rounds with the local model trained for 300 rounds. Table 5 shows that P OTARA achieves 74 .18 accuracy, improving the local baseline by 2.13 and the FedIT baseline by 6.45 . These results indicate that model merging can effectively combine 7Communication-Efficient Personalized Adaptation via Federated-Local Model Merging  
+
+> Table 4. Performance gain of model merging under the personal-ized CIFAR-100 benchmark.
+
+Model Accuracy 
+
+Local (300 rounds) 55.89 ±1.31 
+
+FedIT (400 rounds) 57.88 ±0.38 
+
+POTARA 65.21 ±1.08  
+
+> Table 5. Performance gain of model merging under the common-sense reasoning benchmark.
+
+Model Accuracy 
+
+Local (300 rounds) 72.05 ±0.25 
+
+FedIT (50 rounds) 67.73 ±0.76 
+
+POTARA 74.18 ±0.29 
+
+the global knowledge from FedIT model with the personal-ized knowledge from local fine-tuning model, leading to a substantial accuracy gain. 
+
+4.5. Ablation Study Effect of FedIT model round for merging: We exam-ine the effect of the FedIT training round used for merg-ing. Specifically, we fix the local fine-tuning model at round 300 and merge it with FedIT checkpoints trained for different numbers of rounds. As shown in Figure 3a and Figure 3b, P OTARA improves steadily as the FedIT model is trained longer on both benchmarks, indicating that a better-optimized FedIT checkpoint provides stronger gen-eral knowledge that can be more effectively combined with the local model. On personalized CIFAR-100 benchmark (Figure 3a), increasing the FedIT training rounds yields a clear monotonic gain for the merged model (e.g., from 62.98 to 67.23). On the commonsense reasoning benchmark (Figure 3b), the merged model already achieves strong per-formance even when using an early FedIT checkpoint (e.g., round 50), despite the FedIT still improving substantially with more rounds. This suggests that P OTARA can effec-tively extract useful general knowledge from intermediate FedIT models and combine it with local model. 
+
+Effect of mixing weight strategy: We compare client per-formance using the mixing weights computed by our method with the best-performing weights selected by grid search over {0, 0.1, . . . , 1}. As shown in Figure 3c, the two bars are closely matched across clients, demonstrating that our computed weights achieve performance comparable to grid search while eliminating the expensive per-client hyperpa-rameter sweep. Moreover, Figure 3c supports our theory and assumptions as the mixing weights computed by our method are close to the empirically optimal weights found via grid search. 
+
+Further experiments: Results with an increased num-ber of clients and with a larger model are reported in Ap-pendix D and Appendix C, respectively.     
+
+> (a) Effect of FedIT model round for merging (CIFAR-100).
+> (b) Effect of FedIT model round for merging (Commonsense Reasoning).
+> (c) Client performance comparison between mixing weights com-puted by our method and mixing weights selected by grid search.
+> Figure 3. Ablation studies demonstrating the performance of POTARA .
+
+## 5. Conclusion 
+
+We proposed P OTARA , a principled personalization frame-work for federated fine-tuning that merges a federated model and a local model. We approximate the federated and local task vectors as jointly Gaussian random variables and derive the upper bound on the expected excess task loss of the federated model, the local model, and their merged model, where the dominant term is a trace of the task vector vari-ance. By minimizing this bound, we obtain closed-form op-timal mixing weights, guaranteeing that the merged model attains a tighter bound than both constituent models. Experi-ment results show that P OTARA consistently improves client performance across both vision and language benchmarks, outperforming baselines while retaining communication ef-ficiency. 8Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+## Impact Statement 
+
+This paper makes important contributions to federated per-sonalization by developing a principled framework for per-sonalized fine-tuning. The focus of this work is on the technical advancement of large model fine-tuning. While this research has potential societal impacts, it primarily addresses technical challenges and does not necessitate a specific discussion on societal consequences. 
+
+## References 
+
+Awais, M., Naseer, M., Khan, S., Anwer, R. M., Cholakkal, H., Shah, M., Yang, M.-H., and Khan, F. S. Foundation models defining a new era in vision: a survey and outlook. 
+
+IEEE Transactions on Pattern Analysis and Machine In-telligence , 2025. Bai, J., Chen, D., Qian, B., Yao, L., and Li, Y. Federated fine-tuning of large language models under heterogeneous tasks and client resources. Advances in Neural Informa-tion Processing Systems , 2024. Bian, J., Wang, L., Zhang, L., and Xu, J. Fedalt: Federated fine-tuning through adaptive local training with rest-of-world lora. AAAI Conference on Artificial Intelligence ,2026. Carmon, Y., Duchi, J. C., Hinder, O., and Sidford, A. Ac-celerated methods for nonconvex optimization. SIAM Journal on Optimization , 28(2):1751–1772, 2018. Chen, F., Luo, M., Dong, Z., Li, Z., and He, X. Feder-ated meta-learning with fast convergence and efficient communication. arXiv preprint arXiv:1802.07876 , 2018. Chen, S., Zhou, T., Long, G., Jiang, J., and Zhang, C. Fed-merge: Federated personalization via model merging. 
+
+AAAI Conference on Artificial Intelligence , 2026. Cho, Y. J., Liu, L., Xu, Z., Fahrezi, A., and Joshi, G. Het-erogeneous lora for federated fine-tuning of on-device foundation models. Conference on Empirical Methods in Natural Language Processing , 2024. Chung, H. W., Hou, L., Longpre, S., Zoph, B., Tay, Y., Fe-dus, W., Li, Y., Wang, X., Dehghani, M., Brahma, S., et al. Scaling instruction-finetuned language models. Journal of Machine Learning Research , 25(70):1–53, 2024. Collins, L., Hassani, H., Mokhtari, A., and Shakkottai, S. Exploiting shared representations for personalized fed-erated learning. International Conference on Machine Learning , 2021. Daxberger, E., Kristiadi, A., Immer, A., Eschenhagen, R., Bauer, M., and Hennig, P. Laplace redux-effortless bayesian deep learning. Advances in Neural Informa-tion Processing Systems , 2021. Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., and Gelly, S. An image is worth 16x16 words: Transformers for image recognition at scale. Inter-national Conference on Learning Representations , 2021. Draxler, F., Veschgini, K., Salmhofer, M., and Hamprecht, F. Essentially no barriers in neural network energy land-scape. International Conference on Machine Learning ,2018. Duan, M., Liu, D., Ji, X., Wu, Y., Liang, L., Chen, X., Tan, Y., and Ren, A. Flexible clustered federated learning for client-level data distribution shift. IEEE Transactions on Parallel and Distributed Systems , 33(11):2661–2674, 2021. Dubey, A., Jauhri, A., Pandey, A., Kadian, A., Al-Dahle, A., Letman, A., Mathur, A., Schelten, A., Yang, A., Fan, A., et al. The llama 3 herd of models. arXiv e-prints , pp. arXiv–2407, 2024. Fallah, A., Mokhtari, A., and Ozdaglar, A. Personalized federated learning with theoretical guarantees: A model-agnostic meta-learning approach. Advances in Neural Information Processing Systems , 2020. Fang, W., Han, D.-J., Yuan, L., Hosseinalipour, S., and Brinton, C. G. Federated sketching lora: On-device col-laborative fine-tuning of large language models. arXiv preprint arXiv:2501.19389 , 2025. Fisher, R. A. On the mathematical foundations of theoretical statistics. Philosophical transactions of the Royal Society of London. Series A, containing papers of a mathematical or physical character , 222(594-604):309–368, 1922. Frankle, J., Dziugaite, G. K., Roy, D., and Carbin, M. Lin-ear mode connectivity and the lottery ticket hypothesis. 
+
+International Conference on Machine Learning , 2020. Garipov, T., Izmailov, P., Podoprikhin, D., Vetrov, D. P., and Wilson, A. G. Loss surfaces, mode connectivity, and fast ensembling of dnns. Advances in Neural Information Processing Systems , 2018. Ghosh, A., Chung, J., Yin, D., and Ramchandran, K. An efficient framework for clustered federated learning. Ad-vances in Neural Information Processing Systems , 2020. Guo, P., Zeng, S., Wang, Y., Fan, H., Wang, F., and Qu, L. Selective aggregation for low-rank adaptation in fed-erated learning. International Conference on Learning Representations , 2025. Hao, J., Wu, Y., Payani, A., Lee, M., and Liu, M. Per-sonalized federated fine-tuning for heterogeneous data: An automatic rank learning approach via two-level lora. 
+
+arXiv preprint arXiv:2503.03920 , 2025. 9Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+Hayou, S., Ghosh, N., and Yu, B. Lora+: Efficient low rank adaptation of large models. International Conference on Machine Learning , 2024. Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., Chen, W., et al. Lora: Low-rank adaptation of large language models. International Conference on Learning Representations , 2022. Hu, Z., Wang, L., Lan, Y., Xu, W., Lim, E.-P., Bing, L., Xu, X., Poria, S., and Lee, R. K.-W. Llm-adapters: An adapter family for parameter-efficient fine-tuning of large lan-guage models. arXiv preprint arXiv:2304.01933 , 2023. Ilharco, G., Ribeiro, M. T., Wortsman, M., Gururangan, S., Schmidt, L., Hajishirzi, H., and Farhadi, A. Editing models with task arithmetic. International Conference on Learning Representations , 2023. Jin, X., Ren, X., Preotiuc-Pietro, D., and Cheng, P. Data-less knowledge fusion by merging weights of language models. International Conference on Learning Represen-tations , 2023. Li, T., Hu, S., Beirami, A., and Smith, V. Ditto: Fair and robust federated learning through personalization. 
+
+International Conference on Machine Learning , 2021. MacKay, D. J. A practical bayesian framework for backprop-agation networks. Neural computation , 4(3):448–472, 1992. Matena, M. S. and Raffel, C. A. Merging models with fisher-weighted averaging. Advances in Neural Information Processing Systems , 2022. McMahan, B., Moore, E., Ramage, D., Hampson, S., and y Arcas, B. A. Communication-efficient learning of deep networks from decentralized data. In Artificial intelli-gence and statistics , pp. 1273–1282. PMLR, 2017. Nagarajan, V. and Kolter, J. Z. Uniform convergence may be unable to explain generalization in deep learning. Ad-vances in Neural Information Processing Systems , 2019. Nesterov, Y. and Polyak, B. T. Cubic regularization of newton method and its global performance. Mathematical programming , 108(1):177–205, 2006. Neyshabur, B., Sedghi, H., and Zhang, C. What is being transferred in transfer learning? Advances in Neural Information Processing Systems , 2020. Pascanu, R. and Bengio, Y. Revisiting natural gradient for deep networks. arXiv preprint arXiv:1301.3584 , 2013. Pillutla, K., Malik, K., Mohamed, A.-R., Rabbat, M., San-jabi, M., and Xiao, L. Federated learning with partial model personalization. International Conference on Ma-chine Learning , 2022. Qi, B., Sun, H., Long, W., Zhao, R., Gao, X., et al. Cabs: Conflict-aware and balanced sparsification for enhancing model merging. International Conference on Learning Representations , 2025. Qi, J., Luan, Z., Huang, S., Fung, C., Yang, H., and Qian, D. FDLoRA: Personalized federated learning of large language model via dual lora tuning. arXiv preprint arXiv:2406.07925 , 2024. Shamsian, A., Navon, A., Fetaya, E., and Chechik, G. Per-sonalized federated learning using hypernetworks. Inter-national Conference on Machine Learning , 2021. Smith, V., Chiang, C.-K., Sanjabi, M., and Talwalkar, A. S. Federated multi-task learning. Advances in Neural Infor-mation Processing Systems , 2017. Stoica, G., Ramesh, P., Ecsedi, B., Choshen, L., and Hoff-man, J. Model merging with svd to tie the knots. Interna-tional Conference on Learning Representations , 2025. Sun, Y., Li, Z., Li, Y., and Ding, B. Improving loRA in privacy-preserving federated learning. International Con-ference on Learning Representations , 2024. Tam, D., Bansal, M., and Raffel, C. Merging by matching models in task parameter subspaces. Transactions on Machine Learning Research , 2024. Tan, A. Z., Yu, H., Cui, L., and Yang, Q. Towards person-alized federated learning. IEEE transactions on neural networks and learning systems , 34(12):9587–9603, 2022. Tian, Z., Zhang, Z., Yang, Z., Jin, R., and Dai, H. Distributed learning over networks with graph-attention-based per-sonalization. IEEE Transactions on Signal Processing ,71:2071–2086, 2023. Wang, Z., Shen, Z., He, Y., Sun, G., Wang, H., Lyu, L., and Li, A. Flora: Federated fine-tuning large language models with heterogeneous low-rank adaptations. Advances in Neural Information Processing Systems , 2024. Wang, Z., Xu, X., Liu, Y., Zhang, Y., Lin, P., Feng, S., Yang, X., Wang, D., and Sch ¨utze, H. Why do more experts fail? a theoretical analysis of model merging. arXiv preprint arXiv:2505.21226 , 2025. Wortsman, M., Ilharco, G., Gadre, S. Y., Roelofs, R., Gontijo-Lopes, R., Morcos, A. S., Namkoong, H., Farhadi, A., Carmon, Y., Kornblith, S., et al. Model soups: averaging weights of multiple fine-tuned mod-els improves accuracy without increasing inference time. 
+
+International Conference on Machine Learning , 2022. Yadav, P., Tam, D., Choshen, L., Raffel, C. A., and Bansal, M. Ties-merging: Resolving interference when merging 10 Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+models. Advances in Neural Information Processing Systems , 2023. Yang, A., Li, A., Yang, B., Zhang, B., Hui, B., Zheng, B., Yu, B., Gao, C., Huang, C., Lv, C., et al. Qwen3 technical report. arXiv preprint arXiv:2505.09388 , 2025. Yang, Y., Long, G., Shen, T., Jiang, J., and Blumenstein, M. Dual-personalizing adapter for federated foundation models. Advances in Neural Information Processing Systems , 2024. Yu, L., Yu, B., Yu, H., Huang, F., and Li, Y. Language models are super mario: Absorbing abilities from homol-ogous models as a free lunch. International Conference on Machine Learning , 2024. Zhang, J., Vahidian, S., Kuo, M., Li, C., Zhang, R., Yu, T., Wang, G., and Chen, Y. Towards building the fed-eratedgpt: Federated instruction tuning. In ICASSP 2024-2024 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , pp. 6915–6919. IEEE, 2024. Zhao, W. X., Zhou, K., Li, J., Tang, T., Wang, X., Hou, Y., Min, Y., Zhang, B., Zhang, J., Dong, Z., et al. A survey of large language models. arXiv preprint arXiv:2303.18223 ,1(2), 2023. Zhou, Z., Yang, Y., Yang, X., Yan, J., and Hu, W. Going beyond linear mode connectivity: The layerwise linear feature connectivity. Advances in Neural Information Processing Systems , 2023. 11 Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+## A. Theoretical Results 
+
+A.1. Derivation of Gaussian Distribution Approximation 
+
+The gaussian distribution approximation has been used in prior works (Matena & Raffel, 2022; Tam et al., 2024), but the full derivation is omitted. For completeness, we provide the full derivation. The training of the individual task vector for task i can be formulated as a maximum a posteriori (MAP) estimation problem (Matena & Raffel, 2022; Wang et al., 2025) as follows 
+
+μi = arg max 
+
+> θi
+
+p(θi | D i), (21) where Di denotes the dataset associated with task i. Here, task i may correspond either to the FedIT objective or to the local fine-tuning objective. We perform a second-order Taylor expansion of the log-posterior around a point ˆθ:
+
+log p(θi | D i) ≈ log p( ˆθ | D i) + ( θi − ˆθ)⊤∇θi log p(θi | D i)|θi= ˆθ − 12 (θi − ˆθ)⊤Hi(θi − ˆθ), (22) where Hi = −∇ 2 
+
+> θi
+
+log p(θi | D i)|θi= ˆθ .We assume that the parameter μi of the trained neural network is a local maximum of the posterior distribution. By setting 
+
+ˆθ = μi, we have ∇θi log p(θi | D i)|θi=μi = 0 .Then, we obtain 
+
+log p(θi | D i) ≈ log p(μi | D i) − 12 (θi − μi)⊤Hi(θi − μi), (23) where Hi = −∇ 2 
+
+> θi
+
+log p(θi | D i)|θi=μi .Applying the Laplace approximation (MacKay, 1992; Daxberger et al., 2021) around the local optimum μi, the posterior distribution p(θi | D i) admits the following Gaussian approximation: 
+
+p(θi | D i) ≈ N (θi; μi, H−1 
+
+> i
+
+) (24) Equivalently, we write 
+
+θi ∼ N (μi, Σi) where Σi = H−1 
+
+> i
+
+. (25) Given a trained neural network model pμi (y | x), the Fisher information matrix (Matena & Raffel, 2022; Fisher, 1922) is defined as 
+
+Fμi = Ex
+
+h
+
+Ey∼pμi(y|x)
+
+∇μi log pμi (y | x)∇μi log pμi (y | x)⊤i
+
+. (26) It can be shown that the Fisher information matrix coincides with the Hessian at modes of the distribution (Pascanu & Bengio, 2013). 
+
+A.2. Proof of Theorem 3.6 
+
+Recall that the joint distribution of (θFedIT , θLocal ) is given by 
+
+θFedIT 
+
+θLocal 
+
+
+
+∼ N 
+
+  μFedIT 
+
+μLocal 
+
+
+
+,
+
+ΣFedIT ΣCross 
+
+Σ⊤ 
+
+> Cross
+
+ΣLocal 
+
+  
+
+. (27) where ΣCross denotes the cross-covariance between the two task vectors with ΣCross ⪰ 0, ΣCross ⪯ ΣFedIT and 
+
+ΣCross ⪯ ΣLocal .Then, the merged task vector follows the following Gaussian distribution: 
+
+θMerge ∼ N (μMerge , ΣMerge ) (28) 12 Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+where 
+
+μmerge = λFedIT μFedIT + λLocal μLocal , (29) 
+
+Σmerge = λ2FedIT ΣFedIT + λ2Local ΣLocal + λFedIT λLocal (ΣCross + Σ⊤
+
+> Cross
+
+), (30) 
+
+λFedIT , λ Local ≥ 0, (31) 
+
+λFedIT + λLocal = 1 . (32) To analyze the effect of model merging, we expand the task loss L around its optimum W∗. Let ϕ = WPre +θMerge −W∗
+
+and H = ∇2L(W∗), where WPre is the pre-trained model that can be regarded as a constant vector. By Assumption 3.4 and Lemma 2.2 in (Carmon et al., 2018), we have 
+
+L(WPre + θMerge ) ≤ L (W∗) + 12 ϕ⊤H ϕ + LH
+
+6 ∥ϕ∥32. (33) By taking expectation, we obtain 
+
+EL(WPre + θMerge ) − L (W∗) ≤ 12 Eϕ⊤Hϕ + LH
+
+6 E[∥ϕ∥32]. (34) Using Lemma A.1 (i.e., E[ϕ⊤Hϕ] = ( Eϕ)⊤H(Eϕ) + tr( H Cov( ϕ)) ), we obtain 
+
+EL(WPre + θMerge ) − L (W∗)
+
+≤ 12 Eϕ⊤Hϕ + LH
+
+6 E[∥ϕ∥32]= 12 (Eϕ)⊤H(Eϕ) + 12 tr( H Cov( ϕ)) + LH
+
+6 E[∥ϕ∥32]= 12 (WPre + μMerge − W∗)⊤H(WPre + μMerge − W∗) + 12 tr( H Σ Merge ) + LH
+
+6 E∥ϕ∥32
+
+, (35) where μMerge = E[θMerge ] and ΣMerge = Cov( θMerge ).By Assumption 3.2, we have ∥ϕ∥2 ≤ δ, and therefore ∥ϕ∥32 ≤ δ ∥ϕ∥22. Taking expectation yields E∥ϕ∥32 ≤ δ E∥ϕ∥22. By the second-moment decomposition, we have 
+
+E∥ϕ∥22 = ∥Eϕ∥22 + tr(Cov( ϕ)) = ∥WPre + μMerge − W∗∥22 + tr( ΣMerge ). (36) Combining (35)–(36), we conclude that 
+
+EL(WPre + θMerge ) − L (W∗) ≤ 12 (WPre + μMerge − W∗)⊤H(WPre + μMerge − W∗) + 12 tr( H Σ Merge )+ LH
+
+6 δ
+
+
+
+∥WPre + μMerge − W∗∥22 + tr( ΣMerge )
+
+
+
+. (37) Then, we have 
+
+EL(WPre + θMerge ) − L (W∗) ≤ L
+
+2 ∥WPre + μMerge − W∗∥2 + L
+
+2 tr( ΣMerge )+ LH
+
+6 δ
+
+
+
+∥WPre + μMerge − W∗∥22 + tr( ΣMerge )
+
+
+
+≤ L
+
+2 δ2 + L
+
+2 tr( ΣMerge ) + LH
+
+6 δ3 + LH
+
+6 δtr( ΣMerge )=
+
+ L
+
+2 + LH
+
+6 δ
+
+
+
+δ2 +
+
+ L
+
+2 + LH
+
+6 δ
+
+
+
+tr( ΣMerge ) (38) where the first inequality is due to Assumption 3.3, and the second inequality is due to Assumption 3.2. Similarly, for each individual task vector we have 
+
+EL(WPre + θi) − L (W∗) ≤
+
+ L
+
+2 + LH
+
+6 δ
+
+
+
+δ2 +
+
+ L
+
+2 + LH
+
+6 δ
+
+
+
+tr( Σi), i ∈ { FedIT , Local }. (39) 13 Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+A.3. Proof of Lemma 3.7 
+
+Let 
+
+a = tr( ΣFedIT ), b = tr( ΣLocal ), c = tr( ΣCross ). (40) Hence 
+
+tr( ΣMerge ) = tr( λ2FedIT ΣFedIT + λ2Local · ΣLocal + λFedIT λLocal (ΣCross + Σ⊤
+
+> Cross
+
+)) (41) 
+
+= λ2FedIT · a + λ2Local · b + 2 λFedIT λLocal · c (42) Using the Lemma A.2, we have 
+
+|c| = |tr( ΣCross )| ≤ ptr( ΣFedIT ) tr( ΣLocal ) = √ab. (43) We define a function g(·) with respect to λFedIT as follows 
+
+g(λFedIT ) = tr( ΣMerge ) = aλ 2FedIT + b(1 − λFedIT )2 + 2 λFedIT (1 − λFedIT )c, (44) where 0 ≤ λFedIT ≤ 1.This quadratic form is convex in λFedIT , because g′′ 
+
+(λFedIT ) = 2( a + b − 2c) ≥ 2( a + b − 2√ab ) = 2( √a − √b)2 ≥ 0.Then, we obtain the optimal λFedIT and the optimum as 
+
+λ∗ 
+
+> FedIT
+
+= b − ca + b − 2c ∈ [0 , 1] , (45) 
+
+g(λ∗
+
+> FedIT
+
+) = b − (b − c)2
+
+a + b − 2c = a − (a − c)2
+
+a + b − 2c . (46) Due to ΣCross ⪯ ΣFedIT and ΣCross ⪯ ΣLocal , it follows that tr( ΣCross ) ≤ tr( ΣFedIT ) and tr( ΣCross ) ≤ tr( ΣLocal ).Combining both inequalities yields c ≤ min( a, b ). Therefore, the optimum is smaller than a and b, i.e., g(λ∗
+
+> FedIT
+
+) ≤
+
+min {a, b }.So far, we have shown that, at the optimal mixing weights λ∗ 
+
+> FedIT
+
+and λ∗
+
+> Local
+
+, tr( ΣMerge ) is smaller than 
+
+min {tr( ΣFedIT ), tr( ΣFedIT )}. Therefore, the merged model admits an excess loss upper bound that is tighter than the bounds for FedIT or local fine-tuning alone. 
+
+A.4. Proof of Lemmas Lemma A.1. Let μ = E[ϕ] and Σ = Cov( ϕ) = E(ϕ − μ)( ϕ − μ)⊤. We have 
+
+E[ϕ⊤Hϕ] = ( Eϕ)⊤H(Eϕ) + tr( H Cov( ϕ)) (47) 
+
+Proof. 
+
+E[ϕ⊤Hϕ] = Etr( ϕ⊤Hϕ) = Etr( Hϕϕ ⊤) = tr  H E[ϕϕ ⊤]
+
+= tr  H(Σ + μμ ⊤) = tr( HΣ ) + tr( Hμμ ⊤)= tr( HΣ ) + μ⊤Hμ (48) where we used E[ϕϕ ⊤] = Σ + μμ ⊤ and tr( AB ) = tr( BA ).
+
+Lemma A.2. Assume 
+
+ Σ1 Σ12 
+
+Σ⊤ 
+
+> 12
+
+Σ2
+
+
+
+⪰ 0. Then 
+
+tr( Σ12 ) ≤ ptr( Σ1) tr( Σ2) (49) 14 Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+Proof. Since 
+
+ Σ1 Σ12 
+
+Σ⊤ 
+
+> 12
+
+Σ2
+
+
+
+⪰ 0, there exists a matrix R with ∥R∥2 ≤ 1 such that 
+
+Σ12 = Σ1/21 R Σ 1/22 . (50) By applying trace, 
+
+tr( Σ12 ) = tr  Σ1/21 R Σ 1/22
+
+. (51) Using the trace inequality |tr( A⊤B)| ≤ ∥ A∥F ∥B∥F and ∥RX∥F ≤ ∥ R∥2∥X∥F , we have 
+
+tr( Σ12 ) = tr  (Σ1/21 )⊤(RΣ 1/22 )
+
+≤ ∥ Σ1/21 ∥F ∥RΣ 1/22 ∥F
+
+≤ ∥ Σ1/21 ∥F ∥R∥2 ∥Σ1/22 ∥F
+
+≤ ∥ Σ1/21 ∥F ∥Σ1/22 ∥F . (52) Note that ∥Σ1/21 ∥2 
+
+> F
+
+= tr(( Σ1/21 )⊤Σ1/21 ) = tr( Σ1/21 Σ1/21 ) = tr( Σ1). Similarly, ∥Σ1/22 ∥2 
+
+> F
+
+= tr( Σ2). Therefore, 
+
+tr( Σ12 ) ≤ ptr( Σ1) tr( Σ2).
+
+15 Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+## B. Implementation 
+
+Let {(xn, yn)}Nn=1 be a random data batch from training set of client i. For two well-trained models with parameters μFedIT 
+
+and μLocal , the per-sample gradients are given by 
+
+g(n)FedIT ≜ ∇μFedIT ℓ(μFedIT ; xn, yn), g(n)Local ≜ ∇μLocal ℓ(μLocal ; xn, yn), (53) where ℓ is the per-sample task loss. For each parameter coordinate k ∈ { 1, . . . , d }, compute the mean and variance of per-sample gradient, and covariance as 
+
+¯gFedIT ,k = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+g(n)FedIT ,k , ¯gLocal ,k = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+g(n)Local ,k , (54) 
+
+Var FedIT (k) = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+ g(n)FedIT ,k − ¯gFedIT ,k 
+
+2, Var Local (k) = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+ g(n)Local ,k − ¯gLocal ,k 
+
+2, (55) 
+
+Cov Cross (k) = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+ g(n)FedIT ,k − ¯gFedIT ,k 
+
+  g(n)Local ,k − ¯gLocal ,k 
+
+. (56) The gradient correlation coefficient for coordinate k is defined as 
+
+ρk ≜ Cov Cross (k)
+
+pVar FedIT (k) Var Local (k) , ρk ∈ [−1, 1] . (57) We adopt a diagonal approximation for the cross-covariance, 
+
+(ΣCross )kk ≜ ρk
+
+p(ΣFedIT )kk (ΣLocal )kk , k = {1, . . . , d },
+
+and clip ρk to ensure ΣCross ⪰ 0 and ΣCross ⪯ ΣFedIT , ΣLocal :
+
+ρk ≜ max 0, min {ρk, ρ max  
+
+> k
+
+} , where ρmax  
+
+> k
+
+= min 
+
+(s 
+
+(ΣFedIT )kk 
+
+(ΣLocal )kk 
+
+,
+
+s
+
+(ΣLocal )kk 
+
+(ΣFedIT )kk 
+
+)
+
+. (58) This yields a PSD diagonal ΣCross with each element bounded by the corresponding entries of ΣFedIT and ΣLocal .Then, we calculate the scalar c as 
+
+c ≜ tr( ΣCross ) = 
+
+> d
+
+X
+
+> k=1
+
+(ΣCross )kk =
+
+> d
+
+X
+
+> k=1
+
+ρk
+
+p(ΣFedIT )kk (ΣLocal )kk (59) Note that in practice θ is parameterized by LoRA modules {B, A} and the actual trainable parameters are B and A.Therefore, the Fisher information matrix in Eq. (19) is estimated with respect to the LoRA parameters {B, A} rather than the composed matrix product BA . Accordingly, we estimate the diagonal Fisher information for B and A, and perform merging separately for B and A, instead of first forming θ = BA and computing its Fisher information. 16 Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+## C. Experiments on FLAN benchmark 
+
+C.1. Performance Comparison 
+
+We evaluate P OTARA on the FLAN benchmark (Chung et al., 2024), which consists of over 60 datasets covering more than 12 NLP task categories. To simulate an extreme heterogeneity scenario, we consider eight clients, each trained on a completely different dataset. This setting is highly task-heterogeneous and is substantially more extreme than the CIFAR-100 and commonsense reasoning setups. Dataset details, task descriptions, and client assignments are summarized in Appendix C.2. We adopt Qwen3-4B-Instruct-2507 (Yang et al., 2025) as the pre-trained model and report ROUGE-1 for all tasks. Baselines are trained for 600 rounds, except local fine-tuning which runs for 300 rounds to mitigate overfitting. For P OTARA , we train FedIT for 300 rounds and local fine-tuning for 300 rounds, and merge the two resulting models to obtain the final model. As shown in Table 6, P OTARA achieves the best overall ROUGE-1 on the FLAN benchmark and consistently performing strongly across diverse task categories, indicating that merging global knowledge with personalized knowledge is especially effective under extreme task heterogeneity. Meanwhile, P OTARA attains these improvements while reducing communication cost because it merges an intermediate FedIT model with local model. 
+
+Table 6. ROUGE-1 performance on FLAN benchmark (Qwen3-4B-Instruct model).                                                                                                                                        
+
+> FLAN benchmark (Qwen3-4B-Instruct model) Methods Closed-book QA Reading Comp. Coreference Paraphrase Commonsense NLI Reading Sentiment Avg.
+> Local 69.53 ±0.75 69.38 ±2.81 88.01 ±0.70 80.00 ±3.56 87.62 ±0.78 85.78 ±2.18 73.87 ±0.66 76.16 ±1.69 78.79 ±0.99
+> FFA-LoRA 71.00 ±0.66 70.54 ±0.66 77.18 ±1.34 79.89 ±0.57 85.65 ±1.18 86.33 ±1.18 73.57 ±0.39 77.06 ±0.74 77.65 ±0.70
+> FedSA 69.54 ±0.95 69.54 ±1.09 87.78 ±2.61 81.89 ±0.87 84.05 ±1.16 86.00 ±1.19 72.72 ±0.65 76.47 ±0.98 78.50 ±0.25
+> FedIT 69.96 ±0.57 71.37 ±0.63 83.19 ±0.51 80.44 ±1.40 85.37 ±0.96 86.33 ±1.25 73.78 ±0.85 76.68 ±0.56 78.39 ±0.63
+> FedDPA 70.03 ±0.19 70.57 ±0.34 81.89 ±1.37 81.44 ±0.79 86.93 ±1.71 87.55 ±0.88 74.01 ±0.02 76.45 ±0.88 78.61 ±0.29
+> FedALT 68.07 ±1.51 72.50 ±0.77 84.84 ±0.51 82.44 ±1.03 85.17 ±0.07 86.78 ±0.57 73.43 ±0.86 77.40 ±1.02 78.83 ±0.26
+> POTARA 70.61 ±0.54 70.61 ±2.06 88.26 ±1.77 81.56 ±0.42 88.80 ±0.23 86.78 ±1.10 75.18 ±0.78 76.10 ±1.01 79.74 ±0.27
+
+C.2. FLAN benchmark 
+
+We follow the experimental setup in (Bian et al., 2026; Yang et al., 2024) to simulate a client-level task heterogeneity setting using the FLAN datasets (Chung et al., 2024). The FLAN collection comprises over 12 natural language processing tasks, each of which contains multiple datasets. These tasks are generated from diverse contextual factors and inherently exhibit complex and heterogeneous data distribution shifts. We consider an extreme client heterogeneity setting where 8 clients are assigned completely different NLP tasks. To simulate a realistic environment where each client has limited access to large-scale datasets, we adopt a downsampling strategy that assigns 2000 training samples and 300 test samples to each client. The specific task and dataset assignments are summarized in Table 7. 
+
+Table 7. FLAN benchmark. 
+
+Task Dataset Description 
+
+Closed-book QA arc challenge Answer multiple-choice questions. Reading Comp. w/ Commonsense cosmos qa Reading comprehension with commonsense. Coreference Resolution definite pronoun resolution Resolve ambiguous pronouns. Paraphrase Detection glue qqp Identify semantic equivalence. Commonsense Reasoning hellaswag Choose the most plausible continuation. Natural Language Inference mnli Infer relations between sentence pairs. Reading Comprehension squad v1 Extract answers from passages. Sentiment Analysis sst2 Sentence-level sentiment classification. 17 Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+## D. Experiments with Increased Number of Clients 
+
+In this section, we extend our experiments to settings with a larger number of clients. For the personalized CIFAR-100 benchmark, we increase the number of clients to 20, with each client following a distinct label distribution. For the commonsense reasoning benchmark, we increase the number of clients to 16, where every two clients share the same task but have different training samples. Table 8 and 9 show that with increased number of clients, P OTARA consistently outperforms all baselines, demonstrating robust performance gains at larger scale. 
+
+Table 8. Testing accuracy on personalized CIFAR-100 benchmark with 20 clients. Client Local FFA-LoRA FedSA FedIT FedDPA Fisher Merging POTARA 
+
+Client 1 63.53 ±2.22 44.37 ±1.97 61.28 ±2.27 59.52 ±0.73 67.41 ±2.92 62.00 ±2.46 62.39 ±3.91 
+
+Client 2 62.28 ±5.39 49.25 ±6.36 61.16 ±5.72 61.35 ±6.12 65.95 ±6.74 61.39 ±9.09 70.18 ±5.12 
+
+Client 3 60.40 ±0.23 45.24 ±1.43 58.25 ±2.07 64.25 ±2.42 65.39 ±3.34 59.64 ±2.42 70.09 ±1.34 
+
+Client 4 58.45 ±2.62 39.74 ±0.34 57.29 ±1.19 56.98 ±2.56 59.52 ±0.55 62.54 ±0.71 63.63 ±1.26 
+
+Client 5 62.07 ±2.18 50.88 ±4.72 62.73 ±2.31 66.00 ±3.74 68.64 ±1.89 66.22 ±0.01 67.94 ±4.36 
+
+Client 6 64.14 ±0.67 47.09 ±2.28 61.07 ±0.85 65.06 ±2.94 65.34 ±2.65 59.56 ±0.25 67.00 ±0.09 
+
+Client 7 58.82 ±0.95 40.24 ±1.49 58.12 ±0.59 57.96 ±1.45 58.85 ±3.59 61.12 ±2.24 61.66 ±0.95 
+
+Client 8 62.78 ±1.61 44.65 ±0.02 59.21 ±0.43 63.37 ±3.22 64.41 ±1.21 63.31 ±0.11 65.35 ±2.42 
+
+Client 9 62.58 ±1.40 42.76 ±2.31 60.06 ±1.32 59.63 ±4.14 60.85 ±3.94 65.22 ±0.23 66.83 ±0.98 
+
+Client 10 62.14 ±1.33 44.13 ±2.60 59.58 ±4.50 62.31 ±2.31 65.35 ±1.79 62.25 ±0.61 66.92 ±1.45 
+
+Client 11 60.16 ±1.79 44.74 ±1.14 59.23 ±2.08 64.24 ±1.03 62.61 ±1.03 57.62 ±0.73 61.96 ±0.85 
+
+Client 12 57.86 ±1.87 44.80 ±2.32 55.35 ±0.39 65.66 ±1.49 60.01 ±0.94 59.58 ±2.15 63.40 ±1.89 
+
+Client 13 61.04 ±1.68 46.04 ±7.54 61.00 ±1.22 61.74 ±1.95 64.73 ±3.67 60.20 ±4.24 66.48 ±1.17 
+
+Client 14 60.64 ±2.41 43.08 ±1.47 58.89 ±4.14 60.73 ±3.29 59.39 ±8.12 64.56 ±4.91 63.97 ±4.32 
+
+Client 15 59.61 ±1.47 37.66 ±0.69 57.57 ±1.00 61.24 ±1.12 60.62 ±2.62 59.30 ±1.39 63.62 ±2.54 
+
+Client 16 57.85 ±0.45 42.66 ±0.24 57.34 ±0.59 60.27 ±3.41 58.12 ±0.53 59.75 ±2.71 63.39 ±1.66 
+
+Client 17 62.09 ±4.21 43.70 ±8.42 58.79 ±2.54 64.45 ±5.90 61.59 ±4.52 63.83 ±3.02 64.84 ±3.86 
+
+Client 18 58.45 ±2.12 43.16 ±0.08 57.26 ±0.93 59.52 ±0.82 57.10 ±1.57 59.87 ±3.55 64.88 ±2.82 
+
+Client 19 62.75 ±3.68 50.26 ±1.38 63.88 ±1.85 66.43 ±1.42 66.52 ±2.21 66.39 ±2.62 71.42 ±0.54 
+
+Client 20 58.68 ±0.28 43.53 ±2.69 60.81 ±0.45 63.67 ±3.51 62.98 ±1.16 60.39 ±2.02 67.26 ±0.28 
+
+Average 60.81 ±0.57 44.40 ±1.09 59.45 ±0.95 62.22 ±0.93 62.77 ±0.63 61.73 ±1.45 65.66 ±0.82 
+
+Table 9. Testing accuracy on commonsense reasoning benchmark with 16 clients. Client Local FFA-LoRA FedSA FedIT FedALT FedDPA POTARA 
+
+Client 1 (ARC-c) 71.80 ±0.20 73.00 ±0.80 70.60 ±0.40 73.60 ±0.00 73.50 ±0.70 74.50 ±0.90 74.80 ±0.20 
+
+Client 2 (ARC-c) 70.50 ±0.50 73.10 ±0.30 72.20 ±1.20 73.60 ±0.00 72.40 ±0.00 74.50 ±0.10 75.20 ±1.00 
+
+Client 3 (ARC-e) 85.80 ±0.20 87.50 ±0.50 86.20 ±1.20 87.30 ±0.70 85.90 ±0.70 86.90 ±0.30 88.50 ±0.30 
+
+Client 4 (ARC-e) 86.70 ±0.50 87.10 ±0.50 85.90 ±1.30 87.30 ±0.70 85.00 ±0.20 87.40 ±0.60 87.90 ±0.30 
+
+Client 5 (BoolQ) 65.20 ±3.00 67.00 ±0.60 61.60 ±5.60 64.30 ±3.50 66.70 ±0.10 66.90 ±0.10 65.60 ±0.60 
+
+Client 6 (BoolQ) 67.90 ±1.50 63.50 ±1.70 64.90 ±0.70 64.30 ±3.50 65.50 ±0.30 64.20 ±3.00 66.70 ±1.70 
+
+Client 7 (HellaSwag) 68.50 ±1.50 58.50 ±0.10 66.70 ±1.90 66.90 ±1.10 69.00 ±0.20 65.00 ±0.00 69.70 ±1.30 
+
+Client 8 (HellaSwag) 68.10 ±0.10 59.70 ±0.50 63.90 ±2.50 66.90 ±1.10 68.00 ±1.20 68.10 ±0.70 68.30 ±0.90 
+
+Client 9 (OBQA) 75.90 ±0.50 71.30 ±2.90 72.90 ±0.30 76.70 ±0.10 75.80 ±1.00 78.00 ±1.80 78.70 ±0.50 
+
+Client 10 (OBQA) 74.90 ±2.50 73.80 ±0.40 73.50 ±1.30 76.70 ±0.10 76.00 ±1.00 77.80 ±1.00 77.90 ±0.70 
+
+Client 11 (PIQA) 80.20 ±0.80 79.40 ±1.80 77.40 ±0.40 80.60 ±0.60 79.80 ±0.20 80.20 ±0.60 81.90 ±0.90 
+
+Client 12 (PIQA) 79.40 ±1.00 77.60 ±2.60 78.30 ±0.70 80.60 ±0.60 79.20 ±1.60 81.20 ±0.60 81.90 ±0.30 
+
+Client 13 (SIQA) 67.70 ±1.10 67.60 ±0.20 67.00 ±0.80 70.50 ±0.10 70.80 ±3.00 71.30 ±1.50 73.00 ±1.60 
+
+Client 14 (SIQA) 67.80 ±1.20 67.70 ±0.70 68.30 ±0.70 70.50 ±0.10 66.50 ±0.50 69.20 ±1.80 72.40 ±1.80 
+
+Client 15 (WinoGrande) 67.00 ±0.20 52.20 ±2.60 66.20 ±0.40 62.00 ±0.80 63.40 ±0.00 62.10 ±0.50 62.80 ±0.60 
+
+Client 16 (WinoGrande) 64.80 ±1.00 51.30 ±1.70 64.30 ±1.30 62.00 ±0.80 63.20 ±0.40 61.70 ±0.10 63.60 ±0.20 
+
+Average 72.64 ±0.34 69.39 ±0.38 71.25 ±0.35 72.74 ±0.24 72.55 ±0.53 73.06 ±0.23 74.31 ±0.58 
+
+## E. Client Performance with Various Mixing Weight 
+
+In this section, we investigate the effect of the mixing weight λ that balances the FedIT model and the local fine-tuning model in the proposed P OTARA framework. Specifically, we vary λ ∈ { 0, 0.1, . . . , 1} and evaluate client-wise performance under different mixing weights, where λ = 1 corresponds to using the FedIT model alone and λ = 0 corresponds to 18 Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+purely local fine-tuning. We conduct this analysis on commonsense reasoning benchmark with LLaMA. Figure 4 shows that the performance of nearly all clients exhibits a clear unimodal trend with respect to λ, with intermediate mixing weights outperforming both extreme settings. This observation confirms that neither purely general knowledge nor purely personalized knowledge is sufficient, and that an appropriate combination of the two yields superior performance. Moreover, as the FedIT model is trained for more communication rounds, the peak of the unimodal curves shifts noticeably toward larger λ for nearly all clients. Consistently, the mixing weights estimated by our method (indicated by red dashed lines) also move to the right as the FedIT round increases. This behavior indicates that a better-trained FedIT model contributes more reliable general knowledge to the merged model. This rightward shift further suggests that the Fisher information associated with the FedIT model increases as training proceeds, which in turn assigns a larger weight to the FedIT model during model merging. 
+
+## F. Computation Time 
+
+We report the computation time required to compute the mixing weights on three benchmarks, as well as the training time of the FedIT model and the local model on the same benchmarks. We randomly sample 30 data samples from the training set of each client. As shown in Table 10, the computation time for mixing weights is modest compared to the overall training cost. Notably, this procedure is executed only once and does not introduce additional per-round communication or optimization overhead in the federated learning process. 
+
+Table 10. Computation time and training time. 
+
+Task Pre-trained Model Mixing Weights Computation Time FedIT + Local Training Time 
+
+CIFAR-100 ViT-B/16 52.06s 0.83h Commonsense Reasoning LLaMA-3.2-3B 0.46h 5.92h FLAN Qwen3-4B-Instruct-2507 1.18h 6.83h 
+
+## G. Hyperparameters 
+
+Unless stated otherwise,the hyperparameters used in this work are as follows. 
+
+Table 11. Hyperparameter setting.                        
+
+> Hyperparameter ViT-B/16 & CIFAR-100 LLaMA-3.2-3B-Instruct & commonsense reasoning Qwen3-4B-Instruct-2507 &FLAN
+> Batch size 10 44Learning rate 0.001 0.0001 0.0001 LoRA dropout rate 0.1 0.05 0.05 Local iteration number 544Target module [“query”, “value”] [“q proj”, “k proj”, “v proj”] [“q proj”, “k proj”, “v proj”] Number of data samples to compute mixing weights 30 30 30
+
+## H. Difference between Fisher Merging and P OTARA 
+
+Our proposed method P OTARA differs from Fisher merging in two fundamental aspects. First, these two methods operate in different parameter spaces, which leads to vastly different computational costs. Fisher merging is performed in the full parameter space of the model. When the model size is small (e.g., fewer than hundred million parameters), the computation of the Fisher information matrix is manageable and does not introduce significant overhead. However, for LLMs, whose parameter size typically exceeds one billion, computing the Fisher information for all parameters becomes computationally prohibitive. In contrast, our method performs merging in the task vector space and computes the Fisher information only for the LoRA parameters, whose dimensionality is several orders of magnitude smaller than that of the full model. As a result, our approach incurs substantially lower computational overhead and remains practical for LLMs. Second, Fisher merging assumes independence between the models being merged and ignores their correlation structure. Specifically, Fisher merging combines models by weighting them according to their individual Fisher information matrices, without considering correlation between models. In contrast, our method explicitly models the correlation between the federated model and the local model, which allows us to derive a more principled and optimal mixing weight. 19 Communication-Efficient Personalized Adaptation via Federated-Local Model Merging 
+
+(a) Merging FedIT model at round 50 with lcoal model at round 300 under varying mixing weight. 
+
+(b) Merging FedIT mdoel at round 150 with local model at round 300 under varying mixing weight. 
+
+(c) Merging FedIT model at round 300 with local model at round 300 under varying mixing weight. 
+
+Figure 4. Client performance under various mixing weights. For each client, we construct a personalized model by merging a FedIT checkpoint at round 50,150, or 300 with a fixed Local model at round 300, and sweep the local mixing weight λFedIT (x-axis). Curves report the resulting client accuracy. The red dashed line marks the mixing weight calculated by our method for each client. 
+
+20

@@ -1,0 +1,916 @@
+Title: Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History
+
+URL Source: https://arxiv.org/pdf/2602.17003v1
+
+Published Time: Fri, 20 Feb 2026 01:23:10 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Serin Kim 1 Sangam Lee 1 Dongha Lee 1
+
+# Abstract 
+
+Large language models have advanced web agents, yet current agents lack personalization capabilities. Since users rarely specify every de-tail of their intent, practical web agents must be able to interpret ambiguous queries by in-ferring user preferences and contexts. To ad-dress this challenge, we present P ERSONA 2W EB ,the first benchmark for evaluating personalized web agents on the real open web, built upon the 
+
+clarify-to-personalize principle, which requires agents to resolve ambiguity based on user history rather than relying on explicit instructions. P ER -
+
+> SONA
+
+2W EB consists of: (1) user histories that reveal preferences implicitly over long time spans, (2) ambiguous queries that require agents to infer implicit user preferences, and (3) a reasoning-aware evaluation framework that enables fine-grained assessment of personalization. We con-duct extensive experiments across various agent architectures, backbone models, history access schemes, and queries with varying ambiguity lev-els, revealing key challenges in personalized web agent behavior. For reproducibility, our codes and datasets are publicly available at [CODE]. 
+
+# 1. Introduction 
+
+Large Language models (LLMs) have progressed beyond imitating human reasoning and are beginning to act au-tonomously on behalf of humans in complex, real-world tasks (Xi et al., 2023). A representative paradigm of such advancement is the web agent, an autonomous system de-signed to execute multi-step workflows on web environment that require human intervention (Wang et al., 2024). At the core of these capabilities, LLMs enable the agent to interpret web contents (Gur et al., 2022; 2024) and understand task-specific instructions (Ouyang et al., 2022), which enhances 
+
+> 1
+
+Department of Artificial Intelligence, Yonsei University – DLI Lab, Seoul, Republic of Korea. Correspondence to: Dongha Lee 
+
+<donalee@yonsei.ac.kr >.
+
+Preprint. February 20, 2026. 
+
+Figure 1. A personalized web agent generates user-specific re-sponses by leveraging user history, whereas a general web agent often produces generic or random outputs that fail to align with user preference. 
+
+the robustness of web agents. However, these advances remain insufficient for fully prac-tical use in real-world scenarios. In real-world scenarios, users rarely specify every detail of their intent, assuming that systems understand their implicit context (Kelly & Tee-van, 2003; Hu et al., 2008; Shokouhi et al., 2015; Radlinski & Craswell, 2017; Zamfirescu-Pereira et al., 2023; Deng et al., 2024). To be genuinely practical, web agents must be able to accurately interpret even such ambiguous queries by inferring the user context and preferences. Yet, they often provide generic and sometimes arbitrary responses to ambiguous queries (Song et al., 2007; Qu et al., 2018). In Figure 1, when given the ambiguous query, the general web agent (Left) fails to clarify the query and selects a random high-sugar snack that has no relation to the user’s preferences. Such behavior yields unsatisfactory outcomes for the user with strong preference for health-conscious op-1
+
+> arXiv:2602.17003v1 [cs.CL] 19 Feb 2026 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History
+
+tions. Personalization can directly address this limitation by enabling agents to leverage user history when resolving am-biguity. When given the same query, the personalized web agent (Right) leverages the user history and selects snacks that align with the user’s health-conscious preferences. Despite the importance of personalization in web agents, existing benchmarks fail to provide a pertinent evaluation framework for these capabilities. Specifically, they suffer from two fundamental limitations. First, the majority of existing web agent benchmarks do not provide the user context that reveals user’s preference or behavioral patterns which are essential for agents to personalize their responses. Even when some form of context is provided (Zhou et al., 2023; Yao et al., 2024), it does not reflect realistic user behavior that agents would encounter in practice. Second, current benchmarks (Deng et al., 2023; He et al., 2024) rely on fully specified queries that overlook the ambiguity inherent in real user-agent interactions. This eliminates the need for agents to clarify implicit queries based on user context, which is the core challenge of personalization. Consequently, these benchmarks cannot distinguish between agents that genuinely understand and apply user preferences and those that simply follow the instructions. Motivated by these limitations, we introduce the first person-alized web agent benchmark, P ERSONA 2W EB , specifically designed for evaluating personalization capability of the web agent on the real open web. Central to this benchmark is the principle of clarify-to-personalize . This elicits per-sonalization by challenging agents to interpret ambiguous queries and fill in missing details based on user history, rather than simply executing fully specified instructions. Specifically, P ERSONA 2W EB consists of three core compo-nents. (1) User History: Our rigorously-constructed user history extends simple browsing logs into richer and more detailed contexts. It reveals user preferences in implicit and indirect ways over long time spans, rather than providing them explicitly at once. (2) Ambiguous Query: Our bench-mark intentionally conceals specific parts of the query to let the agent clarify based on user history. This design assesses whether the agent can resolve ambiguity without forcing the users to provide exhaustive details. (3) Reasoning-aware Evaluation: Beyond simple task completion, our evalua-tion framework comprehensively examines reasoning traces through structured rubrics to properly distinguish person-alization failures from navigation failures. This enables fine-grained assessment of personalization in web agents. Evaluating both general and personalized web agents on PERSONA 2W EB reveals a fundamental gap in current per-sonalization capabilities. Without access to user history, all agents fail completely on ambiguous queries, achieving a 0% success rate, which confirms that agents cannot resolve ambiguity without user context. Even when user history is                                     
+
+> Table 1. Comparison between P ERSONA 2W EB and existing web agent benchmarks. P ERSONA 2W EB offers extensive domain and website coverage, enables evaluation on the open web, and sup-ports personalization assessment. Parenthesized numbers next to the environment indicate the number of websites used; simulated, function-call, and dialogue agent therefore omit website counts. Domain counts are recalculated based on our own criteria.
+> Benchmark Domains Environment Personalization
+> WebLINX –Cached (155) ✗
+> Mind2Web 31 Cached (137) ✗
+> WebShop 1Simulated ✗
+> WebArena 6Simulated ✗
+> WebVoyager 5Open web (15) ✗
+> AssistantBench 15+ Open web (258) ✗
+> WebCanvas 19 Open web (69) ✗
+> PersonalWAB 1Function-call ✓
+> Apollonion 6Dialogue agent ✓
+> PERSONA 2W EB 21 Open web (105) ✓
+
+provided, performance improves only marginally, reaching just a 13% success rate at best. These observations indicate that simply supplying user history is insufficient and high-light the need for methods that enable agents to effectively leverage user context for personalization. Furthermore, task completion alone cannot capture personalization capability, as agents with similar success rates excel at personalization but fail at navigation, or the reverse. This underscores the necessity of our reasoning-aware evaluation framework for personalized web agents. Our key contributions are as follows: • We propose P ERSONA 2W EB , the first benchmark for eval-uating personalized web agents on the real open web, comprising user histories, personalization query sets, and evaluation framework. • Our queries follow clarify-to-personalize principle that deliberately embeds ambiguity, requiring the agent to infer implicit contexts from user history without explicit cues. • We conduct extensive experiments across diverse back-bone models, history access schemes, and query ambigu-ity levels to identify key challenges in personalized web agent behavior. 
+
+# 2. Related work 
+
+Web agent benchmark. Evaluating the web agents presents inherent challenges due to the dynamic nature of the web. To mitigate this issue, prior benchmarks have primarily relied on simulated or cached environments (Ta-ble 1). MiniWOB++ (Shi et al., 2017; Liu et al., 2018) provides simplified HTML-based tasks to test interaction skills. WebArena (Zhou et al., 2023) introduces a self-hosted simulated platform with end-to-end executable tasks. 2Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History   
+
+> Figure 2. Overview of P ERSONA 2W EB construction pipeline and reasoning-aware evaluation process.
+
+Mind2Web (Deng et al., 2023) caches real-world webpages and provides realistic tasks demanding multi-step execu-tion. Recent studies have shifted toward benchmarks on the real open web, introducing corresponding evaluation methods to handle its dynamic nature. WebCanvas (Pan et al., 2024) defines mandatory key nodes and evaluates performance at each node, while WebVoyager (He et al., 2024) integrates visual information into observation space and evaluates through LLM judge. Beyond the environment limitations, existing evaluation methodologies fail to capture the complexity of web agent behavior. Current web agent benchmarks assess perfor-mance based on step-wise actions (Gou et al., 2025) or the final outcomes (Zhou et al., 2023; Yao et al., 2022; He et al., 2024) making it impossible to discern whether failures stem from navigation errors, personalization deficiencies, or other reasoning breakdowns. Unlike closed settings, open-web navigation often admits multiple trajectories that lead to correct outcomes, making action-wise or outcome-based evaluation inappropriate. 
+
+Personalization in LLMs. Personalization has been ex-plored in memory-augmented LLMs (Kumar et al., 2024; Wu et al., 2024; Pan et al., 2025; Huet et al., 2025) and dialogue agents (Zhao et al., 2025; Chen et al., 2024; Xu et al., 2022; Lee et al., 2023; Zhang et al., 2018), typi-cally defined as the ability to retrieve and reason over user-relevant information. LaMP (Salemi et al., 2023) introduces a benchmark with user profiles across multiple domains, and LongLaMP (Kumar et al., 2024) extends it with a focus on the text generation tasks. In dialogue settings, Long-MemEval (Wu et al., 2024) evaluates memory abilities based on chat history, Apollonion (Chen et al., 2024) measures per-sonalization through embedding-based similarity with user profiles, and PrefEval (Zhao et al., 2025) requires models to infer implicitly expressed preferences. PersonalWAB (Cai et al., 2024) explores personalization based on the user’s history, but focuses on abstract function calls rather than web interface interactions. Yet none of these benchmarks ad-dress web navigation scenarios, where user preferences are inferred from interaction patterns and apply them in the ac-tion planning and execution. Motivated by these limitations, our work moves beyond response generation to encompass realistic web navigation tasks grounded in user context. 
+
+# 3. P ERSONA 2W EB 
+
+In this section, we present P ERSONA 2W EB , a benchmark designed to evaluate personalized web agents under realistic, open-web environment. It comprises three core components: user history, ambiguous query, and reasoning-aware evalua-tion. Figure 2 illustrates the overall pipeline. 
+
+3.1. Realistic User History 
+
+We construct user context in the form of web browsing his-tory, as this format most closely reflects how real web agents would access user information in practice. While dialogue-based benchmarks (woo Kwak et al., 2025) incorporate user context through explicit verbal cues, browsing history encodes such information implicitly with web behaviors. This requires agents to infer user preferences from actions rather than relying on explicit linguistic cues. To this end, we construct user history through a multi-stage generation pipeline (see Tables 7, 8, 9, and 10 for detailed prompts). The key principle is that user preferences should be revealed implicitly from contextual cues distributed across the history, 3Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History                           
+
+> Table 2. Examples of a P ERSONA 2W EB query set. Each task provides 3 queries with varied ambiguity levels. Web. and Pref. denote website and preferences, respectively. Level 0 is a clear query that includes all explicit cues.
+> Level Web. Pref. Example Query
+> 0✓✓At zocdoc.com , search for doctors near Southside Jacksonville who is a female .1✗✓Search for doctors near Southside Jacksonville who is a female at my preferred website. 2✗✗Search for doctors in my usual area that match my preferred provider gender at my preferred website.
+
+rather than stated explicitly. 
+
+User profile generation. The first stage constructs a user profile consisting of demographic information Dem( u) and 
+
+domain preferences Pref( u). Demographic attributes are evenly distributed to ensure variability across users. Domain preference represents the user’s domain-specific preferences and patterns. We define 21 domains reflecting typical web user experiences. Given Dem( u) and the predefined domain set D =
+
+{d1, d 2, . . . , d 21 }, the LLM M selects K relevant domains with rationales 1:
+
+{(d(k), ρ (k))}Kk=1 = M Dem( u), D,
+
+where d(k) denotes k-th selected domain and ρ(k) is the ra-tionale describing its relevance. M then generates domain-specific preferences using domain prompt π(k) that specifies what attributes to include in domain k’s preferences: 
+
+Pref( u) = 
+
+n
+
+M(d(k), π (k), ρ (k), Dem( u)) 
+
+oKk=1 
+
+The user profile is Profile( u) =  Dem( u), Pref( u) as a result. In total, we construct 50 distinct user profiles. 
+
+Event seeds and action decomposition. Since prefer-ences are reflected in event occurrence, randomly generat-ing events without event seed or directly importing external data (Sap et al., 2020) fails to capture consistent preference. We introduce event seeds that define recurring activity pat-terns based on user preferences and routines. We categorize events into high-frequency (daily activities like commuting, shopping) and low-frequency types (irregular events like travel, medical checkups). Given the Dem( u) and the set of rationales within all selected domains {ρ(k)}Kk=1 , LLM generates two event sets: the high-frequency events EHF  
+
+> u
+
+and the low-frequency events ELF  
+
+> u
+
+, as follows. 
+
+(EHF  
+
+> u
+
+, ELF  
+
+> u
+
+) = M Dem( u), {ρ(k)}Kk=1 
+
+ (1) We selectively apply cancellations and modifications to ap-proximately 10% of the entire record to reflect the noise and inconsistencies present in real-world user histories. Each event Ei is decomposed into a sequence of actions: 
+
+(ai, 1, a i, 2, . . . , a i,L i ) = M Ei), i = 1 , . . . , N   
+
+> 1We use GPT-4o as Mthroughout the data generation pipeline.
+
+where ai,j denotes the j-th action derived from event Ei,and Li is the number of actions in the event Ei. Actions from each event are dispersed across different temporal points over a year. This prevents related actions from being clustered together and instead requires agents to integrate remote histories to recognize recurring patterns. 
+
+User history generation. We structure user history with four elements as shown in Figure 2: timestamp, type, ob-ject, and website. The type field includes five categories, web search, web visit, purchase, booking, and review and rating, capturing a broad spectrum of actions commonly observed in web environments. Object provides the detailed information of the target entity for each action type. 
+
+3.2. Ambiguous Query Sets 
+
+A key distinction of our work lies in intentionally mask-ing explicit values, as the ambiguity of a query should be resolved through the user’s history. Based on this clarify-to-personalize approach, we first generate a query with all explicit cues, then create variants by adjusting the level of ambiguity. Each query set consists of three levels (Ta-ble 2): Level 0 (clear query), where both website and pref-erence constraints are explicit; Level 1 , where preference constraints are explicit while website is masked; and Level 2, where both are masked. Level 2 is the target query on which personalized web agents should perform well. 
+
+3.3. Reasoning-aware Evaluation 
+
+Accurate evaluation of personalized web agents requires dis-tinguishing personalization failures from navigation failures. However, since task completion depends on both personal-ization and navigation, errors in either are compounded in the final outcome, making the distinction impossible from task success alone. Our evaluation framework examines the full trajectory including reasoning traces based on three metrics: personalization score , intent satisfaction , and 
+
+success rate . For each metric, we employ scoring rubrics that assign discrete point levels (0, 5, or 10 points) based on whether each criterion is met. To apply these rubrics, we use GPT-5-mini as an LLM judge that receives the agent’s full trajectory along with the rubrics and outputs scores for each metric. Detailed rubrics in Appendix D. 4Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Personalization scores. To evaluate personalization, we define two Personalization Scores (PS), Pweb and Ppref . Pweb 
+
+determines whether the agent recognizes websites that align with recurring usage patterns based on the user history. Ppref 
+
+further examines whether the agent identifies items or at-tributes that best reflect user preferences. For websites requiring location-aware navigation (e.g., Amazon, Resy), we additionally evaluate whether the agent correctly person-alizes based on user location from history, even without an explicit query cue. Since personalization involves multiple steps to retrieve relevant history and utilize it, which can fail independently, each score is computed using two rubrics: 
+
+retrieval accuracy , which assesses whether the agent ac-cesses the correct histories, and utilization accuracy , which evaluates whether the retrieved information is appropriately incorporated into the navigation process. These rubrics re-quire reasoning traces to identify whether failures occur during retrieval or utilization. 
+
+Intent satisfaction. Intent satisfaction measures task accu-racy apart from personalization. Considering the open-web environment, agents may formulate correct plans but fail due to external factors (website unavailability, dynamic content). The rubric assigns full credit for complete task success and partial credit when the agent attempts the correct action but is blocked by external factors. 
+
+Success rate. Success Rate (SR) counts cases with full scores in both PS and IS. The task is deemed successful only when the agent personalizes and executes accurately. 
+
+# 4. Personalized Web Agent 
+
+4.1. Architecture 
+
+To investigate how well existing web agents can perform per-sonalized web navigation through P ERSONA 2W EB , we con-duct experiments using two web agent architectures, Agen-tOccam (Yang et al., 2024) and Browser-Use 2. (For more de-tails about these architectures, see Appendix B.1.) However, these architectures are designed for generic web navigation and do not account for user history by design, making them unsuitable for evaluating personalized web navigation tasks. Therefore, we transform these architectures into the end-to-end personalized web navigation pipelines by augment-ing them with a personalization module that retrieves and reasons over user history. Specifically, our transformed ar-chitecture consist of three components: planner , retriever ,and generator .• Planner: The planner interprets the current observation and determines whether user history is needed. If so, it generates a history query to retrieve relevant history; 
+
+> 2https://browser-use.com/
+
+otherwise, it directly generates the execution plan for the next step. • Retriever: The retriever receives history queries from the planner and searches for relevant entries in the user history. More details in Section B.2. • Generator: The generator reasons over retrieved histories to resolve query ambiguities. It receives the history query from the planner along with the retrieved histories from the retriever and analyzes them to identify preferences and extract specific details. It then produces a personalized rationale that guides subsequent action planning. Throughout the process, the agent generates a trajectory that captures both actions and reasoning at each step (Erdogan et al., 2025). The resulting reasoning trajectory documents the accessed history entries, query disambiguation process, and final option selection. 
+
+4.2. History Access Scheme 
+
+To evaluate distinct aspects of personalization capabilities, we propose two history access schemes for web agents that differ in when and how user history is accessed: on-demand and pre-execution . In the on-demand scheme, the agent accesses user history dynamically during task ex-ecution, only when the planner determines it is needed at each step. This scheme evaluates whether the agent can rec-ognize, in real time, when and what type of personalization is required, thereby testing its situational awareness. In the 
+
+pre-execution scheme, the agent retrieves all relevant histo-ries before execution begins by generating multiple queries to resolve ambiguities. This scheme examines the agent’s ability to engage in long-horizon planning to anticipate what information will be needed during execution. Refer to Ap-pendix C for detailed analysis. Full trajectory examples for each scheme are provided in Table 11 and Table 12. 
+
+# 5. Experiments 
+
+5.1. Meta Evaluation 
+
+To validate our evaluation framework, we conduct a meta-evaluation on 50 newly generated queries by comparing its correlation with human judgments. 
+
+Baselines and settings. Using GPT-4.1 as the backbone model, we instruct the agent to perform tasks under both pre-execution and on-demand schemes. GPT-5-mini serves as the meta evaluator, consistent with our main experiment. We compare our method against two other commonly adopted methods: action-wise , which evaluates the action sequence across all steps, and outcome-based , which considers only the final action and its reasoning. Since these two methods lack access to intermediate history retrieval steps, they eval-uate only whether the ground truth preferences are reflected 5Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Table 3. Performance comparison across two agent architectures (AgentOccam, Browser Use) with five backbone LLMs under three history access schemes (No-history, On-demand, Pre-execution). Metrics include Pweb , Ppref , Pavg (average of Pweb and Ppref ), Intent satisfaction (Intent), and Success Rate (SR). For No-history scheme, we report only Pavg for brevity. 
+
+Model No-history On-demand Pre-execution 
+
+Pavg Intent SR Pweb Ppref Pavg Intent SR Pweb Ppref Pavg Intent SR 
+
+AgentOccam 
+
+o3 0.168 0.503 0.00 0.747 0.551 0.649 0.423 0.07 0.683 0.555 0.619 0.397 0.07 
+
+GPT-4.1 0.126 0.503 0.00 0.740 0.577 0.658 0.417 0.06 0.705 0.574 0.639 0.409 0.07 
+
+Gemini-2.5-Flash 0.118 0.500 0.00 0.603 0.368 0.486 0.403 0.02 0.517 0.208 0.362 0.377 0.00 Qwen3-80B-Inst. 0.122 0.463 0.00 0.620 0.480 0.550 0.453 0.07 0.703 0.646 0.675 0.347 0.05 Llama-3.3-70B 0.130 0.242 0.00 0.683 0.491 0.587 0.140 0.01 0.693 0.552 0.622 0.217 0.00 
+
+Browser-Use 
+
+o3 0.034 0.277 0.00 0.743 0.568 0.655 0.530 0.13 0.733 0.608 0.671 0.450 0.10 GPT-4.1 0.077 0.250 0.00 0.803 0.731 0.767 0.467 0.13 0.767 0.686 0.727 0.530 0.13 
+
+Gemini-2.5-Flash 0.095 0.270 0.00 0.707 0.487 0.597 0.283 0.02 0.757 0.561 0.659 0.350 0.03 Qwen3-80B-Inst. 0.098 0.230 0.00 0.797 0.551 0.674 0.297 0.03 0.760 0.680 0.720 0.407 0.03 Llama-3.3-70B 0.078 0.090 0.00 0.690 0.534 0.612 0.190 0.01 0.713 0.647 0.680 0.197 0.02 
+
+Table 4. Meta evaluation results comparing reasoning-aware (ours), action-wise, and outcome-based evaluation.                                
+
+> Method Eval metric Pearson Spearman Accuracy Reasoning-aware (ours)
+> Website 0.8525 0.8611 0.8400 Preference 0.7200 0.7248 0.8800 Intent 0.7386 0.7436 0.7400 Action-wise Website 0.7654 0.8163 0.8400 Preference 0.3993 0.4026 0.5600 Intent 0.6409 0.6330 0.6800 Outcome-based Website 0.8038 0.8209 0.8300 Preference 0.2253 0.2241 0.4600 Intent 0.5909 0.5933 0.7000
+
+in the agent’s actions when measuring PS. This corresponds to the utilization accuracy of our full rubric. 
+
+Evaluation process. Human annotators evaluate each pair of trajectory by determining which scheme performs bet-ter (pre-execution, on-demand, or tie) across preference, website, and intent, with ground truth values provided for reference. To compare our evaluation framework against human judgment, we convert our scores into pairwise out-comes indicating which scheme received a higher score for each task. We then calculate Pearson and Spearman correlation coefficients, as well as accuracy, between each evaluation method and human annotations across all three metrics to quantify alignment with human judgment. 
+
+Evaluation results. In Table 4, our reasoning-aware method achieves the highest correlation with human judg-ments across all metrics. Notably, ours and the action-wise method both evaluate full trajectories, but ours incorporates reasoning traces. This difference yields a significant per-formance gap, confirming that reasoning is essential for accurately evaluating personalization. 
+
+5.2. Experimental Settings 
+
+We assess how personalization performance varies across agent architectures, backbone LLMs, and history access schemes. Specifically, we augment two base architectures (AgentOccam, Browser-Use) with our personalization mod-ule (Section 4.1) under three history access schemes (Sec-tion 4.2). We evaluate performance using five metrics: Pweb ,
+
+Ppref , Pavg , intent satisfaction, and success rate. 
+
+5.3. Main Results 
+
+We evaluate personalized web agents with five backbone LLMs: o3 (OpenAI, 2025), GPT-4.1 (OpenAI, 2024), Gemini-2.5-Flash (Google DeepMind, 2024) for propri-etary models, Qwen3-80B-Instruct (Qwen Team, 2025), and Llama-3.3-70B-Instruct (Meta AI, 2024) for open-source models. All experiments use level 2 queries, which are the most ambiguous, under three history access schemes. Results are presented in Table 3. 
+
+Performance differs across agent architectures and back-bone models. When history access is enabled (on-demand or pre-execution), Browser-Use consistently achieves higher personalization scores ( Pweb , Ppref ) than AgentOccam across all backbone models; this indicates that Browser-Use more effectively applies inferred user preferences during execution. We attribute this gap to differences in obser-vation construction. AgentOccam prunes the accessibility tree to retain only pivotal nodes and their related elements, producing a condensed representation that may discard rel-evant contexts. Browser-Use, in contrast, constructs a full enhanced DOM tree that preserves richer information (Ap-pendix B.1). Across both agent architectures, proprietary models (o3 and GPT-4.1) substantially outperform open-source mod-6Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+els, achieving success rates of 6–13% under history ac-cess, while most open-source models remain below 5%. Among open-source backbones, Qwen3-80B-Instruct is the only model that approaches proprietary-level performance in specific settings. These results suggest that both agent architecture and backbone model capacity jointly constrain personalization performance. 
+
+Web agents cannot handle ambiguous queries without user history. Under the no-history scheme, all models across both agents record 0% success rate. This confirms that web agents cannot resolve ambiguous queries without access to user history. Notably, the two agents exhibit dis-tinct failure patterns. AgentOccam achieves approximately 2× higher intent satisfaction than Browser-Use by substitut-ing missing values with random or generic values, prioritiz-ing task completion over accuracy. In contrast, Browser-Use requests user clarification and terminates execution, priori-tizing accuracy over completion but resulting in task aban-donment. In both cases, ambiguity remains unresolved. This inability to handle ambiguity cannot be captured through existing benchmarks that provide explicit queries, which highlights the necessity of our clarify-to-personalize queries and user history. 
+
+Task completion alone cannot measure personalization capability. For personalized web agents, task success de-pends on both personalization and navigation, and weakness in either leads to failure. For instance, Browser-Use with Llama-3.3-70B under pre-execution achieves Pavg = 0 .680 
+
+but only Intent = 0 .197 , which results in SR = 0 .02 .Conversely, AgentOccam with Gemini-2.5-Flash under on-demand achieves Intent = 0 .403 but only Pavg = 0 .486 ,which also results in SR = 0 .02 . Both cases record the same low success rate, yet they fail for opposite reasons. Llama succeeds at personalization but struggles with navi-gation, while Gemini navigates reasonably but fails at per-sonalization. That is, task completion alone cannot distin-guish whether failures arise from incorrect personalization or ineffective navigation. Our reasoning-aware evaluation framework resolves this by evaluating personalization and navigation separately. 
+
+History access schemes reveal backbone strengths. 
+
+Some backbone models consistently perform better under a specific scheme regardless of agent architecture. For in-stance, GPT-4.1 consistently achieves higher Pavg under on-demand than pre-execution across both agents, while Qwen3-80B-Instruct and Llama-3.3-70B show the opposite pattern, performing relatively better under pre-execution. This indicates that the two schemes capture different capa-bilities of these models as mentioned in Section 4.2. Based on this result, GPT-4.1 appears better suited for situational awareness, while Qwen3-80B-Instruct and Llama-3.3-70B  
+
+> Figure 3. Performance across query ambiguity levels for each agent architecture and history access scheme. Bars show Success Rate (left axis) for level 0, 1, 2 (gray, medium, dark blue). Lines show preference (red) and website (green) scores (right axis). o3, GPT-4.1, and Qwen3-80B-Instruct are used as backbone models.
+
+are for long-horizon planning. 
+
+5.4. Analysis Across Query Ambiguity 
+
+This section analyzes how performance changes across query ambiguity levels for each combination of agent archi-tecture, backbone models, and two history access schemes. Based on the main results presented in 5.3, we select the top three performing backbone models–o3, GPT-4.1, and Qwen3-80B-Instruct–for the analysis. Figure 3 reports suc-cess rate and personalization scores across different ambi-guity levels (level 0–2). 
+
+Performance degrades as ambiguity level increases. 
+
+Well-personalized web agents should maintain performance even on ambiguous queries by leveraging user history. How-ever, despite providing access to user history through our personalization module, success rate consistently decreases as query ambiguity increases across all configurations. Clear queries achieve an average success rate of 23.8%, while level 1 queries drop to 16.3%, and level 2 to 7.8%. Since both the personalized architecture and user history are available, this performance drop suggests that agents struggle to ef-fectively identify, reason over, and utilize relevant historical information to disambiguate queries as ambiguity increases. 7Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History                      
+
+> Table 5. Performance with explicit user profiles using Browser-Use. Values in parentheses indicate changes relative to implicit user history results in Table 3.
+> History Scheme Metric Backbone o3 GPT-4.1
+> Pre-execution Pweb 0.830 (+0.097) 0.887 (+0.120)
+> Ppref 0.764 (+0.156) 0.892 (+0.206) Intent 0.400 (+0.050) 0.640 (+0.110) Success 0.17 (+0.07) 0.27 (+0.14) On-demand Pweb 0.890 (+0.147) 0.933 (+0.130)
+> Ppref 0.682 (+0.114) 0.887 (+0.156) Intent 0.617 (+0.087) 0.597 (+0.130) Success 0.15 (+0.02) 0.25 (+0.12)
+
+Clear queries still lead to personalization failures. To identify factors limiting personalization capability, we an-alyze performance on clear queries, where all required in-formation is explicitly provided and no retrieval is needed. Yet, preference scores average only 0.92 and website scores 0.97 on clear queries, neither reaching a perfect 1.0. This indicates that even when complete information is given, agents often fail at utilization. We trace these failures to two primary causes. First, agents struggle to handle multiple constraints, applying only a subset. For example, given “my usual external SSD capacity, port, and budget,” agents correctly applied capacity (1TB-1.9TB) and port (USB inter-face) filters, but failed to apply the budget constraint (under $120). Second, agents fail to determine when and where to apply given information, specifically identifying the appro-priate element or execution step remains challenging. These findings indicate that improving personalization requires advancing not only retrieval but also utilization capabilities. 
+
+5.5. Analysis On User Context Implicitness 
+
+We construct our user history to reveal preferences implicitly through behavioral patterns rather than explicit statements. This is critical since explicit statements fundamentally re-duce personalization to instruction following, where agents simply apply given information, not inferring user intent. This undermines the genuine evaluation of personalization. To validate our implicit encoding and its necessity for per-sonalization evaluation, we compare performance of the agent when given explicit user profile (Section 3.1), which explicitly includes preference statements and implicit user history , which implicitly reveals preferences via behavioral patterns. As shown in Table 5, all configurations achieve substantially higher performance across all metrics with explicit profiles. Both contexts contain the same user infor-mation, yet there exists significant performance gap. This confirms that preferences in our user history are not explic-itly visible but must be inferred from behavioral patterns, validating our implicit encoding design. Furthermore, it highlights the necessity of implicit user context for genuine personalization and evaluation. 
+
+# 6. Error Analysis 
+
+To investigate the sources of personalization failures, we conduct an analysis based on the agent’s trajectories from level 2 query experiments. We examine them with imper-fect PS and categorize observed errors into four distinct types: Redundant history access, Personalization hallucina-tion, History retrieval failure, and History utilization failure. Beyond the qualitative analysis, Appendix H provides com-plementary error statistics across backbone models. 
+
+Redundant history access. Redundant history access oc-curs when the agent generates underspecified personaliza-tion queries, leading to unsuccessful retrieval and repeated attempts. In Table 13, the agent queries “ user’s usual shore excursion preferences ,” which is too broad to identify rele-vant history. When the query is refined by including domain-aware attributes “ activity type, activity level, price range ”, the agent retrieves relevant history. Without such specificity, the agent repeatedly accesses user history assuming no rele-vant history exists, causing redundant retrieval attempts. 
+
+Personalization hallucination. Personalization hallucina-tion refers to errors in which the model fabricates user in-formation without accessing relevant histories. In Table 14, the agent incorrectly applies a non-existent preference 4stars and up as if derived from the user history. Such errors frequently occur with rating or pricing thresholds, where the agent defaults to generic assumptions (e.g., preferring higher ratings or lower prices) instead of referencing user history. Although such behavior may appear operationally sound, it contradicts the goal of personalization. The goal is not to generate plausible information, but to reason faithfully from user-grounded evidence. 
+
+History retrieval failure. History retrieval failure refers to cases in which the agent retrieves irrelevant or incomplete histories, leading to the omission of essential information. In Table 15, the agent fails to identify “ Baltimore Orioles ”as the user’s favorite MLB team. Although it is mentioned in multiple histories, none of them explicitly state “favorite team” causing the retriever to miss the connection. To under-stand whether retriever design contributes to such failures, we explore alternative indexing designs in Appendix E. 
+
+History utilization failure. History utilization failure rep-resents situations where appropriate history is successfully retrieved but not properly utilized in the agent’s action. In Table 16, the agent retrieves the user’s location Los Angeles 
+
+but fails to incorporate it into searching, resulting in incor-rect results. This failure stems from the agent’s inability to determine when the retrieved histories should be applied within the overall process. The location needs to be set prior to initiating the search to yield accurate results. 8Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+# 7. Conclusion 
+
+This paper establishes the first benchmark for evaluating personalized web agents in real open web environments. Our benchmark introduces a clarify-to-personalize query design and rigorously constructs user histories, along with a reasoning-aware evaluation framework that assesses person-alization through rubric-based scoring. We conduct exten-sive experiments across web agent architectures, multiple backbone LLMs, two history access schemes, query ambi-guity, and user context formats, followed by error analysis to identify key challenges in web agent personalization. By enabling the assessment of how agents infer and apply user preferences, we believe this benchmark provides a strong foundation for advancing personalization in web agents. 
+
+# Impact Statement 
+
+This paper presents work whose goal is to advance the field of personalized web agents. Our P ERSONA 2W EB uses syn-thetically generated user profiles and browsing histories, ensuring no real user data is collected or used. However, we acknowledge that deployed personalized agents would re-quire access to actual user behavior patterns, raising privacy considerations regarding consent and data protection. We encourage future work to carefully address these concerns. Additionally, as our benchmark operates on the real open web, agents may encounter potentially harmful content dur-ing execution. We hope our work encourages research into personalization approaches that incorporate both privacy safeguards and safety mechanisms for web navigation. 
+
+# References 
+
+Cai, H., Li, Y., Wang, W., Zhu, F., Shen, X., Li, W., and Chua, T.-S. Large language mod-els empowered personalized web agents. Pro-ceedings of the ACM on Web Conference 2025 ,2024. URL https://api.semanticscholar. org/CorpusID:273507656 .Chen, S., Zhao, Z., Zhao, Y., and Li, X. Apollonion: Profile-centric dialog agent. ArXiv , abs/2404.08692, 2024. URL https://api.semanticscholar. org/CorpusID:269148688 .Deng, X., Gu, Y., Zheng, B., Chen, S., Stevens, S., Wang, B., Sun, H., and Su, Y. Mind2web: Towards a generalist agent for the web. ArXiv , abs/2306.06070, 2023. URL https://api.semanticscholar. org/CorpusID:259129428 .Deng, Y., Zhang, X., Zhang, W., Yuan, Y., Ng, S.-K., and Chua, T.-S. On the multi-turn instruction following for conversational web agents. In Ku, L.-W., Martins, A., and Srikumar, V. (eds.), Proceedings of the 62nd Annual Meet-ing of the Association for Computational Linguistics (Vol-ume 1: Long Papers) , pp. 8795–8812, Bangkok, Thailand, August 2024. Association for Computational Linguis-tics. doi: 10.18653/v1/2024.acl-long.477. URL https: //aclanthology.org/2024.acl-long.477/ .Erdogan, L. E., Lee, N., Kim, S., Moon, S., Fu-ruta, H., Anumanchipalli, G. K., Keutzer, K., and Gholami, A. Plan-and-act: Improving planning of agents for long-horizon tasks. ArXiv , abs/2503.09572, 2025. URL https://api.semanticscholar. org/CorpusID:276937549 .Google DeepMind. Gemini 2.5 flash. https:// deepmind.google/technologies/gemini/ ,2024. Accessed: 2026-01-28. Gou, B., Huang, Z., Ning, Y., Gu, Y., Lin, M., Qi, W., Kopanev, A., Yu, B., Guti ´errez, B. J., Shu, Y., Song, C. H., Wu, J., Chen, S., Moussa, H. N., Zhang, T., Xie, J., Li, Y., Xue, T., Liao, Z., Zhang, K., Zheng, B., Cai, Z., Rozgic, V., Ziyadi, M., Sun, H., and Su, Y. Mind2web 2: Evaluating agentic search with agent-as-a-judge. ArXiv , abs/2506.21506, 2025. URL https://api.semanticscholar. org/CorpusID:280011442 .Gur, I., Nachum, O., Miao, Y., Safdari, M., Huang, A., Chowdhery, A., Narang, S., Fiedel, N., and Faust, A. Understanding html with large language mod-els. ArXiv , abs/2210.03945, 2022. URL https: //api.semanticscholar.org/CorpusID: 252780086 .Gur, I., Furuta, H., Huang, A., Safdari, M., Matsuo, Y., Eck, D., and Faust, A. A real-world webagent with planning, long context understanding, and program synthesis, 2024. URL https://arxiv.org/abs/2307.12856 .He, H., Yao, W., Ma, K., Yu, W., Dai, Y., Zhang, H., Lan, Z., and Yu, D. Webvoyager: Building an end-to-end web agent with large multimodal models. In Annual Meeting of the Association for Computational Linguistics ,2024. URL https://api.semanticscholar. org/CorpusID:267211622 .Hu, Y., Koren, Y., and Volinsky, C. Collaborative filtering for implicit feedback datasets. 2008 Eighth IEEE In-ternational Conference on Data Mining , pp. 263–272, 2008. URL https://api.semanticscholar. org/CorpusID:10537313 .Huet, A., Ben-Houidi, Z., and Rossi, D. Episodic memories generation and evaluation benchmark for large language models. ArXiv , abs/2501.13121, 2025. URL https://api.semanticscholar. org/CorpusID:275820643 .9Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Kelly, D. and Teevan, J. Implicit feedback for inferring user preference: a bibliography. SIGIR Forum , 37:18– 28, 2003. URL https://api.semanticscholar. org/CorpusID:14181461 .Kumar, I., Viswanathan, S., Yerra, S., Salemi, A., Rossi, R. A., Dernoncourt, F., Deilamsalehy, H., Chen, X., Zhang, R., Agarwal, S., Lipka, N., and Za-mani, H. Longlamp: A benchmark for personalized long-form text generation. ArXiv , abs/2407.11016, 2024. URL https://api.semanticscholar. org/CorpusID:271218187 .Lee, G., Hartmann, V., Park, J., Papailiopoulos, D., and Lee, K. Prompted llms as chatbot modules for long open-domain conversation. In Annual Meet-ing of the Association for Computational Linguistics ,2023. URL https://api.semanticscholar. org/CorpusID:258557761 .Liu, E. Z., Guu, K., Pasupat, P., Shi, T., and Liang, P. Re-inforcement learning on web interfaces using workflow-guided exploration. CoRR , abs/1802.08802, 2018. URL 
+
+http://arxiv.org/abs/1802.08802 .Maharana, A., Lee, D.-H., Tulyakov, S., Bansal, M., Barbi-eri, F., and Fang, Y. Evaluating very long-term conversa-tional memory of llm agents. ArXiv , abs/2402.17753, 2024. URL https://api.semanticscholar. org/CorpusID:268041615 .Meta AI. The llama 3 herd of models. https://arxiv. org/abs/2407.21783 , 2024. arXiv:2407.21783. Muennighoff, N., Tazi, N., Magne, L., and Reimers, N. MTEB: Massive text embedding benchmark. In Vla-chos, A. and Augenstein, I. (eds.), Proceedings of the 17th Conference of the European Chapter of the Asso-ciation for Computational Linguistics , pp. 2014–2037, Dubrovnik, Croatia, May 2023. Association for Compu-tational Linguistics. doi: 10.18653/v1/2023.eacl-main. 148. URL https://aclanthology.org/2023. eacl-main.148/ .OpenAI. Gpt-4.1 system card. https://openai. com/index/gpt-4-1-system-card/ , 2024. Ac-cessed: 2026-01-28. OpenAI. Openai o3 and o4-mini system card. https://openai.com/index/ o3-o4-mini-system-card/ , April 2025. Ac-cessed: 2026-01-28. Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C. L., Mishkin, P., Zhang, C., Agarwal, S., Slama, K., Ray, A., Schulman, J., Hilton, J., Kelton, F., Miller, L., Simens, M., Askell, A., Welinder, P., Christiano, P., Leike, J., and Lowe, R. Training language models to follow instructions with human feedback, 2022. URL https: //arxiv.org/abs/2203.02155 .Pan, Y., Kong, D., Zhou, S., Cui, C., Leng, Y., Jiang, B., Liu, H., Shang, Y., Zhou, S., Wu, T., and Wu, Z. Webcanvas: Benchmarking web agents in online environments. ArXiv , abs/2406.12373, 2024. URL https://api.semanticscholar. org/CorpusID:270562249 .Pan, Z., Wu, Q., Jiang, H., Luo, X., Cheng, H., Li, D., Yang, Y., Lin, C.-Y., Zhao, H. V., Qiu, L., and Gao, J. On memory construction and retrieval for person-alized conversational agents. ArXiv , abs/2502.05589, 2025. URL https://api.semanticscholar. org/CorpusID:276249662 .Qu, C., Yang, L., Croft, W. B., Trippas, J. R., Zhang, Y., and Qiu, M. Analyzing and charac-terizing user intent in information-seeking conversa-tions. The 41st International ACM SIGIR Conference on Research & Development in Information Retrieval ,2018. URL https://api.semanticscholar. org/CorpusID:13756414 .Qwen Team. Qwen3 technical report. https://arxiv. org/abs/2505.09388 , 2025. arXiv:2505.09388. Radlinski, F. and Craswell, N. A theoretical framework for conversational search. Proceedings of the 2017 Conference on Conference Human Information Inter-action and Retrieval , 2017. URL https://api. semanticscholar.org/CorpusID:17732445 .Salemi, A., Mysore, S., Bendersky, M., and Za-mani, H. Lamp: When large language mod-els meet personalization. ArXiv , abs/2304.11406, 2023. URL https://api.semanticscholar. org/CorpusID:258298303 .Sap, M., Horvitz, E., Choi, Y., Smith, N. A., and Pennebaker, J. Recollection versus imagination: Exploring human memory and cognition via neural language models. In Jurafsky, D., Chai, J., Schluter, N., and Tetreault, J. (eds.), 
+
+Proceedings of the 58th Annual Meeting of the Associa-tion for Computational Linguistics , pp. 1970–1978, On-line, July 2020. Association for Computational Linguis-tics. doi: 10.18653/v1/2020.acl-main.178. URL https: //aclanthology.org/2020.acl-main.178/ .Shi, T., Karpathy, A., Fan, L. J., Hern ´andez, J. Z., and Liang, P. World of bits: An open-domain platform for web-based agents. In International Conference on Machine Learning , 2017. URL https://api. semanticscholar.org/CorpusID:34953552 .10 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Shokouhi, M., Sloan, M., Bennett, P. N., Collins-Thompson, K., and Sarkizova, S. Query suggestion and data fu-sion in contextual disambiguation. In Proceedings of the 24th International Conference on World Wide Web , WWW ’15, pp. 971–980, Republic and Canton of Geneva, CHE, 2015. International World Wide Web Conferences Steering Committee. ISBN 9781450334693. doi: 10.1145/2736277.2741646. URL https://doi. org/10.1145/2736277.2741646 .Song, R., Luo, Z., Wen, J.-R., Yu, Y., and Hon, H.-W. Identifying ambiguous queries in web search. In 
+
+The Web Conference , 2007. URL https://api. semanticscholar.org/CorpusID:9797193 .Wang, L., Ma, C., Feng, X., Zhang, Z., Yang, H., Zhang, J., Chen, Z., Tang, J., Chen, X., Lin, Y., Zhao, W. X., Wei, Z., and Wen, J. A survey on large language model based autonomous agents. Frontiers of Computer Science ,18(6), March 2024. ISSN 2095-2236. doi: 10.1007/ s11704-024-40231-1. URL http://dx.doi.org/ 10.1007/s11704-024-40231-1 .woo Kwak, B., Kim, M., Lim, D., Chae, H., Kang, D., Kim, S., Yang, D., and Yeo, J. Toolhaystack: Stress-testing tool-augmented language models in realistic long-term interactions, 2025. URL https://arxiv.org/ abs/2505.23662 .Wu, D., Wang, H., Yu, W., Zhang, Y., Chang, K.-W., and Yu, D. Longmemeval: Benchmarking chat assistants on long-term interactive memory. ArXiv , abs/2410.10813, 2024. URL https://api.semanticscholar. org/CorpusID:273345961 .Xi, Z., Chen, W., Guo, X., He, W., Ding, Y., Hong, B., Zhang, M., Wang, J., Jin, S., Zhou, E., Zheng, R., Fan, X., Wang, X., Xiong, L., Zhou, Y., Wang, W., Jiang, C., Zou, Y., Liu, X., Yin, Z., Dou, S., Weng, R., Cheng, W., Zhang, Q., Qin, W., Zheng, Y., Qiu, X., Huang, X., and Gui, T. The rise and potential of large language model based agents: A survey, 2023. URL https: //arxiv.org/abs/2309.07864 .Xu, X., Gou, Z., Wu, W., Niu, Z.-Y., Wu, H., Wang, H., and Wang, S. Long time no see! open-domain con-versation with long-term persona memory. In Findings ,2022. URL https://api.semanticscholar. org/CorpusID:247411350 .Yang, K., Liu, Y., Chaudhary, S., Fakoor, R., Chaudhari, P., Karypis, G., and Rangwala, H. Agentoccam: A simple yet strong baseline for llm-based web agents. ArXiv , abs/2410.13825, 2024. URL https://api.semanticscholar. org/CorpusID:273403385 .Yao, S., Chen, H., Yang, J., and Narasimhan, K. Web-shop: Towards scalable real-world web interaction with grounded language agents. ArXiv , abs/2207.01206, 2022. URL https://api.semanticscholar. org/CorpusID:250264533 .Yao, S., Shinn, N., Razavi, P., and Narasimhan, K. 
+
+τ -bench: A benchmark for tool-agent-user interac-tion in real-world domains. ArXiv , abs/2406.12045, 2024. URL https://api.semanticscholar. org/CorpusID:270562578 .Zamfirescu-Pereira, J., Wong, R. Y., Hartmann, B., and Yang, Q. Why johnny can’t prompt: How non-ai experts try (and fail) to design llm prompts. In Proceedings of the 2023 CHI Conference on Human Factors in Computing Systems , CHI ’23, New York, NY, USA, 2023. Associa-tion for Computing Machinery. ISBN 9781450394215. doi: 10.1145/3544548.3581388. URL https://doi. org/10.1145/3544548.3581388 .Zhang, S., Dinan, E., Urbanek, J., Szlam, A., Kiela, D., and Weston, J. Personalizing dialogue agents: I have a dog, do you have pets too? ArXiv , abs/1801.07243, 2018. URL https://api.semanticscholar. org/CorpusID:6869582 .Zhao, S., Hong, M., Liu, Y., Hazarika, D., and Lin, K. Do llms recognize your preferences? evaluating personalized preference following in llms. ArXiv , abs/2502.09597, 2025. URL https://api.semanticscholar. org/CorpusID:276317480 .Zhong, W., Guo, L., Gao, Q., Ye, H., and Wang, Y. Memo-rybank: Enhancing large language models with long-term memory. In Proceedings of the AAAI Conference on Arti-ficial Intelligence , volume 38, pp. 19724–19731, 2024. Zhou, S., Xu, F. F., Zhu, H., Zhou, X., Lo, R., Sridhar, A., Cheng, X., Bisk, Y., Fried, D., Alon, U., and Neu-big, G. Webarena: A realistic web environment for building autonomous agents. ArXiv , abs/2307.13854, 2023. URL https://api.semanticscholar. org/CorpusID:260164780 .11 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+# A. Dataset Details  
+
+> Figure 4. Detailed statistics of user profile provided from P ER -
+> SONA 2W EB benchmark.
+
+We construct a user profile of 50 individuals whose occupa-tion, age, gender, and marital status are evenly distributed to ensure demographic balance, as depicted in Figure 4. Each attribute combination is designed to be plausible and internally consistent, avoiding unrealistic pairings such as a 16 years old professor or a 21 years old retiree. To ensure this, both human validation and prompt-based filtering are employed during generation. The occupation categories are defined across six major sectors—technology, healthcare, education, business, service, and creative industries. To define realistic web domains, we collected 144 websites used in prior benchmarks (Mind2Web, WebArena, Web-Voyager) and filtered out sites with CAPTCHAs, regional restrictions, or outdated content, resulting in 105 acces-sible websites. We categorized these into 21 representa-tive domains: Groceries, Apparel and accessories, Electron-ics, Home and kitchen, Books and stationary, Sports and outdoor, Transportation, Hotels, Car rental, Tours, Restau-rants reservations, Weather and maps, Health and medical, Movies, Music, Concerts and exhibitions, Games, Online learning, Search, and Communities and forums. The in-clusion of diverse occupations and domains results in het-erogeneous user profiles, each exhibiting distinct interests and behavioral routines, thereby enabling the generation of diverse and realistic user interaction histories. We construct approximately 2,000 history entries spanning a one-year period for each of the 50 users. 
+
+# B. Implementation Details 
+
+B.1. Web Agent AgentOccam AgentOccam (Yang et al., 2024) improves web navigation performance without additional training by simply aligning the observation and action spaces with the LLM’s inherent capabilities. It simplifies action space to reduce distractions and improving focus on meaningful op-erations For the observation space, it removes redundant textual elements that describe page layout or functionality to produce a condensed representation of each page. It then refines observation history selectively by identifying piv-otal nodes on the accessibility tree, which are web elements essential for task completion, and retaining these nodes along with their ancestors, siblings, and descendants. It then organizes the workflow through a planning tree to keep the agent focused. Each branch represents a new sub-goal and once a branch is initiated, past trajectories irrelevant to the current plan are pruned. Following AgentOccam, we use a Playwright-based environment with Chromium as the browser engine. Unlike the original AgentOccam setup, we set the starting page to bing.com to avoid CAPTCHA issues. 
+
+Browser-Use Browser-Use extracts web page state through the Chrome DevTools Protocol (CDP). It retrieves three types of information in parallel: the DOM tree, lay-out information(bounding boxes and computed CSS styles), and the accessibility tree containing semantic role informa-tion for each element. These three data sources are merged into an enhanced DOM tree where each node contains its structural properties, screen coordinates, visibility status, scrollability, and accessibility semantics. The framework then serializes this enhanced tree into a text representation for LLM input, assigning numeric indices to interactive elements. Browser-Use automatically switches to duck-duckgo.com whenever it encounters CAPTCHAs. While AgentOccam selectively retains pivotal nodes and their related elements to produce a condensed observation, Browser-Use constructs the full DOM tree and filters el-ements based on visibility and interactivity derived from the CDP snapshot data. For fair comparison, we use only text-based observations without screenshot images. 
+
+B.2. Retriever 
+
+As a retriever, we use Stella V5 1.5B, the dense retriever that has shown high performance on MTEB (Muennighoff et al., 2023). Each history entry is indexed using the con-catenation of its type and object attributes as the key, while the complete history item is stored as the value. We em-ploy FAISS with inner product similarity (IndexFlatIP) for efficient nearest neighbor search. At retrieval time, we com-pute cosine similarity between the query embedding and all indexed keys, returning up to 20 entries that exceed a sim-12 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+ilarity threshold of 0.5. The embedding cache and FAISS index are serialized and stored on disk to enable fast loading across multiple task executions. 
+
+# C. History Access Schemes 
+
+Our history access schemes evaluate fundamentally different dimensions of personalized web agent. In the on-demand scheme, our analysis targets the agent’s capacity to detect when personalization is required and what 
+
+kind of user information is needed based on the current state, not compensating for missing inputs with generic or randomly imputed values. The focus is thus not merely on end-to-end completion, but on whether the agent adheres to the clarify-to-personalize goal, which is demonstrated by requesting user context via personalization module precisely when the current step demands it. In practice, web agents cannot assume users are available to answer queries at every step of execution. In such environments, well-personalized web agents must be able to proactively access to the history when it is needed. On-demand evaluation directly probes real-time situational awareness and the necessity of timely personalization intervention under realistic constraints. 
+
+Pre-execution requires the agent to anticipate what user information will be needed based on the given intent and domain, then integrate retrieved histories to construct an enhanced query that resolves ambiguities. Anticipation de-mands long-horizon planning, while integration requires ac-curately synthesizing information across multiple domains. Unlike the on-demand scheme, history access is unavailable during navigation. Thus, any omission of constraints, inclu-sion of irrelevant histories, or reliance on stale information propagates throughout the entire trajectory. 
+
+# D. Evaluation Rubric 
+
+We employ GPT-5-mini to evaluate agent performance. The model receives the agent’s full trajectory, including reason-ing traces, and measures personalization and intent scores based on the rubrics. Below, we detail the scoring criteria for each metric. 
+
+D.1. Website Score 
+
+The website score Pweb evaluates whether the agent cor-rectly identifies and navigates to the user’s preferred website based on user history. Total score: 10 points (5 for retrieval + 5 for utilization). Website Personalization Rubric       
+
+> Task Context: The agent needed to identify and navigate to the correct website based on the task query.
+> STEP 1 - Retrieval Evaluation:
+> 1. Did the agent generate appropriate queries to find website preference/history? 2. Was the expected website found in ANY of the memory responses?
+> STEP 2 - Utilization Evaluation:
+> 1. Did the agent successfully navigate to the expected web-site?
+> Scoring:
+> •STEP 1 - Retrieval : 5 pts if criteria met, 0 otherwise •STEP 2 - Utilization : 5 pts if criteria met, 0 otherwise
+
+D.2. Preference Score 
+
+The preference score Ppref evaluates whether the agent cor-rectly retrieves and utilizes user preferences. Total score: 10 points (2.5 per preference × 2 preferences × 2 steps). For location-aware websites, an additional 5 points for location personalization. (Total score: 15 points) The total score is normalized: Pweb = raw score max score .Preference Personalization Rubric            
+
+> Task Context: The agent needed to retrieve and apply user preferences for the given query.
+> Target Preferences:
+> •Preference 1 - Category: {pref1 key }, Expected Value:
+> {pref1 value }
+> •Preference 2 - Category: {pref2 key }, Expected Value:
+> {pref2 value }
+> STEP 1 - Retrieval Evaluation:
+> For EACH preference: 1. Check if any memory query asked about this preference category 2. Check if the expected value appears in any memory re-sponse
+> STEP 2 - Utilization Evaluation:
+> For EACH preference: 1. Check if the expected value was correctly applied in the reasoning 2. OR check if the agent at least attempted to apply the expected value
+> Scoring:
+> For EACH preference: •STEP 1 - Retrieval : 2.5 pts if criteria met, 0 otherwise •STEP 2 - Utilization : 2.5 pts if criteria met, 0 otherwise
+
+13 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+D.2.1. L OCATION EVALUATION (C ONDITIONAL )For websites requiring location-aware navigation (Amazon, Instacart, Resy, OpenTable, etc), we additionally evaluate lo-cation personalization using similar retrieval and utilization rubrics, each worth 2.5 points. The total score is normalized: 
+
+Ppref = raw score max score .Location Personalization Rubric 
+
+Task Context: The agent visited a location-required website and needed to apply user location. 
+
+Expected Location: {city, state, zip code }
+
+STEP 1 - Retrieval Evaluation: 
+
+1. Did the agent query for location/address information from memory? 2. Was location data (city, state, zip code, address, neighbor-hood) retrieved? 
+
+STEP 2 - Utilization Evaluation: 
+
+1. Was the location applied during navigation? (delivery address, search location, filters, etc.) 
+
+Scoring: 
+
+• STEP 1 - Retrieval : 2.5 pts if criteria met, 0 otherwise • STEP 2 - Utilization : 2.5 pts if criteria met, 0 otherwise 
+
+D.3. Intent Satisfaction 
+
+Evaluates task completion independent of personalization accuracy, with partial credit for external failures. Total score: 10 points. Intent Satisfaction Rubric 
+
+10 POINTS - Complete Intent Satisfaction: 
+
+• The requested final goal was successfully achieved • Examples: item added to cart, booking completed, infor-mation found 
+
+5 POINTS - Critical Action Attempted but Blocked: 
+
+• Agent reached the correct website/service • Agent identified the correct item/service • Agent attempted the final decisive action (e.g., clicked “Add to Cart”) • BUT was blocked by external factors: out of stock, CAPTCHA, website error, service unavailable 
+
+0 POINTS - Intent Not Satisfied: 
+
+• Failed to reach the decisive action • Search/filtering failed • Wrong item selected • Process abandoned • Constraint violated (e.g., attempted login when prohibited) 
+
+D.4. Success Rate 
+
+A task is considered successful if and only if all three metrics achieve perfect scores: 
+
+# E. Effect of Retriever Indexing 
+
+Table 6. Ablation study on retriever index design. T and O denote type and object, respectively. All incorporates timestamp, type, object, and website. 
+
+Scheme Key Ppref Intent 
+
+On-demand T + O 0.677 0.542 All 0.480 0.307 Pre-execution T + O 0.737 0.690 All 0.703 0.677 
+
+To validate our index design choice in retriever module, we conduct an ablation study comparing alternative indexing schemes. The original retriever extracts only type and object 
+
+attributes from each history entry to form simplified keys. Following common practice in information retrieval (Wu et al., 2024; Zhong et al., 2024; Maharana et al., 2024), an alternative design incorporates all four attributes ( timestamp ,
+
+type , object , and website ). Results on Qwen3-80B-Instruct show that the condensed indexing scheme achieves higher preference and intent scores across both access schemes. Adding timestamp and website attributes introduces noise rather than useful signal. Concatenating all attributes ob-scures the core semantic content in the embedding, and semantic similarity-based retrievers cannot meaningfully leverage temporal or locational information. 
+
+# F. Prompt for Data Construction 
+
+Tables 7, 8, 9, and 10 detail the prompts used in our data con-struction pipeline. These prompts guide the generation of domain preferences, daily life event seeds, action decompo-sitions, and personalized user history entries. Each prompt is carefully designed to enforce realism, internal consistency, and alignment with user preferences and behavioral patterns, forming the foundation of our clarify-to-personalize query design. 
+
+# G. Examples for History Access Schemes 
+
+Tables 11 and 12 present execution logs illustrating the two history access schemes considered in our benchmark. In the pre-execution scheme (Table 11), the agent retrieves and reasons over multiple aspects of user history (e.g., preferred website, typical category, and format) before initiating any navigation actions. This enables the agent to construct a fully specified personalized objective prior to execution, after which navigation proceeds without further history ac-14 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+cess. In contrast, the on-demand scheme (Table 12) interleaves history access with navigation. The agent initially retrieves only coarse-grained preferences (e.g., preferred platform) to start execution, and later queries user history again when additional constraints (e.g., budget limits or course duration) become necessary. This reactive access pattern allows the agent to refine its plan during execution but requires cor-rectly identifying when and which personalization signals should be retrieved. Together, these examples highlight that pre-execution em-phasizes upfront personalization and planning, while on-demand prioritizes adaptive personalization during execu-tion. The differing strengths and requirements of these schemes help explain why optimal history access strategies vary across agent architectures. 
+
+# H. Error Statistics  
+
+> Figure 5. Error statistics for AgentOccam across backbone models (top) and a breakdown of personalization-related errors for Gemini 2.5 Flash (bottom).
+
+To investigate the sources of agent failures, we conduct an error analysis based on the main results. Errors are catego-rized into personalization-related errors, indicated by imper-fect preference or website scores, and non-personalization-related errors, indicated by imperfect intent scores. Figure 5(a) reports the distribution of personalization-related and non-personalization-related errors for AgentOc-cam with various backbone models. Across all backbones, personalization-related errors constitute a substantial por-tion of total failures, indicating that incorrect or incomplete use of user history remains a dominant challenge even when agents successfully navigate the web. While the overall error counts vary by model, this pattern suggests that im-provements in general web navigation alone are insufficient to address personalization failures. Figure 5(b) further breaks down personalization-related er-rors for Gemini 2.5 Flash. Among these, history retrieval failure is the most prevalent error type, accounting for nearly half of personalization errors, followed by history utilization failure and redundant history access. In contrast, personal-ization hallucination occurs less frequently. This breakdown highlights that personalization failures more often arise from difficulties in identifying and applying relevant historical information, rather than fabricating nonexistent preferences. Together, these findings reinforce the need for improved mechanisms that support effective history reasoning and utilization in personalized web agents. 
+
+# I. Case Studies of Error Types 
+
+We also present representative execution logs for each of the four personalization error types identified in our analysis: Redundant History Access (Table 13), Personalization Hal-lucination (Table 15), History Retrieval Failure (Table 14), and History Utilization Failure (Table 16). These examples complement the main analysis by illustrating how each error type manifests during agent execution. 15 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Table 7. Prompt for Domain Preference Generation 
+
+Prompt for Domain Preference Generation Travel / Accommodation / Transportation ¿ Restaurant Reservations 
+
+What the fields must capture 
+
+Preference : include 4-5 concise preferences regarding restaurant reservations - MUST provide user context in a concise manner. - Favorite cuisine types (e.g., Japanese, Mexican, vegetarian-friendly) - Price tiers in USD or symbols (e.g., ”average meal ≤ $40 per person”) 
+
+Patterns : include 2–3 realistic, repeating habits such as: - ”Uses OpenTable when booking business dinners during weekdays” - ”Browses ExploreTock before special occasions” 
+
+Table 8. Prompt for Event Seed Generation 
+
+Prompt for Event Seed Generation - High Frequency 
+
+Generate realistic daily life events for month month of year based on the following user profile and requirements. 
+
+CRITICAL INSTRUCTIONS 
+
+- All events MUST align with the provided user profile - The ’frequency related to’ field in the user profile contains frequency information for each event category - strictly follow these frequencies - The ’selected subdomains’ field in the user profile includes preference information about the user’s tastes and lifestyle - faithfully incorporate these preferences - All events must be realistic and plausible with natural flow and timing - Keep descriptions general and avoid overly specific details - Avoid specific details that cannot be inferred from the profile (website names, brand names, etc.) 
+
+CANCELLATION RULES 
+
+- Approximately 10% of cancellable events should be marked as cancelled - Add ”(cancelled)” to events that are cancelled - Only cancel events where cancellation makes logical sense 
+
+User Profile 
+
+{user profile }
+
+Event Generation Guidelines Core Categories :
+
+Food & Dining 
+
+- Create variety: restaurant visits, cafe visits, brunch meetings, dinner with friends/colleagues 
+
+Shopping 
+
+- Online shopping ONLY - no offline shopping events - Include various product categories based on user preferences - Keep descriptions at appropriate level: NO more specific details 
+
+Work & Education 
+
+- First identify user’s occupation from profile: student, office worker, or freelancer - This determines the base routine: - Students: school attendance, study sessions, exams - Office workers: commute - Freelancers: client work, flexible schedule, networking - Include relevant special events: - Work: client meetings, conferences, presentations - Education: exams, competitions, school events, study groups - Development: online courses, workshops, certifications, skill training 
+
+16 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Table 9. Prompt for Action Decomposition 
+
+Prompt for Action Decomposition 
+
+Decompose the following event into a sequence of plausible actions with timestamps. Event Date: {event date }
+
+Event Description: event description 
+
+CRITICAL CONSTRAINTS: 
+
+Only these 5 action types are allowed: 1. web search - searching for information online 2. web visit - visiting specific websites 3. purchase - buying products or services 4. booking - making reservations or appointments 5. review & rating - writing reviews DO NOT use any other action types. 
+
+DECOMPOSITION GUIDELINES :The number of actions must reflect realistic human behavior. Don’t force simple tasks to have many steps, and don’t oversimplify naturally complex processes. Simple Events (1-2 actions): - Quick, single-purpose tasks - No research or comparison needed Complex Events (3-8 actions): - Multi-stage processes requiring planning - Involve research, comparison, decision-making - planning trips, organizing events, major purchases 
+
+CORE REQUIREMENTS: 
+
+1. Temporal Logic Actions must occur in **before/during/after** timeframes: - **Before**: preparation actions (search, review reading, booking) - **During**: execution actions (purchase, web visit for real-time info) - **After**: follow-up actions (writing reviews, related purchases) TIMESTAMP GENERATION RULES: - Generate timestamps around the event date - Use realistic times (avoid 2-6 AM unless necessary) - Format: YYYY-MM-DD HH:MM:SS - Actions should be in chronological order 2. Action Diversity Guidelines (DO NOT copy exactly) - **Shopping events**: Not just ‘purchase’ - Include: product search → review reading → price comparison → purchase → review writing - **Travel events**: Full journey - Include: destination search → booking → travel info lookup → review writing - **Dining events**: Complete experience - Include: ‘web search’ (restaurant) → ‘web visit’ (read reviews) → ‘booking’ (reservation) → ‘web visit’ (location map) → ‘review & rating’ (write reviews) 
+
+17 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Table 10. Prompt for User History Generation 
+
+Prompt for User History Generation 
+
+Personalize the following action into a detailed user history entry based on the user’s domain profile. 
+
+Action Information: 
+
+- Timestamp: {timestamp }
+
+- Action: {action }
+
+- Domain: {domain }
+
+- Subdomain: {subdomain }
+
+User’s Domain Profile: 
+
+{domain profile }
+
+CRITICAL REQUIREMENTS: 
+
+1. MUST reference the ”preferences” field in the profile for specific brands, sizes, websites, artists, and other preferences 2. MUST consider the ”patterns” field to understand user’s routine behaviors and habits 3. Generate highly specific and concrete details that align with these preferences and patterns 4. The personalization should authentically reflect this specific user’s tastes and behaviors 
+
+PERSONALIZATION GUIDELINES: 
+
+OUTPUT FORMAT: 
+
+{
+
+”timestamp”: ”YYYY-MM-DD HH:MM:SS”, ”type”: ”web search, web visit, purchase, booking, review & rating”, ”object”: ”detailed description with specifics from preferences”, ”website”: ”bare domain of the platform” 
+
+}
+
+The object field MUST be extremely specific, incorporating details from the profile’s preferences and patterns fields. 
+
+18 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Table 11. Execution log of pre-execution scheme 
+
+Query: Find books in my usual work category in my preferred format. Step 1 (History Access): 
+
+Personalization Query: What is the user’s preferred website for finding and purchasing books? 
+
+Retrieved History Index: 1749, 850, 854, ... 
+
+Personalization Reasoning: Based on the histories provided, the user’s preferred website for purchasing books is Amazon . You have made five separate book purchases, all of which were on Amazon. On November 17, 2024, you purchased ’Continuous Discovery Habits’ by Teresa Torres. On October 16, ... In all instances where details are mentioned, you leveraged Amazon Prime for quick delivery. 
+
+Step 2 (History Access): 
+
+Personalization Query: What is the user’s usual work-related book category? 
+
+Retrieved History Index: 1893, 288 
+
+Personalization Reasoning: Based on the histories provided, no explicit record of work-related book categories. However, histories show interest in product management through online course searches on coursera.org, not through book purchases. 
+
+Step 3 (History Access): 
+
+Personalization Query: What is the user’s preferred format for books? 
+
+Retrieved History Index: 1593, 854, 268, ... 
+
+Personalization Reasoning: Based on the user histories provided, the user’s preferred book format is 
+
+hardcover . All book purchases recorded in the histories are for hardcover editions. **February 18, 2024:** Purchased ’Inspired: How To Create Products Customers Love’ by Marty Cagan in hardcover. **May 30, 2024:** Purchased a hardcover edition of ’INSPIRED: How to Create Products Customers Love’ by Marty Cagan. **June 11, 2024:** Purchased two hardcover business books. 
+
+Step 4 (Navigation Action): 
+
+Objective: Enhanced task: First, go to Amazon.com. Then, search for Product Management books and filter the results to show only Hardcover editions. ... 
+
+URL: https://www.bing.com/ 
+
+Reason: The first step of the objective is to go to Amazon.com. Since the current page is a search engine, the most direct way to navigate to Amazon.com is to type ”Amazon.com” into the search bar and execute the search. 
+
+Action: type [141] [Amazon.com] [1] 
+
+Step 5 (Navigation Action): 
+
+Objective: Enhanced task: First, go to Amazon.com. Then, search for Product Management books and filter the results to show only Hardcover editions. ... 
+
+URL: https://www.amazon.com/ 
+
+Reason: The next step in the objective is to search for ”Product Management” books. I will use the search bar ‘searchbox [8]‘ to input the search query ”Product Management” and then proceed to click the search button to execute the search. 
+
+Action: type [8] [Product Management] [1] 
+
+Step 6 (Navigation Action): 
+
+Objective: Enhanced task: First, go to Amazon.com. Then, search for Product Management books and filter the results to show only Hardcover editions. ... 
+
+URL: https://www.amazon.com/s?k=Product+Management... 
+
+Reason: The objective is to filter the search results to show only ”Hardcover” editions. I have identified the ”Hardcover” filter link (ID ‘16553‘) within the ”Book Format” section of the filtering menu. Clicking this link will apply the desired filter to the search results. 
+
+Action: click [16215] ... 
+
+Step 9 (Navigation Action): 
+
+Objective: Enhanced task: First, go to Amazon.com. Then, search for Product Management books and filter the results to show only Hardcover editions. ... 
+
+URL: https://www.amazon.com/s?k=Product+Management... 
+
+Reason: All these steps have been successfully completed. The current page shows the filtered results as requested. Therefore, the task is finished. 
+
+Action: stop [The search for ”Product Management” books on Amazon.com has been performed, and the results have been successfully filtered to show only ”Hardcover” editions. 
+
+19 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Table 12. Execution log of on-demand scheme 
+
+Query: Find sales negotiation courses that match my typical budget and course length limits. Step 1 (History Access): 
+
+Personalization Query: user’s preferred website for finding professional development courses. 
+
+Retrieved History Index: 1113, 611, 100, ... 
+
+Personalization Reasoning: Based on the histories provided, your preferred website for finding professional development courses is coursera.org . You have used coursera.org on at least nine separate occasions for various activities related to professional development, specifically focusing on sales strategy and negotiation techniques. 
+
+Step 2 (Navigation Action): 
+
+Objective: Query: Find sales negotiation courses that match my typical budget and course length limits for sales/negotiation. 
+
+URL: https://www.bing.com/ 
+
+Reason: Based on the user’s memory, the preferred website for finding professional development courses is 
+
+coursera.org . Therefore, the first step is to navigate to this website. I will type coursera.org into the search bar and press enter to go to the website. 
+
+Action: type [144] [coursera.org] [1] 
+
+Step 3 (Navigation Action): 
+
+Objective: Query: Find sales negotiation courses that match my typical budget and course length limits for sales/negotiation. 
+
+URL: https://www.bing.com/search?q=coursera.org... 
+
+Reason: I have successfully searched for the user’s preferred website. The next logical step is to click on the link that leads to the Coursera homepage to begin searching for the specified courses. I will click on the link with the text ”Coursera Degrees, Certificates, & Free Online Courses” to navigate to the website. 
+
+Action: click [15096] 
+
+Step 4 (Navigation Action): 
+
+Objective: Query: Find sales negotiation courses that match my typical budget and course length limits for sales/negotiation. 
+
+URL: https://www.coursera.org/?msockid... 
+
+Reason: The objective is to find ”sales negotiation courses”. The most direct way to do this is to use the search bar provided on the homepage. I will type ”sales negotiation” into the search bar and press enter to see the available courses. 
+
+Action: type [1853] [sales negotiation] [1] 
+
+Step 5 (History Access): 
+
+Personalization Query: user’s typical budget and course length limits for sales/negotiation courses. 
+
+Retrieved History Index: 1113, 904, 495, ... 
+
+Personalization Reasoning: Based on the provided histories, you have looked for courses priced under $30 USD . You have a limit for total course length of under 10 hours . You have a preferred weekly workload of 
+
+4-6 hours per week .
+
+Step 6 (Navigation Action): 
+
+Objective: Query: Find sales negotiation courses that match my typical budget and course length limits for sales/negotiation. 
+
+URL: https://www.coursera.org/search?query=sales%20negotiation... 
+
+Reason: I have successfully searched for ”sales negotiation” courses. Now I need to filter the results to match the user’s preferences. According to the user’s memory, the course length should be under 10 hours. The ¨Duration ¨filter button [5907] is the most direct way to apply this constraint. I will click on it to see the available duration options and select the one that best fits the user’s needs. 
+
+Action: click [5907] ... 
+
+Step 14 (Navigation Action): 
+
+Objective: Query: Find sales negotiation courses that match my typical budget and course length limits for sales/negotiation. 
+
+URL: https://www.coursera.org/search?query=sales%20negotiation& productDuration=Less... 
+
+Reason: I have successfully identified multiple courses that match the user’s specified criteria for website, duration, and budget. The course titled ”Copilot for Beginners: Create a Sales Pitch Presentation” is particularly relevant as it explicitly mentions ”Price Negotiation”. Since I have found suitable options, the task is complete. I will now stop and provide the answer. 
+
+Action: stop [The following sales negotiation courses on Coursera match your preferences (under 10 hours, under $30): ”Copilot for Beginners: Create a Sales Pitch Presentation”, ”Design a pitch deck with Canva”, and ”Create a Promotional Video using Canva”.]” 
+
+20 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Table 13. Redundant History Access Error 
+
+Query: Find and compare shore excursions for our upcoming cruise that match my usual preferences and budget. 
+
+Step 1 (History Access): 
+
+Personalization Query: user’s preferred website for booking or browsing cruise shore excursions 
+
+Personalization Reasoning: Based on the provided histories, the evidence of your preferred website for booking or browsing cruise shore excursions is your use of the Carnival Cruises website. ... 
+
+Step 2 (Navigation Action): 
+
+URL: https://www.bing.com/ 
+
+Reason: Following the user’s preferences and history, the search for shore excursions should be conducted on the Carnival Cruises website. The next step is to search for the Carnival Cruises website using Bing, so I can navigate there and begin searching for shore excursions that match the user’s preferences and budget. 
+
+Action: type [144] [Carnival Cruises shore excursions] [1] 
+
+Step 3 (History Access): 
+
+Personalization Query: user’s usual shore excursion preferences 
+
+Personalization Reasoning: Based on the provided user histories, there is no direct information available regarding the user’s usual shore excursion preferences. ... 
+
+Step 4 (History Access): 
+
+Personalization Query: user’s cruise itinerary (dates and ports of call for the upcoming cruise) 
+
+Personalization Reasoning: Based on the provided user histories, there is limited information available regarding your cruise itinerary. The only relevant detail found is from a memory dated 2023-10-21, which states: you booked a small-group, low-activity shore excursion for 2 adults on Carnival Cruises departing from Port Canaveral. ... 
+
+Step 5 (History Access): 
+
+Personalization Query: user’s cruise itinerary (upcoming cruise: dates and ports of call) 
+
+Personalization Reasoning: Based on the provided user histories, the available information about your upcoming cruise is as follows: Cruise Line: Carnival Cruises; Departure Port: Port Canaveral; Excursion Details: You have booked a small-group, low-activity panoramic coach sightseeing shore excursion for 2 adults. ... 
+
+Step 6 (Navigation Action): 
+
+URL: https://www.bing.com/search?q=Carnival+Cruises+shore+excursions... 
+
+Reason: To fulfill the user’s objective in line with their known preferences, I should proceed to the official Carnival Cruises shore excursions page. This will allow me to browse and compare available excursions, filter for low-activity or sightseeing options, and check prices, all without needing to log in or provide personal info. This step is required before any filtering or comparison based on preferences or budget. 
+
+Action: click [17259] 
+
+Step 7 (History Access): 
+
+Personalization Query: user’s specific shore excursion preferences (activity type, activity level, price range) 
+
+Personalization Reasoning: Based on the provided user histories, several histories indicate a preference for mid-range spending ($30–$70 per person) and highly rated services. ... 
+
+Step 8 (History Access): 
+
+Personalization Query: user’s specific shore excursion preferences (activity type, activity level, and price range) 
+
+Personalization Reasoning: Based on the provided user histories, the relevant detail is that you previously searched for family-friendly activities near Lockeland Table in East Nashville, focusing on activities suitable for all ages. ... 
+
+Step 9 (Navigation Action): 
+
+URL: https://www.carnival.com/shore-excursions/... 
+
+Reason: First, I must retrieve the user’s preferred website from their memory bank to support the execution of this query, and then perform the search. I should not attempt any actions that require login, phone number, or e-mail address. To match the user’s known preferences (low-activity, sightseeing, mid-range budget) and efficiently compare excursions, I should apply the following filters: - Activity Type: Sight-seeing and Motorcoach (as panoramic coach tours are a past preference) - Activity Level: Easy (to ensure low-activity options) - Price: $50–$99.99 and $100 or more (to cover mid-range and slightly higher). Applying these filters will narrow down excursions to those most relevant to the user’s patterns, allowing for an effective comparison. 
+
+Action: click [2423] 
+
+21 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Table 14. Personalization Hallucination Error 
+
+Query: Find monitors that match my usual monitor specs, and apply my preferred condition and review threshold; sort by price low to high. 
+
+Step 1 (History Access): 
+
+Personalization Query: user’s preferred website for monitor shopping 
+
+Personalization Reasoning: Based on the provided histories, the user has visited and used both eBay and Best Buy when shopping for monitors. eBay was used for price comparison, and Best Buy was checked for open-box availability. No explicit preference for either site is stated, but Best Buy appears frequently in relation to open-box deals. 
+
+Step 2 (Navigation Action): 
+
+URL: https://www.bing.com/ 
+
+Reason: Therefore, Best Buy is a reasonable starting point for this task. Search for “Best Buy monitors” to reach the monitor category page. 
+
+Action: type [144] [Best Buy monitors] [1] 
+
+Step 3 (History Access): 
+
+Personalization Query: user’s usual monitor specs (size, resolution, panel type, refresh rate etc.) 
+
+Personalization Reasoning: The user typically searches for 27–32” 4K monitors prioritizing high color accuracy, high refresh rate, and USB-C connectivity. No brand or panel-type information is available. 
+
+Step 4 (Navigation Action): 
+
+URL: https://www.bing.com/search?q=Best+Buy+monitors... 
+
+Reason: Select the “Best Buy” link ([16375]) to navigate to Best Buy’s monitor section for applying the user’s specifications and filters. 
+
+Action: click [16375] 
+
+Step 5 (History Access): 
+
+Personalization Query: user’s preferred condition and minimum review threshold for monitors 
+
+Personalization Reasoning: Based on the provided histories, records indicate interests in 4K monitor and purchasing monitors under open-box condition. However, there is no explicit mention of any minimum review threshold for monitor selection. 
+
+Step 6–13 (Navigation Actions): 
+
+The agent sequentially selected “United States”, navigated to “4K Monitors”, applied the “26.5”–31.4” size filter”, and then the “Open-Box” condition filter. Finally, the results were sorted by “Price Low to High”. These steps remain consistent with the retrieved specifications and History-grounded reasoning. 
+
+Step 14 (Navigation Action): 
+
+URL: https://www.bestbuy.com/site/searchpage... 
+
+Reason: “The objective is to find monitors that match the user’s usual specs (4K, 27–32”, open-box, high refresh rate, USB-C, high color accuracy) and apply the preferred condition and review threshold. Since the user likely wants well-reviewed products, I should apply the “4 Stars & Up” filter. ”
+
+Action: click [4499] 
+
+Step 15 (Navigation Action): 
+
+URL: https://www.bestbuy.com/site/searchpage... 
+
+Reason: The results now display open-box 4K monitors (27–32”, USB-C, well-reviewed, sorted by price). Representative examples include LG 27” IPS UHD 4K ($216.99, 4.8 ⋆) and Dell 27” 4K ($239.99, 4.7 ⋆). 
+
+Action: stop 
+
+22 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Table 15. History Retrieval Failure Error 
+
+Query: Check the current standings and this week’s schedule for my NFL team and my MLB team. 
+
+Step 1 (History Access): 
+
+Personalization Query: What is the user’s favorite or preferred NFL team? 
+
+Personalization Reasoning: Based on the provided user histories, the user’s favorite or preferred NFL team is the Baltimore Ravens. 
+
+Step 2 (History Access): 
+
+Personalization Query: What is the user’s favorite or preferred MLB team? 
+
+Personalization Reasoning: Based on the provided user histories, there is no explicit mention of the user’s favorite or preferred MLB team. 
+
+Step 3 (History Access): 
+
+Personalization Query: What is the user’s preferred website for checking sports standings and schedules? 
+
+Personalization Reasoning: Based on the provided user histories, the user’s preferred website for checking sports standings and schedules is Fox Sports (foxsports). If the user uses any other sports websites, this is not reflected in the current histories. 
+
+Step 4 (Navigation Action): 
+
+URL: https://www.bing.com/ 
+
+Reason: To proceed according to the user’s preferences, I need to go to the Fox Sports website. Since there is no direct link, the most efficient step is to use the search box to search for “Fox Sports Baltimore Ravens standings and schedule” to directly reach the relevant section on Fox Sports. 
+
+Action: type [141] [Fox Sports Baltimore Ravens standings and schedule] [1] 
+
+Step 5 (Navigation Action): 
+
+URL: https://www.bing.com/search?q=Fox+Sports+Baltimore+Ravens+standings+ and+schedule... 
+
+Reason: The user’s preferred source is Fox Sports, and the top links ([17517]/[17528] and [17794]) are directly relevant to the Baltimore Ravens’ standings and schedule. To fulfill the objective, I should proceed to the Fox Sports page for the Baltimore Ravens’ schedule and standings. Link [17794] appears to be the most comprehensive for both the schedule and scores, which likely includes this week’s schedule and potentially a link to standings or the standings themselves. 
+
+Action: click [17794] 
+
+Step 6 (Navigation Action): 
+
+URL: https://www.bing.com/search?q=Fox+Sports+Baltimore+Ravens+standings+ and+schedule&form... 
+
+Reason: The objective is to retrieve both the current standings and this week’s schedule for the Baltimore Ravens from Fox Sports. The most direct links to Fox Sports are [17517], [17528] (standings) and [17777] (schedule). Since the previous click on [17794] did not navigate away from Bing, the next best action is to click [17777], which is another direct Fox Sports link for the Baltimore Ravens’ schedule and may provide the required information. 
+
+Action: click [17777] 
+
+Step 7 (Navigation Action): 
+
+URL: https://www.foxsports.com/nfl/baltimore-ravens-team-schedule 
+
+Reason: The current page provides both the Ravens’ current standings and their schedule, including this week’s game. The record is explicitly stated at the top, and the upcoming games table includes this week’s schedule. No information about an MLB team can be provided due to lack of user preference. All required information is now gathered and ready to be summarized for the user. 
+
+Action: stop [Baltimore Ravens (NFL) on Fox Sports: - Current standing: 1-3, 3rd in AFC North. - This week’s game: vs. Houston Texans, Monday 10/5, 2:00AM at M&T Bank Stadium, Baltimore, MD (CBS). - No MLB team schedule or standings are provided, as no preferred MLB team is identified in your histories.] 
+
+23 Persona2Web: Benchmarking Personalized Web Agents for Contextual Reasoning with User History 
+
+Table 16. History Utilization Failure Error 
+
+Query: Check seat availability for upcoming concerts in my preferred genre with seats in my preferred location. 
+
+Step 1 (History Access): 
+
+Personalization Query: What is the user’s preferred website for buying concert tickets? 
+
+Personalization Reasoning: Based on the user histories provided, SeatGeek is the only website explicitly mentioned in the context of checking ticket availability. 
+
+Step 2 (History Access): 
+
+Personalization Query: What is the user’s preferred music genre? 
+
+Personalization Reasoning: Based on the user histories, there is no explicit mention of a preferred music genre. However, History indicates an interest in specific artists such as Kendrick Lamar and SZA, for whom the user previously searched concert venues. 
+
+Step 3 (History Access): 
+
+Personalization Query: What is the user’s preferred seating location within a concert venue? 
+
+Personalization Reasoning: The user’s preferred seating location within a concert venue is in the lower-bowl sections near the stage. 
+
+Step 4 (History Access): 
+
+Personalization Query: What is the user’s home city or the city they are interested in for finding concerts? 
+
+Personalization Reasoning: Based on the user histories, the city the user is interested in for concerts is Los Angeles .
+
+Step 5 (Navigation Action): 
+
+URL: https://www.bing.com/ 
+
+Reason: The first step of the task is to navigate to SeatGeek.com. Since the current page is a search engine, the most direct way to do this is to type “SeatGeek.com” into the search bar and press Enter. 
+
+Action: type [141] [SeatGeek.com] [1] 
+
+Step 6 (Navigation Action): 
+
+URL: https://www.bing.com/search?q=SeatGeek.com... 
+
+Reason: I have successfully searched for SeatGeek.com. The next step is to click the first search result, which leads to the SeatGeek homepage. 
+
+Action: click [15414] 
+
+Step 7–8 (Navigation Actions): 
+
+The agent searched sequentially for “Kendrick Lamar” and “SZA” concerts on SeatGeek. However, these searches were conducted at the global level without applying the retrieved city constraint (Los Angeles) ,thereby overlooking the user’s explicit location preference during reasoning and action selection. 
+
+Step 9 (Navigation Action): 
+
+URL: https://seatgeek.com/sza-tickets 
+
+Reason: According to SeatGeek, there are no upcoming concerts in Los Angeles for either Kendrick Lamar or SZA. While the website mentions that SZA will be an opening act for Kendrick Lamar’s 2025 Grand National Tour, no specific dates or ticket listings are currently available. The agent stops here without verifying lower-bowl seat availability or applying the city constraint. 
+
+Action: stop [No upcoming concerts found for Kendrick Lamar or SZA in Los Angeles. Seat availability could not be checked.] 
+
+24

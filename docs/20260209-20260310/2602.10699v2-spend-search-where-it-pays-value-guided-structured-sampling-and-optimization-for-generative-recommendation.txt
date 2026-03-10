@@ -1,0 +1,460 @@
+Title: Spend Search Where It Pays: Value-Guided Structured Sampling and Optimization for Generative Recommendation
+
+URL Source: https://arxiv.org/pdf/2602.10699v2
+
+Published Time: Fri, 13 Feb 2026 01:48:32 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# Spend Search Where It Pays: Value-Guided Structured Sampling and Optimization for Generative Recommendation 
+
+# Jie Jiang ∗, Yangru Huang ∗, Zeyu Wang, Changping Wang, Yuling Xiong, Jun Zhang †, Huan Yu 
+
+Tencent Inc., China {zeus,yarayrhuang,peterzywang,terracewang,whitnyxiong,neoxzhang,huanyu}@tencent.com 
+
+## Abstract 
+
+Generative recommendation via autoregressive models has uni-fied retrieval and ranking into a single conditional generation framework. However, fine-tuning these models with Reinforce-ment Learning (RL) often suffers from a fundamental probability-reward mismatch . Conventional likelihood-dominated decoding (e.g., beam search) exhibits a myopic bias toward locally probable prefixes, which causes two critical failures: (1) insufficient explo-ration , where high-reward items in low-probability branches are prematurely pruned and rarely sampled, and (2) advantage com-pression , where trajectories sharing high-probability prefixes re-ceive highly correlated rewards with low within-group variance, yielding a weak comparative signal for RL. To address these chal-lenges, we propose V-STAR , a Value-guided Sampling and Tree-structured Advantage Reinforcement framework. V-STAR forms a self-evolving loop via two synergistic components. First, a Value-Guided Efficient Decoding (VED) is developed to identify de-cisive nodes and selectively deepen high-potential prefixes. This improves exploration efficiency without exhaustive tree search. Sec-ond, we propose Sibling-GRPO , which exploits the induced tree topology to compute sibling-relative advantages and concentrates learning signals on decisive branching decisions. Extensive experi-ments on both offline and online datasets demonstrate that V-STAR outperforms state-of-the-art baselines, delivering superior accuracy and candidate-set diversity under strict latency constraints. 
+
+## Keywords 
+
+Generative Recommendation, Reinforcement Learning, Value-Guided Efficient Decoding, Sibling-GRPO 
+
+## 1 Introduction 
+
+Recommender systems are shifting from retrieve-and-rank to end-to-end generative recommendation (GR) [ 21 , 26 , 50 ], which has been deployed in e-commerce and short-video platforms [ 26 , 50 ]. By reformulating item identifiers into a hierarchical search space of Semantic IDs (SIDs), large-scale candidate generation has be-come computationally practical with autoregressive language mod-els [ 9 , 38 , 39 , 46 ]. To further bridge the gap between generation likelihood and real-world utility, these GR models are usually fine-tuned with reinforcement learning (RL) [ 4, 6, 30 ] techniques, e.g., on-policy GRPO-style groupwise updates [ 9 , 14 , 20 , 43 , 52 ]. How-ever, such a training mechanism is bottlenecked by a fundamental probability-reward misalignment. During training, candidate items are typically sampled by probability-driven decoding strategies 
+
+> ∗Equal contribution: Jie Jiang and Yangru Huang.
+> †Corresponding author: Jun Zhang.
+
+Figure 1: Comparison of Beams Search and V-STAR. Left: probability-based pruning removes high-reward items and produces homogeneous candidates. Right: V-STAR expands high-value prefixes under a fixed budget and strengthens within-group learning with Sibling-GRPO. 
+
+(e.g., beam search). In contrast, the recommendation objective aims to maximize the expected reward of the full generated SIDs. This misalignment creates a tension between the greedy nature of generation and the long-term goal of exploration, manifesting in two critical structural failures: (1) insufficient exploration of high-reward items: Many high-reward items begin with lower-probability tokens because they have limited historical interactions. Standard beam search prunes branches based on likelihood and can irreversibly discard such paths early in generation. Conse-quently, the model becomes blind to high-reward candidates simply because their prefixes are not immediately likely. (2) advantage compression within the generated group: Guided by likeli-hood, decoding tends to over-expand multiple branches that share high-probability prefixes, producing a candidate set dominated by siblings, i.e., near-duplicate items with similar rewards. However, effective RL relies on reward contrast: policy gradients are driven by differences between good and bad actions. In such sibling-heavy groups, rewards become highly correlated and concentrate in a narrow band, while a few outliers can set the overall reward scale. As a result, GRPO’s group-wise normalization is dominated by the global reward range and shrinks the relative advantage differences among siblings, weakening the learning signal at the decisions that actually matter. Previous methods attempt to mitigate these issues, but each incurs a hard trade-off. One line of work increases the sampling budget [ 11 , 42 , 45 ], yet indiscriminate expansion largely spends compute on redundant, high-probability candidates. Another line relies on heuristic sampling (e.g., temperature scaling or nucleus sampling) to increase sample diversity [ 13 , 24 , 36 ], but the added  
+
+> arXiv:2602.10699v2 [cs.AI] 12 Feb 2026 Conference’17, July 2017, Washington, DC, USA Trovato et al.
+
+randomness is difficult to control, often hurting relevance and making high-reward outcomes less reliable. More structured ap-proaches, such as Monte Carlo Tree Search or tree-of-thought style search [ 23 , 32 , 47 ], can improve exploration in LLM inference, but their computational cost is prohibitive for broad use in recommen-dation. A critical gap therefore remains: we lack a mechanism that reliably determines when exploration is worth paying for and where 
+
+limited compute should be allocated to maximize reward. Motivated by this gap, we make a simple observation: under a fixed decoding budget, extra exploration does not help equally at every generation step. Many prefixes are clearly low-potential, or their next token is already obvious, so additional compute there is largely wasted. In contrast, exploration matters most at a small num-ber of decisive prefixes where several plausible branches compete and which branch to choose strongly affects the final reward (e.g., whether long-tail but high-reward items can be reached). We detect these decisive points using two signals: (1) high value , meaning the prefix is promising in expected reward, and (2) high ambigu-ity given high value , meaning the next-step choice is uncertain enough that extra search can change the outcome. This perspective turns exploration into a targeted budgeting problem: decide where 
+
+to spend compute so that it most improves reward, which directly motivates a value-guided decoding strategy and a tree-structured credit assignment objective. Building on these insights, we propose V-STAR ( Value-guided S ampling and T ree-structured A dvantage Reinforcement), a self-evolving sampling-and-learning framework where better sampling provides clearer training signals, and the resulting updates further improve sampling. V-STAR comprises two key components: Value-Guided Efficient Decoding (VED) for candidate sampling and 
+
+Sibling-GRPO for tree-structured policy optimization. VED tack-les insufficient exploration by performing budgeted value-guided ex-pansion on the SID prefix tree. It initializes a shallow prefix tree with likelihood-guided beam search to cheaply reveal where hypotheses concentrate and where promising branches are pruned early. It then combines a lightweight value estimator with an uncertainty signal (e.g., policy entropy) to select a small set of high-potential prefixes and spends additional compute only at these divergence points, en-abling local expansion and backup under strict depth and branching constraints. This targeted allocation corrects premature pruning and improves the reachability of long-tail, high-reward items with-out incurring exhaustive tree search. Sibling-GRPO addresses 
+
+advantage compression in prefix-coupled generation by introducing a structured group-relative objective over genealogically related candidates. Rather than applying a single global normalization over the entire candidate set, it forms sibling groups under each parent prefix and performs within-group relative advantage learning. This concentrates gradients on the decisive branching actions where can-didates diverge yet remain highly correlated, mitigating advantage compression and recovering informative learning signals inside ho-mogenized candidate clusters. Together, VED improves candidate quality and diversity, while Sibling-GRPO turns these gains into more stable and informative updates. In summary, our contributions are as follows: (1) We formalize probability–reward misalignment in generative recommendation and analyze its impact on sample decoding and RL fine-tuning. Building on this analysis, we propose V-STAR to address the issue via value-guided decoding and tree-structured credit assignment. (2) We develop Value-Guided Efficient Decoding (VED) for bud-geted candidate construction by allocating decoding com-pute to high-value and high-ambiguity nodes. (3) We introduce Sibling-GRPO, a tree-structured objective that uses sibling groups to mitigate advantage compression under correlated candidates. (4) Experiments on both offline datasets and online settings show consistent gains over strong generative baselines. 
+
+## 2 Related Work 2.1 Generative Recommender 
+
+The paradigm of recommender systems is shifting from discrimina-tive matching to generative modeling. Early works linearized user histories and predicted the next item ID directly, but faced chal-lenges due to the extremely large item-ID vocabulary [ 8 , 33 ]. To mit-igate this issue, recent approaches such as P5 [ 10 ] and TIGER [ 26 ]introduce SID, which represent each item as a short sequence of hierarchical discrete tokens constructed via residual quantization (RQ-VAE) [ 48 ] or collaborative indexing. This formulation bridges recommendation and language modeling, enabling Transformer architectures to generate items token by token. Most existing SID-based recommenders still rely on likelihood-driven decoding (e.g., beam search) at training time. Recent analyses [ 22 ] show that beam search exhibits a rich-get-richer bias and can prune low-probability branches early in generation. In recommendation, high-reward items (e.g., niche discoveries) may begin with low-probability pre-fix tokens, so early prefix pruning can make a substantial portion of the item space effectively unreachable. This is a structural limitation that is not resolved by model scaling alone. 
+
+## 2.2 Decoding Strategies in Generation 
+
+Decoding (sampling) strategies control the trade-off between ex-ploration and exploitation. Heuristic sampling methods (e.g., Top-K and nucleus sampling [ 13 ]) introduce stochasticity to improve diversity, but they provide no explicit mechanism to guarantee reward and can lead to irrelevant recommendations. In contrast, tree-search algorithms such as Monte Carlo Tree Search (MCTS) and Tree of Thoughts (ToT) [ 47 ] enable lookahead and backtrack-ing and have shown strong performance on multi-step reasoning tasks. However, these methods are often impractical for industrial recommendation because strict latency budgets make per-request rollouts prohibitively expensive. Some works distill search behavior into a policy [ 37 ], but they typically treat search as a black-box optimizer. Our work instead proposes a budget-aware sparse search that dynamically allocates a finite compute budget to a small set of pivotal nodes, capturing the benefits of lookahead without the overhead of full tree expansion. 
+
+## 2.3 RL for Generative Alignment 
+
+RL is widely used to align generative models with non-differentiable objectives (e.g., CTR and diversity). Common approaches in-clude REINFORCE [ 41 ], PPO [ 28 ], GRPO [ 29 ], and recent direct Spend Search Where It Pays: Value-Guided Structured Sampling and Optimization for Generative Recommendation Conference’17, July 2017, Washington, DC, USA 
+
+preference-optimization methods such as DPO [ 25 ]. In recom-mendation, RL has been applied to optimize slate generation (e.g., SlateQ [ 16 ]) and to correct exposure bias [ 5 ]. However, existing generative RL methods often implicitly treat candidate samples as independent and identically distributed (i.i.d.) [ 9 , 39 ]. In autore-gressive generation, candidates frequently share long prefixes and therefore form sibling groups with highly correlated features and rewards. Standard policy-gradient updates can be ineffective in this setting: subtracting a baseline from a set of nearly identical rewards yields a weak and noisy advantage signal, which can lead to advantage collapse [ 27 ]. Our proposed Sibling-GRPO addresses this issue by explicitly modeling relative advantages within sibling groups, which is related in spirit to listwise ranking objectives [ 3]but tailored to the hierarchical structure of the generation tree. 
+
+## 3 Preliminaries 3.1 Problem Formulation 
+
+Generative Recommendation with Semantic IDs. We formu-late recommendation as a conditional sequence generation task [ 10 ,34 ]. Under the SID paradigm [ 26 ], each item is represented by a unique, fixed-length sequence of discrete tokens 𝑦 = (𝑦 1, . . . , 𝑦 𝐿 ) ∈ V𝐿 , where V is a finite token vocabulary and 𝐿 is the (fixed) SID length. Given a user context 𝑥 (e.g., interaction history and pro-file features), an autoregressive policy 𝜋 𝜃 models the conditional probability of an item sequence via the probability chain rule: 
+
+𝜋 𝜃 (𝑦 | 𝑥 ) = Î𝐿 𝑙 =1 𝜋 𝜃 (𝑦 𝑙 | 𝑥, 𝑦 ≤𝑙 −1) , where 𝑦 ≤𝑙 −1 = (𝑦 1, . . . , 𝑦 𝑙 −1)
+
+denotes the already generated prefix before step 𝑙 , with 𝑦 ≤0 = ∅
+
+(empty prefix, i.e., generation starts from the user context 𝑥 alone). 
+
+Decoding Operator. We abstract decoding process as an operator 
+
+D that maps policy 𝜋 𝜃 and context 𝑥 to a candidate set C( 𝑥 ):
+
+C( 𝑥 ) = D ( 𝜋 𝜃 , 𝑥 ), C( 𝑥 ) ⊂ V 𝐿 . (1) Ideally, D should return candidates that maximize the ground-truth reward 𝑅 (𝑥, 𝑦 ). In practice, standard decoding strategies (e.g., beam search [ 45 ]) approximate this objective by maximizing model probability 𝜋 𝜃 (𝑦 | 𝑥 ) through heuristic prefix pruning. 
+
+Policy Refinement via GRPO. To align the pre-trained policy with non-differentiable ranking objectives, we apply GRPO [ 29 ]to the decoded set C( 𝑥 ) as the empirical reference set for reward comparison. The standard group-normalized advantage is used: 
+
+𝐴 (𝑥, 𝑦 ) = 𝑅 (𝑥, 𝑦 ) − 𝜇 𝑅 (𝑥 )
+
+𝜎 𝑅 (𝑥 ) + 𝜖 , (2) where 𝜇 𝑅 (𝑥 ) and 𝜎 𝑅 (𝑥 ) are the mean and standard deviation of rewards over C( 𝑥 ) and 𝜖 > 0 ensures numerical stability. In addition to standard GRPO, our method also applies sibling GRPO to further enhance learning signals, which will be introduced in Sec. 4.3. 
+
+## 3.2 Probability-Driven Decoding Bias 
+
+Insufficient exploration on high-reward items. Autoregressive decoding process can be viewed as traversing a prefix tree [ 40 ]: SIDs sharing a common prefix follow the same branch until they diverge. Under a fixed budget, pruning-based methods [ 7 , 24 , 36 ] (e.g., beam search or top-K sampling) keep only a small set of active prefixes and discard the rest by local likelihood. Pruning is irreversible in this case: once a prefix is removed, all items under that branch will never be evaluated. This is problematic because likelihood and reward can be misaligned: there may exist 𝑦 𝑎 , 𝑦 𝑏 with 𝜋 𝜃 (𝑦 𝑎 | 𝑥 ) > 𝜋 𝜃 (𝑦 𝑏 | 𝑥 )
+
+but 𝑅 (𝑥, 𝑦 𝑎 ) < 𝑅 (𝑥, 𝑦 𝑏 ). As a result, likelihood-only pruning may eliminate low-probability prefixes that lead to high-reward items, and those branches are rarely revisited. 
+
+Advantage compression within the generated group. Given a candidate set C( 𝑥 ), we define the within-group reward range as: 
+
+Δ𝑅 (𝑥 ) ≜ max    
+
+> 𝑦 ∈ C ( 𝑥 )
+
+𝑅 (𝑥, 𝑦 ) − min    
+
+> 𝑦 ∈ C ( 𝑥 )
+
+𝑅 (𝑥, 𝑦 ). (3) Since |𝑅 (𝑥, 𝑦 ) − 𝜇 𝑅 (𝑥 )| ≤ Δ𝑅 (𝑥 ) for all 𝑦 ∈ C( 𝑥 ), the within-group advantage magnitude is bounded by: 
+
+|𝐴 (𝑥, 𝑦 )| = 𝑅 (𝑥, 𝑦 ) − 𝜇 𝑅 (𝑥 )
+
+𝜎 𝑅 (𝑥 ) + 𝜖 ≤ Δ𝑅 (𝑥 )
+
+𝜎 𝑅 (𝑥 ) + 𝜖 ≤ Δ𝑅 (𝑥 )
+
+𝜖 . (4) Eq. 4 implies that 𝐴 (𝑥, 𝑦 ) ∈ [− Δ𝑅 (𝑥 ) 
+
+> 𝜖
+
+, Δ𝑅 (𝑥 ) 
+
+> 𝜖
+
+]. By Popoviciu’s in-equality on variances, Var 𝑦 ∈ C ( 𝑥 ) [𝐴 (𝑥, 𝑦 )] ≤ ( Δ𝑅 (𝑥 ) 
+
+> 𝜖
+
+)2, so the stan-dard deviation 𝜎 𝐴 (𝑥 ) ≜√︁ Var 𝑦 ∈ C ( 𝑥 ) [𝐴 (𝑥, 𝑦 )] ≤ Δ𝑅 (𝑥 ) 
+
+> 𝜖
+
+. Therefore, when candidate collapse in C( 𝑥 ) yields small Δ𝑅 (𝑥 ), it forces 𝜎 𝐴 (𝑥 )
+
+to be small, making advantages nearly indistinguishable. We refer to this degeneration of learning signal as advantage compression .
+
+Implication. Together, insufficient exploration and advantage compression show that decoding is not a mere inference-time heuristic [ 31 ]: it controls both reachability (which high-reward items are ever surfaced) and learnability (whether candidates pro-vide enough reward contrast for RL). We therefore need a decoder that avoids irreversible pruning of low-probability yet high-reward branches and yields candidate groups with sufficient reward dis-persion, motivating our dynamic decoding framework. 
+
+## 4 Methodology 
+
+Our V-STAR (Fig. 2) is a unified decoding-and-learning framework consisting Value-Guided Efficient Decoding (VED) for candidate con-struction and Sibling-GRPO for policy optimization. VED addresses 
+
+reachability by allocating compute to decisive prefixes under a fixed budget, while Sibling-GRPO addresses learnability by restor-ing within-group learning signal under prefix coupling. 
+
+## 4.1 Semantic-aware Value Model Learning 
+
+VED relies on lookahead value estimation to mitigate probability-driven bias on the SID prefix tree. To this end, we first learn a prefix value function 𝑉 𝜙 that maps each prefix to its expected down-stream return [ 28 ]. At generation step ℓ ∈ { 1, . . . , 𝐿 }, we define the decoding state 𝑠 ℓ as 𝑠 ℓ ≜ (𝑥, 𝑦 ≤ℓ ), where 𝑥 is the user context and 𝑦 ≤ℓ = (𝑦 1, . . . , 𝑦 ℓ ) is the current SID prefix. The value function estimates the discounted return of continuing generation from 𝑠 ℓ :
+
+𝑉 𝜙 (𝑠 ℓ ) ≜ E
+
+" 𝐿 ∑︁  
+
+> 𝑡 =ℓ
+
+𝛾 𝑡 −ℓ 𝑟 𝑡 𝑠 ℓ
+
+#
+
+, (5) where 𝛾 ∈ ( 0, 1] is the discount factor. We parameterize 𝑉 𝜙 as a lightweight value head on top of the policy backbone: a single shallow Transformer block (operating on the prefix hidden states) followed by an MLP regressor, enabling frequent value queries with negligible overhead. 
+
+Semantic-aware dense supervision. Learning 𝑉 𝜙 from sparse terminal returns (non-zero only when the generated item exactly Conference’17, July 2017, Washington, DC, USA Trovato et al. 
+
+Figure 2: Overview of the proposed self-evolving decoding-and-learning framework V-STAR. 
+
+matches the ground truth) provides weak, delayed signals for inter-mediate prefixes. We therefore build dense semantic returns from pre-computed item embeddings, obtained by encoding each item’s textual description with a frozen text encoder. Given context 𝑥 , let 
+
+C( 𝑥 ) = D ( 𝜋 𝜃 , 𝑥 ) be the sampled candidate set. For prefix 𝑦 ≤ℓ , we define the sampled prefix bucket to be the subset of items in C( 𝑥 )
+
+that shares this prefix: 
+
+C( 𝑥 ; 𝑦 ≤ℓ ) ≜  𝑦 ′ ∈ C( 𝑥 ) | 𝑦 ′≤ℓ = 𝑦 ≤ℓ , (6) where 𝑦 ′≤ℓ denotes the SID prefix of the candidate item 𝑦 ′. We then define a context-conditional prefix embedding by averaging embeddings over this bucket: 
+
+¯e(𝑥, 𝑦 ≤ℓ ) ≜ 1
+
+|C( 𝑥 ; 𝑦 ≤ℓ )| ∑︁ 𝑖 ∈ C ( 𝑥 ;𝑦 ≤ℓ )
+
+e(𝑖 ), (7) where e(𝑖 ) is the embedding of candidate item 𝑖 . The step-wise dense return 𝑟 ℓ for prefix 𝑦 ≤ℓ is then defined as: 
+
+𝑟 ℓ =
+
+
+
+𝑤 ℓ , if 𝑦 ≤ℓ = 𝑦 ★ 
+
+> ≤ℓ
+
+,
+
+− 𝑤 ℓ
+
+ 1 − cos  ¯e(𝑥, 𝑦 ≤ℓ ), e(𝑦 ★) , otherwise , (8) where 𝑤 ℓ > 0 is a monotonically increasing weight with respect to ℓ, cos denotes the cosine similarity between the embeddings, and e(𝑦 ★) represents the embedding of the ground-truth item 𝑦 ★
+
+for context 𝑥 . Compared to sparse exact-match supervision, the proposed semantic-aware dense supervision provide informative feedback on mismatched prefixes by leveraging their semantic prox-imity to the ground-truth item, thereby improving value estimation for intermediate decoding states. 
+
+Temporal-difference learning. Given the stepwise signal in (8) ,we train the value function by one-step temporal-difference learn-ing, enforcing Bellman-style consistency across successive prefixes. Concretely, the TD target and regression loss are: 
+
+˜𝑦 ℓ =
+
+
+
+𝑟 ℓ + 𝛾 𝑉 𝜙 (𝑠 ℓ+1), ℓ < 𝐿, 𝑟 𝐿 , ℓ = 𝐿, L𝑉 (𝜙 ) = E
+
+h 𝑉 𝜙 (𝑠 ℓ )− ˜𝑦 ℓ
+
+2 i
+
+,
+
+(9) where 𝑠 ℓ+1 = (𝑥, 𝑦 ≤ℓ+1). The resulting 𝑉 𝜙 provides an efficient, reward-aligned lookahead over prefixes, which is later used to guide budgeted expansion toward decisive prefix nodes in Sec. 4.2. 
+
+## 4.2 Value-Guided Efficient Decoding 
+
+With the value model as guidance, we cast semantic-ID decoding as constructing a candidate set under a strict compute budget on the SID prefix tree. Given context 𝑥 , the decoder returns C( 𝑥 ) ⊂ V 𝐿 
+
+that (i) contains high-reward items and (ii) enables informative within-group comparisons for groupwise RL. 
+
+A budgeted objective for candidate sets. Let Cost (C( 𝑥 )) denote the compute required to construct C( 𝑥 ), measured by the number of backbone forward tokens incurred during decoding. We formulate candidate construction as a constrained set optimization problem: 
+
+max   
+
+> C ( 𝑥 ) ⊆ V 𝐿
+
+E𝑦 ∈ C ( 𝑥 ) [𝑅 (𝑥, 𝑦 )] 
+
+| {z }
+
+> reward
+
++ 𝜆 Contrast (C( 𝑥 )) 
+
+| {z }
+
+> dispersion
+
+s.t. Cost (C( 𝑥 )) ≤ 𝐵. 
+
+(10) where Contrast (·) is a set-level regularizer that encourages within-group discriminability, e.g., by increasing reward dispersion and mitigating prefix coupling (Sec. 3.2). The budget 𝐵 captures the computational constraint in recommendation. 
+
+Value-based scoring with entropy regularization. Directly optimizing Eq. (10) is intractable due to the exponential SID space. VED therefore allocates the decoding budget to a small set of decisive prefixes . The key question is how to rank prefix states 𝑠 = (𝑥, 𝑦 ≤ℓ )
+
+for further expansion. To maximize the expected improvement Spend Search Where It Pays: Value-Guided Structured Sampling and Optimization for Generative Recommendation Conference’17, July 2017, Washington, DC, USA 
+
+per unit cost, prefix expansion should balance exploitation and 
+
+exploration . We therefore define a prefix priority score: 
+
+𝐺 (𝑠 ) ≜
+
+
+
+𝑉 𝜙 (𝑠 ) + 𝜆 H𝜃 (𝑠 ), ℓ < 𝐿, 𝑉 𝜙 (𝑠 ), ℓ = 𝐿, (11) where 𝑉 𝜙 (𝑠 ) is the predicted downstream return from prefix 𝑠 , 𝜆 
+
+is the regularization weight, and H𝜃 (𝑠 ) is the entropy term that measures how uncertain the policy is about the next token: 
+
+H𝜃 (𝑠 ) ≜ −∑︁   
+
+> 𝑦 ℓ+1∈ V
+
+𝜋 𝜃 (𝑦 ℓ+1 | 𝑥, 𝑦 ≤ℓ ) log 𝜋 𝜃 (𝑦 ℓ+1 | 𝑥, 𝑦 ≤ℓ ). (12) For terminal prefixes ( ℓ = 𝐿 ), the priority reduces to 𝑉 𝜙 (𝑠 ).
+
+Score-based efficient decoding. With the above value-based prefix score, the decoding process performs budgeted search and expansion on a search tree T over prefix states 𝑠 = (𝑥, 𝑦 ≤ℓ ). The procedure consists of four stages: 1○ initialization, 2○ selection and traversal, 3 ○ gated expansion, and 4 ○ backpropagation. 1○ Initialization. We initialize T using prefixes obtained by a low-cost probability-guided beam search under 𝜋 𝜃 . The beam width in this warm start is set smaller than the final candidate set size to limit overhead. The resulting prefix tree reveals which prefixes the policy prefers and which branches are pruned early. We evaluate each node in the initial tree once to populate {𝑉 𝜙 (𝑠 ), H𝜃 (𝑠 ), 𝐺 (𝑠 )} 
+
+and record whether the node admits unexpanded valid children. 2○ Selection and traversal. After initialization, we repeatedly select nodes and traverse a root-to-leaf path. Let 𝑁 (𝑠 ) be the visit count of node 𝑠 and 𝑁 root the number of traversals so far, we select nodes with a UCB-style score [18]: 
+
+𝑈 (𝑠 ) ≜ 𝐺 (𝑠 ) + 𝛽 ·√︄ ln  𝑁 root + 1
+
+𝑁 (𝑠 ) + 1 , (13) where 𝛽 controls exploration. Starting from the root, we recur-sively choose the child with the largest 𝑈 (𝑠 ) until reaching a leaf or terminal node. 3○ Gated expansion. Along the selected path, we expand only prefixes that are decisive relative to other prefixes at the same depth. Let Tℓ denote the set of nodes in the current tree at depth ℓ, and define the depth-wise average priority 
+
+¯𝐺 ℓ ≜ 1
+
+|T ℓ |∑︁ 𝑢 ∈ T ℓ
+
+𝐺 (𝑢 ). (14) For any visited node 𝑠 = (𝑥, 𝑦 ≤ℓ ) on the path that is not fully expanded, we trigger one-step expansion if and only if 𝐺 (𝑠 ) ≥ ¯𝐺 ℓ .
+
+When triggered, we add one new child to 𝑠 by sampling a token from its yet-unexpanded valid children according to their normalized policy probabilities. 4○ Backpropagation. For each newly added child 𝑠 new , we evaluate 
+
+(𝑉 𝜙 , H𝜃 , 𝐺 ) and update statistics along its ancestor chain, including visit count 𝑁 (·) and depth-wise average priority scores. The above stages 2○– 4○ are repeated until Cost (T ) > 𝐵 , where 
+
+Cost (·) counts the number of backbone forward tokens. After ter-mination, we extract a candidate set C( 𝑥 ) ⊂ V 𝐿 from the search tree T in a value-aware manner. In practice, we sample top-valued SIDs from depth-𝐿 leaf nodes. In rare cases, if insufficient leaf nodes exist, we fill the remainder by completing high-value prefixes in the tree using cached 𝜋 𝜃 , without additional backbone forwards. The resultant candidate set C improves reachability by exploring low-probability but high-value prefixes. 
+
+## 4.3 Sibling-GRPO 
+
+While VED improves reachability and increases candidate reward dispersion, hierarchical SIDs still induce common-prefix sibling node groups in C( 𝑥 ). Sibling-GRPO exploits these groups to recover strong learning signals exactly at the decisive branching actions. 
+
+Sibling groups and sibling nodes. An SID 𝑦 = (𝑦 1, . . . , 𝑦 𝐿 ) cor-responds to a root-to-leaf path on a depth-𝐿 prefix tree. Fix a depth 
+
+ℓ ∈ { 1, . . . , 𝐿 } and let ℎ ∈ V ℓ −1 denote a parent prefix at depth ℓ − 1.We first define the sibling group under ℎ as the sampled items that share this parent prefix: 
+
+G( ℎ) ≜ { 𝑦 ∈ C( 𝑥 ) | 𝑦 ≤ℓ −1 = ℎ } . (15) Next, we define the sibling node set under ℎ as the set of child nodes at depth ℓ that extend ℎ by one token: 
+
+S( ℎ) ≜ { 𝑣 | 𝑣 ∈ V , ∃ 𝑦 ∈ G( ℎ) s.t. 𝑦 ℓ = 𝑣 } . (16) 
+
+Relative advantages over sibling nodes. Sibling-GRPO is com-puted within S( ℎ) by assigning each child node 𝑣 ∈ S( ℎ) a node-level score defined as the average reward of candidates routed through that child: 
+
+¯𝑅 (𝑥 ; ℎ, 𝑣 ) ≜ 1
+
+|G( ℎ, 𝑣 )| ∑︁ 𝑦 ∈ G ( ℎ,𝑣 )
+
+𝑅 (𝑥, 𝑦 ),
+
+G( ℎ, 𝑣 ) ≜ { 𝑦 ∈ G( ℎ) | 𝑦 ℓ = 𝑣 }.
+
+(17) This construction yields localized, sibling-level comparisons that focus learning on the branching decision at depth ℓ. Let 𝜇 ℎ (𝑥 ) and 
+
+𝜎 ℎ (𝑥 ) denote the mean and standard deviation of { ¯𝑅 (𝑥 ; ℎ, 𝑣 )} 𝑣 ∈ S ( ℎ) ,the sibling-relative node advantage for a child 𝑣 ∈ S( ℎ) is 
+
+𝐴 node (𝑥 ; ℎ, 𝑣 ) = ¯𝑅 (𝑥 ; ℎ, 𝑣 ) − 𝜇 ℎ (𝑥 )
+
+𝜎 ℎ (𝑥 ) + 𝜖 . (18) Compared with global normalization over C( 𝑥 ), this sibling-node advantage prevents within-parent advantages from being washed out by coarse variations across unrelated prefixes, and it concen-trates learning signals on the branching action 𝑦 ℓ that differentiates siblings under the same parent prefix. 
+
+Objective. Sibling-GRPO retains the GRPO update form but ap-plies it to the sibling nodes within each depth. For a parent prefix 
+
+ℎ ∈ V ℓ −1 at depth ℓ − 1 and child node 𝑣 ∈ S( ℎ). We define the token-level importance ratio as 𝜌 𝜃 (𝑣 | 𝑥, ℎ ) ≜ 𝜋 𝜃 (𝑣 |𝑥,ℎ )   
+
+> 𝜋 𝜃 old (𝑣 |𝑥,ℎ )
+
+, where 
+
+𝜋 𝜃 old denotes the frozen behavior policy used to sample C( 𝑥 ). We then maximize the following sibling-node GRPO objective aggre-gated over depths: 
+
+Jsib (𝜃 ) = E𝑥 
+
+
+
+1
+
+|C( 𝑥 )| 
+
+> 𝐿
+
+∑︁ 
+
+> ℓ=1
+
+∑︁ ℎ∑︁ 𝑣 ∈ S ( ℎ)
+
+𝐴 node (𝑥 ; ℎ, 𝑣 ) 𝜌 𝜃 (𝑣 | 𝑥, ℎ )
+
+
+
+.
+
+(19) This formulation performs GRPO-style [ 29 ] updates on branching tokens at each depth, with sibling-normalized advantages computed across competing child nodes under the same parent prefix. Conference’17, July 2017, Washington, DC, USA Trovato et al. 
+
+Table 1: Performance comparison on Industrial and Office. Gen. means Generative model. Best results are bolded.                                                                                                                                                                                      
+
+> Model Gen. SID RL Industrial Office HR@3 HR@5 HR@10 NDCG@3 NDCG@5 NDCG@10 HR@3 HR@5 HR@10 NDCG@3 NDCG@5 NDCG@10 GRU4Rec −−−0.0638 0.0774 0.0999 0.0542 0.0598 0.0669 0.0629 0.0789 0.1019 0.0528 0.0595 0.0669 Caser −−−0.0618 0.0717 0.0942 0.0514 0.0555 0.0628 0.0748 0.0865 0.1093 0.0615 0.0664 0.0737 SASRec −−−0.0790 0.0909 0.1088 0.0700 0.0748 0.0806 0.0861 0.0949 0.1120 0.0769 0.0805 0.0858 HSTU ✓−−0.0927 0.1037 0.1163 0.0885 0.0918 0.0958 0.1134 0.1252 0.1400 0.1031 0.1079 0.1126 BIGRec ✓−−0.0931 0.1092 0.1370 0.0841 0.0907 0.0997 0.1069 0.1204 0.1434 0.0961 0.1017 0.1091 TIGER ✓✓−0.0852 0.1010 0.1321 0.0742 0.0807 0.0908 0.0986 0.1163 0.1408 0.0852 0.0960 0.1002 LCRec ✓✓−0.0915 0.1057 0.1332 0.0805 0.0862 0.0952 0.0921 0.1048 0.1237 0.0807 0.0859 0.0920 D3 ✓✓−0.1024 0.1213 0.1500 0.0991 0.0989 0.1082 0.1204 0.1406 0.1634 0.1055 0.1139 0.1213 S-DPO ✓✓✓0.1032 0.1238 0.1524 0.0906 0.0991 0.1082 0.1169 0.1356 0.1587 0.1033 0.1110 0.1255 MiniOneRec ✓✓✓0.1143 0.1321 0.1586 0.1011 0.1084 0.1167 0.1217 0.1420 0.1634 0.1088 0.1172 0.1242
+> Ours-Train ✓✓✓0.1189 0.1361 0.1641 0.1057 0.1128 0.1217 0.1344 0.1500 0.1746 0.1196 0.1260 0.1340
+
+## 4.4 Training and Testing 
+
+Training-Time Self-Evolution. Our V-STAR primarily focuses on training-time improvement. During training, VED and Sibling-GRPO form a closed loop: VED uses the value 𝑉 𝜙 together with the entropy signal to selectively refine search and generate struc-tured candidate groups with better reachability and clearer reward contrast. Sibling-GRPO then converts these structured groups into stable, high-quality policy updates by comparing sibling alterna-tives at each branching level. As training progresses, both 𝜋 𝜃 and 
+
+𝑉 𝜙 improve, which sharpens the acquisition score in Eq. (11) and further improves subsequent candidate construction—yielding a self-evolving decoding-and-learning loop. 
+
+Testing-Time Decoding. At test time, we use standard beam search [ 34 ] decoding for efficiency and compatibility with existing serving pipelines [ 9 ]. Optionally, decoding with VED can also be applied at inference: the learned 𝑉 𝜙 and the same acquisition rule Eq. (11) guide the decoder to select a small number of high-potential prefixes under a fixed compute budget, improving long-tail coverage and candidate diversity when additional search is allowed. 
+
+## 5 Experiments 5.1 Experimental Setup 
+
+Datasets and Evaluation. Experiments are conducted on both offline public dataset and online data. For offline evaluation, we use Amazon Review dataset [ 15 ] with two subsets Industrial and 
+
+Office Products . Following the standard next-item prediction proto-col, interactions are ordered chronologically per user. The model takes the entire historical sequence as input and predicts the next interacted item. For data preprocessing, we follow the procedure described in [ 20 ]. Each item is represented by a 3-level SID derived from the RQ-VAE codebook [ 26 ], and all generative decoders op-erate under a hard constraint that restricts outputs to valid SIDs, ensuring that each generated sequence maps to a unique catalog item. We report standard metrics Hit Rate (HR) and Normalized Dis-counted Cumulative Gain (NDCG). HR@K measures whether the ground-truth next item appears in the Top-𝐾 list, while NDCG@K further accounts for its ranked position. Unless otherwise specified, we set 𝐾 = 3, 5, 10 in the main tables. For online evaluation, we use real traffic data, which will be detailed in Sec. 5.3. 
+
+Implementation Details. We use Qwen2.5-1.5B [ 44 ] as the model backbone. All models are trained in two stages: supervised fine-tuning (SFT) followed by RL with GRPO. SFT is run with data parallelism on 8 GPUs with a global batch size of 1024 and a fixed random seed. RL is trained on 8 GPUs with a per-GPU batch size 64 and gradient accumulation step 2. The learning rate is set to 1×10 −5,and KL regularization coefficient is 10 −3. During training, VED is utilized to construct 16 candidates per query, with a prefix length 
+
+𝐿 = 3 and hierarchical weights 𝑤 𝑙 = [0.3, 0.5, 1.0]. The discount fac-tor 𝛾 in Eq. 9 is set to 0.99 and the exploration coefficient 𝜆 in Eq. 11 is set to 0.1. The beam width for VED prefix-tree initialization is set to 8. To ensure serving efficiency, we adopt standard beam search as the default decoder during inference, effectively decoupling the exploration-intensive training from latency-critical deployment. 
+
+## 5.2 Performance on Offline Dataset 
+
+The proposed method is compared with recent state-of-the-art baselines under the same setting, including traditional embedding-based sequential recommenders (GRU4Rec [ 12 ], Caser [ 35 ], and SASRec [ 17 ]), generative non-SID baselines (HSTU [ 49 ], BIGRec [ 1]), SID-based generative recommenders without RL-style opti-mization (TIGER [ 26 ], LCRec [ 51 ], D3 [ 2 ]), and SID-based methods with RL or preference optimization (S-DPO [ 19 ], MiniOneRec [ 20 ]). Table 1 summarizes results on Industrial and Office . Our method consistently achieve the highest performance among all methods. Compared with the strongest RL baseline MiniOneRec, our method achieves a 4.0% relative improvement in HR@3 and a 4.3% rela-tive improvement in NDCG@10 on Industrial . On Office , the gain is more pronounced, reaching a 10.4% relative improvement in HR@3. These consistent gains indicate that value-guided, budgeted exploration can reliably surface higher-reward SID candidates un-der strict prefix constraints, while tree-structured advantage rein-forcement strengthens training by concentrating gradients on the branching decisions that actually differentiate sibling items. 
+
+## 5.3 Online Performance 
+
+To validate V-STAR in a real business environment, we conduct online A/B testing for 5 days on 5% of live request traffic on WeChat Channels . We use GMV (Gross Merchandise Volume) as the primary metric, i.e., the total transaction value attributed to advertising recommendations and a core indicator of commercial revenue. We Spend Search Where It Pays: Value-Guided Structured Sampling and Optimization for Generative Recommendation Conference’17, July 2017, Washington, DC, USA 
+
+Table 2: Ablation on decoding strategies.                       
+
+> Decoding Industrial Office Strategy NDCG@10 ↑HR@10 ↑NDCG@10 ↑HR@10 ↑
+> Beam Search 0.1194 0.1606 0.1299 0.1684 Top-K 0.1090 0.1538 0.1226 0.1644 Ours 0.1217 0.1641 0.1340 0.1746
+
+Table 3: Ablation of expand rules in VED.                             
+
+> Expansion Industrial Office Rule NDCG@10 ↑HR@10 ↑NDCG@10 ↑HR@10 ↑
+> 𝑉 𝜙 (𝑠 )0.1202 0.1627 0.1333 0.1742
+> H𝜃 (𝑠 )0.1198 0.1604 0.1259 0.1688
+> 𝐺 (𝑠 )0.1217 0.1641 0.1340 0.1746
+
+compare against the BeamSearch +GRPO baseline. The online re-sults show that V-STAR achieves a 1.23% relative improvement in 
+
+GMV and a 1.87% relative improvement in GMV-Normal (GMV from click/conversion-optimized ad). These gains suggest that value-aware candidate construction, together with Sibling-GRPO, helps V-STAR more reliably surface high-commercial-value items, thereby increasing transaction volume. 
+
+## 5.4 Ablation Study 
+
+We conduct targeted ablation studies to disentangle the contribu-tions of (i) the decoding strategy used to construct candidate sets, and (ii) the training objective used to optimize the policy. 
+
+Impact of the Decoding Strategy. To isolate decoding effects, we fix the trained way and vary only the inference-time candi-date construction method. On Industrial and Office , we compare (i) beam search, (ii) top-K (stochastic sampling from the 𝐾 highest-probability tokens at each step), and (iii) our VED. 1 Table 2 shows that VED consistently achieves the best performance across datasets and metrics. Beam search is probability-dominated and may prune low-prior yet high-reward branches, while top-𝐾 improves diver-sity but yields less stable ranking due to untargeted exploration. In contrast, VED reallocates compute to a small set of decisive prefixes with high value and high uncertainty, mitigating early pruning and improving reachability of valuable long-tail items. To isolate what drives the gain in VED, we keep the sampling procedure and candidate budget, and vary only the prefix priority score for selecting expansion nodes. Table 3 compares three rules: value-only ( 𝑉 𝜙 ), entropy-only ( H𝜃 ), and the joint score 𝐺 (𝑠 ) (Eq. 11) combining 𝑉 𝜙 and H𝜃 . Value-only may over-exploit and miss low-prior yet high-reward branches, whereas entropy-only may over-explore high-uncertainty but low-reward regions. The joint score is consistently best, indicating that uncertainty mainly serves as an expansion gate: when value is high but confidence is already saturated, further expansion is redundant; uncertainty redirects budget to high-value yet under-resolved prefixes where exploration can still improve reachability. 
+
+Impact of Sibling-GRPO. To evaluate the impact of the training objective, we fix VED candidate construction 𝐶 (𝑥 ) and compare 
+
+> 1All methods enforce the same SID-validity constraint and return the same number of final items.
+
+Table 4: Ablation on training objective.                       
+
+> Training Industrial Office Objective NDCG@10 ↑HR@10 ↑NDCG@10 ↑HR@10 ↑
+> GRPO 0.1189 0.1598 0.1302 0.1712 Sibling-GRPO 0.1204 0.1640 0.1335 0.1749
+> Joint 0.1217 0.1641 0.1340 0.1746
+
+Figure 3: Spearman Correlation 𝜌 of Probability(P) and Value (V) Signals with Ground-truth Rewards. 
+
+three RL objectives that differ only in how advantages are normal-ized on the VED-generated prefix tree: (i) GRPO with global group-based normalization over 𝐶 (𝑥 ); (ii) Sibling-GRPO with sibling-relative normalization at shared-prefix branching points; and (iii) GRPO+Sibling-GRPO that jointly optimizes both losses. Table 4 shows that standard GRPO performs worst, as global normalization is dominated by inter-cluster variance and compresses intra-group advantages. Sibling-GRPO improves performance by aligning up-dates with the prefix-tree topology, focusing gradients on deci-sive branching nodes. Finally, the combined objective achieves the highest NDCG and HR. This suggests that global sequence-level alignment from GRPO and structure-aware, branch-level credit assignment from Sibling-GRPO are mutually reinforcing. 
+
+## 5.5 Further Analysis 
+
+How well do probability and value align with ground-truth reward across SID levels? To answer this, we form a candi-date pool C( 𝑥 ) of 64 SIDs for each query 𝑥 by temperature sam-pling from 3 different models: SFT model, RL model trained with beam search+standard GRPO, and our V-STAR model. The tem-perature is set to 1.5 to cover various probability range. At each level ℓ ∈ { 1, 2, 3}, we compute Spearman correlation 𝜌 between prefix log-probability log 𝜋 𝜃 (𝑦 ≤ℓ | 𝑥 ) and reward 𝑅 (𝑥, 𝑦 ≤ℓ ), where 
+
+𝑅 (𝑥, 𝑦 ≤ℓ ) is the average reward of candidate in C( 𝑥 ) that share prefix 𝑦 ≤ℓ . For V-STAR, we also compute 𝜌 between value predic-tion 𝑉 𝜙 (𝑥, 𝑦 ≤ℓ ) and 𝑅 (𝑥, 𝑦 ≤ℓ ). We report 𝜌 averaged over queries in Fig. 3. From the figure we can see that: (i) the predicted value 
+
+𝑉 𝜙 (𝑥, 𝑦 ≤ℓ ) aligns best with 𝑅 (𝑥, 𝑦 ≤ℓ ), (ii) for probability–reward alignment, V-STAR > beam search+GRPO > SFT, indicating that RL improves the probability landscape and V-STAR further en-hances such improvement, (iii) the correlation gap is largest at 
+
+ℓ=3, where semantically similar leaf items reduce discriminability and weaken likelihood–reward correlation, while the value model remains strongly reward-aligned. Conference’17, July 2017, Washington, DC, USA Trovato et al. 
+
+Figure 4: Training time scaling with decoding token budget. Table 5: Case Study of different decoding strategies on Office Products . SIDs in red share prefixes with history items. SIDs in teal represent novel explorations. SIDs in green represent ground truth. VED shows higher candidate diversity and successfully discovers the ground-truth (GT) item in a novel branch ( <a_20> ), while baselines remain biased toward historical prefixes.                      
+
+> Context Key Items & Candidate SIDs (For non-GT candidates, only the first SID are shown for simplicity) History Pencil Sharpener ( <a_250> ), Postcards ( <a_225> ), Bubble Mailer ( <a_118> ), Thank-you Stickers ( <a_186> ), Sharpie Pen ( <a_102> )
+> GT Item ACCUTECK Digital Scale (<a_20><b_181><c_107> )
+> Beam Search Stickers ( <a_186> ), Label Tape ( <a_117> ), Sharpie Pen ( <a_102> ), Postcards ( <a_225> ), Bubble Mailer ( <a_118> ), Stickers ( <a_186> ), Label Printer ( <a_117> ), Address Labels ( <a_186> ), Shipping Labels ( <a_117> ), Label Tape ( <a_117> )
+> (High redundancy: 6/10 items are historical prefixes; GT is missed)
+> Top-K Sharpie Pen ( <a_102> ), Thank-you Labels ( <a_186> ), Thank-you Stickers ( <a_186> ), Sharpie Marker ( <a_102> ), Sharpie Marker ( <a_102> ), Foam Board ( <a_242> ), EXPO Markers ( <a_178> ), Bubble Mailer ( <a_118> ), Glue Stick ( <a_131> ), File Folders ( <a_204> )
+> (Prefix-biased: 6/10 items are historical prefixes; GT is missed)
+> Ours (VED) Thank-you Stickers (<a_186> ), Thank-you Labels (<a_186> ), Sharpie Pen (<a_102> ), ACCUTECK Digital Scale (GT)
+> (<a_20><b_181><c_107> ), Round Labels ( <a_186> ), File Folders ( <a_187> ), Sharpie Marker ( <a_102> ), EXPO Markers ( <a_178> ), Poly Mailers ( <a_118> ), Glue ( <a_242> )
+> (Finds GT via novel <a_20> branch while keeping diverse useful neighbors)
+
+Table 6: Diversity and max reward of candidate sets.                    
+
+> Method Industrial Office
+> Div ( C) ↑ MaxReward ↑Div ( C) ↑ MaxReward ↑
+> Beam search 0.7949 0.2303 0.8624 0.2321 Top-K 0.8089 0.2246 0.8856 0.2160 Ours (VED) 0.8167 0.2475 0.8852 0.2473
+
+Does VED increase candidate-set diversity without sacrific-ing quality? We measure candidate-set diversity in SID space by calculating the average pairwise dissimilarity in candidate pool 
+
+C( 𝑥 ). For two SIDs 𝑣 𝑖 and 𝑣 𝑗 (each with 𝐿 tokens), we define their similarity as the normalized length of the longest common prefix (LCP), i.e., Sim SID (𝑣 𝑖 , 𝑣 𝑗 ) = LCP (𝑣 𝑖 , 𝑣 𝑗 )/ 𝐿 . Diversity is then com-puted as the average of 1 − Sim SID (𝑣 𝑖 , 𝑣 𝑗 ) over all candidate pairs in C( 𝑥 ), where a larger value indicates fewer near-duplicate SIDs and broader coverage across SID branches. To ensure diversity is not obtained by sacrificing strong candidates, we also report the best-in-set reward max 𝑣 ∈ C 𝑅 (𝑣 ), averaged over test queries. Three decoding strategies are tested: beam search, top-K, and our VED. Table 6 reports results with |C( 𝑥 )| = 64 . VED yields the highest (or matched-highest) diversity across datasets while consistently im-proving the best-in-set reward, indicating reduced SID redundancy and better discovery of high-reward candidates without trading off candidate quality. A detailed case study is given in Table 5. 
+
+Does VED exhibit more favorable scaling property than beam search under training-time decoding budgets? We compare VED with beam search under matched training-time decoding bud-gets. Specifically, we scale the decoding token budget by the number of model-evaluated tokens during candidate construction (exclud-ing prompt prefill). For 𝐿 =3 with beam width 𝐵 = 16 , the 1× budget is 1+2𝐵 , and we proportionally expand it to 2× (1+4𝐵 ), 3× (1+6𝐵 ), and 4× (1+8𝐵 ). Similarly, VED is constrained to the same budgets at each scale. Figure 4 shows that VED consistently outperforms beam search across budgets and metrics. On Industrial , VED yields larger gains at low budgets ( 1× → 2×), whereas widening the beam provides smaller increments, indicating higher compute efficiency from value-guided expansion. On Office , VED maintains a clear margin at every scale, and 1× VED often matches or exceeds 3×–
+
+4× beam search. This suggests that value-guided expansion is more compute-efficient than indiscriminately widening the beam. Over-all, VED converts additional training-time decoding compute into larger improvements than likelihood-driven widening by reducing redundant expansions and prioritizing high-value branches. 
+
+## 6 Conclusion 
+
+This paper studies candidate construction for Semantic-ID gen-erative recommendation, where probability-driven decoding (e.g., beam search) tends to over-exploit high-probability sibling branches and provides limited reward contrast for RL. We propose V-STAR, which couples Value-Guided Efficient Decoding (VED) for budgeted candidate construction with Sibling-GRPO for structure-aware pol-icy optimization. VED allocates a fixed decoding budget to a small set of high-potential branching points, improving reachability and Spend Search Where It Pays: Value-Guided Structured Sampling and Optimization for Generative Recommendation Conference’17, July 2017, Washington, DC, USA 
+
+candidate diversity without exhaustive tree search. Sibling-GRPO leverages the prefix-tree structure to compute sibling-relative learn-ing signals, stabilizing optimization under prefix coupling. Exten-sive experiments show that V-STAR consistently improvements over strong generative baselines under strict token budgets, and additional analyses verify better value–reward alignment and more effective use of extra decoding compute. 
+
+## References 
+
+[1] Keqin Bao, Jizhi Zhang, Wenjie Wang, Yang Zhang, Zhengyi Yang, Yanchen Luo, Chong Chen, Fuli Feng, and Qi Tian. 2025. A bi-step grounding paradigm for large language models in recommendation systems. ACM Transactions on Recommender Systems 3, 4 (2025), 1–27. [2] Keqin Bao, Jizhi Zhang, Yang Zhang, Xinyue Huo, Chong Chen, and Fuli Feng. 2024. Decoding matters: Addressing amplification bias and homogeneity issue in recommendations for large language models. In Proceedings of the Conference on Empirical Methods in Natural Language Processing (EMNLP) . 10540–10552. [3] Zhe Cao, Tao Qin, Tie-Yan Liu, Ming-Feng Tsai, and Hang Li. 2007. Learning to Rank: From Pairwise Approach to Listwise Approach. In Proceedings of the International Conference on Machine Learning (ICML) . 129–136. [4] Ben Chen, Xian Guo, Siyuan Wang, Zihan Liang, Yue Lv, Yufei Ma, Xinlong Xiao, Bowen Xue, Xuxin Zhang, Ying Yang, et al . 2025. Onesearch: A preliminary exploration of the unified end-to-end generative framework for e-commerce search. arXiv preprint arXiv:2509.03236 (2025). [5] Minmin Chen, Alex Beutel, Paul Covington, Sagar Jain, Francois Belletti, and Ed H Chi. 2019. Top-k off-policy correction for a REINFORCE recommender system. In Proceedings of the ACM International Conference on Web Search and Data Mining (WSDM) . 456–464. [6] Yuxin Chen, Junfei Tan, An Zhang, Zhengyi Yang, Leheng Sheng, Enzhi Zhang, Xiang Wang, and Tat-Seng Chua. 2024. On softmax direct preference optimization for recommendation. Advances in Neural Information Processing Systems (NeurIPS) 
+
+37 (2024), 27463–27489. [7] Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al . 2021. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168 (2021). [8] Paul Covington, Jay Adams, and Emre Sargin. 2016. Deep Neural Networks for YouTube Recommendations. In Proceedings of the ACM Conference on Recom-mender Systems (RecSys) . 191–198. [9] Jiaxin Deng, Shiyao Wang, Kuo Cai, Lejian Ren, Qigen Hu, Weifeng Ding, Qiang Luo, and Guorui Zhou. 2025. Onerec: Unifying retrieve and rank with generative recommender and iterative preference alignment. arXiv preprint arXiv:2502.18965 
+
+(2025). [10] Shijie Geng, Shuchang Liu, Zuohui Fu, Yingqiang Ge, and Yongfeng Zhang. 2022. Recommendation as Language Processing (RLP): A Unified Pretrain, Personal-ized Prompt & Predict Paradigm (P5). In Proceedings of the ACM Conference on Recommender Systems (RecSys) . 299–315. [11] Kartik Goyal, Graham Neubig, Chris Dyer, and Taylor Berg-Kirkpatrick. 2018. A continuous relaxation of beam search for end-to-end training of neural sequence models. In Proceedings of the AAAI Conference on Artificial Intelligence (AAAI) ,Vol. 32. 3045–3052. [12] Balázs Hidasi, Alexandros Karatzoglou, Linas Baltrunas, and Domonkos Tikk. 2015. Session-based recommendations with recurrent neural networks. arXiv preprint arXiv:1511.06939 (2015). [13] Ari Holtzman, Jan Buys, Li Du, Maxwell Forbes, and Yejin Choi. 2020. The Curious Case of Neural Text Degeneration. In International Conference on Learning Representations (ICLR) .[14] Minjie Hong, Zetong Zhou, Zirun Guo, Ziang Zhang, Ruofan Hu, Weinan Gan, Jieming Zhu, and Zhou Zhao. 2025. Generative Reasoning Recommendation via LLMs. arXiv preprint arXiv:2510.20815 (2025). [15] Yupeng Hou, Jiacheng Li, Zhankui He, An Yan, Xiusi Chen, and Julian McAuley. 2024. Bridging language and items for retrieval and recommendation. arXiv preprint arXiv:2403.03952 (2024). [16] Eugene Ie, Vihan Jain, Jing Wang, Sanmit Narvekar, Ritesh Agarwal, Rui Wu, Heng-Tze Cheng, et al . 2019. Reinforcement Learning for Slate-based Recom-mender Systems: A Tractable Decomposition. In Proceedings of the International Joint Conference on Artificial Intelligence (IJCAI) . 2368–2375. [17] Wang-Cheng Kang and Julian McAuley. 2018. Self-attentive sequential rec-ommendation. In IEEE International Conference on Data Mining (ICDM) . IEEE, 197–206. [18] Levente Kocsis and Csaba Szepesvári. 2006. Bandit based monte-carlo planning. In Proceedings of the European Conference on Machine Learning (ECML) . Springer, 282–293. [19] Aobo Kong, Wentao Ma, Shiwan Zhao, Yongbin Li, Yuchuan Wu, Ke Wang, Xiaoqian Liu, Qicheng Li, Yong Qin, and Fei Huang. 2025. Sdpo: Segment-level direct preference optimization for social agents. arXiv preprint arXiv:2501.01821 
+
+(2025). [20] Xiaoyu Kong, Leheng Sheng, Junfei Tan, Yuxin Chen, Jiancan Wu, An Zhang, Xiang Wang, and Xiangnan He. 2025. Minionerec: An open-source framework for scaling generative recommendation. arXiv preprint arXiv:2510.24431 (2025). [21] Jinming Li, Wentao Zhang, Tian Wang, Guanglei Xiong, Alan Lu, and Gerard Medioni. 2023. GPT4Rec: A generative framework for personalized recommen-dation and user interests interpretation. arXiv preprint arXiv:2304.03879 (2023). [22] Shuai Li, Xinyu Luo, Xiang Wang, Yongfeng Zhang, and Tat-Seng Chua. 2023. Large Language Models for Generative Recommendation: A Survey and Visionary Discussions. arXiv preprint arXiv:2309.01157 (2023). [23] Yujia Li, David Choi, Junyoung Chung, Nate Kushman, Julian Schrittwieser, Rémi Leblond, Tom Eccles, James Keeling, Felix Gimeno, Agustin Dal Lago, et al . 2022. Competition-level code generation with alphacode. Science 378, 6624 (2022), 1092–1097. [24] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al . 2022. Training language models to follow instructions with human feedback. Advances in Neural Information Processing Systems (NeurIPS) 35 (2022), 27730–27744. [25] Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea Finn. 2023. Direct Preference Optimization: Your Language Model is Secretly a Reward Model. In Advances in Neural Information Processing Systems (NeurIPS) .[26] Shashank Rajput, Nikhil Mehta, Anima Singh, Raghunandan Hulikal Keshavan, Trung Vu, Lukasz Heldt, Lichan Hong, Yi Tay, Vinh Tran, Jonah Samost, et al .2023. Recommender systems with generative retrieval. Advances in Neural Information Processing Systems (NeurIPS) 36 (2023), 10299–10315. [27] Rajkumar Ramamurthy, Prithviraj Ammanabrolu, Kianté Brantley, Jack Hessel, Rafet Sifa, Christian Bauckhage, Hannaneh Hajishirzi, and Yejin Choi. 2023. Is Reinforcement Learning (Not) for Natural Language Generation?. In Proceedings of the Annual Meeting of the Association for Computational Linguistics (ACL) .844–862. [28] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. 2017. Proximal Policy Optimization Algorithms. arXiv preprint arXiv:1707.06347 
+
+(2017). [29] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, YK Li, Yang Wu, et al . 2024. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 (2024). [30] Amit Sharma, Hua Li, Xue Li, and Jian Jiao. 2024. Optimizing novelty of top-k recommendations using large language models and reinforcement learning. In 
+
+Proceedings of the ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD) . 5669–5679. [31] Chufan Shi, Haoran Yang, Deng Cai, Zhisong Zhang, Yifan Wang, Yujiu Yang, and Wai Lam. 2024. A thorough examination of decoding methods in the era of llms. arXiv preprint arXiv:2402.06925 (2024). [32] David Silver, Julian Schrittwieser, Karen Simonyan, Ioannis Antonoglou, Aja Huang, Arthur Guez, Thomas Hubert, Lucas Baker, Matthew Lai, Adrian Bolton, et al . 2017. Mastering the game of go without human knowledge. nature 550, 7676 (2017), 354–359. [33] Fei Sun, Jun Liu, Jian Wu, Changhua Pei, Xiao Lin, Wenwu Ou, and Peng Jiang. 2019. BERT4Rec: Sequential Recommendation with Bidirectional Encoder Repre-sentations from Transformer. In Proceedings of the ACM International Conference on Information and Knowledge Management (CIKM) . 1441–1450. [34] Ilya Sutskever, Oriol Vinyals, and Quoc V Le. 2014. Sequence to sequence learn-ing with neural networks. Advances in Neural Information Processing Systems (NeurIPS) 27 (2014). [35] Jiaxi Tang and Ke Wang. 2018. Personalized top-n sequential recommendation via convolutional sequence embedding. In Proceedings of the ACM International Conference on Web Search and Data Mining (WSDM) . 565–573. [36] Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yas-mine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhos-ale, et al . 2023. Llama 2: Open foundation and fine-tuned chat models. arXiv preprint arXiv:2307.09288 (2023). [37] Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and Denny Zhou. 2023. Self-Consistency Improves Chain of Thought Reasoning in Language Models. In International Conference on Learning Representations (ICLR) .[38] Ye Wang, Jiahao Xun, Minjie Hong, Jieming Zhu, Tao Jin, Wang Lin, Haoyuan Li, Linjun Li, Yan Xia, Zhou Zhao, et al . 2024. Eager: Two-stream generative recommender with behavior-semantic collaboration. In Proceedings of the ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD) . 3245–3254. [39] Zhipeng Wei, Kuo Cai, Junda She, Jie Chen, Minghao Chen, Yang Zeng, Qiang Luo, Wencong Zeng, Ruiming Tang, Kun Gai, et al . 2025. Oneloc: Geo-aware generative recommender systems for local life service. arXiv preprint arXiv:2508.14646 (2025). Conference’17, July 2017, Washington, DC, USA Trovato et al. 
+
+[40] Yepeng Weng, Qiao Hu, Xujie Chen, Li Liu, Dianwen Mei, Huishi Qiu, Jiang Tian, and Zhongchao Shi. 2025. Traversal Verification for Speculative Tree Decoding. 
+
+arXiv preprint arXiv:2505.12398 (2025). [41] Ronald J Williams. 1992. Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning. Machine Learning 8 (1992), 229–256. [42] Sam Wiseman and Alexander M Rush. 2016. Sequence-to-sequence learning as beam-search optimization. arXiv preprint arXiv:1606.02960 (2016). [43] Haibo Xing, Hao Deng, Yucheng Mao, Jinxin Hu, Yi Xu, Hao Zhang, Jiahao Wang, Shizhun Wang, Yu Zhang, Xiaoyi Zeng, et al . 2025. Reg4rec: Reasoning-enhanced generative model for large-scale recommendation systems. arXiv preprint arXiv:2508.15308 (2025). [44] An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jingren Zhou, Junyang Lin, Kai Dang, Keming Lu, Keqin Bao, Kexin Yang, Le Yu, Mei Li, Mingfeng Xue, Pei Zhang, Qin Zhu, Rui Men, Runji Lin, Tianhao Li, Tingyu Xia, Xingzhang Ren, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yu Wan, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zihan Qiu. 2024. Qwen2.5 Technical Report. arXiv preprint arXiv:2412.15115 (2024). [45] Weiqin Yang, Bohao Wang, Zhenxiang Xu, Jiawei Chen, Shengjia Zhang, Jingbang Chen, Canghong Jin, and Can Wang. 2026. BEAR: Towards Beam-Search-Aware Optimization for Recommendation with Large Language Models. arXiv preprint arXiv:2601.22925 (2026). https://arxiv.org/abs/2601.22925 Preprint. [46] Yuhao Yang, Zhi Ji, Zhaopeng Li, Yi Li, Zhonglin Mo, Yue Ding, Kai Chen, Zijian Zhang, Jie Li, Shuanglong Li, et al . 2025. Sparse meets dense: Unified generative recommendations with cascaded sparse-dense representations. arXiv preprint arXiv:2503.02453 (2025). [47] Shunyu Yao, Dian Yu, Jeffrey Zhao, Tom Shafran, Tom Griffiths, Yuan Cao, and Karthik Narasimhan. 2023. Tree of thoughts: Deliberate problem solving with large language models. Advances in Neural Information Processing Systems (NeurIPS) 36 (2023), 11809–11822. [48] Neil Zeghidour, Alejandro Luebs, Ahmed Omran, Jan Skoglund, and Marco Tagliasacchi. 2021. SoundStream: An End-to-End Neural Audio Codec. IEEE/ACM Transactions on Audio, Speech, and Language Processing 30 (2021), 495–507. [49] Jiaqi Zhai, Lucy Liao, Xing Liu, Yueming Wang, Rui Li, Xuan Cao, Leon Gao, Zhaojie Gong, Fangda Gu, Jiayuan He, et al . 2024. Actions Speak Louder than Words: Trillion-parameter Sequential Transducers for Generative Recommenda-tions. In Proceedings of the International Conference on Machine Learning (ICML) .58484–58509. [50] Jiaqi Zhai, Lucy Liao, Xing Liu, Yueming Wang, Rui Li, Xuan Cao, Leon Gao, Zhao-jie Gong, Fangda Gu, Michael He, et al . 2024. Actions speak louder than words: Trillion-parameter sequential transducers for generative recommendations. arXiv preprint arXiv:2402.17152 (2024). [51] Bowen Zheng, Yupeng Hou, Hongyu Lu, Yu Chen, Wayne Xin Zhao, Ming Chen, and Ji-Rong Wen. 2024. Adapting large language models by integrating collaborative semantics for recommendation. In IEEE International Conference on Data Engineering (ICDE) . 1435–1448. [52] Guorui Zhou, Hengrui Hu, Hongtao Cheng, Huanjie Wang, Jiaxin Deng, Jinghao Zhang, Kuo Cai, Lejian Ren, Lu Ren, Liao Yu, et al . 2025. Onerec-v2 technical report. arXiv preprint arXiv:2508.20900 (2025).

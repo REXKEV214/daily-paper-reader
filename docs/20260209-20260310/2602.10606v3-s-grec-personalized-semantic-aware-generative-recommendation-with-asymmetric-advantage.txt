@@ -1,0 +1,1074 @@
+Title: S-GRec: Personalized Semantic-Aware Generative Recommendation with Asymmetric Advantage
+
+URL Source: https://arxiv.org/pdf/2602.10606v3
+
+Published Time: Thu, 26 Feb 2026 01:43:47 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# S-GRec: Personalized Semantic-Aware Generative Recommendation with Asymmetric Advantage 
+
+# Jie Jiang ∗, Hongbo Tang ∗, Wenjie Wu ∗, Yangru Huang ∗, Zhenmao Li ∗, Qian Li, Changping Wang, Jun Zhang †, Huan Yu 
+
+Tencent Inc., China {zeus, hardytang, yonewu, yarayrhuang, zoomli, kathieqli, terracewang, neoxzhang, huanyu}@tencent.com 
+
+## Abstract 
+
+Generative recommendation models sequence generation to pro-duce items end-to-end, but training from behavioral logs often provides weak supervision on underlying user intent. Although Large Language Models (LLMs) offer rich semantic priors that could supply such supervision, direct adoption in industrial recommenda-tion is hindered by two obstacles: semantic signals can conflict with platform business objectives, and LLM inference is prohibitively expensive at scale. This paper presents S-GRec , a semantic-aware framework that decouples an online lightweight generator from an offline LLM-based semantic judge for train-time supervision. S-GRec introduces a two-stage Personalized Semantic Judge (PSJ) that produces interpretable aspect evidence and learns user-conditional aggregation from pairwise feedback, yielding stable semantic rewards. To prevent semantic supervision from deviating from business goals, Asymmetric Advantage Policy Optimiza-tion (A2PO) anchors optimization on business rewards (e.g., eCPM) and injects semantic advantages only when they are consistent. Extensive experiments on public benchmarks and a large-scale pro-duction system validate both effectiveness and scalability, including statistically significant gains in CTR and a 1.19% lift in GMV in online A/B tests, without requiring real-time LLM inference. 
+
+## Keywords 
+
+Generative Recommendation, Large Language Models, Policy Opti-mization, Metric Alignment, Semantic-aware Modeling 
+
+## 1 Introduction 
+
+Recommendation systems have evolved from the conventional retrieval–ranking paradigm into generative recommendation [ 16 ,25 ], where recommendation is formulated as sequence generation to enable end-to-end construction of item lists and richer modeling of temporal and contextual dependencies in user behavior. This par-adigm is increasingly adopted across industrial applications such as e-commerce [ 6, 13 , 14 , 34 ], short-video platforms [ 10 , 52 ], social media feeds [ 46 ], POI recommendation [ 38 ] and online advertising [ 32 , 47 , 50 ]. Its practical significance is reflected in the fact that recommendation outputs simultaneously shape user experience and directly drive key business metrics, including Click-Through Rate (CTR), Conversion Rate (CVR), and Gross Merchandise Vol-ume (GMV). However, in real-world deployments, user preferences are often implicit and fine-grained, while behavioral feedback is noisy and biased. As a result, relying on behavior sequences for generative learning tends to induce superficial correlation fitting,    
+
+> ∗Equal contribution.
+> †Corresponding author. Reward Model
+> Generative Model
+> s0 s1 s2
+> s0 s1
+> LLM as Enhancer
+> user token
+
+(a) LLM     
+
+> s0 s1 s2
+> s1 BOS s0
+> LLM as Backbone
+> Reward Model
+
+(b) Business Reward     
+
+> Generative Model
+> s0 s1 s2
+> s1 BOS s0
+> Semantic Reward
+> LLM as Judge
+
+(c) Ours 
+
+Figure 1: LLM applications in different ways. The dashed red line indicates LLM use only during training for our method, while the other two approaches require it in both training and inference. 
+
+making it difficult to infer why users prefer certain items. More crit-ically, it struggles to maintain stable alignment with the platform’s business objectives. With the rapid progress of Large Language Models (LLMs) [ 1, 12 ,41 ], their powerful semantic understanding and reasoning capabili-ties have sparked significant interest in LLM-integrated recommen-dation systems [ 26 , 44 ]. Current research primarily follows two paradigms: (i) LLMs as semantic enhancers: as shown in Figure 1a, these methods leverage LLMs to deeply encode textual features (e.g., user profiles and item metadata) into high-quality semantic representations or discrete IDs. These enhanced features are then integrated into downstream recommenders to better capture con-tent semantics and user intentions [ 7 , 43 ]. (ii) LLMs as primary generators: as shown in Figure 1b, these approaches treat recom-mendation as a generative task, fine-tuning LLMs via instruction tuning or Parameter-Efficient Fine-Tuning (e.g., LoRA) to directly generate recommendation lists or predict item ratings [ 5, 18 ]. While these approaches validate the potential of LLMs for recommenda-tion, they face critical bottlenecks in the industrial deployment of generative recommendation. The remaining deployment gap is primarily driven by two struc-tural conflicts between LLMs and generative recommendation in industrial scenarios. The first is the Cost-Scalability Conflict : While LLMs offer immense semantic power, they are burdened by high inference costs and substantial memory footprints. In contrast, production-scale recommenders necessitate millisecond-level la-tency and high-throughput scalability to handle millions of requests, creating a fundamental tension between model complexity and  
+
+> arXiv:2602.10606v3 [cs.IR] 25 Feb 2026 Conference’17, July 2017, Washington, DC, USA Jiang et al.
+
+operational efficiency. The second is the Objective Alignment Con-flict : Recommendation engines are engineered to optimize scenario-specific business metrics by modeling implicit user behaviors. Con-versely, general-purpose LLMs are pre-trained for open-domain semantic generation [ 30 , 48 ]. Without a robust mechanism to trans-late ambiguous implicit preferences into explicit, business-aligned supervisory signals, these models struggle to maintain stable perfor-mance on platform-specific objectives. This raises a core question: 
+
+How can we distill the semantic priors of LLMs into controllable pref-erence supervision to train a generative recommender, while strictly maintaining alignment with business objectives? 
+
+In this paper, we bridge these gaps by proposing Semantic-Aware Generative Recommendation (S-GRec) , a framework that reconciles LLM-driven semantic depth with the stringent re-quirements of industrial serving (see Figure 1c). Our core philos-ophy is to decouple high-cost semantic reasoning from real-time inference, distilling it into a lightweight, business-aligned generator during training. Specifically, S-GRec first introduces an LLM-based 
+
+Personalized Semantic Judge (PSJ) to transform complex user– item semantic interactions into scalar preference signals. This is achieved via a two-stage pipeline: (i) Aspect-level Semantic Scor-ing , which yields interpretable, fine-grained evidence to charac-terize candidate items; and (ii) User-conditional Preference Aggre-gation , which employs GRPO-style optimization to learn context-aware importance weights from pairwise feedback. To prevent the distilled semantic supervision from conflicting with platform ob-jectives, S-GRec further incorporates Asymmetric Advantage Policy Optimization (A2PO) . This mechanism fuses business re-wards with PSJ-derived semantic rewards at the advantage level us-ing consistency-aware asymmetric weighting. In addition, S-GRec adopts sparse sampling and queries PSJ on only a small subset of training instances. In summary, S-GRec delivers a robust framework that harmonizes high-quality semantic intelligence with platform-specific objectives, offering a scalable path to deploy generative recommenders without the prohibitive overhead of real-time LLM reasoning. The main contributions of this paper are summarized as follows: (1) LLM-as-Judge for Industrial Generative Recommenda-tion. We propose a decoupled framework that uses an LLM as an offline semantic judge to provide controllable preference su-pervision for training, while keeping online serving lightweight and free of LLM dependency. (2) Personalized Semantic Judge (PSJ). We develop a two-stage judge adaptation pipeline that produces interpretable, aspect-level evidence and learns user-conditional aggregation from pairwise feedback, yielding stable scalar semantic rewards aligned with user preferences. (3) Asymmetric Advantage Policy Optimization (A2PO). We propose an asymmetric, advantage-level fusion objective that integrates PSJ semantic rewards with business rewards under sparse LLM querying, preventing conflicts with platform objec-tives at industrial cost. (4) Strong Offline and Online Results. Extensive experiments on public benchmarks and large-scale online A/B tests demon-strate consistent improvements and practical impact, including a 1.19% GMV lift and a 1.55% GMV-Normal lift. 
+
+## 2 Related Works 2.1 Generative Recommendation 
+
+Generative Recommendation (GR) formulates recommendation as conditional sequence generation, where an autoregressive model generates the target item from user context, collapsing retrieval and ranking into a single decoder [ 33 , 51 , 52 ]. Prior work advances GR along two main directions: (i) scalable architectures and serv-ing pipelines , evolving from encoder-decoder to decoder-only and industrial-grade systems such as HSTU and the OneRec family [ 46 , 51 , 52 ]; and (ii) representation and tokenization schemes that make item generation tractable at scale, often via quantization-based codes [ 23 , 30 , 31 ]. GR has also been extended to richer signals and settings, including collaborative features, geographic context, and multi-behavior generation [ 29 , 36 –39 ]. Despite these advances, a key bottleneck in industrial scenarios remains: GR training is still dominated by noisy behavioral logs and likelihood-oriented objectives, making it hard to inject semantic preference supervi-sion while preserving business alignment [ 8, 26 ]. Recent methods introduce LLMs as generators, rerankers, or feature augmentation modules, but often incur online inference overhead or require heavy fine-tuning, limiting scalability and deployment. In contrast, this work adopts an LLM-as-Judge paradigm, using the LLM as an of-fline source of controllable semantic supervision. This enables scal-able semantic guidance for GR training and motivates our domain-adapted two-stage judge and consistency-aware advantage-level fusion that maintains business alignment without adding serving-time cost. 
+
+## 2.2 LLM-as-Judge and Preference Supervision 
+
+LLM-as-Judge uses a strong language model to provide preference judgments or rubric-based scores, offering a scalable alternative to human labeling for evaluation and alignment. This paradigm is closely related to RLHF and RLAIF, where preference feedback, including AI-generated feedback, is used to optimize a target model [ 2, 24 ]. Prior work has studied the reliability of LLM judges and their agreement with humans [ 49 ], and developed specialized judge models or prompting frameworks to improve controllability and interpretability, including multi-aspect scoring and open-source judges [ 20 , 28 , 53 ]. Recent studies further investigate judge biases and calibration, such as position and verbosity bias, and propose mit-igation or self-improvement strategies [ 22 , 42 , 45 ]. LLM judges have also been used to scale preference datasets and distill supervision, for example in synthetic preference pipelines [ 9, 11 ]. In recommen-dation, LLM judges have mainly been used as external evaluators or offline modules. RecGPT and RecGPT-V2 employ LLM-based judging to assess recommendation quality and decompose evalua-tion into multiple aspects [ 43 , 44 ]. However, existing uses typically do not address a key industrial training issue: semantic judgments can be noisy and may conflict with business rewards, making naive reward mixing unstable. In contrast, this work treats the LLM as a domain-adapted semantic judge that produces structured prefer-ence signals and integrates them into generative recommendation training via advantage-level, consistency-aware fusion, aiming to improve semantic preference modeling while preserving business alignment under industrial cost constraints. S-GRec: Personalized Semantic-Aware Generative Recommendation with Asymmetric Advantage Conference’17, July 2017, Washington, DC, USA 
+
+## 3 Methodology 
+
+In this section, we first formalize the problem and then describe the two core components of S-GRec. First, we detail the Personalized Semantic Judge (PSJ) and its two-stage training pipeline for fine-grained content scoring and preference alignment, including the scoring rubrics and LLM-based supervision. We then introduce Asymmetric Advantage Policy Optimization (A2PO), which fuses LLM-derived semantic rewards with business signals in a unified objective. Figure 2 illustrates the overall architecture. 
+
+## 3.1 Preliminary 
+
+Generative recommendation with Semantic IDs [ 33 ]. We formu-late recommendation as conditional sequence generation. Given a unified input 𝑥 that encapsulates the user profile, behavioral his-tory, and spatio-temporal context (e.g., time and location), each item (or ad) is represented by a fixed-length Semantic ID (SID) to-ken sequence 𝑦 = (𝑦 1, . . . , 𝑦 𝑇 ) ∈ V 𝑇 . An autoregressive policy 𝜋 𝜃 
+
+models 
+
+𝜋 𝜃 (𝑦 | 𝑥 ) =
+
+> 𝑇
+
+Ö
+
+> 𝑡 =1
+
+𝜋 𝜃 (𝑦 𝑡 | 𝑥, 𝑦 <𝑡 ) , (1) and a deterministic mapping Map (·) maps a valid SID sequence 𝑦 to its corresponding item. Candidate items are obtained by generating multiple valid SIDs under the same 𝑥 .
+
+Group-based sampling for policy optimization [ 12 ]. For each 𝑥 , we sample a group of 𝐺 candidate sequences Y ( 𝑥 ) = {𝑦 1, 𝑦 2, . . . , 𝑦 𝐺 }
+
+from a rollout policy and evaluate each candidate with a scalar reward 𝑟 (𝑥, 𝑦 ). Following group-based policy optimization, we use 
+
+group-relative (standardized) advantages computed within Y ( 𝑥 ) to reduce reward scale sensitivity and stabilize updates. 
+
+Why not off-the-shelf LLM-as-Judge. Direct application of general-purpose LLMs as judges is impractical for large-scale ad recommen-dation. Large models face prohibitive inference overhead, while smaller variants are often fragile, showing sensitivity to prompt phrasing and candidate list presentation. Moreover, off-the-shelf LLMs struggle with ad-domain alignment, failing to capture interest evolution or business constraints while suffering from judgment drift under finite context windows. This motivates the need for a structured, domain-stabilized judge. 
+
+## 3.2 Personalized Semantic Judge (PSJ): Turning an LLM into a Reward Provider 
+
+3.2.1 Problem Setup. Let 𝑥 denote the comprehensive user input, including the profile, recent behavior sequence, and request-time signals (e.g., time and location when available). Given a candidate ad 𝑎 = Map (𝑦 ), PSJ serves as a semantic reward provider for down-stream recommendation optimization. For each (𝑥, 𝑎 ), PSJ returns: (i) an interpretable aspect score vector s(𝑥, 𝑎 ) ∈ R4 over four se-mantic dimensions; and (ii) a holistic semantic score 𝑠 hol (𝑥, 𝑎 ) ∈ R
+
+as a scalar semantic reward for ranking and RL. The design fol-lows a progressive principle: PSJ first learns decomposed aspect judgments, and then learns a user-conditional aggregation rule that maps the aspect evidence to a stable scalar preference. 
+
+3.2.2 Part A: Aspect-level Semantic Scoring. 
+
+Point-wise fine-grained scoring. This task trains PSJ to output independent, interpretable judgments by decomposing each can-didate ad into structured aspect scores. Given a user input-ad pair 
+
+(𝑥, 𝑎 ), PSJ predicts a discrete score vector s(𝑥, 𝑎 ) over four semantic dimensions: 
+
+• User Profile Relevance : alignment with the user’s long-term and coarse-grained interests. 
+
+• Future Interest Relevance : alignment with short-term, fine-grained, and evolving interests. 
+
+• Novelty : relevance to derivative interests not yet covered by the user’s exposure history. 
+
+• Contextual Relevance : suitability under request-time context such as time and location. We adopt discrete labels to reduce annotation ambiguity and stabi-lize learning. The full scoring rubrics are provided in Table 7. 
+
+Point-wise annotation pipeline. To construct point-wise supervi-sion at scale, we collect two types of candidate samples: (i) candidate sets sampled from online recommendation models (each request contains multiple candidates); and (ii) online exposure logs, includ-ing ads that users clicked or converted, as well as exposed but not clicked ads. These two sources complement each other: online can-didate sets cover the model-induced exposure distribution, while exposure logs provide behavior-grounded positives and hard neg-atives. Each instance is formatted into a structured prompt that contains the request context and the ad content, and a strong LLM is used to generate initial discrete aspect scores. Human annotators then verify and correct the scores to ensure label quality. Veri-fication feedback is further used to refine the prompt templates, forming a closed-loop pipeline: automatic initial labeling → human verification → prompt iteration .
+
+Aspect scorer training. We first train PSJ by supervised fine-tuning (SFT) on human-verified point-wise samples to learn struc-tured aspect prediction. To improve consistency and robustness, we further apply GRPO with a KL constraint to an SFT reference model. Let 𝑦 denote the predicted aspect-score sequence and 𝑦 ∗ the human label. We define the dimension-wise reward as the sum of (i) an exact-match accuracy term 𝑟 𝑑  
+
+> acc
+
+and (ii) an order-consistency term 𝑟 𝑑  
+
+> ord
+
+that preserves the relative ordering induced by annotated scores. The total point-wise reward aggregates over dimensions: 
+
+𝑟 asp (𝑥, 𝑎, 𝑦 ) =∑︁  
+
+> 𝑑 ∈𝐷
+
+𝜔 𝑑 
+
+
+
+𝑟 𝑑  
+
+> acc
+
+(𝑦, 𝑦 ∗) + 𝑟 𝑑  
+
+> ord
+
+(𝑦, 𝑦 ∗)
+
+
+
+, |𝐷 | = 4, 𝜔 𝑑 = 1.
+
+(2) GRPO is then employed to maximize the expected aspect reward 
+
+𝑟 𝑎𝑠𝑝 as [ 12 ]. The trained scorer is then used to generate aspect evi-dence s(𝑥, 𝑎 ), which serves as input to the preference aggregation stage. 
+
+3.2.3 Part B: User-conditional Preference Aggregation. 
+
+Motivation. While Part A provides interpretable aspect evidence, industrial recommendation ultimately requires a single holistic pref-erence signal for ranking and selection. Moreover, users may trade off semantic aspects differently under different request contexts. Therefore, Part B learns a user-conditional aggregation rule that Conference’17, July 2017, Washington, DC, USA Jiang et al. User Input x  
+
+> Business Reward (CTR, GMV)
+
+A2PO: 
+
+Asymmetric Advantage Policy Optimization   
+
+> Combined RL Signal
+> Ef fi cient Online Generation Loop
+> Item1 Item2 Item3
+
+Part A: Aspect-level Scoring Part B: User-conditional Preference Aggregation  
+
+> Aspect Scorer
+> Aspect Score Vector
+> • s0: User Pro fi le Relevance • s1: Future Interest Relevance
+> • s2: Novelty • s3: Contextual Relevance
+> Annotation Pipeline
+
+Training: SFT + GRPO 
+
+> Aggregator
+> Importance Weights
+> (w0,w1,w2,w3)
+> Reward
+> [S_i > S_j]
+> Preference Aggregation
+> Aspect-level Scoring
+
+## ∑
+
+> PSJ
+> User Input x
+> Candidate Ads
+> Point-wise data
+> Reasoning User Input x
+
+Training: Pair-wise RL 
+
+> Reasoning
+
+## ……   
+
+> Candidate Ad A
+> Candidate Ad B
+> 0.1 0.7 1.
+
+## …… 
+
+> Semantic Reward
+
+S-GRec Overall Framework 
+
+> Pair-wise data
+
+Figure 2: Overview of S-GRec. The offline PSJ produces semantic rewards via two-stage scoring (aspect-level evidence →
+
+user-conditional aggregation). A2PO fuses semantic and business rewards in the advantage space with consistency gating, training a lightweight generator without serving-time LLM inference. 
+
+integrates multi-dimensional aspect scores into a unified prefer-ence score. We adopt pairwise supervision for this stage because recommendation feedback and ranking objectives are inherently comparative: annotators can more consistently decide which candi-date is better overall under the same context than assign calibrated absolute holistic scores, and such comparisons directly expose cross-aspect trade-offs. 
+
+Aggregation model. Given a user input 𝑥 and a candidate ad 𝑎 ,the aspect scorer from Part A produces an aspect evidence vec-tor s(𝑥, 𝑎 ) ∈ R4. The aggregation model predicts user-dependent importance weights w(𝑥 ) = 𝑔 𝜓 (𝑥 ) ∈ R4, where 𝑤 𝑑 (𝑥 ) ≥ 0 and 
+
+Í4 
+
+> 𝑑 =1
+
+𝑤 𝑑 (𝑥 ) = 1, and computes the holistic semantic score as 
+
+𝑠 hol (𝑥, 𝑎 ) = w(𝑥 )⊤s(𝑥, 𝑎 ) =
+
+> 4
+
+∑︁ 
+
+> 𝑑 =1
+
+𝑤 𝑑 (𝑥 ) 𝑠 𝑑 (𝑥, 𝑎 ). (3) 
+
+Pairwise supervision and annotation pipeline. We construct pair-wise preference samples of the form (𝑥, 𝑎 𝑖 , 𝑎 𝑗 , 𝑦 𝑖 𝑗 ), where 𝑦 𝑖 𝑗 ∈{𝑎 𝑖 ≻ 𝑎 𝑗 , 𝑎 𝑗 ≻ 𝑎 𝑖 } indicates which ad is preferred under the same user input 𝑥 . Pairwise instances are collected from two complemen-tary sources: (i) intra-request comparisons by sampling candidates within the same request, and (ii) behavioral contrasts from exposure logs that compare clicked/converted ads against exposed-but-not-clicked ads. We follow an LLM-assisted human verification pipeline similar to Part A: a strong LLM first provides an initial comparison judgment, and human annotators verify and correct labels to ensure quality. Annotation rules are summarized in Table 8. 
+
+Preference optimization via group-based GRPO.. For each labeled pair (𝑥, 𝑎 𝑖 , 𝑎 𝑗 ) with 𝑎 𝑖 ≻ 𝑎 𝑗 , we encourage 𝑠 hol (𝑥, 𝑎 𝑖 ) > 𝑠 hol (𝑥, 𝑎 𝑗 )
+
+and optimize the aggregation policy with GRPO-style updates. Concretely, for each 𝑥 we sample a group of 𝐺 importance-level vectors {w(𝑔 ) (𝑥 )} 𝐺 𝑔 =1 from the policy 𝜋 𝜓 (· | 𝑥 ), where w(𝑔 ) (𝑥 ) ∈ {0, . . . , 𝐾 }4. We compute holistic semantic scores by Eq. (3) and define a preference-consistency reward: 
+
+𝑟 (𝑔 ) 
+
+> pw
+
+(𝑥, 𝑎 𝑖 , 𝑎 𝑗 ) = I𝑠 (𝑔 ) 
+
+> hol
+
+(𝑥, 𝑎 𝑖 ) > 𝑠 (𝑔 ) 
+
+> hol
+
+(𝑥, 𝑎 𝑗 ) for 𝑎 𝑖 ≻ 𝑎 𝑗 , (4) where 𝑠 (𝑔 ) 
+
+> hol
+
+(𝑥, 𝑎 ) ≜ (w(𝑔 ) (𝑥 )) ⊤s(𝑥, 𝑎 ). By sampling multiple weight-ing actions under the same 𝑥 , we compute advantages 𝐴 (𝑔 ) 
+
+> pw
+
+in the corresponding rollout group to stabilize learning under the binary preference reward. Finally, we optimize a KL-regularized GRPO ob-jective to improve preference consistency while keeping the policy close to a reference model: 
+
+max  
+
+> 𝜓
+
+E(𝑥,𝑎 𝑖 ,𝑎 𝑗 )∼D pw 
+
+"
+
+E{ˆz(𝑔 ) }𝐺 𝑔 =1∼𝜋 𝜓 (· | 𝑥 )
+
+"
+
+1
+
+𝐺 
+
+> 𝐺
+
+∑︁ 
+
+> 𝑔 =1
+
+𝐴 (𝑔 )
+
+> pw
+
+#
+
+− 𝛽 KL  𝜋 𝜓 (· | 𝑥 ) ∥ 𝜋 ref (· | 𝑥 ) #
+
+.
+
+(5) This training enables the aggregator to learn user-conditional cross-aspect trade-offs such that the resulting holistic semantic score 𝑠 hol (𝑥, 𝑎 ) is consistent with human pairwise preferences. 
+
+Outputs for downstream optimization. PSJ finally provides (i) interpretable aspect scores s(𝑥, 𝑎 ), and (ii) a holistic semantic score S-GRec: Personalized Semantic-Aware Generative Recommendation with Asymmetric Advantage Conference’17, July 2017, Washington, DC, USA Business Reward                                    
+
+> Advantage Norm Advantage Norm
+> Semantic Reward
+> Proposed: Asymmetric Advantage Fusion
+> (Stable & Selective Integration)
+> A𝑏𝑖𝑧 Asem
+> Traditional: Naive Reward Fusion
+> (Conflict & Instability)
+> Unstable Signal Aligned &Stable Signal
+> Consistency Check
+> 𝑟 𝑏𝑖𝑧 𝑟 𝑠𝑒𝑚
+> 𝐴 𝑏𝑖𝑧
+> +𝐴 𝑏𝑖𝑧
+> −
+> 𝐴 𝑠𝑒𝑚
+> +
+> 𝐴 𝑠𝑒𝑚
+> −
+> Business Reward Semantic Reward
+> 𝑟 𝑠𝑒𝑚 𝑟 𝑏𝑖𝑧
+> r𝑠𝑢𝑚
+> 𝑖 =r𝑏𝑖𝑧
+> 𝑖 +r𝑠𝑒𝑚
+> 𝑖
+> 𝐴 𝑠𝑢𝑚
+> 𝑖 =r𝑠𝑢𝑚
+> 𝑖 −mean {r𝑠𝑢𝑚
+> 1,…,r𝑠𝑢𝑚
+> 𝐺 }
+> 𝑠𝑡𝑑 {r𝑠𝑢𝑚
+> 1,…,r𝑠𝑢𝑚
+> 𝐺 }
+> GRPO
+
+Figure 3: Asymmetric Advantage Fusion 
+
+𝑠 hol (𝑥, 𝑎 ) obtained by weighting s(𝑥, 𝑎 ) with predicted w(𝑥 ). The scalar reward 𝑠 hol (𝑥, 𝑎 ) is used for subsequent recommendation optimization and will be fused with business rewards via A2PO. 
+
+## 3.3 Asymmetric Advantage Policy Optimization 
+
+Industrial generative recommendation is often optimized against (i) business-driven objectives (e.g., eCPM, CTR, GMV) and (ii) fine-grained semantic preferences. A naive approach is to fuse them at the reward level, e.g., 𝑟 = 𝑟 biz + 𝛼𝑟 sem . However, these rewards are heterogeneous in scale and distribution: business rewards are calibrated to platform metrics, while semantic rewards can exhibit context and judge-dependent variance. As a result, reward-level fusion is brittle [ 27 ], requiring sensitive manual tuning of 𝛼 and often yielding unstable updates when one signal interferes with the other. We therefore propose Asymmetric Advantage Policy Optimization (A2PO) , which performs fusion in the advantage space and treats business optimization as an anchor while selectively injecting semantic guidance (see Figure 3). 
+
+Heterogeneous reward formulation. For each sampled candidate 
+
+𝑦 (𝑖 ) under input 𝑥 (𝑖 ) , A2PO considers two rewards: 
+
+• Business reward 𝑟 (𝑖 ) 
+
+> biz
+
+: derived from platform objectives and feedback signals (e.g., eCPM/CTR/GMV-related rewards). 
+
+• Semantic reward 𝑟 (𝑖 )
+
+> sem
+
+: computed by PSJ as a holistic semantic score 𝑠 hol (𝑥 (𝑖 ) , 𝑎 (𝑖 ) ) for mapped candidates 𝑎 (𝑖 ) = Map (𝑦 (𝑖 ) ),capturing intent-relevance signals that are weak or missing in logs. Rather than forcing these rewards into a shared numerical space, we standardize them within each rollout group of size 𝐺 and compute objective-specific advantages 𝐴 (𝑖 ) 
+
+> biz
+
+and 𝐴 (𝑖 )
+
+> sem
+
+.
+
+Asymmetric alignment in advantage space. Even after standard-ization, semantic advantages may be misaligned with business optimization due to judge uncertainty and open-domain ambiguity. To safeguard the platform’s core revenue, A2PO uses business as an 
+
+anchor and activates semantic guidance only when it is consistent with the business signal. We define the fused advantage: 
+
+𝐴 (𝑖 ) = 𝐴 (𝑖 ) 
+
+> biz
+
++ 𝜆 (𝑖 ) 𝐴 (𝑖 )
+
+> sem
+
+, (6) where the semantic coefficient 𝜆 (𝑖 ) is computed by a dual-consistency rule: 
+
+𝜆 (𝑖 ) = I
+
+
+
+sign 
+
+
+
+𝐴 (𝑖 )
+
+> biz
+
+
+
+= sign 
+
+
+
+𝐴 (𝑖 )
+
+> sem
+
+ | {z }
+
+> gate
+
+·
+
+min 
+
+
+
+𝐴 (𝑖 ) 
+
+> biz
+
+, 𝐴 (𝑖 )
+
+> sem
+
+
+
+max 
+
+
+
+𝐴 (𝑖 ) 
+
+> biz
+
+, 𝐴 (𝑖 )
+
+> sem
+
+
+
++ 𝜖 
+
+| {z }
+
+> magnitude
+
+. (7) Directional consistency prevents semantic guidance from pushing the policy against the business update direction, while magnitude balancing attenuates semantic influence when it is disproportion-ately stronger than the business signal. 
+
+Bounded semantic contribution. When 𝜆 (𝑖 ) > 0, Eq. (7) implies 
+
+𝜆 (𝑖 ) 𝐴 (𝑖 ) 
+
+> sem
+
+≤ 𝐴 (𝑖 ) 
+
+> biz
+
+, (8) thereby upper-bounding the effective semantic contribution by the business advantage magnitude. This bound prevents semantic-induced spikes and stabilizes fusion without introducing additional tunable coefficients. 
+
+Optimization objective. We plug the rectified advantage 𝐴 (𝑖 ) into a GRPO-style clipped policy objective: 
+
+LA2PO = E𝑖 
+
+h
+
+min 
+
+
+
+𝜌 (𝑖 ) 𝐴 (𝑖 ) , clip 
+
+
+
+𝜌 (𝑖 ) , 1 − 𝛿, 1 + 𝛿 
+
+
+
+𝐴 (𝑖 ) i 
+
+,𝜌 (𝑖 ) =
+
+𝜋 𝜃 
+
+
+
+𝑦 (𝑖 ) | 𝑥 (𝑖 )
+
+
+
+𝜋 𝜃 old 
+
+ 𝑦 (𝑖 ) | 𝑥 (𝑖 )  .
+
+(9) where 𝛿 is the clipping threshold. By rectifying semantic super-vision through business-anchored consistency and a bounded se-mantic contribution, A2PO achieves stable multi-objective opti-mization under heterogeneous rewards while still benefiting from fine-grained semantic signals. 
+
+## 4 Experiment 
+
+We design experiments to answer the following questions: 
+
+• RQ1: Does S-GRec improve recommendation performance over state-of-the-art generative methods? 
+
+• RQ2: Is PSJ’s two-stage design necessary, and how does RL align-ment affect aspect scoring quality? 
+
+• RQ3: Can A2PO resolve semantic–business objective conflicts via advantage-level fusion? 
+
+• RQ4: Does S-GRec remain effective under sparse semantic sam-pling, enabling cost-scalable training? 
+
+• RQ5: Does semantic supervision promote beyond-history explo-ration, and does it improve user experience? 
+
+• RQ6: Does S-GRec yield measurable business gains in online deployment? 
+
+## 4.1 Experimental Setup 
+
+4.1.1 Datasets. To ensure fair comparison, we follow the experi-mental setup of MiniOneRec [ 21 ]. We evaluate on two widely used benchmarks from the Amazon Review dataset [ 17 ]: Office Products 
+
+(Office) and Industrial and Scientific (Industrial). The datasets are pre-processed using the same scripts as MiniOneRec, filtering users and items with fewer than five interactions. Data splits and statis-tics are identical to those reported in [ 21 ]. Neither dataset contains temporal or location metadata, so the PSJ Context aspect is dropped in all offline experiments. 
+
+4.1.2 Baselines. We compare S-GRec with two groups of baselines: 
+
+• Non-LLM-based: GRU4Rec [ 15 ], Caser [ 35 ], and SASRec [ 19 ]are traditional sequential models that rely on ID embeddings and sequence modeling. HSTU [ 46 ], TIGER [ 33 ], and LC-Rec [ 48 ]adopt generative paradigms with Semantic IDs. Conference’17, July 2017, Washington, DC, USA Jiang et al. 
+
+Table 1: Overall performance comparison on Amazon Industrial and Office datasets. Best results are bolded and second-best are underlined. Method Industrial Office HR@3 NDCG@3 HR@5 NDCG@5 HR@10 NDCG@10 HR@3 NDCG@3 HR@5 NDCG@5 HR@10 NDCG@10                                                                                                                                     
+
+> GRU4Rec 0.0638 0.0542 0.0774 0.0598 0.0999 0.0669 0.0629 0.0528 0.0789 0.0595 0.1019 0.0669 Caser 0.0618 0.0514 0.0717 0.0555 0.0942 0.0628 0.0748 0.0615 0.0865 0.0664 0.1093 0.0737 SASRec 0.0790 0.0700 0.0909 0.0748 0.1088 0.0806 0.0861 0.0769 0.0949 0.0805 0.1120 0.0858 HSTU 0.0927 0.0885 0.1037 0.0918 0.1163 0.0958 0.1134 0.1031 0.1252 0.1079 0.1400 0.1126 TIGER 0.0852 0.0742 0.1010 0.0807 0.1321 0.0908 0.0986 0.0852 0.1163 0.0960 0.1408 0.1002 LCRec 0.0915 0.0805 0.1057 0.0862 0.1332 0.0952 0.0921 0.0807 0.1048 0.0859 0.1237 0.0920 BIGRec 0.0931 0.0841 0.1092 0.0907 0.1370 0.0997 0.1069 0.0961 0.1204 0.1017 0.1434 0.1091 D30.1024 0.0991 0.1213 0.0989 0.1500 0.1082 0.1204 0.1055 0.1406 0.1139 0.1634 0.1213 S-DPO 0.1032 0.0906 0.1238 0.0991 0.1524 0.1082 0.1169 0.1033 0.1356 0.1110 0.1587 0.1255 MiniOneRec 0.1143 0.1011 0.1321 0.1084 0.1586 0.1167 0.1217 0.1088 0.1420 0.1172 0.1634 0.1242 S-GRec 0.1160 0.1031 0.1359 0.1113 0.1632 0.1202 0.1319 0.1173 0.1496 0.1246 0.1689 0.1308
+
+• LLM-based: BIGRec [ 3], D 3 [ 4], S-DPO [ 8 ], and MiniOneRec [ 21 ]. MiniOneRec serves as our base model, on top of which S-GRec introduces PSJ and A2PO. 
+
+4.1.3 Evaluation Metrics. We report Hit Rate (HR@ 𝐾 ) and Normal-ized Discounted Cumulative Gain (NDCG@ 𝐾 ) for 𝐾 ∈ { 3, 5, 10 }.All metrics are computed on the held-out test set. 
+
+4.1.4 Implementation Details. PSJ is built on Qwen3-4B [ 40 ] and trained following the two-stage pipeline in Section 3.2. We con-struct the training data from the production advertising system via a dedicated annotation platform: approximately 20k human-verified point-wise samples for aspect-level scoring and 40k pair-wise preference samples for preference aggregation. On the Ama-zon benchmarks, PSJ scores candidates using item text metadata available in the dataset. The generative recommender backbone is Qwen2.5-1.5B [ 41 ] with RQ-VAE tokenization, initialized from the MiniOneRec SFT checkpoint. A2PO training uses learning rate 
+
+1×10 −5, group size 𝐺 =16 , KL coefficient 𝛽 =0.04 . The instantiation of 
+
+𝑟 biz and 𝑟 sem follows the formulation in Section 3.3. On the Amazon benchmarks, 𝑟 biz is instantiated as a ranking-based proxy derived from the ground-truth next item, since monetary signals are unavail-able in public datasets; in the online deployment, 𝑟 biz corresponds to eCPM. 
+
+## 4.2 Overall Performance (RQ1) 
+
+Table 1 presents the overall performance comparison. S-GRec achieves the best results across all metrics on both datasets. Compared with its base model MiniOneRec, S-GRec improves on all metrics, with representative gains of 2.9% HR@10 and 3.0% NDCG@10 on In-dustrial, and 3.4% HR@10 and 5.3% NDCG@10 on Office. The consistent improvements indicate that the semantic supervision from PSJ, fused through A2PO, provides complementary prefer-ence signals beyond what the base generative model captures from behavioral sequences alone, without modifying the serving-time architecture. 
+
+## 4.3 Effectiveness of PSJ (RQ2) 
+
+We validate PSJ from two angles: (i) intrinsic scoring quality of the aspect-level scorer (Part A) against human annotations, and 
+
+Table 2: Intrinsic evaluation of Part A aspect scoring quality.                
+
+> Variant Description PairAUC PointAcc
+> DeepSeek-R1 Zero-shot reference 0.4617 0.4726 Qwen3-4B Pre-trained only 0.3987 0.4043 + SFT Supervised fine-tuning 0.4703 0.5202
+> + SFT + GRPO + RL alignment 0.8116 0.8687
+
+(ii) extrinsic impact of the two-stage pipeline (Part A → Part B) on downstream recommendation. 
+
+4.3.1 Aspect Scoring Quality. We evaluate Part A on 1,000 held-out point-wise samples from the production annotation platform, each containing a context–candidate pair with human scores across four semantic dimensions ( 𝐷 =4). We report two metrics, each com-puted per dimension and macro-averaged: PairAUC , the fraction of sample pairs whose predicted ordering agrees with the human-annotated ordering, and PointAcc , the rate at which the predicted discrete score exactly matches the human label. Table 2 includes DeepSeek-R1 [ 12 ] as a zero-shot reference. The pre-trained Qwen3-4B underperforms R1 on both metrics. SFT on human-verified labels raises PairAUC by 18% and PointAcc by 29% relative to Qwen3-4B, showing that structured aspect prediction benefits substantially from domain supervision. GRPO alignment yields the most significant gain, boosting PairAUC and PointAcc to 
+
+0.8116 and 0.8687 respectively—roughly a 2 × improvement over the pre-trained baseline. This confirms that domain-specific RL alignment is far more effective than model scale for aspect scoring. 
+
+4.3.2 Two-Stage Decomposition Performance. To test whether the two-stage PSJ design (aspect scoring → user-conditional aggre-gation) yields better semantic rewards than simpler alternatives, we fix A2PO and vary only the semantic reward source. Table 3 compares four configurations: 
+
+• MiniOneRec : business reward only (no semantic signal). 
+
+• + Aspect only : uniform aggregation of four aspect scores ( 𝑤 𝑑 =0.25 ), bypassing Part B. 
+
+• + Holistic only : a single Qwen3-4B trained to output a scalar semantic score directly, without aspect decomposition. S-GRec: Personalized Semantic-Aware Generative Recommendation with Asymmetric Advantage Conference’17, July 2017, Washington, DC, USA 
+
+Table 3: Ablation of PSJ pipeline on downstream recommen-dation. All variants use A2PO for reward fusion. 
+
+Variant Office Industrial 
+
+HR@10 NDCG@10 HR@10 NDCG@10 MiniOneRec 0.1634 0.1242 0.1586 0.1167 + Aspect only 0.1665 0.1257 0.1613 0.1170 + Holistic only 0.1677 0.1281 0.1637 0.1177 
+
+S-GRec 0.1689 0.1308 0.1632 0.1202 
+
+Table 4: Ablation of A2PO reward fusion. 𝑟 sem : semantic re-ward enabled. Adv: advantage-level standardization. 
+
+Variant Components Office Industrial 
+
+𝑟 sem Adv Gate Wt. HR@10 NDCG@10 HR@10 NDCG@10 MiniOneRec – – – – 0.1634 0.1242 0.1586 0.1167 Reward-Sum ✓ – – – 0.0904 0.0761 0.0585 0.0543 Adv-Sum ✓ ✓ – – 0.1515 0.1223 0.1348 0.1020 w/o Gate ✓ ✓ – ✓ 0.1691 0.1302 0.1591 0.1169 w/o Magnitude ✓ ✓ ✓ – 0.1652 0.1294 0.1624 0.1189 
+
+S-GRec ✓ ✓ ✓ ✓ 0.1689 0.1308 0.1632 0.1202 
+
+• S-GRec : PSJ with aspect scoring and user-conditional aggrega-tion. As shown in Table 3, all semantic variants outperform the business-only baseline, indicating that PSJ provides complementary supervi-sion. + Aspect only improves HR@10 on Office/Industrial (1.9%/1.7% relative) but yields limited NDCG gains, suggesting that uniform weights fail to capture user-specific trade-offs. + Holistic only fur-ther improves both metrics, yet S-GRec achieves the best NDCG@10 on both datasets. On Industrial, S-GRec slightly underperforms 
+
+Holistic only on HR@10 while substantially improving NDCG@10, indicating that personalized aggregation primarily sharpens top-rank precision rather than increasing hit coverage. Overall, the decompose-then-aggregate design produces more effective seman-tic rewards than either stage alone. 
+
+## 4.4 Effectiveness of A2PO (RQ3) 
+
+We validate that A2PO’s consistency-aware advantage-level fusion resolves the heterogeneous reward integration problem. Table 4 organizes six variants into two groups: the first three rows compare fusion granularity (reward-level vs. advantage-level), while the last three ablate A2PO’s internal submodules. All semantic-reward variants use PSJ. 
+
+4.4.1 Reward-level vs. Advantage-level Fusion. Reward-Sum causes a catastrophic collapse—HR@10 drops by 44.6% on Office and 63.1% on Industrial relative to MiniOneRec—demonstrating that raw re-ward summation allows the semantic signal to dominate and desta-bilize the ranking objective. Adv-Sum, which standardizes each reward within its rollout group before summation, substantially recovers performance, validating that operating in the advantage space removes absolute-scale dependence. However, Adv-Sum still underperforms MiniOneRec on both datasets, indicating that un-filtered semantic advantages can still conflict with the business optimization direction. Empirically, the directional consistency rate between 𝐴 biz and 𝐴 sem is 45.4% on the Amazon benchmarks and 0 0.01 0.02 0.05 0.1 0.2 0.5 1         
+
+> Sampling Ratio p
+> 0.12
+> 0.13
+> 0.14
+> 0.15
+> 0.16
+> 0.17
+> Metric Value
+> Cost-efficient
+> (a) Amazon Office
+> 00.01 0.02 0.05 0.1 0.2 0.5 1
+> Sampling Ratio p
+> 0.11
+> 0.12
+> 0.13
+> 0.14
+> 0.15
+> 0.16
+> 0.17
+> (b) Amazon Industrial
+> 0
+> 15
+> 30
+> 45
+> 0
+> 15
+> 30
+> 45
+> Token Cost (M)
+> HR@10 NDCG@10 Token Cost
+
+Figure 4: HR@10 and NDCG@10 vs. semantic sampling ratio 
+
+𝑝 on Office and Industrial. Level 0        
+
+> Re-consume Level 1
+> Intra-Cat Level 2
+> Cross-Cat Level 3
+> Unseen Root
+> 0
+> +2
+> +4
+> +6
+> Lift (%)
+> +1.6%
+> +3.2%
+> +5.6% +5.5%
+> n=154 n=353 n=1020 n=3339
+> Novelty Level
+> HR@3
+> HR@5
+> HR@10
+
+Figure 5: Relative HR lift (%) of S-GRec over MiniOneRec across novelty levels on the Office test set. 𝑛 denotes the number of test samples per bucket. 
+
+49.8% in the online advertising system, confirming that conflicts are frequent and that consistency gating is necessary. 
+
+4.4.2 Ablation of A2PO Submodules. Starting from Adv-Sum, adding either consistency gating or magnitude balancing already surpasses MiniOneRec on all metrics, indicating that each component can mitigate the residual conflict after standardization. Combining both yields the best NDCG@10 on both datasets, with 5.3% and 3.0% relative improvement over MiniOneRec on Office and Industrial respectively. Among A2PO variants, removing the gate hurts In-dustrial NDCG@10 the most, confirming that gating is critical for filtering directionally misaligned semantic signals. 
+
+## 4.5 Cost-Scalability Analysis (RQ4) 
+
+A key practical concern for LLM-based semantic supervision is cost: invoking PSJ on every training sample is prohibitively expensive at industrial scale. We vary the sampling ratio 𝑝 —the fraction of instances receiving semantic rewards (cost ∝ 𝑝 ). Figure 4 shows that S-GRec achieves near-saturated performance at 𝑝 =0.05 : 99.1% of full performance on Office and 99.6% on Industrial, enabling a 
+
+20 × cost reduction. We adopt 𝑝 =0.05 in online deployment. We suspect 5% is sufficient because semantic supervision acts as a shared calibration signal on top of an already strong base policy, and A2PO further increases its precision by gating out directionally misaligned semantic advantages, leading to fast saturation. Conference’17, July 2017, Washington, DC, USA Jiang et al. 
+
+Table 5: Case study on Office. Left columns 1–3 are staggered to accommodate additional candidate analysis in right columns 4–11. ⋆ denotes the ground-truth target.                                                                   
+
+> User History MiniOneRec S-GRec Item Candidate Prof. Fut. Nov. 𝒔 hol Mini S-GRec
+> top5 top5 top5 Drafting Erasers ⋆1.0 1.0 1.0 0.92 #6 #1
+> (1) Sharpener Blades 1. Waterbrush 1. Erasers ⋆Metallic Pencils 1.0 0.5 1.0 0.75 #3 #3 (2) Brass Sharpener 2. Pencils (48) 2. Pencils (48) Waterbrush (Small Tip) 0.5 0.5 1.0 0.56 #1 #4 (3) Artists’ Pencils 3. Metallic Pencils 3. Metallic Pencils Portrait Set (24) 1.0 0.5 0.0 0.54 #4 #5 (4) Inktense Pencils 4. Portrait Set 4. Waterbrush Colored Pencils (48) 1.0 0.0 0.0 0.38 #2 #2 (5) Verithin Pencils 5. Sargent Pencils 5. Portrait Set Sargent Pencils (12) 0.5 0.5 0.0 0.35 #5 –
+
+## 4.6 Semantic-Guided Exploration Analysis (RQ5) 
+
+The overall gains reported in RQ1 aggregate across all test instances. A natural question is: where does semantic supervision help most? 
+
+We hypothesize that its value concentrates on instances where behavioral signals are sparse—i.e., where the target item falls outside the user’s historical patterns. To test this, we stratify the Amazon Office test set by history novelty and compare S-GRec against the MiniOneRec baseline, reporting relative HR lift. 
+
+4.6.1 History Novelty Analysis. We measure novelty w.r.t. the user’s history H and bucket each target item by how far it generalizes beyond previously seen categories: 
+
+• Level 0: Re-consumption. The target item has appeared in history ( target ∈ H ). 
+
+• Level 1: Intra-Category. The target is new, but shares the same sub-category (𝑐 1, 𝑐 2) with at least one historical item. 
+
+• Level 2: Cross-Category. The target shares the same root cate-gory 𝑐 1 with history, but belongs to a new sub-category 𝑐 2.
+
+• Level 3: Unseen Root. The target’s root category is unseen in history ( 𝑐 1 (target ) ∉ 𝑐 1 (H ) ). As shown in Figure 5, the relative lift of S-GRec over the Min-iOneRec baseline generally increases from Level 0 to Level 3. On Re-consumption targets, S-GRec yields marginal gains (HR@5: +1.6% ), while on Unseen Root targets the gain reaches +5.5% . This trend sug-gests that high-novelty instances are harder for the behavior-only baseline: when targets deviate from historical categories, behav-ioral co-occurrence becomes sparse and MiniOneRec over-exploits familiar categories, under-ranking cross-category complements. PSJ supplies a transferable content-level quality prior that compen-sates for this failure mode, so the benefit of semantic supervision increases with novelty. 
+
+4.6.2 Case Study. Table 5 illustrates how S-GRec enables cross-category exploration (Case #1718). For a user purchasing art pencils, the ground-truth is a complementary drafting eraser—a category absent from their history. While the baseline ranks the target at #6 (miss@5 ), S-GRec promotes it to #1 ( hit@5 ). We apply PSJ post-hoc to all candidates to interpret the rank-ing shift. The learned aspect weights for this user are 𝑤 Prof =0.15 ,
+
+𝑤 Fut =0.42 , 𝑤 Nov =0.31 (Context is dropped; see Section 4.1), heavily favoring Future Interest. History-similar candidates (e.g., Colored Pencils) score high on Profile but low-to-zero on Future Interest 
+
+and Novelty , yielding moderate 𝑠 hol . Conversely, the target eraser achieves the highest 𝑠 hol (0.92) thanks to max Future Interest and full Novelty . The baseline’s top-ranked Waterbrush, though novel, scores only 𝑠 hol =0.56 due to moderate Future Interest (0.5). Accord-ingly, S-GRec demotes the Waterbrush from #1 to #4 while elevating the eraser to the top, demonstrating that A2PO effectively distills content-level reasoning (pencils → erasers) into ranking improve-ments that behavioral co-occurrence fails to capture. 
+
+## 4.7 Online A/B Test (RQ6) 
+
+To evaluate the real-world impact of S-GRec, we first validate it in a simulation environment, where it achieves a 5.5% uplift in eCPM. Following this validation, we launch an online A/B test on 5% of the advertising traffic in WeChat Channels. Compared with the pro-duction baseline, S-GRec yields +1.19% GMV, +1.55% GMV-Normal (ads optimized for clicks or conversions, which accounts for the majority of total GMV), +1.16% CTR, and −2.02% dislike rate. The concurrent improvement in both business revenue and user satis-faction confirms that S-GRec delivers meaningful commercial gains in a high-concurrency industrial environment, and validates the LLM-as-Judge paradigm as a practical path to enhance generative recommendation without requiring LLM inference at serving time. 
+
+## 5 Conclusion 
+
+This paper studies how to leverage LLM semantic priors in in-dustrial generative recommendation under two deployment con-straints: strict alignment to platform business objectives and pro-hibitive LLM inference cost at scale. To this end, we propose S-GRec, which distills LLM semantics into train-time supervision via a Personalized Semantic Judge (PSJ) that aggregates aspect-level semantic evidence into user-conditional scores for each candidate, and optimizes the generator with Asymmetric Advantage Policy Optimization (A2PO) that anchors updates on business rewards while selectively injecting reliable semantic guidance in the ad-vantage space. Experiments on public benchmarks and a large-scale advertising system, including online A/B tests, show that S-GRecconsistently improves recommendation quality and delivers measurable business gains without requiring serving-time LLM inference. Future work includes extending the judge to richer pref-erence dimensions and improving robustness under distribution shifts and evolving platform objectives. 
+
+## References         
+
+> [1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Floren-cia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al .2023. Gpt-4 technical report. arXiv preprint arXiv:2303.08774
+> (2023). [2] Yuntao Bai, Saurav Kadavath, Sandipan Kundu, Amanda Askell, Jackson Kernion, Andy Jones, Anna Chen, Anna Goldie, Azalia Mirhoseini, Cameron McKinnon, et al .2022. Constitutional ai: Harmlessness from ai feedback. arXiv preprint arXiv:2212.08073 (2022).
+
+S-GRec: Personalized Semantic-Aware Generative Recommendation with Asymmetric Advantage Conference’17, July 2017, Washington, DC, USA 
+
+[3] Keqin Bao, Jizhi Zhang, Wenjie Wang, Yang Zhang, Zhengyi Yang, Yanchen Luo, Chong Chen, Fuli Feng, and Qi Tian. 2025. A bi-step grounding paradigm for large language models in recommendation systems. ACM Transactions on Recommender Systems 3, 4 (2025), 1–27. [4] Keqin Bao, Jizhi Zhang, Yang Zhang, Xinyue Huo, Chong Chen, and Fuli Feng. 2024. Decoding Matters: Addressing Amplification Bias and Homogeneity Issue in Recommendations for Large Language Models. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing, EMNLP 2024, Miami, FL, USA, November 12-16, 2024 . Association for Computational Linguistics. [5] Keqin Bao, Jizhi Zhang, Yang Zhang, Wenjie Wang, Fuli Feng, and Xiangnan He. 2023. Tallrec: An effective and efficient tuning framework to align large language model with recommendation. In Proceedings of the 17th ACM Conference on Recommender Systems . 1007–1014. [6] Ben Chen, Xian Guo, Siyuan Wang, Zihan Liang, Yue Lv, Yufei Ma, Xinlong Xiao, Bowen Xue, Xuxin Zhang, Ying Yang, et al . 2025. Onesearch: A preliminary exploration of the unified end-to-end generative framework for e-commerce search. arXiv preprint arXiv:2509.03236 (2025). [7] Junyi Chen, Lu Chi, Bingyue Peng, and Zehuan Yuan. 2024. Hllm: Enhancing sequential recommendations via hierarchical large language models for item and user modeling. arXiv preprint arXiv:2409.12740 (2024). [8] Yuxin Chen, Junfei Tan, An Zhang, Zhengyi Yang, Leheng Sheng, Enzhi Zhang, Xiang Wang, and Tat-Seng Chua. 2024. On Softmax Direct Preference Optimiza-tion for Recommendation. Advances in Neural Information Processing Systems 
+
+(2024). [9] Ganqu Cui, Lifan Yuan, Ning Ding, Guanming Yao, Bingxiang He, Wei Zhu, Yuan Ni, Guotong Xie, Ruobing Xie, Yankai Lin, et al . 2023. Ultrafeedback: Boosting language models with scaled ai feedback. arXiv preprint arXiv:2310.01377 (2023). [10] Jiaxin Deng, Shiyao Wang, Kuo Cai, Lejian Ren, Qigen Hu, Weifeng Ding, Qiang Luo, and Guorui Zhou. 2025. Onerec: Unifying retrieve and rank with generative recommender and iterative preference alignment. arXiv preprint arXiv:2502.18965 
+
+(2025). [11] Yann Dubois, Chen Xuechen Li, Rohan Taori, Tianyi Zhang, Ishaan Gulrajani, Jimmy Ba, Carlos Guestrin, Percy S Liang, and Tatsunori B Hashimoto. 2023. Al-pacafarm: A simulation framework for methods that learn from human feedback. 
+
+Advances in Neural Information Processing Systems 36 (2023), 30039–30069. [12] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu, Shirong Ma, Peiyi Wang, Wenfeng Liang, et al . 2025. DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning. Nature 
+
+645, 8081 (2025), 633–638. doi:10.1038/s41586-025-09422-z [13] Xian Guo, Ben Chen, Siyuan Wang, Ying Yang, Chenyi Lei, Yuqing Ding, and Han Li. 2025. OneSug: The Unified End-to-End Generative Framework for E-commerce Query Suggestion. arXiv preprint arXiv:2506.06913 (2025). [14] Xuegang Hao, Ming Zhang, Alex Li, Xiangyu Qian, Zhi Ma, Yanlong Zang, Shijie Yang, Zhongxuan Han, Xiaolong Ma, Jinguang Liu, et al . 2025. OxygenREC: An Instruction-Following Generative Framework for E-commerce Recommendation. 
+
+arXiv preprint arXiv:2512.22386 (2025). [15] Balázs Hidasi, Alexandros Karatzoglou, Linas Baltrunas, and Domonkos Tikk. 2016. Session-based Recommendations with Recurrent Neural Networks. In The 4th International Conference on Learning Representations .[16] Min Hou, Le Wu, Yuxin Liao, Yonghui Yang, Zhen Zhang, Changlong Zheng, Han Wu, and Richang Hong. 2025. A survey on generative recommendation: Data, model, and tasks. arXiv preprint arXiv:2510.27157 (2025). [17] Yupeng Hou, Jiacheng Li, Zhankui He, An Yan, Xiusi Chen, and Julian McAuley. 2024. Bridging Language and Items for Retrieval and Recommendation. arXiv:2403.03952 [cs.IR] https://arxiv.org/abs/2403.03952 [18] Jianchao Ji, Zelong Li, Shuyuan Xu, Wenyue Hua, Yingqiang Ge, Juntao Tan, and Yongfeng Zhang. 2024. GenRec: Large Language Model for Generative Recommendation. In European Conference on Information Retrieval .[19] Wang-Cheng Kang and Julian J. McAuley. 2018. Self-Attentive Sequential Rec-ommendation. In 2018 IEEE International Conference on Data Mining .[20] Seungone Kim, Jamin Shin, Yejin Cho, Joel Jang, Shayne Longpre, Hwaran Lee, Sangdoo Yun, Seongjin Shin, Sungdong Kim, James Thorne, et al . 2023. Prometheus: Inducing fine-grained evaluation capability in language models. In 
+
+The Twelfth International Conference on Learning Representations .[21] Xiaoyu Kong, Leheng Sheng, Junfei Tan, Yuxin Chen, Jiancan Wu, An Zhang, Xiang Wang, and Xiangnan He. 2025. MiniOneRec: An Open-Source Framework for Scaling Generative Recommendation. arXiv:2510.24431 [cs.IR] https://arxiv. org/abs/2510.24431 [22] Peng Lai, Jianjie Zheng, Sijie Cheng, Yun Chen, Peng Li, Yang Liu, and Guanhua Chen. 2025. Beyond the Surface: Enhancing LLM-as-a-Judge Alignment with Human via Internal Representations. arXiv preprint arXiv:2508.03550 (2025). [23] Doyup Lee, Chiheon Kim, Saehoon Kim, Minsu Cho, and Wook-Shin Han. 2022. Autoregressive image generation using residual quantization. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 11523–11532. [24] Harrison Lee, Samrat Phatale, Hassan Mansoor, Thomas Mesnard, Johan Ferret, Kellie Lu, Colton Bishop, Ethan Hall, Victor Carbune, Abhinav Rastogi, et al .2023. Rlaif vs. rlhf: Scaling reinforcement learning from human feedback with ai feedback. arXiv preprint arXiv:2309.00267 (2023). [25] Xiaopeng Li, Bo Chen, Junda She, Shiteng Cao, You Wang, Qinlin Jia, Haiying He, Zheli Zhou, Zhao Liu, Ji Liu, Zhiyang Zhang, Yu Zhou, Guoping Tang, Yiqing Yang, Chengcheng Guo, Si Dong, Kuo Cai, Pengyue Jia, Maolin Wang, Wanyu Wang, Shiyao Wang, Xinchen Luo, Qigen Hu, Qiang Luo, Xiao Lv, Chaoyi Ma, Ruiming Tang, Kun Gai, Guorui Zhou, and Xiangyu Zhao. 2025. A Survey of Generative Recommendation from a Tri-Decoupled Perspective: Tokenization, Architecture, and Optimization. Preprints (December 2025). doi:10.20944/preprints202512.0203. v1 [26] Jiacheng Lin, Tian Wang, and Kun Qian. 2025. Rec-r1: Bridging generative large language models and user-centric recommendation systems via reinforcement learning. arXiv preprint arXiv:2503.24289 (2025). [27] Shih-Yang Liu, Xin Dong, Ximing Lu, Shizhe Diao, Peter Belcak, Mingjie Liu, Min-Hung Chen, Hongxu Yin, Yu-Chiang Frank Wang, Kwang-Ting Cheng, et al .2026. Gdpo: Group reward-decoupled normalization policy optimization for multi-reward rl optimization. arXiv preprint arXiv:2601.05242 (2026). [28] Yang Liu, Dan Iter, Yichong Xu, Shuohang Wang, Ruochen Xu, and Chenguang Zhu. 2023. G-eval: NLG evaluation using gpt-4 with better human alignment. 
+
+arXiv preprint arXiv:2303.16634 (2023). [29] Zihan Liu, Yupeng Hou, and Julian McAuley. 2024. Multi-behavior generative recommendation. In Proceedings of the 33rd ACM International Conference on Information and Knowledge Management . 1575–1585. [30] Xinchen Luo, Jiangxia Cao, Tianyu Sun, Jinkai Yu, Rui Huang, Wei Yuan, Hezheng Lin, Yichen Zheng, Shiyao Wang, Qigen Hu, et al . 2025. Qarm: Quantitative alignment multi-modal recommendation at kuaishou. In Proceedings of the 34th ACM International Conference on Information and Knowledge Management . 5915– 5922. [31] Fabian Mentzer, David Minnen, Eirikur Agustsson, and Michael Tschannen. 2023. Finite Scalar Quantization: VQ-VAE Made Simple. arXiv:2309.15505 [cs.CV] https://arxiv.org/abs/2309.15505 [32] Junyan Qiu, Ze Wang, Fan Zhang, Zuowu Zheng, Jile Zhu, Jiangke Fan, Teng Zhang, Haitao Wang, and Xingxing Wang. 2025. One Model to Rank Them All: Unifying Online Advertising with End-to-End Learning. arXiv preprint arXiv:2505.19755 (2025). [33] Shashank Rajput, Nikhil Mehta, Anima Singh, Raghunandan Keshavan, Trung Vu, Lukasz Heidt, Lichan Hong, Yi Tay, Vinh Q Tran, Jonah Samost, et al . 2023. Rec-ommender Systems with Generative Retrieval. In Advances in Neural Information Processing Systems . 10299–10315. [34] Jiakai Tang, Yujie Luo, Xunke Xi, Fei Sun, Xueyang Feng, Sunhao Dai, Chao Yi, Dian Chen, Zhujin Gao, Yang Li, et al . 2025. Interactive Recommendation Agent with Active User Commands. arXiv preprint arXiv:2509.21317 (2025). [35] Jiaxi Tang and Ke Wang. 2018. Personalized Top-N Sequential Recommenda-tion via Convolutional Sequence Embedding. In Proceedings of the 11th ACM International Conference on Web Search and Data Mining .[36] Wenjie Wang, Honghui Bao, Xinyu Lin, Jizhi Zhang, Yongqi Li, Fuli Feng, See-Kiong Ng, and Tat-Seng Chua. 2024. Learnable item tokenization for generative recommendation. In Proceedings of the International Conference on Information and Knowledge Management . 2400–2409. [37] Ye Wang, Jiahao Xun, Minjie Hong, Jieming Zhu, Tao Jin, Wang Lin, Haoyuan Li, Linjun Li, Yan Xia, Zhou Zhao, et al . 2024. Eager: Two-stream generative recommender with behavior-semantic collaboration. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining . 3245–3254. [38] Zhipeng Wei, Kuo Cai, Junda She, Jie Chen, Minghao Chen, Yang Zeng, Qiang Luo, Wencong Zeng, Ruiming Tang, Kun Gai, et al . 2025. Oneloc: Geo-aware generative recommender systems for local life service. arXiv preprint arXiv:2508.14646 (2025). [39] Longtao Xiao, Haozhao Wang, Cheng Wang, Linfei Ji, Yifan Wang, Jieming Zhu, Zhenhua Dong, Rui Zhang, and Ruixuan Li. 2025. Unger: Generative recommendation with a unified code via semantic and collaborative integration. 
+
+ACM Transactions on Information Systems 44, 2 (2025), 1–31. [40] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, et al . 2025. Qwen3 technical report. arXiv preprint arXiv:2505.09388 (2025). [41] An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jingren Zhou, Junyang Lin, Kai Dang, Keming Lu, Keqin Bao, Kexin Yang, Le Yu, Mei Li, Mingfeng Xue, Pei Zhang, Qin Zhu, Rui Men, Runji Lin, Tianhao Li, Tingyu Xia, Xingzhang Ren, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yu Wan, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zihan Qiu. 2024. Qwen2.5 Technical Report. CoRR 
+
+(2024). [42] Jiayi Ye, Yanbo Wang, Yue Huang, Dongping Chen, Qihui Zhang, Nuno Moniz, Tian Gao, Werner Geyer, Chao Huang, Pin-Yu Chen, et al . 2024. Justice or prejudice? quantifying biases in llm-as-a-judge. arXiv preprint arXiv:2410.02736 
+
+(2024). [43] Chao Yi, Dian Chen, Gaoyang Guo, Jiakai Tang, Jian Wu, Jing Yu, Mao Zhang, Wen Chen, Wenjun Yang, Yujie Luo, et al . 2025. RecGPT-V2 Technical Report. 
+
+arXiv preprint arXiv:2512.14503 (2025). [44] Chao Yi, Dian Chen, Gaoyang Guo, Jiakai Tang, Jian Wu, Jing Yu, Mao Zhang, Sunhao Dai, Wen Chen, Wenjun Yang, et al . 2025. Recgpt technical report. arXiv Conference’17, July 2017, Washington, DC, USA Jiang et al. 
+
+preprint arXiv:2507.22879 (2025). [45] Weizhe Yuan, Richard Yuanzhe Pang, Kyunghyun Cho, Xian Li, Sainbayar Sukhbaatar, Jing Xu, and Jason E Weston. 2024. Self-rewarding language models. In Forty-first International Conference on Machine Learning .[46] Jiaqi Zhai, Lucy Liao, Xing Liu, Yueming Wang, Rui Li, Xuan Cao, Leon Gao, Zhaojie Gong, Fangda Gu, Jiayuan He, et al . 2024. Actions Speak Louder than Words: Trillion-parameter Sequential Transducers for Generative Recommen-dations. In Proceedings of the 41st International Conference on Machine Learning .58484–58509. [47] Jun Zhang, Yi Li, Yue Liu, Changping Wang, Yuan Wang, Yuling Xiong, Xun Liu, Haiyang Wu, Qian Li, Enming Zhang, et al . 2025. GPR: Towards a Generative Pre-trained One-Model Paradigm for Large-Scale Advertising Recommendation. 
+
+arXiv preprint arXiv:2511.10138 (2025). [48] Bowen Zheng, Yupeng Hou, Hongyu Lu, Yu Chen, Wayne Xin Zhao, Ming Chen, and Ji-Rong Wen. 2024. Adapting large language models by integrating collaborative semantics for recommendation. In 2024 IEEE 40th International Conference on Data Engineering (ICDE) . IEEE, 1435–1448. [49] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric Xing, et al . 2023. Judging llm-as-a-judge with mt-bench and chatbot arena. Advances in Neural Information Processing Systems 36 (2023), 46595–46623. [50] Zuowu Zheng, Ze Wang, Fan Yang, Jiangke Fan, Teng Zhang, Yongkang Wang, and Xingxing Wang. 2025. EGA-V2: An End-to-end Generative Framework for Industrial Advertising. arXiv preprint arXiv:2505.17549 (2025). [51] Guorui Zhou, Jiaxin Deng, Jinghao Zhang, Kuo Cai, Lejian Ren, Qiang Luo, Qian-qian Wang, Qigen Hu, Rui Huang, Shiyao Wang, et al . 2025. OneRec Technical Report. arXiv preprint arXiv:2506.13695 (2025). [52] Guorui Zhou, Hengrui Hu, Hongtao Cheng, Huanjie Wang, Jiaxin Deng, Jinghao Zhang, Kuo Cai, Lejian Ren, Lu Ren, Liao Yu, et al . 2025. Onerec-v2 technical report. arXiv preprint arXiv:2508.20900 (2025). [53] Lianghui Zhu, Xinggang Wang, and Xinlong Wang. 2023. Judgelm: Fine-tuned large language models are scalable judges. arXiv preprint arXiv:2310.17631 (2023). S-GRec: Personalized Semantic-Aware Generative Recommendation with Asymmetric Advantage Conference’17, July 2017, Washington, DC, USA 
+
+## A Summary of Mathematical Notations 
+
+Table 6 presents all the symbols referenced in the Methodology section. 
+
+Table 6: Summary of Mathematical Notations. 
+
+Symbol Description 
+
+Problem Definition & Preliminaries 
+
+𝑥 Unified user input including profile, behavior history, and request context features. 
+
+𝑦 Semantic ID (SID) sequence representing an item, y =
+
+(𝑦 1, . . . , 𝑦 𝑇 ).
+
+𝑎 Candidate item or ad mapped from the SID sequence, 𝑎 =
+
+Map (𝑦 ).
+
+𝜋 𝜃 Generative recommendation policy with parameters 𝜃 .
+
+Y ( 𝑥 ) Set of sampled candidate sequences for input 𝑥 with group size 𝐺 .
+
+Personalized Semantic Judge (PSJ) 
+
+s(𝑥, 𝑎 ) Fine-grained aspect score vector ( ∈ R4) covering four se-mantic dimensions. 
+
+𝑠 𝑑 (𝑥, 𝑎 ) Discrete score for the 𝑑 -th semantic aspect, where 𝑑 ∈{1, . . . , 4}.
+
+w(𝑥 ) Context-dependent importance weight vector for prefer-ence aggregation. 
+
+𝑠 hol (𝑥, 𝑎 ) Holistic semantic score computed as the weighted sum 
+
+w(𝑥 )⊤s(𝑥, 𝑎 ).
+
+𝑟 asp Point-wise scalar reward for aspect scorer training (Part A). 
+
+𝑟 pw Pairwise consistency scalar reward for preference aggrega-tion (Part B). 
+
+Asymmetric Advantage Policy Optimization (A2PO) 
+
+𝑟 biz , 𝑟 sem Business-driven rewards (e.g., eCPM) and semantic rewards (derived from 𝑠 hol ). 
+
+𝐴 biz , 𝐴 sem Standardized group-relative advantages for business and semantic objectives. 
+
+𝐴 (𝑖 ) Final fused asymmetric advantage for the 𝑖 -th sample. 
+
+𝜆 (𝑖 ) Adaptive coefficient gating the semantic advantage contri-bution. 
+
+LA2PO The final objective function for S-GRec policy optimization. 
+
+## B Data Annotation 
+
+The point - wise fine -grained scoring rules are defined in Table 7, which includes four tasks: user - profile relevance, future -interest rel-evance, novelty, and contextual relevance. We employ DeepSeek - R1 as the initial judge model to generate preliminary scores along with intermediate reasoning. Subsequently, we introduce a human cal-ibration step that focuses on verifying whether the intermediate reasoning produced by DeepSeek -R1 is correct and whether the final scores adhere to the defined scoring rules. At the same time, we collect feedback from human annotators to refine ambiguous aspects of the original annotation-rule definitions. The pair - wise scoring rule is defined in Table 8, which contains one task: given a user’s information and two candidate advertise-ments, determine which advertisement the user is more likely to prefer. We provide four options: " 𝐴 > 𝐵 " (i.e., the user prefers A over B), " 𝐴 < 𝐵 " (the user prefers B over A), "tie (both equally good)", and "tie (both equally poor)", so as to reduce labeling noise. 
+
+## C Prompts 
+
+As depicted in Figure 6, the aspect-level semantic scoring task and the user-conditional preference aggregation task can share the same user input. Therefore, we structure the prompt template into two parts: a common prompt defined in Ad Scoring Common Prompt Template , which contains the complete user information and the definitions of the four scoring tasks (with detailed scoring rules for each task provided in Table 7), and a task-specific part that differs for each objective. For aspect-level semantic scoring task, the template is defined in Aspect Level Scoring Task Prompt , while for user-conditional preference aggregation task, the template is defined in Preference Aggregation Task Prompt .
+
+## D Case Study 
+
+Figure 8 presents a case of the scoring process. For aspect-level scoring, the LLM conducts in -depth analysis of the user’s behav-ioral history to extract user - profile information and future -interest signals. The LLM is capable of accurately identifying the user’s interest preferences and predicting potential interest extensions. The Aggregator LLM performs reasoning on the user’s behav-ioral patterns across the four defined dimensions, assesses the influ-ence of each dimension on the user’s behavior, and thereby designs a reasonable set of scoring weights. 
+
+## E Deployment 
+
+S-GRec has been successfully deployed in the WeChat Channels ser-vice at Tencent. As shown in Figure 7, the architecture comprises the Model Server and Data Production modules. During opera-tion, the Online Infer Server processes user requests and transmits interaction logs to the GRPO Sample Server. We employ a resource-efficient sampling strategy for reward generation: the Business Reward Model scores 100% of the data for general business metrics, while the Personalized Semantic Judge evaluates a 5% subset for semantic quality. The Offline Model Trainer utilizes the aggregated training data and periodically updates the online server parameters. GRPO  Sample        
+
+> Server
+> Personalized
+> Semantic Judge
+> Business
+> Reward Model
+> Online Infer Server Offline Model Trainer
+> 100%
+> 5%
+> Training
+> Data
+> Update
+> Parameters
+> Collect Log
+> Request
+> Recommend
+> Data Production
+> Model Server
+
+Figure 7: Framework of S-GRec Deployment Conference’17, July 2017, Washington, DC, USA Jiang et al. Ad Scoring Common Prompt Template 
+
+# Role 
+
+You are an expert in recommendation systems, pro fi cient in conducting in-depth analysis by integrating users’ basic information with historical behavioral data, and accurately evaluating and scoring candidate advertisements based on this analysis, thereby genuinely re fl ecting user preferences. #User Information Basic Info: Age{}, Gender{}, Location{}, Other attributes. Recent ad behavior sequence: {} Recent article reading sequence: {} Recent short‑video watching sequence: {} #Context Current Time: {}, Location:{} #Task There are four scoring tasks: 
+
+User Pro fi le Relevance 
+
+Based on the user’s basic information and behavior history, summarize the user’s long‑term, stable interests into a user pro fi le. Follow the rules below:{} Then, according to the summarized user pro fi le and the candidate ad information, score each ad for user‑pro fi le relevance. Scoring criteria:{} 
+
+Future Interest Relevance 
+
+Infer the interest points the user is most likely to click on next, considering recent user behavior and the continuity/expansion of interests. Follow the rules below:{} Then, based on the predicted interest points the user is most likely to click, combine the candidate ad information to score each ad for future‑interest relevance. Scoring criteria:{} 
+
+Novelty 
+
+Combine user preference information and candidate ad information to assign a novelty score for each ad. Follow the rules below:{} Scoring criteria:{} 
+
+Context Relevance 
+
+Combine contextual information to assign a context‑relevance score for each ad. Scoring criteria:{} 
+
+Output Check 
+
+Verify that the output meets the format requirements. If not, revise it until it does. 
+
+Additional Information:{} 
+
+Aspect Level Scoring Task Prompt 
+
+Candidate Advertisement List : {} 
+
+#Task :Please perform scoring according to the four scoring tasks de fi ned above, and output the con fi dence level for each score as an integer between 0 and 10, where 10 indicates very certain and 0 indicates completely uncertain. #Output Format :Place the scores for each advertisement within `<scores>` and `</scores>` tags, with each advertisement on a separate line as follows: `Advertisement {id}: {user pro fi ling score}@{future interest score}@{novelty score}@{contextual relevance score}` 
+
+#Output Validation :Check whether the output satis fi es the format requirements. If not, please revise until it meets the requirements. 
+
+Preference Aggregation Task Prompt 
+
+#Task :
+
+Based on the de fi nitions of the four scoring tasks above, please output a set of 4‑dimensional weights, each ranging from 0 to 1, to be used for weighting the four scores of subsequent candidate advertisements, thereby obtaining the  fi nal score. 
+
+#Requirements :
+
+The 4‑dimensional weights should fully account for the importance of each dimension, analyze the user’s behavioral preference in each dimension, and judge the importance of each dimension to the user, so that the weighted score can re fl ect the user’s true preference across different candidate advertisements. 
+
+#Output Format :
+
+The weights should be placed within `<weights>w0, w1, w2, w3</weights>`. 
+
+Check whether the output satis fi es the format requirements. If not, please revise until it meets the requirements. 
+
+Figure 6: Prompt templates for PSJ. The common prompt provides user information and scoring task definitions, while the task-specific prompts define aspect-level scoring and preference aggregation respectively. S-GRec: Personalized Semantic-Aware Generative Recommendation with Asymmetric Advantage Conference’17, July 2017, Washington, DC, USA 红唇的魅⼒，是夏天 的颜⾊没
+
+错了！#⼝红试⾊#我被⼝红控
+
+制了
+
+告别油痘肌烦恼！eLL 泥膜
+
+强⼒吸油清洁 ，助你绽放
+
+净透肌！
+
+床单被套螨⾍滋⽣？康佳家⽤
+
+除螨仪，让你安⼼睡个好觉！
+
+scores 
+
+⽤户画像: 1 
+
+未来 兴趣：1
+
+新奇性：0
+
+上下 ⽂：0
+
+Candidates 
+
+scores 
+
+⽤户画像: 0.5 
+
+未来 兴趣：1
+
+新奇性：0
+
+上下 ⽂：0
+
+scores 
+
+⽤户画像: 0 
+
+未来 兴趣：0.5 
+
+新奇性：1
+
+上下 ⽂：0
+
+Output from Aspect Scorer 
+
+<未来 兴趣分析>
+
+分析过程：基于⽤户画像和近期⾏为，推测其下⼀步可能点击的兴趣点。优先考虑强兴趣的延伸、近期⾏为的补充，以及季节性/⽣活
+
+场景的联想。
+
+1.  ⺟婴延伸：近期点击婴幼⼉营养品，可能延伸⾄其他婴幼⼉⽤品（如辅⻝、零⻝、洗护、玩具）、⼉童服装，或针对⼤龄⼉童的⽤
+
+品（如学习桌、书包）。
+
+2. 美妆延伸：近期点击⼝红，可能延伸⾄其他彩妆（如粉底、眼影、定妆）、护肤进阶（如精华、眼霜、⾯膜），或美容仪器。
+
+3. 家庭清洁 延伸：历史 有清洁 剂需求，可能延伸⾄更⾼效的清洁 ⼯具（如洗地机、除螨仪、吸尘器）。
+
+4.  ⾃我关爱延伸：作为中 年职业⼥性，可能关注健康养⽣（如滋补品、按摩器材、体检服务）、服饰穿搭（如秋季外套 、鞋靴 、包包）。
+
+5. 季节性与节⽇：当前时间为10 ⽉中旬（秋季），可能关注秋装、换季护肤品、秋季滋补品、国庆后旅⾏⽤品、冬季预热⽤品（如保
+
+暖内⾐、暖宝宝 ）。
+
+6. 家庭成员关怀延 伸：历史 有为丈夫购买⾐物、汽⻋⽤品的记录，可能延伸⾄男⼠护肤品、男⼠⽪鞋、其他汽⻋⽤品（如⾏⻋记录
+
+仪、⻋载⾹薰）。
+
+7. 品质⽣活延伸：历史 关注净⽔器、按摩器材，可能延伸⾄其他提升⽣活品质的⼩家电（如空⽓净化 器、咖啡机、养⽣壶）。
+
+8. 忽略点：短视频中的麻将桌、⽟⽯⼿链等，因在 ⼴告⾏为中 ⽆对应⽀撑，且 可能为偶然浏览，暂不作为 ⾼可能性未来 兴趣。
+
+</ 未来 兴趣分析>
+
+<⽤户画像分 析>
+
+分析过程：根据规则，⼴告⾏为>⽂章>视频。⽤户为41 岁已 婚育⼉⼥性，⾼消费⽔平，职业法律⼯作者。分析其⼴告点击历史 ，可以
+
+提取出以下⻓期稳定的兴趣点：
+
+1.  ⾃我关爱与形象管理：作为 ⾼消费⽔平、⾼知的 职业⼥性，她对美妆护肤、个⼈护理、珠宝钟表有明显 兴趣。这类⾏为贯穿始终，且近期仍有发⽣（如2025-09-02 的⼝红点击）。
+
+2. 家庭⽣活与⺟婴育⼉：点击记录中包含婴幼⼉营养品、⼉童电动⽛刷（短视频）、居家 ⽇⽤品、清洁 ⽤品等，结合其“已婚育⼉”状
+
+态，家庭与孩⼦是其重要的关注领域。
+
+3. 家庭成员的关怀：点击⾏为中 包含男装（休闲裤）、男表、汽⻋养护⽤品等，推测在为丈夫或家庭汽⻋进⾏消费。
+
+4. 品质与便利⽣活：点击物品涉及多个品类，但普遍指向提升⽣活品质（如按摩器材、净⽔器）或解决具 体⽣活痛点（如清洁 剂、⼲
+
+洗剂）。
+
+5. 兴趣的时效性与频次：将多次点击、近期点击且跨平台（⼴告、短视频）验证的兴趣点视为强兴趣，如彩妆、⺟婴营养品、⼥⼠内
+
+⾐。⽽孤⽴、久远的⾏为（如2025-04-24 的隐形袜）则视为弱兴趣或忽略。
+
+忽略的噪声：2025-08-19 的⽂章搜索仅有⼀次，且与 ⼴告⾏为重合度低，参考价值有限。短视频中的婚纱、⽟⽯⼿链等可能为⼀
+
+次性浏览兴趣，未在⼴告点击中得到验证，暂不纳⼊⻓期稳定画像。
+
+</ ⽤户画像分 析>
+
+Output from Aggregator 
+
+⽤户是41 岁⼥性、⾼消费⽔平、职业法律⼯作者、已婚育⼉。她的⾏为序列呈现出⾮常清晰的特征，这直接影响各 维度的重要性：
+
+1.  ⽤户画像相关性 (Pro fi le Relevance) - ⾼权重 (0.35) 
+
+理由 ：该⽤户表现出稳定、⻓期的兴趣圈层。她对美妆护肤、⺟婴⽤品、⼥⼠内⾐、珠宝⼿表等的兴趣贯 穿数⽉，且与 其年龄、性别、职业、消费⽔平⾼度吻合 。这表明她的消费决策受⻓期形
+
+成的品味和 ⽣活⽅式驱动，符合她“画像”的推荐是基础且重要的。强兴趣点（如⼝红、婴幼⼉营养品）的转化潜⼒极⾼。
+
+2. 未来 兴趣相关性 (Future Interest) - 最⾼权重 (0.40) 
+
+理由 ：⽤户⾏为展现出强烈的探索性和前瞻性。她不仅重复点击同类商品，更会沿着兴趣链延伸（如从清洁 剂到净 ⽔器，从营养品到⼉童⽛刷）。近期（9-10 ⽉）的点击和短视频观看⾏为，特别
+
+是对** 婴幼⼉营养品和 ⼉童电动⽛刷** 的关注，揭示了强烈的、即时的潜在需求。她的⾼消费能⼒和作为 ⺟亲的⻆⾊，使得满⾜其“下⼀步”兴趣点⾄关重要。捕捉 并满⾜其正在萌发或强化的需
+
+求，是促成转化的关键。
+
+3. 新奇性 (Novelty) - 中等权重 (0.15) 
+
+理由 ：该⽤户并⾮保守的重复购买者。她点击了多个品类的“新品”（如⻣传导⽿机、特定功能⾯霜、不同款式腕表），表明她对在同⼀兴趣范围内尝试新事物持开放态度 。然⽽，其⾏为也 显示核
+
+⼼兴趣圈稳定，盲⽬推荐完全⽆关的新奇物品（如极限运动装备）效果会差。因此，新奇性应 作为 在相关兴 趣基础上的“调味剂”和“拓展剂”，权重不宜过⾼。
+
+4. 上下 ⽂相关性 (Context) - 最低权重 (0.10) 
+
+理由 ：⽤户⾏为对季 节和节⽇的敏感性相对较低。她在不同⽉份点击了跨度很 ⼤的商品（如夏 季的⽂胸、秋季的⼝红、全年的清洁 剂）。作为 ⾼消费职业⼥性，她的许多需求（如美妆、内⾐、⺟
+
+婴）受季节影响较⼩，更多是持续性需求。虽然季节因素（如秋冬滋补）可以作为 加分 项，但其重要性远低于 其个⼈⻓期和即 时兴趣。⼤部分候选⼴告也都不存在明显 的上下 ⽂冲突。
+
+综合权重分配：
+
+基于以 上分析，该⽤户的推荐策略应以 ** “精准满⾜⻓期品味 ，敏锐捕捉 即时需求”** 为核⼼。因此，`未来 兴趣相关性`权重最⾼，`⽤户画像相关性`次之，两 者共同构成推荐的主体 。`新奇性`⽤
+
+于在核⼼圈层内微调，`上下 ⽂相关性`作为 基础过滤器。
+
+最终4维权重向量为：[0.35, 0.40, 0.15, 0.10] 
+
+Figure 8: Case study of PSJ scoring process. The aspect-level scorer analyzes user behavioral history to produce fine-grained scores, and the aggregator infers user-conditional dimension weights. Conference’17, July 2017, Washington, DC, USA Jiang et al. 
+
+Table 7: Detailed Specifications for the Four Fine-grained Scoring Dimensions of PSJ 
+
+ID Criterion Rules and Guidelines Scoring Rules 
+
+0 User Profile Relevance Evaluate whether the recommendation aligns with the user’s long-term, stable profile. 
+
+a. Behavior importance: Ad interaction > Article reading > Video play. b. Rank all interest tags by importance (strongest first), keep at most 10. 
+
+c. Behavior weight: Conversion > Click. d. Summarize user’s stable interests from basic info and history using LLM. 
+
+• Score range: [-1, -0.5, 0, 0.5, 1] (5 levels). 
+
+• Aligns with strong interest: 1; weak interest: 0.5 ;no match: 0.
+
+• Contradicts profile (strong): -1 ; (mild): -0.5 . (e.g., do not recommend degree-upgrading ads to highly-educated users). 1 Future Interest Rele-vance Assess if the recommendation matches the user’s likely next interest. 
+
+a. Enrich/expand item attributes/content for better inference. 
+
+b. Infer next possible clicks based on temporal con-tinuity and interest trends. Ignore isolated noisy behaviors. 
+
+c. Explicitly exclude ads violating user interests or common sense. 
+
+d. Predict the user’s most likely next interest point for clicking. 
+
+• Score range: [0, 0.5, 1] (3 levels). 
+
+• Aligns with strong predicted interest: 1; weak: 0.5 ;no match: 0.
+
+• Example: If history suggests buying hiking gear, relevant outdoor ads score higher. 2 Novelty Judge if the result satisfies both conditions: 1) aligns with user interest; 2) similar ads not clicked in user history. 
+
+• Score range: [0, 0.5, 1] (3 levels). 
+
+• 0: No novelty; 0.5 : Weak novelty; 1: Strong novelty. 3 Contextual Relevance Evaluate match with user’s situational context: loca-tion, time, season, age, etc. • Score range: [-1, 0] (2 levels). 
+
+• -1 : Contradicts context (penalize); 0: Matches or irrelevant. 
+
+• Exclude temporally irrelevant ads (e.g., post-618 sale ads). 
+
+• Match based on season, holidays, current time. 
+
+Table 8: Annotation Rules and Output Format for the Pair-wise Holistic Scoring Task 
+
+ID Criterion Rules and Constraints Output Format 
+
+0 Core Task: Given two candidate ads, determine which one the user is more likely to click. 
+
+a. Prioritize behavior types: Ad interaction importance > Article reading importance > Video play importance. b. Consider temporal continuity of user behavior; reason about the next potential interest. 
+
+c. For each ad, analyze alignment with the user’s next interest and assess the degree of alignment. 
+
+d. Conduct a thorough comparison between the two candidate ads. 
+
+e. If ads are very similar and hard to distinguish, indicate lower certainty and set ranks for both to 0. 
+
+f. If both ads are of very low quality and clearly irrelevant to user interest, set ranks for both to 0. 
+
+• Ranking result: Winning ad is marked as 1, the other as 0.
+
+• Degree of preference: 
+
+Score indicating how much better the winning ad is (0: Identical, 5: Moderate, 10: Very Obvious).

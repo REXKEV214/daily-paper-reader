@@ -1,0 +1,733 @@
+Title: Scene-Aware Memory Discrimination: Deciding Which Personal Knowledge Stays
+
+URL Source: https://arxiv.org/pdf/2602.11607v1
+
+Published Time: Fri, 13 Feb 2026 01:35:18 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Scene-Aware Memory Discrimination: Deciding Which Personal Knowledge Stays 
+
+## Yijie Zhong a, Mengying Guo b, Zewei Wang b, Zhongyang Li b, Dandan Tu b and Haofen Wang a,∗
+
+> a
+
+College of Design and Innovation, Tongji University, 281 Fuxin Road, Shanghai, 200092, China 
+
+> b
+
+Huawei Technologies Co. Ltd., Shenzhen, 518129, China 
+
+A R T I C L E I N F O 
+
+Keywords :Personal Knowledge Memory Assisted Data Management Memory Discrimination 
+
+A B S T R A C T 
+
+Intelligent devices have become deeply integrated into everyday life, generating vast amounts of user interactions that form valuable personal knowledge. Efficient organization of this knowledge in user memory is essential for enabling personalized applications. However, current research on memory writing, management, and reading using large language models (LLMs) faces chal-lenges in filtering irrelevant information and in dealing with rising computational costs. Inspired by the concept of selective attention in the human brain, we introduce a memory discrimination task. To address large-scale interactions and diverse memory standards in this task, we propose a Scene-Aware Memory Discrimination method (SAMD), which comprises two key components: the Gating Unit Module (GUM) and the Cluster Prompting Module (CPM). GUM enhances processing efficiency by filtering out non-memorable interactions and focusing on the salient content most relevant to application demands. CPM establishes adaptive memory standards, guiding LLMs to discern what information should be remembered or discarded. It also analyzes the relationship between user intents and memory contexts to build effective clustering prompts. Comprehensive direct and indirect evaluations demonstrate the effectiveness and generalization of our approach. We independently assess the performance of memory discrimination, showing that SAMD successfully recalls the majority of memorable data and remains robust in dynamic scenarios. Furthermore, when integrated into personalized applications, SAMD significantly enhances both the efficiency and quality of memory construction, leading to better organization of personal knowledge. 
+
+## 1. Introduction 
+
+The proliferation of intelligent devices (Hasan et al. (2024)) has resulted in the continuous collection and storage of vast amounts of personal information generated through daily interactions. Efficient organization and management of these data are essential to support personalized services (Li et al. (2024)). Recent research (Liu et al. (2023); Wang et al. (2024); Lee et al. (2023); Pibiri and Trani (2024); Zhong et al. (2025)) has explored the construction of user memory, which typically involves three key processes: memory writing , to transform collected data into a storable format; 
+
+memory management , to update and maintain the stored information; and memory reading , to retrieve relevant memories for downstream tasks (Zhang et al. (2024)). However, personal interactions are inherently diverse (Nardelli et al. (2024)), and not all collected data are valuable or necessary to store in user memory. Moreover, these interactions span a wide range of topics, and the relevance of information depends on the specific requirements of applications, which often evolve over time. When memory includes meaningless or irrelevant data, the system may retrieve incorrect historical information or overlook important details during use, potentially leading to erroneous responses. To address this issue, we introduce a memory discrimination 
+
+task aimed at constructing a more concise and accurate user memory for various applications, such as knowledge graph construction (Zhong et al. (2025); Zhang et al. (2024)), information retrieval (Toukmaji and Tee (2024)), and recommendation systems (Li et al. (2024); Qu et al. (2023)). Inspired by the filter theory of attention(McLeod (2023)), which suggests that humans employ an internal mechanism to prioritize relevant information while suppressing distractions, we simulate this cognitive process in our design. Specifically, we conceptualize memory discrimination as a filter during memory construction, formally defined as the process of assessing daily personal interactions according to application requirements to determine whether each piece of data is worth remembering. 
+
+> ∗
+
+Corresponding auther 
+
+carter.whfcarter@gmail.com (H. Wang) 
+
+> ORCID
+
+(s): 
+
+> 1
+
+This paper is written during an internship at Huawei 2012 Lab. 
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 1 of 18 
+
+> arXiv:2602.11607v1 [cs.CL] 12 Feb 2026 Scene-Aware Memory Discrimination
+
+Recent research has investigated memory-assisted personalized applications leveraging large language models (LLMs), underscoring their potential in personal memory processing (Zhang et al. (2024)). However, incorporating memory discrimination presents two primary challenges: (1) Efficient discrimination at scale . Real-world interaction data includes a large volume of non-memorable information, such as routine or trivial requests ( e.g. , operating devices). To construct effective user memory, it is crucial to rapidly and accurately identify valuable interactions. Relying solely on LLMs for this process often results in inefficiency due to their computational overhead. (2) Dynamic definition of memory standards . LLMs inherently lack an understanding of what information should be remembered. They depend on explicitly defined criteria derived from application needs. These memory standards must remain adaptable to accommodate evolving requirements. Therefore, an effective discrimination method must quickly determine what to remember and what to disregard while precisely communicating these criteria to the model. Although applications are diverse and complex, making exhaustive enumeration infeasible, the types of personal information they depend on are relatively limited and structurally similar. Prior research (Westmacott et al. (1999); Choi et al. (2004); Etard et al. (2019)) indicates that the human brain selectively retains information by focusing on key memory cues. Inspired by Broadbent’s Filter Model (McLeod (2023)), which posits that attention operates by selecting stimuli based on their physical properties, we draw on three fundamental dimensions of personal knowledge ( personal attributes, relations, and events ) to establish memory scenes that guide the process of memory discrimination. In this paper, we propose SAMD , a Scene-Aware Memory Discrimination method consisting of a Gating Unit Module (GUM) and Cluster Prompting Module (CPM). The proposed framework identifies memorable interactions and dynamically adapts to the memory requirements of various applications with the support of a frozen LLM. GUM is designed to filter non-memorable data at the early stage of memory processing. It adopts a gating mechanism inspired by selective attention theory (Maarseveen et al. (2018)) to help SAMD focus on the most relevant content within each memory scene. A memory scene-based identifier is constructed using salient words that users typically employ in different memory scenes. To enrich the diversity of salient words and reduce the risk of mistakenly filtering meaningful data, we perform multi-view role-playing to simulate diverse user–device interaction contexts. CPM is responsible for defining what should be remembered according to the current application’s requirements and conveying these criteria to the LLM. By integrating user intent signals from sources such as voice assistants and dialogue systems, we analyze large-scale real interaction data to build an intent–scene affinity matrix. Subsequently, we perform intent clustering via matrix decomposition to group similar user intents. For each cluster, memory discrimination rules are constructed based on the associated memory scenes, effectively minimizing redundancy while maintaining complementary coverage across scenes. When an application scenario changes, the identifiers in GUM and discrimination rules in CPM can be easily updated according to the corresponding memory scenes, ensuring fast adaptation to new memory requirements. The main contributions of this paper are summarized as follows: 
+
+• We investigate the role of memory in personalized applications and introduce a memory discrimination task within the memory construction process. This task aims to identify memorable daily user–device interactions, enabling the construction of high-quality and concise user memory. 
+
+• We propose SAMD, a Scene-Aware Memory Discrimination method built upon a frozen LLM. SAMD comprises two key modules: GUM, which filters non-memorable data by simulating interactions across memory scenes, and CPM, which defines and communicates memory standards to LLMs by clustering user intents and establishing discrimination rules aligned with application requirements. 
+
+• We conduct extensive experiments, including both direct and indirect evaluations, to demonstrate the necessity and superiority of SAMD. Results show that SAMD effectively adapts to evolving application demands and remains robust even when user intents are incomplete, incorrect, or unavailable. The remaining sections of this article are organized as follows: Section 2 reviews the related work. Section 3 formally defines the proposed memory discrimination task, while Section 4 provides a detailed description of the proposed SAMD method. Comprehensive experimental evaluations are presented in Section 5. In particular, Section 5.1 reports the direct performance of SAMD in the memory discrimination task, and Section 5.2 presents indirect evaluations of SAMD in the context of memory construction for memory-assisted agents. Finally, Section 6 concludes the article.   
+
+> Y. Zhong et al.: Preprint submitted to Elsevier Page 2 of 18 Scene-Aware Memory Discrimination
+
+## 2. Related Work 
+
+This section details the memory construction and personalization mechanisms in LLM-assisted Agents, which are highly relevant to our research. We also discuss how to evaluate the effectiveness of the memory module. 
+
+2.1. Mechanism of Memory Construction 
+
+Attempts have been made to enhance personalized services and applications by personal memory with the help of LLMs (Zhang et al. (2024); Gao and Zhang (2024); Chen et al. (2024); Alonso et al. (2024); Wang et al. (2024)). These methods revolve around memory operations like memory writing, memory management, and memory reading. 
+
+Memory Writing. TiM (Liu et al. (2023)) extracts the raw information as the relation between two entities and stores them in a structured memory. SCM (Wang et al. (2025)) retains all historical data and designs a memory controller to decide when and which to activate. MemGPT (Packer et al. (2023)) is entirely self-directed and autonomously updates the memory based on the context. The existing research reflects an important point, which is that the original information is commonly lengthy and noisy. 
+
+Memory Management. Memorybank (Zhong et al. (2024)) distills the conversations into a high-level summary and refines the user’s knowledge to generate daily insights into personality traits. Voyager (Wang et al. (2024)) refines the memory based on the feedback of the environment. GITM (Zhu et al. (2023)) summarizes the key actions from multiple plans to establish common reference plans for various situations. These methods expend significant resources on removing redundant memory entries or forgetting unimportant memory, whereas a substantial portion of them could have been discarded before being written into memory. 
+
+Memory Reading. This operation extracts related information from memory for reasoning and decision-making. ChatDB (Hu et al. (2023)) generates SQL statements to retrieve historical data from a symbolic memory. MPC (Lee et al. (2023)) provides examples for ignoring certain memories when retrieving relevant memories. ExpeL (Zhao et al. (2024)) utilizes a vector database to store the memory and obtains the Top-k successful trajectories for the current task. Memory reading and memory writing are collaborative, and the quality of memory greatly influences the methods for memory reading. In this paper, we introduce a memory discrimination operation in the memory construction process to determine whether the current context needs to be processed before memory writing based on the application scenario. This mechanism not only helps build high-quality memory but also effectively avoids unnecessary computational and resource costs. 
+
+2.2. Mechanism of Personalization 
+
+Profile-augmented prompting explicitly utilizes summarized user preferences and profiles in natural language to augment LLMs, where prompt engineering acts as a bridge for interaction between users and LLMs (Liu et al. (2025)). Cue-COT (Wang et al. (2023)) employs chain-of-thought prompting to extract user status like emotion, personality, and psychology. ONCE (Liu et al. (2024)) summarizes topics and user interests based on historical content. These works point out a key technique: Role-Playing in LLMs. It is developed to simulate intricate personas based on various individual profiles and narratives (Chen et al. (2024)). These profiles are constructed using diverse persona data (Shanahan et al. (2023); Shao et al. (2023); Wang et al. (2024)). The Personas have three categories: individualized persona, character persona, and demographic persona. 
+
+Individual Persona embodies digital clones or personal assistants for individuals (Salemi et al. (2024)) and even mirrors their behaviors (Chen et al. (2024)). Its applications range from personalized conversation Gao et al. (2023)) and recommendation (Chen et al. (2024)) to autonomous agents for more complicated task-solving (Li et al. (2024)). 
+
+Character Persona is primarily established characters with stories widely recognized by the public. Early research focuses on recognizing characters from a provided text and decodes character traits from their dialogues and ac-tions (Zhao et al. (2024); Yu et al. (2023)). Recently, researchers have shifted their focus toward applying and prompting LLMs to faithfully reproduce the characters, including their linguistic style (Li et al. (2023)), knowledge (Wang et al. (2024)), personality (Wang et al. (2024)), and even decision-making (Xu et al. (2024)).   
+
+> Y. Zhong et al.: Preprint submitted to Elsevier Page 3 of 18 Scene-Aware Memory Discrimination
+
+Demographic Persona is expected to display unique characteristics of specific groups of people and captures typical traits associated with groups possessing common characteristics (Gupta et al. (2023)), such as occupational roles, hobbies or interests, and personality types, etc. By assigning specific demographics, LLMs often have better performance in various types of downstream tasks. Demographic personas improve task-solving in both single-agent (Kong et al. (2024)) and multi-agent (Zheng et al. (2023)) systems. Such a persona could also simulate collective social behaviors across various environments (Chawla et al. (2023); Wang et al. (2023); Gu et al. (2024)). 
+
+In this paper, we establish demographic personas to simulate the interactions of different users with various devices in different scenarios. This ensures that the salient words in GUM are representative and have adequate coverage. Unlike existing works, we do not need to fine-tune the LLMs, nor do we require the LLM to perform role-playing during system usage. SAMD filters out non-memorable data while ensuring the effective recall of memorable data. 
+
+2.3. Evaluation of the Memory 
+
+The evaluation of memory can be broadly categorized into two strategies (Zhang et al. (2024)): Indirect Evaluation and Direct Evaluation. Next, we compare their differences in detail and show how we evaluate memory discrimination. 
+
+Indirect Evaluation evaluates the memory module via end-to-end agent tasks. The memory module proves useful if the tasks are effectively accomplished. There are several representative tasks in the recent works. Engaging in human-AI conversations is a key application of agents, where memory significantly enhances user experience. MemoChat (Lu et al. (2023)) evaluates the agents on interactive dialogues using GPT-4 to score the responses. Research utilizes the CSIM (Packer et al. (2023)) score and SCE-p (Lee et al. (2023)) score to evaluate the memory effect on increasing engagement of users. Question answering can evaluate the memorized information. ReAct (Yao et al. (2023)) evaluates the memory from inside-trial information and external information from Wikipedia. Retroformer (Yao et al. (2024)) and Reflexion (Shinn et al. (2023)) further include the cross-trial information. The success rate refers to the proportion of tasks that agents can successfully solve. Expel (Zhao et al. (2024)) accesses how many special tasks can be correctly completed through memory in AlfWorld, while GITM (Zhu et al. (2023)) evaluates this in Minecraft. In addition, some methods (Wang et al. (2024)) use the exploration degree in exploratory games to reflect the extent that agents can explore the environment. 
+
+Direct Evaluation independently measures the capability of the memory module. Previous studies apply both subjective and objective metrics. Memorybank (Zhong et al. (2024)) and TiM (Liu et al. (2023)) recruit human evaluators to check if the memory contains reasonable answers for the current question and if the recalled memory is suitable for the current context. Other works (Wang et al. (2025); Lee et al. (2023)) focus on the relation and contradiction between the current query and historical memory. Numeric metrics are also used to evaluate the effectiveness and efficiency of the memory module. The correctness is calculated to evaluate whether the recalled memory (Hu et al. (2023)) and the responses (Packer et al. (2023)) from the agents match the correct answers. A reference accuracy is used to assess the retrieval process of the memory by calculating the F1-score (Zhong et al. (2024); Lu et al. (2023)). The time and hardware cost (Tack et al. (2024)) is widely used to assess the efficiency of memory operations. 
+
+In this paper, to comprehensively validate the necessity of memory discrimination and the effectiveness of SAMD, we not only calculated indirect metrics, such as question answering and historical memory retrieval accuracy, but also analyzed direct metrics like the accuracy and recall of memorable and non-memorable data. We also calculate the computational cost to reflect the efficiency of our method. 
+
+## 3. Problem Definition 
+
+Constructing user memory is crucial for memory-assisted LLM-based personalized applications. The memory discrimination problem is defined as a binary classification task to build more efficient and accurate user memory. This could be described as: 
+
+Memory Discrimination (D) : Judges whether the sentences in context should be recorded in memory based on the demand of personal information. Consider that at time 𝑡 , the context 𝐶 𝑡 consists of user interactions 𝑞 𝑡 , response 𝑜 𝑡 , and user intent 𝐼 = { 𝐼 𝑖 }𝑛 𝑖 =1 of a dialogue system, question answering system, or voice assistant. The memory discrimination method  determines   
+
+> Y. Zhong et al.: Preprint submitted to Elsevier Page 4 of 18
+
+Scene-Aware Memory Discrimination Online Memory Judging  Offline Memory Understanding 
+
+Gating Unit Module  Cluster Prompting Module 
+
+Prediction 
+
+1. Match Rule 1 
+
+2. Memorable 
+
+Memory Scene-based Identifier     
+
+> Input Text:
+> Call my classmate Jessica’s phone
+> Your task is to determine whether the input texts contains the personal information according to the rules , …
+> Positive Rules: 1. with personal relations; 2. with personal attributes; …
+> Negative Rules: 1. only call someone, ..
+
+User Intents 
+
+> PLAYMUSIC
+> CALL
+> NAVIGATE PAY SET NODISTURB
+> ……
+
+Memory Scenes   
+
+> kindred
+> leader …
+> age
+> …name
+> entertainment
+> …… health
+
+Discrimination Rules                   
+
+> Cluster n:
+> Positive Rules :
+> 1. xxx 2. xxx …
+> Negative Rules :
+> 1. xxx 2. xxx …
+> Cluster n+1: …
+> Analyze Real Data
+> 1011
+> 0110
+> 1100
+> 0001
+> intent
+> scene
+> Intent-Scene
+> Joint Clustering
+> LLMs
+> Age :35
+> Sex :Male
+> BFI :Extraversion
+> Career :Engineer
+> phone
+
+Device 
+
+> in-vehicle
+
+Role 
+
+> soundbox
+
+Multi-view Role Playing 
+
+> Text:
+> I don’t want to go there
+> Text:
+> Call my classmate Jessica’s phone
+
+e.g.  
+
+> Non-memorable
+> Context at time t:
+> Interactions
+> Response
+> User Intent
+
+Memory 𝑴𝑴 𝒕𝒕   
+
+> time t+1
+> From Application Need  From Intelligent Device
+
+Figure 1: The overview of the proposed memory discrimination method via the gating unit module and cluster prompting modules. It has two phases: offline memory understanding and online memory judging. In the memory understanding phase, a memory scene-based identifier and cluster prompts with discrimination rules are created using all memory scenes and user intents. During the memory judging phase, each sentence in the context at time 𝑡 is evaluated for whether to remember, with memorable sentences being stored in memory 𝑀 𝑡 for use in time 𝑡 + 1 .
+
+whether each sentence 𝑙 𝑖 in 𝐶 𝑡 should be recorded ( memorable ) as memory 𝑀 𝑡 or discarded ( non-memorable ), with the help of additional information in 𝐶 𝑡 , such as user intents. This can be formalized as follows: 
+
+𝜙 (𝑙 𝑖 , 𝐼 ) → {0 , 1} , (1) where 𝐼 is optional, and 𝜙 denotes the memory criterion formed by the application’s needs for personal information. These needs can be described as a series of memory scenes 𝑆 = { 𝑆 𝑖 }𝑚 𝑖 =1 linked to personal information, which includes elements related to personal relations, attributes, and events. Based on the results of  , we recompile all the memorable data with predicted results of 1 to obtain 𝐶 ′ 
+
+> 𝑡
+
+and store it in memory. Therefore,  can be implemented using function  .Previous research (Zhang et al. (2024)) represents memory-assisted LLM-based personalized applications as: 
+
+𝑜 𝑡 +1 = LLM {𝐑 (𝐏 (𝑀 𝑡 −1 , 𝐖 (𝐶 𝑡 )) 
+
+⏟⏞⏞⏞⏞⏞⏞⏞⏞⏟⏞⏞⏞⏞⏞⏞⏞⏞⏟ 
+
+> 𝑀 𝑡
+
+, 𝑞 𝑡 +1 )} . (2) Existing work focuses on the following three core operations related to memory: 
+
+• Memory Writing ( 𝐖 ): Projects the raw context 𝐶 𝑡 into the actually stored memory contents. 
+
+• Memory Management ( 𝐏 ): Processes the stored memory to make it more effective through summarization, integration, or forgetting mechanisms. 
+
+• Memory Reading (R) : Obtains relevant information from memory 𝑀 𝑡 to support the next user interactions 𝑞 𝑡 +1 
+
+and produce the response 𝑜 𝑡 +1 .However, due to the vast number of user interactions and the abundance of non-memorable context, processing all raw data indiscriminately can lead to significant unnecessary time and computational costs. Moreover, noise data in memory can lead to erroneous retrieval results and incorrect responses. Therefore, we propose adding a memory discrimination operation, which transforms the construction of memory 𝑀 𝑡 into: 
+
+𝑀 𝑡 = 𝐏 (𝑀 𝑡 −1 , 𝐖 (𝐃 (𝐶 𝑡 ))) . (3) 
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 5 of 18 Scene-Aware Memory Discrimination New Memory Scene 
+
+Existed Memory Scene 
+
+Memory Scene-based 
+
+Identifier 
+
+> Daughter :
+> grow up, little baby, naughty,
+> exam grade, tell story, puppy love, wedding, concerned, …
+> Shopping :
+> cosmetics, digital product, luxury, promotion activity, coupon, product quality, comfort, internet shopping,…
+> ……
+
+Generate e.g. Sudden Occurrence 
+
+Update 
+
+Persona 
+
+Environment 
+
+> Bem's Sex Role Inventory
+> 16 Personalities
+
+Multi-view Role-Playing 
+
+> The Big Five Inventory
+> Openness, Agreeableness,
+> Neuroticism, Extraversion, Conscientiousness
+
+Role :       
+
+> From now on, you are a <age> <sex> person working in
+> <career> , known for your <personality> communication style and interactions with others.
+> You are interacting with <device> in your daily life and discussing content related to <memory scene> .
+> Your task is to provide ten salient words included in this scenarios, which reflect the users’ characteristics.
+
+Instructions :     
+
+> Output Requests: colloquial, variegation, interaction, …
+> Output Format: <Salient Word> … </Salient Word>
+> Groups of Age
+> 18-23
+> <18 24-34
+> 35-44 >55
+> 44-54
+> more than 20 occupation
+> Virtual User
+> interact Smart Phone
+> Soundbox
+> In-vehicle
+
+…
+
+Figure 2: Instructions for constructing the memory scene-based identifier in GUM, enabling quick updates for new memory scene demands. Different individuals focus on various aspects of the same memory scene. 
+
+## 4. Proposed Method 
+
+4.1. Overview 
+
+Figure 1 illustrates the proposed SAMD, comprising the gating unit module (GUM) and cluster prompting module (CPM). SAMD distinguishes and retains memories through offline memory understanding and online memory judging. Offline, we convey to SAMD what to remember and clarify the memory scenes based on application needs. GUM constructs a memory scene-based identifier through multi-view role-playing, while CPM creates cluster prompts by examining the relationship between intents and scenes and a joint clustering. Online, GUM verifies incoming user interactions using the identifier. A failed verification indicates the data is non-memorable. Otherwise, CPM employs LLMs and cluster prompts to ascertain if this data needs to be remembered. 
+
+4.2. Gating Unit Module 
+
+Users interact with numerous intelligent devices daily, yet only a fraction of these interactions are memorable. To avoid inefficiently processing all data with LLMs, we introduce a gating mechanism inspired by human selective attention when facing abundant information from the environment (Maarseveen et al. (2018)). Specifically, we propose the gating unit module to filter out non-memorable data and avoid unnecessary computational costs on these data while maintaining the recall of the memorable data. The structure of GUM is detailed in Figure 2. Relying on sentence-level embedding similarity comparisons between current data and memory scenes is computa-tionally expensive and inefficient. Moreover, it may retain non-memorable data due to ambiguous semantic matching. Therefore, we propose a word-level gating approach. Following Broadbent’s Filter Model (McLeod (2023)), which suggests selecting which stimuli to process based on their physical properties, we construct a memory scene-based identifier to prioritize relevant data while filtering out the rest. 
+
+Memory Scene-based Identifier. We propose to use salient words that frequently occur in different memory scenes for efficient filtering. To ensure a high recall of memorable data, we need to capture fully the focal points and expression styles of different users. We utilize LLMs to simulate user-device interactions in memory scenes 𝑆 through multi-view role-playing. We define users  with diverse attributes: age, sex, career, personality . The salient words list 𝑊 𝑖 created by a specific user in memory scene 𝑆 𝑖 can be formally defined as: 
+
+𝑊 𝑖 = ⋃ 𝜙 (𝑆 𝑖 |), (4) where 𝜙 denotes the employed LLM. The memory scene-based identifier can be obtained by merging all the sets ( 𝐾 𝑖 ). In the memory judging phase, salient words in the identifier are matched with the input text, and upon a successful match, the text is forwarded to CPM. 
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 6 of 18 Scene-Aware Memory Discrimination Intent-Scene Joint Clustering 
+
+New Intent 
+
+Existed Intents             
+
+> Real Interactions
+> MSI
+> 1011
+> 0110
+> 1100
+> 0001
+> Intent-Scene
+> Affinity Matrix
+
+𝑼𝑼 
+
+𝑽𝑽 𝑻𝑻 
+
+𝜮𝜮 ′ 
+
+> SVD Cluster Features
+
+𝑭𝑭   
+
+> e.g. Intent: Exam
+> Text:
+> Today’s math exam…
+
+𝒙𝒙 
+
+> New Intent-Scene Relation
+
+𝒄𝒄 
+
+> Distance  𝑫𝑫
+> Gather Intents by Index
+> Gather Intents by Distance
+> Intent Clusters
+
+𝑪𝑪 
+
+𝑪𝑪𝑪   
+
+> Join Cluster
+> Create Cluster
+> Add Rules
+> if necessary
+> Cluster Prompt
+> Cluster 1:
+> Positive Rules :
+> with song name, with video name, …
+> Negative Rules :
+> request to play a song without any info., …
+> Cluster 2:
+> …
+> App. Required
+> Personal Info.
+> Memory Scenes
+
+N-N 
+
+Relation 
+
+> Discrimination Rules
+
+N-1 
+
+Relation 
+
+Figure 3: The left side illustrates the proposed Cluster Prompting Module. MSI represents the memory scene-based identifier in GUM. Intents are grouped into different clusters via matrix decomposition. The cluster prompts consist of several positive and negative rules. The rightmost side demonstrates how to design discrimination rules using memory scenes as a bridge to represent the personal information required by real-world applications. 
+
+Handle New Memory Scene. In practical use, new memory scene 𝑆 𝑚 +1 may arise, as shown by ‘ sudden occurrence ’in Figure 2. GUM provides excellent scalability via multi-view role-playing, enabling quick acquisition of the corresponding salient words 𝑊 𝑚 +1 and updating the identifier. 
+
+4.3. Cluster Prompting Module 
+
+Instructing LLMs on what to remember and what not to remember assists them in making accurate memory discrimination. Summarizing an application’s memory requirements using only a few general descriptions can lead to cognitive biases in LLMs. On the other hand, providing detailed descriptions for each memory scene may involve excessive manual effort, increase computational costs, and reduce scalability. Thus, we analyze the relationship between intents and memory scenes on 80 million real data, creating an intent-scene affinity matrix 𝐸 ∈ {0 , 1} 𝑛 ×𝑚 . Analysis reveals that some intents share similar memory scenes. As shown in Figure 3, we propose to cluster the intents and build discrimination rules for each cluster based on its associated memory scenes. 
+
+Intent-Scene Joint Clustering. Considering intents are categorized into 𝐾 classes, {𝐴 𝑘 }𝐾 𝑘 =1 , and memory scenes into 𝑄 classes, {𝐵 𝑞 }𝑄 𝑞 =1 . The relationship between intent 𝐼 𝑗 and memory scene 𝑆 𝑖 can be expressed as: 
+
+𝑃 (𝑆 𝑖 |𝐼 𝑗 ) = ∑ 
+
+> 𝑘,𝑞
+
+𝑃 (𝑆 𝑖 |𝐵 𝑞 )𝑃 (𝐵 𝑞 |𝐴 𝑘 )𝑃 (𝐴 𝑘 |𝐼 𝑗 ). (5) Thus, we have 𝑃 (𝑆 |𝐼 ) = 𝑃 (𝐴 |𝐼 )𝑃 (𝐵 |𝐴 )𝑃 (𝑆 |𝐵 ). The intent clustering can be obtained through 𝑃 (𝐴 |𝐼 ) if we consider 
+
+𝐸 ∼ 𝑃 (𝑆 |𝐼 ). Researches show that matrix factorization, like singular value decomposition (SVD) (Szalontai et al. (2020)), can efficiently generate effective representations (Qiu et al. (2018, 2019)) or clustering insights (Gao et al. (2020)). As it can yield reasonable cluster centroids and cluster membership indicators (Zass and Shashua (2005); Ding and He (2005)), we apply SVD to generate approximate intent clustering. We get 𝐸 = 𝑈 Σ𝑉 𝑇 , and select a subset of singular values Σ′, ensuring the ratio |𝐸 ′   
+
+> 𝑖,𝑗 >𝜎 ||𝐸 𝑖,𝑗 =1 |
+
+exceeds 0.9 after reconstruction, with 𝜎 as a threshold. Highly similar intents are grouped based on their distances 𝐷 = 𝐹 ⋅ 𝐹 𝑇 from each other. Thus we obtain clusters 𝐶 = [ 𝐶 1, 𝐶 2, ⋯]
+
+based on the criteria: for every intent 𝐼 𝑢 , 𝐼 𝑣 ∈ 𝐶 𝑖 , it need to be satisfied 
+
+𝑑 (𝐼 𝑢 , 𝐼 𝑣 ) = 𝐷 𝑢,𝑣 ≤ min( median (𝐷 𝑢 ), 𝜖 ), (6) where 𝑑 (⋅, ⋅) means the distance between intents, median (⋅) denotes the median of the list, and 𝜖 signifies a minimal distance. We only keep clusters with more than two intents. For the remaining intents, we extract clustering information 
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 7 of 18 Scene-Aware Memory Discrimination 
+
+from 𝐹 and select Index 𝑖 = argmax 𝑗 𝐹 𝑖,𝑗 . We group intents with the same Index into the same cluster to obtain 𝐶 ′:
+
+𝐶 ′ = [( 𝐼 𝑢 , 𝐼 𝑣 , ⋯ |Index 𝑢 = Index 𝑣 ), ⋯]. (7) Finally, we merge 𝐶 and 𝐶 ′ as the intent clustering, followed by manually verifying and merging any two clusters that cover the same memory scenes while reassessing the independent intent. Each cluster prompt includes discrimination rules based on related memory scenes: positive rules indicate what to remember and negative rules for not to remember. A text is non-memorable if it fails to meet any positive rules or meets negative ones. LLMs follow a two-step process. They first think and provide the evidence based on these rules, then present the discrimination result. 
+
+Handle New Intent. When the system supports a new intent, CPM can integrate it with limited cost. We obtain the relative vector 𝑥 ∈ {0 , 1} 1× 𝑚 using the memory scene-based identifier with the intent and its corresponding interactions. The cluster feature for the new intent can be calculated as 𝑐 = √Σ′ ⋅ 𝑉 𝑇 ⋅ 𝑥 𝑇 . We identify the cluster by finding the maximum value in 𝚜𝚘𝚏𝚝𝚖𝚊𝚡 (𝑐 ). After verification, we decide whether to add it to the existing cluster or create a new one, updating the relevant discrimination rules as necessary. 
+
+Handle Incorrect or Unavailable Intent. SAMD does not need the device to identify user intents, thanks to this module’s error-tolerance mechanism. Cluster prompting ensures that similar intents with consistent memory scenes share discrimination rules, reducing the impact of intent deviations. When user intents are unavailable, we apply the memory scene-based identifier to match input text and utilize the intent-scene affinity matrix to obtain candidate intents. 
+
+## 5. Evaluation 
+
+In this section, to comprehensively evaluate the superiority of our method and the value of memory discrimination in the memory construction process, we conduct direct evaluations of the memory discrimination module and indirect evaluations of the LLM-assisted agents integrated with this module. 
+
+5.1. Direct Evaluation of Memory Discrimination 
+
+For direct evaluation, we focus on the performance of SAMD to determine whether user interactions are memorable. 
+
+5.1.1. Experimental Settings 
+
+Dataset. We incorporate a broader range of data from personal daily interactions, including both voice and text-based interactions with intelligent assistants on devices such as cars, smart speakers, and mobile phones. In total, we first collect approximately 80 million anonymous interaction records from real users (with informed consent), encompassing over 2,600 distinct intents recognized by the devices. From these, we select 97 high-value intents based on their relevance to personal memory construction. After data cleaning and filtering, we construct multiple datasets for direct evaluation of the proposed method. To comprehensively evaluate memory discrimination under different conditions, we construct two real-world datasets, one synthetic dataset, and two datasets targeting long-tail distributions. Detailed dataset statistics are provided in Table 1. 
+
+• Balanced interaction dataset (BID-20K) : This dataset includes more than 100 samples per intent, ensuring that the number of memorable and non-memorable samples is approximately balanced for fair evaluation.                                 
+
+> Table 1
+> Statistics of the datasets under different settings to directly evaluate memory discrimination. ‘Num.’ means the number.
+> Dataset Num. of Memory Scenes User Intents Num. of Data Total Memorable Non-memorable BID-20K 203 ✓19,416 10,567 (54.4%) 8,849 (45.6%)
+> IID-10K 203 ✓9,700 1,008 (10.4%) 8,692 (89.6%)
+> GID-1K 24 ✗1,000 500 (50%) 500 (50%)
+> LID 10 ✓500 275 (57.0%) 215 (43.0%)
+> MLID 213 (203+10) ✓2500 1330 (53.2%) 1170 (46.8%) Y. Zhong et al.: Preprint submitted to Elsevier Page 8 of 18 Scene-Aware Memory Discrimination
+
+• Imbalanced interaction dataset (IID-10K) : Each intent contains 100 samples sampled according to the real-world distribution of memorable and non-memorable data, simulating realistic usage scenarios. 
+
+• Generated interaction dataset (GID-1K) : This synthetic dataset simulates dynamic scenarios where intents and memory scenes evolve. We first create 10 virtual users and generate personal details for their family members, classmates, friends, and acquaintances (100 individuals in total). An event list with 500 events is then constructed based on these entities and their associations across different memory scenes. Finally, we generate interaction data according to these events to model diverse and evolving user behaviors. 
+
+• Long-tail interaction dataset (LID) : To evaluate performance under long-tail distribution conditions in reality, we identify memory scenes whose interaction frequency is lower than 1% of the average across all existing scenes. This dataset contains 10 rare memory scenes with 500 samples. Representative long-tail scenarios include niche domains ( e.g. , ingredients, collections, pets, niche topics) and cross-domain compositions ( e.g. ,work and special diet, travel and customs). 
+
+• Merged long-tail interaction dataset (MLID) : This dataset merges 203 regular memory scenes with the 10 identified long-tail memory scenes, forming a total of 213 scenes with 2,500 samples. It is used to assess model robustness and adaptability when rare and frequent interactions coexist. Data is first annotated by three annotators, treating all memory scenes as the application demands. To avoid erroneous annotations caused by inconsistent labeling, we adopt a widely recognized annotation alignment mechanism. When annotations are consistent, it is determined whether a data point is memorable. When disagreements arise among annotators, another annotator is introduced to re-annotate the data. The team then discusses to reach a consensus on the final annotation. If no agreement can be achieved, the data will be discarded. 
+
+Metrics. For memory discrimination, following the previous research (Zhang et al. (2024); Wang et al. (2025)), we apply widely used metrics: Accuracy (Acc) and weighted-F1 score ( 𝒘𝑭 𝟏 ) (Wang et al. (2017)). We also report the Recall of memorable ( 𝑹 𝟏 ) and non-memorable ( 𝑹 𝟎 ) data to determine if LLMs understand what to remember and what not to remember. For intent clustering, following the previous works (Tang et al. (2023); Fang et al. (2023)), we use the Rand Index (RI) 1, which measures the similarity between two clusterings. The value of RI ranges from 0 to 1, with larger values indicating better performance. 
+
+Compared Methods. For memory discrimination, we select different types of approaches in the memory-assisted agent that focus on memory writing function, which is directly linked to this task: SCM (Wang et al. (2025)), Memochat (Lu et al. (2023)), and TiM (Liu et al. (2023)). For intent clustering, we compare our method with the approach of directly clustering embeddings. The embeddings are extracted from BERT Devlin et al. (2019) and GPT-2 (Radford et al. (2019)). Then, we utilize several density-based clustering algrithms (Bhuyan and Borah (2023); Li et al. (2024)), which can adaptively form multiple clusters, including MeanShift, Bisecting K-Means, and Spectral 2.
+
+LLMs. We employ different series of LLMs with varying scales: MiniCPM-2B (Hu et al. (2024)), Qwen2 (Team (2024)), LLAMA3 (Touvron et al. (2023)), and GLM series (Team (2024)). This helps verify if SAMD adapts to different LLMs and performs well on LLMs with few parameters. 
+
+Implementation Details. The LLMs used in our experiments are all deployed offline to protect data privacy. Based on 203 memory scenes, the memory scene-based identifier contains 31,831 salient words. The cluster prompting module consists of 16 clusters with 91 discrimination rules. 
+
+5.1.2. Main Results 
+
+We evaluate the superiority, generalization, robustness, and efficiency of our method, respectively. 
+
+Superiority of proposed SAMD. As shown in Table 2, the proposed SAMD (with intent) is at least 3 × faster while providing over 20% greater accuracy in memory discrimination. It aids LLMs in understanding what to remember, retaining more than 90% of the memorable data, and improving overall performance by over 20%.   
+
+> 1https://en.wikipedia.org/wiki/Rand_index
+> 2https://scikit-learn.org/stable/modules/clustering.html
+> Y. Zhong et al.: Preprint submitted to Elsevier Page 9 of 18
+
+Scene-Aware Memory Discrimination Cluster Prompt vs. Specific Prompt Cluster Prompt vs. General Prompt                          
+
+> Intent: CALL
+> Text: Call Bob’s number
+> Cluster Prompt: ×
+> General Prompt: √
+> Intent: Save Personal Name
+> Text: Remember my name is Chris
+> GT: ×
+> Cluster Prompt: √
+> General Prompt: √GT: √
+> cluster a {CALL, SEND MESSAGE, …}
+> cluster b {SAVE PERSONAL NAME, CHECK PERSONAL NAME, …}
+> Intent: NAVIGATE
+> Text: Google Map navigation to station
+> Cluster Prompt: √
+> Specific Prompt: √
+> Intent: Check Working Place
+> Text: View Yahoo Map how far is this from my company
+> GT: √
+> Cluster Prompt: √
+> Specific Prompt: ×GT: √
+> cluster a {NAVIGATE, CHECK WORKING PLACE, …}
+
+Figure 4: Comparative examples of various prompts. 
+
+Table 2: The quantitative results comparing existing methods under different settings. 𝚀𝚠𝚎𝚗𝟸 and 𝙻𝙻𝙰𝙼𝙰𝟹 represents Qwen2-7B and LLAMA3-8B respectively. ‘ w/o GUM’ indicates that GUM is removed in the experiments.                                                                                               
+
+> Method BID-20K IID-10K GID-1K Acc 𝑹 𝟏 Time Acc 𝑹 𝟏 Time Acc 𝑹 𝟏 Time SCM 54.4 --10.4 --50.0 --
+> Memochat 65.6 68.4 1.39 16.3 73.1 1.21 52.9 76.4 1.72
+> TiM 48.6 50.2 1.26 67.2 50.9 0.95 63.7 68.0 1.60
+> with Intent
+> Ours 𝚀𝚠𝚎𝚗𝟸 85.4 89.5 0.45 82.5 93.6 0.18 ---
+> w/o GUM 80.9 90.9 0.55 77.6 96.2 0.53 ---
+> Ours 𝙻𝙻𝙰𝙼𝙰𝟹 85.1 92.1 0.43 83.0 95.7 0.18 ---
+> w/o GUM 80.5 92.3 0.54 81.1 97.2 0.53 ---
+> without Intent
+> Ours 𝚀𝚠𝚎𝚗𝟸 80.4 99.6 0.98 80.0 96.8 0.20 76.4 97.9 0.94
+> Ours 𝙻𝙻𝙰𝙼𝙰𝟹 86.0 97.2 0.96 84.1 92.5 0.28 80.2 95.6 0.89
+
+Figure 5: Efficiency of Salient Words Matching. 
+
+Generalization of proposed SAMD. Results across different datasets in Table 2 demonstrate that SAMD performs well across various conditions, including dynamically changing memory scenes and scenarios without explicit user intent. When user intent is absent, SAMD still achieves high discrimination accuracy with only a minor increase in processing time, maintaining a clear speed advantage over existing methods. From the perspective of diverse memory scenes, examples shown in Figure 4 illustrate SAMD’s ability to flexibly adjust to diverse contexts. When comparing cluster prompts with general prompts, it is evident that the memory standard for identical content (e.g., a person’s name) may vary between texts. Discrimination rules in general prompts often struggle to accommodate such variability. Similarly, when compared with specific prompts, the latter frequently overlook certain intents due to the broad range of memory scenes and heterogeneous user expressions. In contrast, cluster prompt groups semantically related intents, enabling the associated discrimination rules to cooperate, thereby minimizing the possibility of missing memorable texts and enhancing adaptability across different memory scenes. From the perspective of long-tail memory scenes, SAMD also exhibits strong generalization. On the LID, achieves an accuracy of 87% and a weighted-F1 score of 86%, demonstrating that salient words generated through multi-view role-playing effectively capture the distinct linguistic characteristics of rare or infrequent memory scenes. Similarly, the discriminative rules within CPM support efficient adaptation to low-frequency interaction contexts. On the MLID, SAMD attains an accuracy of 85% and a weighted-F1 score of 85%, confirming that the cluster prompts successfully distinguish regular scenes from long-tail ones, reducing the risk of misidentification for infrequent data. 
+
+Robustness of proposed SAMD. We validate through experiments involving intent recognition uncertainty and analyses of potential LLM hallucination effects. From the perspective of intent uncertainty, we simulate scenarios in which user intents are incomplete or noisy rather than explicitly incorrect. In this experiment, the accurate intent labels in BID are deliberately removed, and SAMD is required to infer candidate intents using its internal reasoning mechanism, which integrates the memory scene-based identifier with the intent–scene affinity matrix. The results show that the ground-truth intents appear 
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 10 of 18 Scene-Aware Memory Discrimination 
+
+among the generated candidate intents in 70.26% of all cases, and that the ground-truth and inferred intents fall within the same cluster in 89.79% of the instances. This confirms that CPM provides strong robustness to SAMD: even when the inferred intents contain noise, their cluster proximity allows accurate memory discrimination by leveraging semantically related memory scenes to approximate users’ original intents. From the perspective of potential hallucination effects, we systematically assess whether the frozen LLM exhibits hallucinations in our task. Specifically, the LLM is instructed to produce explicit reasons for each prediction, detailing the rules applied (positive or negative) and the supporting textual evidence. We manually examine 3,000 erroneous predictions and categorize hallucinations into two types: (1) Fabricated Content , where key entities or attributes cited in the explanation are absent from the source interaction text; (2) Rule Inconsistency , where the reason contradicts the final predicted label ( e.g. , a positive rule cited for a negative result). we identify 135 hallucinated cases, corresponding to a hallucination rate below 5%. Among these, 26 cases (less than 1% of all errors) involve fabricated content, while 109 cases correspond to rule inconsistencies. These results indicate that LLM hallucinations primarily manifest as mild reasoning inconsistencies rather than invented content, and can be further mitigated by more explicit prompting or structured instructions. Overall, the low hallucination rate demonstrates that LLM reasoning errors have a negligible impact on SAMD’s memory discrimination reliability. We further evaluate SAMD under adversarial annotation errors and noisy rule interference. To assess robustness against adversarial label perturbations, we simulate label-flipping scenarios in which user interactions related to ‘preferred music genre’ and ‘frequently used music player’ are originally labeled as memorable, and the labels of one category ( e.g. , data related to ‘music players’) are flipped from memorable to non-memorable. To accommodate this adversarial setting, the corresponding discrimination rules are simultaneously adjusted by transferring a subset of positive rules into negative rules. Results show that, within the affected intents, SAMD still achieves an accuracy of 86.7%, demonstrating strong resilience to adversarial label noise. We then evaluate robustness to irrelevant rule noise by generating and injecting 10 discrimination rules unrelated to existing intents, including 5 positive and 5 negative rules. These noise rules are randomly inserted into existing intents, and experiments are conducted on the GID dataset. The results indicate that 𝑅 1 of SAMD remains largely unaffected, reaching 96.8%, which confirms its robustness against rule-level noise. Furthermore, when requiring the LLMs to explicitly report the rules they relied upon during judgment, we observe that fewer than 1% of the outputs reference the injected noise rules. This observation further verifies the high robustness of the proposed cluster prompt. 
+
+Efficiency of proposed SAMD. First, we verify that the GUM module maintains high matching efficiency even as the number of salient words increases substantially through both empirical analysis and theoretical estimation. Experiments are conducted using 20,000 samples on a 13th Gen Intel(R) Core(TM) i7-13700K CPU. The results indicate an average throughput of approximately 25 million salient-word matches per second. In practical conditions where user intent information is available, the average matching time per text is only 0.08ms, which is computationally negligible. As shown in Figure 5, even when matching against all 31,831 salient words, the average processing time per text remains around 1ms. Extrapolation suggests that if both the number of memory scenes and salient words are to expand by three orders of magnitude, the average per-text matching time would still remain below one second, demonstrating the strong scalability of the SAMD design. It is also worth noting that a larger set of salient words is not inherently advantageous. Salient words should be representative and discriminative rather than merely abundant. Excessive expansion introduces redundant or weakly informative terms, offering diminishing returns. These findings confirm that GUM effectively handles salient-word list growth while preserving practical efficiency. Second, detailed measurements are conducted across all stages of SAMD’s offline memory understanding and updating phases. Constructing the memory scene-based identifier for 203 memory scenes with 31,831 salient words requires 22 minutes, consuming 2.5M input tokens, 0.6M output tokens, and incurring a total cost of only $0.49. The intent clustering step executes extremely rapidly, completing within 0.04 seconds. Incremental updates are also efficient: adding a new memory scene takes approximately 6 seconds and requires 16K total tokens, while adding a new intent, using 1,000 corresponding interactions as examples, requires only 1.2 seconds. These results demonstrate that the offline phase introduces minimal computational overhead and that incremental updates for new memory scenes or intents can be performed within seconds. Overall, SAMD exhibits excellent computational efficiency, scalable processing capability, and low maintenance cost, making it suitable for deployment in large-scale, continuously evolving user–device interaction environments.   
+
+> Y. Zhong et al.: Preprint submitted to Elsevier Page 11 of 18
+
+Scene-Aware Memory Discrimination 
+
+Table 3 
+
+Comparison of memory discrimination with different prompt types using the Balanced Interaction Dataset. Bold numbers represent the average ranking of different prompts across all models. Red numbers represent the highest rank.  
+
+> †
+
+indicates the use of a quantized model.                                                                                                                                                                
+
+> Direct Prompt General Prompt Cluster Prompt (Ours) Specific Prompt Model Acc 𝑹 𝟎 𝑹 𝟏 𝒘𝑭 𝟏 Acc 𝑹 𝟏 𝒘𝑭 𝟏 Acc 𝑹 𝟏 𝒘𝑭 𝟏 Acc 𝑹 𝟏 𝒘𝑭 𝟏
+> MiniCPM-2B 54.24 31.73 81.13 51.57 59.74 97.83 50.63 78.40 95.33 77.43 72.05 95.46 69.78 Qwen2-0.5B 46.96 92.87 8.39 36.07 48.71 87.26 41.79 65.70 94.95 63.49 65.69 95.06 63.48 Qwen2-1.5B 54.34 0.01 99.99 38.27 55.40 94.50 44.84 70.91 77.84 70.70 70.80 81.93 70.27 Qwen2-7B 55.49 75.83 38.41 54.10 64.49 95.92 59.26 85.42 89.47 85.36 82.11 85.48 82.07 Qwen2-72B †50.61 90.73 17.02 43.38 58.63 80.99 57.09 86.28 84.19 86.31 83.25 84.33 83.26 LLAMA3-8B 62.19 66.40 58.66 62.24 64.90 90.49 61.60 85.09 92.08 84.95 82.76 91.54 82.52 LLAMA3.1-8B 62.37 43.48 78.12 61.13 61.29 95.86 54.25 85.86 83.79 85.89 81.85 87.34 81.74 LLAMA3-70B †50.12 87.44 18.77 43.88 49.67 79.96 45.72 85.03 82.65 85.06 81.56 79.99 81.60 ChatGLM3-6B 53.36 76.16 34.22 51.44 56.22 86.35 50.63 70.48 95.12 67.83 70.97 97.74 67.86 GLM4-9B 59.46 58.40 60.35 59.52 64.07 69.01 63.99 83.61 95.87 83.18 81.82 94.83 81.31
+> Average Rank 3.8 -3.7 3.6 3.2 2.3 3.4 1.1 1.9 1.1 1.9 2.1 1.9
+
+5.1.3. Ablation Study 
+
+Effectiveness of Gating Unit Module. The results in the middle part of Table 2 show that GUM significantly reduces time costs while improving accuracy. Especially under real data distributions, it achieves nearly three times the speed improvement. This shows that the proposed identifier and multi-view role-playing quickly identify non-memorable and memorable data, respectively. 
+
+Effectiveness of Cluster Prompting Module. A thorough examination of the results in Table 3 and Figure 6 allows us to investigate the impact of different prompts on memory discrimination. We conduct experiments under the following four settings: 
+
+• Direct Prompt : Directly ask LLMs, ‘ Does the text contain personal information that needs recording? ’. Different LLMs all hit around 50% accuracy. However, the differences in the performance of recall reveal the inherent biases of each LLM on what to remember. In truth, LLMs lack real memory understanding and cannot be used for memory discrimination directly. 
+
+• General Prompt : Inform LLMs of criteria for judging what content to remember based on the personal information required by applications through a set of general rules. These rules include that the content needs to involve aspects such as personal education, work, health, social relationships, and travel activities. The results indicate that this increases the recall of memorable data to over 80% while having little impact on accuracy. LLMs still do not understand what not to remember. 
+
+• Specific Prompt : Create several discrimination rules for each intent based on all memory scenes to enhance LLMs’ understanding of memory. The results indicate that the performance of memory discrimination has improved by nearly 20%. Nevertheless, it depends heavily on thousands of manually crafted rules and the system’s accurate intent recognition results. Additionally, rules designed for a single intent might not cover all user behaviors, potentially leading to gaps in real scenarios. 
+
+• Cluster Prompt : The proposed cluster prompt groups intents covering similar memory scenes. We construct positive and negative memory discrimination rules for each group. The results show that SAMD achieves optimal performance on most LLMs. Compared to the general prompt, SAMD uses a similar number of rules but improves performance by over 20%. Compared to the specific prompt, SAMD uses less than 1% of the number of rules while outperforming them. 
+
+Effectiveness of Intent-Scene Joint Clustering. The results are shown in Table 4. Intent embeddings with density-based clustering algorithms are ineffective due to the inherent vagueness and ambiguity of intent names. Then, we 
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 12 of 18 Scene-Aware Memory Discrimination 10 
+
+> 100
+> 1000
+> 10000
+> 50
+> 60
+> 70
+> 80
+> 90
+
+General Prompt  Cluster Prompt  Specific Prompt   
+
+> Number of rules
+> Accuracy
+> Qwen2-7B LLAMA3-8B GLM4-9B
+
+Figure 6: Comparison of different prompt types. The proposed cluster prompt, using only a similar magnitude of rules as the general prompt, performs as well or even better than the specific prompt. 
+
+Table 4 
+
+Quantitative results for intent clustering are assessed in terms of both clustering and multi-class classification. The bold 
+
+number highlights the best results. K-Means represents the Bisecting K-Means algorithm.                                             
+
+> Metrics BERT GPT-2 BERT GPT-2 Ours Meanshift K-Means Spectral Meanshift K-Means Spectral Meanshift K-Means Spectral Meanshift K-Means Spectral
+> 𝑅𝐼 0.029 0.033 0.086 0.009 0.298 0.037 0.071 0.138 0.107 0.016 0.333 0.081 0.626
+> 𝑤𝐹 10.05 0.24 0.24 0.04 0.33 0.20 0.09 0.25 0.29 0.06 0.38 0.30 0.71
+> -Embedding: Intent Only Embedding: Intent with corresponding texts
+
+further incorporate relevant interactions for each intent in embeddings, which improves intent understanding and the discriminative power of the embeddings, though only slightly. Significant manual adjustments remained necessary before usage. The proposed intent-scene joint clustering effectively captures intent correlations by creating the affinity matrix between intents and memory scenes. By analyzing latent intent aggregations via SVD, we achieve clustering that aligns with actual semantic meanings for subsequent clustering prompt construction. 
+
+5.2. Indirect Evaluation of Memory Discrimination 
+
+We indirectly evaluate memory discrimination by assessing its impact on end-to-end memory agents, verifying that improved memory enhances application performance and reduces cost. The successful usage reflects the utility of the memory discrimination method. We experiment on the state-of-the-art methods that store raw data and summaries, Self-Controlled Memory framework (SCM) (Wang et al. (2025)), and MemoryBank (Zhong et al. (2024)). 
+
+5.2.1. Experimental Settings 
+
+Datasets. We choose two widely used datasets to evaluate the memory-assisted agents, and the conversation data is a typical form of personal interaction. 
+
+• Dataset in SCM : Contains 18 dialogue instances collected from the open source data ShareChat 3 and 105 human-annotated probing questions. 
+
+• Dataset in MemoryBank : Comprises conversations from 15 virtual users over 10 days and has a total of 194 questions. These users have diverse personalities, and the dialogue on each day covers at least two topics. 
+
+Metrics. Following SCM and MemoryBank, we evaluate across multiple dimensions, including answer accuracy, efficiency, and retrieval accuracy: 
+
+• Answer accuracy : Evaluate the accuracy of answers to probing questions. Note that we further evaluate questions that require single-turn dialogue and multi-turn dialogue history separately for SCM. 
+
+• Computational cost : Evaluate the average number of tokens on each dialogue. Since all methods rely on LLM APIs, under the same network conditions, this directly reflects the efficiency and runtime of these methods. 
+
+• Memory retrieval effect : Determines if related memory can be successfully retrieved. Specifically, we calculate the recall and Top-1 accuracy of the retrieved memory. 
+
+> 3https://paratranz.cn/projects/6725
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 13 of 18 Scene-Aware Memory Discrimination 
+
+Table 5 
+
+The comparison results of SCM with and without the proposed SAMD. Referring to the original paper, we conduct experiments on both GPT-3.5-turbo and GPT-4o-mini . We apply the default settings of SCM and utilize the Top-4 retrieved memory. The red numbers indicate an increase in performance, while the green numbers indicate a decrease in consumption. SAMD helps construct superior memory, resulting in more accurate question answering, improved memory retrieval accuracy, and reduced computational costs.                                  
+
+> Method Answer Accuracy Avg. Tokens/Dialogue Memory Retrieval
+> Total Single Turn Multi Turn Recall Top-1 Accuracy SCM turbo 69.2 77.2 63.3 86k 84.1 57.7 +SAMD 82.6 (+13.4%) 77.2 (+0.0%) 86.7 (+23.4%) 64k (-25.6%) 88.5 (+4.4%) 75.0 (+17.3%)
+> SCM 4o-mini 65.4 72.7 60.0 91k 81.4 59.6 +SAMD 80.0 (+14.6%) 77.2 (+4.5%) 83.3 (+23.3%) 65k (-28.6%) 85.0 (+3.6%) 71.2 (+11.6%)
+
+Table 6 
+
+The comparison results of ChatGPT -based SiliconFriend (MemoryBank) with and without SAMD. The introduction of memory discrimination significantly reduces computational costs, enhances retrieval accuracy, and improves the accuracy. 
+
+Method Answer Acc. Retrieval Acc. Avg. Token 
+
+SiliconFriend 0.73 0.79 16.5k + SAMD 0.78 (+5%) 0.85 (+6%) 7.4k (-55.2%) 
+
+Implementation Details. For fair comparison, we perform experiments using the open-source code 45 .
+
+5.2.2. Quantitative Results 
+
+Table 5 presents the SCM results, demonstrating that incorporating memory discrimination reduces token consumption by over 25%. SAMD filters out sentences in the context that are irrelevant to personal information or meaningless, resulting in a high-quality memory, which decreases storage needs and invalid inputs for other memory operations. Recall of historical dialogues related to questions has improved, with at least a 10% boost in Top-1 retrieval accuracy. Consequently, answer accuracy improves by over 10% and over 20% for multi-turn questions, thanks to retrieval results that contain more relevant information and less noise, enhancing overall information coverage. Table 6 provides the MemoryBank results. The memory discrimination method SAMD helps avoid more than 50% of unnecessary computational costs. With reduced noise in memory, the accuracy of retrieval historical information and responses improves by at least 5%. 
+
+5.2.3. Qualitative Results 
+
+We find that users’ daily interactions contain a large amount of meaningless data. As shown on the left side of Figure 7, if these data are incorrectly activated during application, it causes inaccurate responses and omissions of relevant information. Moreover, as shown on the right side, when the amount of context gradually increases, the lack of memory discrimination makes LLMs overlook key clues, resulting in an incomplete understanding of events. This leads to incorrect conclusions in responses. The proposed SAMD effectively filters out non-memorable data, leading to concise and accurate responses. As seen in Figure 8, without memory discrimination, meaningless information interferes with LLMs’ understanding of user personal information. This causes neglect or incorrect inferences about user information. Moreover, when this low-quality memory is used as a reference, we receive verbose and inaccurate responses. However, with the introduction of SAMD, we obtain concise and accurate ones. 
+
+5.2.4. Failure Case Study 
+
+Analysis of incorrect responses reveals that while historical information is generally stored accurately, memory-assisted agents struggle due to limitations in other memory modules. We identify two primary issues: incomplete responses and misinterpretation of questions. Firstly, when too many memory fragments are required, some may not be activated properly. This results in incomplete or inaccurate responses. For example, when a user asks, 
+
+> 4https://github.com/wbbeyourself/SCM4LLMs
+> 5https://github.com/zhongwanjun/MemoryBank-SiliconFriend
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 14 of 18 Scene-Aware Memory Discrimination Can I communicate with you in English? 
+
+Of course, I can communicate with you in English. Do you have any questions or need any assistance? 
+
+Are you there? 
+
+Hello! I'm here. How can I assist you? 
+
+The group believes that  the company is experiencing losses , so no one will receive 
+
+a year-end bonus. However, the company's 
+
+legal representative have assured me that 
+
+there will indeed be a year-end bonus. 
+
+… more sentences …
+
+Based on the information you provided, I suggest that you…  . If you need further assistance, … more sentences … . I wish you success in resolving the issue. 
+
+What skills do you possess? 
+
+I can answer questions, more sentences ,and engage in conversations. Is there anything you need assistance with? 
+
+dialogue about jewelry 
+
+Question :
+
+What topics have we discussed earlier? 
+
+Answer w/ MeD-GC: 
+
+Jewelry making techniques, product copywriting, analysis of the American jewelry market. 
+
+Answer w/o Memory Discrimination :
+
+The topics we discussed include that users can communicate with me in English, my skills, users considering me an expert in the jewelry field, and users wanting to inquire about the pros and cons of brass jewelry compared to stainless steel jewelry. 
+
+Question :
+
+Why does the company not issue year-end bonuses? 
+
+Answer w/ MeD-GC: 
+
+The reason is that the company incurred significant losses last year. 
+
+Answer w/o Memory Discrimination :
+
+The reason … is that the group has confirmed that neither the entire group nor the company will issue year-end bonuses. I suggest that you further communicate with the company … . If you need further assistance … . I wish you success in resolving the issue. 
+
+more dialogue 
+
+… more sentences … the group and the 
+
+involved party that there are no year-end bonuses, and the entire group has none. 
+
+more dialogue 
+
+Context  Non-Memorable Data  Context  Memorable Data  Context  Relevant Data  Context  Correct  Context  Wrong 
+
+Figure 7: Examples of the probing questions in SCM’s data. There is a large amount of non-memorable content. As indicated on the left side, memory discrimination can prevent the introduction of noise in the answer and the loss of answer elements. On the right side, memory discrimination helps avoid relevant information being drowned in a plethora of non-memorable content, allowing it to be correctly retrieved and utilized. Indeed, everyone's music preferences are different.  My favorite music genres are rock and pop music.  Which rock and pop artists or bands have you heard of?    
+
+> Rock and pop music are very popular genres, … . Here are some famous rock and pop music artists or bands. You may be familiar with some of these figures or works: Rock music: … more sentences… . Pop music: … more sentences… . If you are interested in a specific artist or work, feel free to let me know, and we can share more stories and music about them together! … more sentences … . I would be happy to share more information about these musical figures with you!
+
+Answer w/ MeD-GC: 
+
+You like both rock and pop music. 
+
+Answer w/o Memory Discrimination :
+
+Based on the contextual information, I speculate that you might enjoy both rock and pop music. Of course, if there are other music genres you are interested in, feel free to let me know, more sentences . If you want to learn more about a specific genre of music or have any songs you'd like to recommend, just let me know! 
+
+Question :
+
+What types of music do I like?  Context  Non-Memorable  Context  Memorable  Context  Correct  Context  Wrong 
+
+Figure 8: Example of probing questions in MemoryBank’s data. The storage of excessive non-memorable data in memory causes LLMs to have biases in understanding them during use, leading to incorrect responses. Additionally, it makes the responses verbose. 
+
+“What topics did we discuss?" ,and there is a large amount of content under each topic. Some topics may be lost in the response due to retrieval limitations. Secondly, questions are sometimes not correctly understood. For example, when a user asks, 
+
+“What is the first poem I sent you?" .Memory-assisted agents may struggle to perform operations in memory to locate the ‘first’ item. Therefore, memory discrimination streamlines memory, providing a more concise and efficient personal information foundation for memory writing, management, and reading modules, thus unlocking tremendous potential for memory-assisted agents. 
+
+## 6. Conclusion 
+
+In this paper, we propose a scene-aware memory discrimination method via GUM and CPM called SAMD, aimed at enhancing the efficiency and quality of memory construction for personal daily interaction data. SAMD effectively recalls memorable data while maintaining robustness in complex or changing scenarios. SAMD not only provides new insights for personal memory processing but also lays the groundwork for advancing the application of intelligent devices in personalized services. We look forward to further exploration in this field to achieve more efficient memory management and a better user experience. 
+
+Acknowledgement. This work was supported by the National Natural Science Foundation of China (U23B2057), and Shanghai Pilot Program for Basic Research (22TQ1400300). 
+
+## References 
+
+M. A. M. Hasan, Y. S. Hwang, J. Shin, Deep learning assisted intelligent human computer interaction for next generation internet applications, Informatica (Slovenia) 48 (2024). 
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 15 of 18 Scene-Aware Memory Discrimination 
+
+D. Li, C. Deng, X. Wang, Z. Li, C. Zheng, J. Wang, B. Li, Joint inter-word and inter-sentence multi-relation modeling for summary-based recommender system, Inf. Process. Manag. 61 (2024) 103631. L. Liu, X. Yang, Y. Shen, B. Hu, Z. Zhang, J. Gu, G. Zhang, Think-in-memory: Recalling and post-thinking enable llms with long-term memory, CoRR abs/2311.08719 (2023). G. Wang, Y. Xie, Y. Jiang, A. Mandlekar, C. Xiao, Y. Zhu, L. Fan, A. Anandkumar, Voyager: An open-ended embodied agent with large language models, Trans. Mach. Learn. Res. 2024 (2024). G. Lee, V. Hartmann, J. Park, D. Papailiopoulos, K. Lee, Prompted llms as chatbot modules for long open-domain conversation, in: ACL (Findings), Association for Computational Linguistics, 2023, pp. 4536–4554. G. E. Pibiri, R. Trani, Parallel and external-memory construction of minimal perfect hash functions with pthash, IEEE Trans. Knowl. Data Eng. 36 (2024) 1249–1259. Y. Zhong, Y. Gao, X. Zhang, H. Wang, ODDA: an ooda-driven diverse data augmentation framework for low-resource relation extraction, in: ACL (Findings), Association for Computational Linguistics, 2025, pp. 267–285. Z. Zhang, X. Bo, C. Ma, R. Li, X. Chen, Q. Dai, J. Zhu, Z. Dong, J. Wen, A survey on the memory mechanism of large language model based agents, CoRR abs/2404.13501 (2024). A. Nardelli, A. Sgorbissa, C. T. Recchiuto, Personality- and memory-based software framework for human-robot interaction, in: ICRA, IEEE, 2024, pp. 17388–17394. Y. Zhong, F. Wu, M. Guo, X. Zhang, M. Wang, H. Wang, Meta-pke: Memory-enhanced task-adaptive personal knowledge extraction in daily life, Inf. Process. Manag. 62 (2025) 104097. F. Zhang, Z. Zhang, F. Zhuang, Y. Zhao, D. Wang, H. Zheng, Temporal knowledge graph reasoning with dynamic memory enhancement, IEEE Trans. Knowl. Data Eng. 36 (2024) 7115–7128. C. Toukmaji, A. Tee, Retrieval-augmented generation and LLM agents for biomimicry design solutions, in: AAAI Spring Symposia, AAAI Press, 2024, pp. 273–278. S. Qu, F. Yuan, G. Guo, L. Zhang, W. Wei, Cmnrec: Sequential recommendations with chunk-accelerated memory network, IEEE Trans. Knowl. Data Eng. 35 (2023) 3540–3550. S. McLeod, Theories of selective attention in psychology, Cognitive Psychology (2023). J. Westmacott, P. Lozo, L. C. Jain, Distortion invariant selective attention adaptive resonance theory neural network, in: KES, IEEE, 1999, pp. 13–16. S. Choi, S. Ban, M. Lee, J. Shin, D. Seo, H. S. Yang, Biologically motivated trainable selective attention model using adaptive resonance theory network, in: BioADIT, volume 3141 of Lecture Notes in Computer Science , Springer, 2004, pp. 456–471. O. Etard, M. Kegler, C. Braiman, A. E. Forte, T. Reichenbach, Decoding of selective attention to continuous speech from the human auditory brainstem response, NeuroImage 200 (2019) 1–11. J. Maarseveen, H. Hogendoorn, F. A. J. Verstraten, C. L. E. Paffen, Attention gates the selective encoding of duration, Scientific Reports (2018). H. Gao, Y. Zhang, Memory sharing for large language model based agents, CoRR abs/2404.09982 (2024). N. Chen, H. Li, J. Huang, B. Wang, J. Li, Compress to impress: Unleashing the potential of compressive memory in real-world long-term conversations, CoRR abs/2402.11975 (2024). N. Alonso, T. Figliolia, A. Ndirango, B. Millidge, Toward conversational agents with context and time sensitive long-term memory, CoRR abs/2406.00057 (2024). G. Wang, P. Zhao, Y. Shi, C. Zhao, S. Yang, Generative model-based feature knowledge distillation for action recognition, in: AAAI, AAAI Press, 2024, pp. 15474–15482. B. Wang, X. Liang, J. Yang, H. Huang, S. Wu, P. Wu, L. Lu, Z. Ma, Z. Li, Scm: Enhancing large language model with self-controlled memory framework, in: DASFAA, 2025. URL: https://arxiv.org/abs/2304.13343 .C. Packer, V. Fang, S. G. Patil, K. Lin, S. Wooders, J. E. Gonzalez, Memgpt: Towards llms as operating systems, CoRR abs/2310.08560 (2023). W. Zhong, L. Guo, Q. Gao, H. Ye, Y. Wang, Memorybank: Enhancing large language models with long-term memory, in: AAAI, AAAI Press, 2024, pp. 19724–19731. X. Zhu, Y. Chen, H. Tian, C. Tao, W. Su, C. Yang, G. Huang, B. Li, L. Lu, X. Wang, Y. Qiao, Z. Zhang, J. Dai, Ghost in the minecraft: Generally capable agents for open-world environments via large language models with text-based knowledge and memory, CoRR abs/2305.17144 (2023). C. Hu, J. Fu, C. Du, S. Luo, J. Zhao, H. Zhao, Chatdb: Augmenting llms with databases as their symbolic memory, CoRR abs/2306.03901 (2023). A. Zhao, D. Huang, Q. Xu, M. Lin, Y. Liu, G. Huang, Expel: LLM agents are experiential learners, in: AAAI, AAAI Press, 2024, pp. 19632–19642. J. Liu, Z. Qiu, Z. Li, Q. Dai, J. Zhu, M. Hu, M. Yang, I. King, A survey of personalized large language models: Progress and future directions, CoRR abs/2502.11528 (2025). H. Wang, R. Wang, F. Mi, Y. Deng, Z. Wang, B. Liang, R. Xu, K. Wong, Cue-cot: Chain-of-thought prompting for responding to in-depth dialogue questions with llms, in: EMNLP (Findings), Association for Computational Linguistics, 2023, pp. 12047–12064. Q. Liu, N. Chen, T. Sakai, X. Wu, ONCE: boosting content-based recommendation with both open- and closed-source large language models, in: WSDM, ACM, 2024, pp. 452–461. J. Chen, X. Wang, R. Xu, S. Yuan, Y. Zhang, W. Shi, J. Xie, S. Li, R. Yang, T. Zhu, A. Chen, N. Li, L. Chen, C. Hu, S. Wu, S. Ren, Z. Fu, Y. Xiao, From persona to personalization: A survey on role-playing language agents, CoRR abs/2404.18231 (2024). M. Shanahan, K. McDonell, L. Reynolds, Role play with large language models, Nature 623 (2023) 493–498. Y. Shao, L. Li, J. Dai, X. Qiu, Character-llm: A trainable agent for role-playing, in: EMNLP, Association for Computational Linguistics, 2023, pp. 13153–13187. N. Wang, Z. Peng, H. Que, J. Liu, W. Zhou, Y. Wu, H. Guo, R. Gan, Z. Ni, J. Yang, M. Zhang, Z. Zhang, W. Ouyang, K. Xu, W. Huang, J. Fu, J. Peng, Rolellm: Benchmarking, eliciting, and enhancing role-playing abilities of large language models, in: ACL (Findings), Association for Computational Linguistics, 2024, pp. 14743–14777. 
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 16 of 18 Scene-Aware Memory Discrimination 
+
+A. Salemi, S. Mysore, M. Bendersky, H. Zamani, Lamp: When large language models meet personalization, in: ACL (1), Association for Computational Linguistics, 2024, pp. 7370–7392. J. Chen, Z. Liu, X. Huang, C. Wu, Q. Liu, G. Jiang, Y. Pu, Y. Lei, X. Chen, X. Wang, K. Zheng, D. Lian, E. Chen, When large language models meet personalization: perspectives of challenges and opportunities, World Wide Web (WWW) 27 (2024) 42. J. Gao, Y. Lian, Z. Zhou, Y. Fu, B. Wang, Livechat: A large-scale personalized dialogue dataset automatically constructed from live streaming, in: ACL (1), Association for Computational Linguistics, 2023, pp. 15387–15405. Y. Li, H. Wen, W. Wang, X. Li, Y. Yuan, G. Liu, J. Liu, W. Xu, X. Wang, Y. Sun, R. Kong, Y. Wang, H. Geng, J. Luan, X. Jin, Z. Ye, G. Xiong, F. Zhang, X. Li, M. Xu, Z. Li, P. Li, Y. Liu, Y. Zhang, Y. Liu, Personal LLM agents: Insights and survey about the capability, efficiency and security, CoRR abs/2401.05459 (2024). R. Zhao, Q. Zhu, H. Xu, J. Li, Y. Zhou, Y. He, L. Gui, Large language models fall short: Understanding complex relationships in detective narratives, in: ACL (Findings), Association for Computational Linguistics, 2024, pp. 7618–7638. M. Yu, J. Li, S. Yao, W. Pang, X. Zhou, X. Zhou, F. Meng, J. Zhou, Personality understanding of fictional characters during book reading, in: ACL (1), Association for Computational Linguistics, 2023, pp. 14784–14802. C. Li, Z. Leng, C. Yan, J. Shen, H. Wang, W. Mi, Y. Fei, X. Feng, S. Yan, H. Wang, L. Zhan, Y. Jia, P. Wu, H. Sun, Chatharuhi: Reviving anime character in reality via large language model, CoRR abs/2308.09597 (2023). X. Wang, Y. Xiao, J. Huang, S. Yuan, R. Xu, H. Guo, Q. Tu, Y. Fei, Z. Leng, W. Wang, J. Chen, C. Li, Y. Xiao, Incharacter: Evaluating personality fidelity in role-playing agents through psychological interviews, in: ACL (1), Association for Computational Linguistics, 2024, pp. 1840–1873. R. Xu, X. Wang, J. Chen, S. Yuan, X. Yuan, J. Liang, Z. Chen, X. Dong, Y. Xiao, Character is destiny: Can large language models simulate persona-driven decisions in role-playing?, CoRR abs/2404.12138 (2024). V. Gupta, P. N. Venkit, S. Wilson, R. J. Passonneau, Survey on sociodemographic bias in natural language processing, CoRR abs/2306.08158 (2023). A. Kong, S. Zhao, H. Chen, Q. Li, Y. Qin, R. Sun, X. Zhou, E. Wang, X. Dong, Better zero-shot reasoning with role-play prompting, in: NAACL-HLT, Association for Computational Linguistics, 2024, pp. 4099–4113. Y. Zheng, C. Ma, K. Shi, H. Huang, Agents meet OKR: an object and key results driven agent system with hierarchical self-collaboration and self-evaluation, CoRR abs/2311.16542 (2023). K. Chawla, I. Wu, Y. Rong, G. M. Lucas, J. Gratch, Be selfish, but wisely: Investigating the impact of agent personality in mixed-motive human-agent interactions, in: EMNLP, Association for Computational Linguistics, 2023, pp. 13078–13092. Z. Wang, Y. Y. Chiu, Y. C. Chiu, Humanoid agents: Platform for simulating human-like generative agents, in: EMNLP (Demos), Association for Computational Linguistics, 2023, pp. 167–176. Z. Gu, X. Zhu, H. Guo, L. Zhang, Y. Cai, H. Shen, J. Chen, Z. Ye, Y. Dai, Y. Gao, Y. Hu, H. Feng, Y. Xiao, Agent group chat: An interactive group chat simulacra for better eliciting collective emergent behavior, CoRR abs/2403.13433 (2024). J. Lu, S. An, M. Lin, G. Pergola, Y. He, D. Yin, X. Sun, Y. Wu, Memochat: Tuning llms to use memos for consistent long-range open-domain conversation, CoRR abs/2308.08239 (2023). S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. R. Narasimhan, Y. Cao, React: Synergizing reasoning and acting in language models, in: ICLR, OpenReview.net, 2023. W. Yao, S. Heinecke, J. C. Niebles, Z. Liu, Y. Feng, L. Xue, R. R. N., Z. Chen, J. Zhang, D. Arpit, R. Xu, P. Mui, H. Wang, C. Xiong, S. Savarese, Retroformer: Retrospective large language agents with policy gradient optimization, in: ICLR, OpenReview.net, 2024. N. Shinn, F. Cassano, A. Gopinath, K. Narasimhan, S. Yao, Reflexion: language agents with verbal reinforcement learning, in: NeurIPS, 2023. J. Tack, J. Kim, E. Mitchell, J. Shin, Y. W. Teh, J. R. Schwarz, Online adaptation of language models with a memory of amortized contexts, in: NeurIPS, 2024. B. Szalontai, M. Debreczeny, K. Fintor, C. Bagyinka, Svd-clustering, a general image-analyzing method explained and demonstrated on model and raman micro-spectroscopic maps, Scientific reports 10 (2020) 4238. J. Qiu, Y. Dong, H. Ma, J. Li, K. Wang, J. Tang, Network embedding as matrix factorization: Unifying deepwalk, line, pte, and node2vec, in: Proceedings of the Eleventh ACM International Conference on Web Search and Data Mining, WSDM 2018, Marina Del Rey, CA, USA, February 5-9, 2018, ACM, 2018, pp. 459–467. URL: https://doi.org/10.1145/3159652.3159706 . doi: 10.1145/3159652.3159706 .J. Qiu, Y. Dong, H. Ma, J. Li, C. Wang, K. Wang, J. Tang, Netsmf: Large-scale network embedding as sparse matrix factorization, in: The World Wide Web Conference, WWW 2019, San Francisco, CA, USA, May 13-17, 2019, ACM, 2019, pp. 1509–1520. URL: https: //doi.org/10.1145/3308558.3313446 . doi: 10.1145/3308558.3313446 .Q. Gao, W. Xia, Z. Wan, D. Xie, P. Zhang, Tensor-svd based graph learning for multi-view subspace clustering, in: The Thirty-Fourth AAAI Conference on Artificial Intelligence, AAAI, AAAI Press, 2020, pp. 3930–3937. URL: https://doi.org/10.1609/aaai.v34i04.5807 .doi: 10.1609/AAAI.V34I04.5807 .R. Zass, A. Shashua, A unifying approach to hard and probabilistic clustering, in: 10th IEEE International Conference on Computer Vision (ICCV 2005), 17-20 October 2005, Beijing, China, IEEE Computer Society, 2005, pp. 294–301. URL: https://doi.org/10.1109/ICCV.2005.27 .doi: 10.1109/ICCV.2005.27 .C. H. Q. Ding, X. He, On the equivalence of nonnegative matrix factorization and spectral clustering, in: Proceedings of the 2005 SIAM International Conference on Data Mining, SDM 2005, Newport Beach, CA, USA, April 21-23, 2005, SIAM, 2005, pp. 606–610. URL: 
+
+https://doi.org/10.1137/1.9781611972757.70 . doi: 10.1137/1.9781611972757.70 .Z. Wang, C. Wang, J. Pei, X. Ye, Multiple source detection without knowing the underlying propagation model, in: Proceedings of the Thirty-First AAAI Conference on Artificial Intelligence, February 4-9, 2017, San Francisco, California, USA, 2017, pp. 217–223. URL: 
+
+https://doi.org/10.1609/aaai.v31i1.10477 . doi: 10.1609/AAAI.V31I1.10477 .J. Tang, H. Lin, Z. Li, Y. Lu, X. Han, L. Sun, Harvesting event schemas from large language models, CoRR abs/2305.07280 (2023). U. Fang, M. Li, J. Li, L. Gao, T. Jia, Y. Zhang, A comprehensive survey on multi-view clustering, IEEE Trans. Knowl. Data Eng. 35 (2023) 12350–12368. 
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 17 of 18 Scene-Aware Memory Discrimination 
+
+J. Devlin, M. Chang, K. Lee, K. Toutanova, BERT: pre-training of deep bidirectional transformers for language understanding, in: NAACL-HLT (1), Association for Computational Linguistics, 2019, pp. 4171–4186. A. Radford, J. Wu, R. Child, D. Luan, D. Amodei, I. Sutskever, Language models are unsupervised multitask learners, OpenAI (2019). R. Bhuyan, S. Borah, A survey of some density based clustering techniques, CoRR abs/2306.09256 (2023). D. Li, S. Zhou, T. Zeng, R. H. Chan, Multi-prototypes convex merging based k-means clustering algorithm, IEEE Trans. Knowl. Data Eng. 36 (2024) 6653–6666. S. Hu, Y. Tu, X. Han, C. He, G. Cui, X. Long, Z. Zheng, Y. Fang, Y. Huang, W. Zhao, X. Zhang, Z. L. Thai, K. Zhang, C. Wang, Y. Yao, C. Zhao, J. Zhou, J. Cai, Z. Zhai, N. Ding, C. Jia, G. Zeng, D. Li, Minicpm: Unveiling the potential of small language models with scalable training strategies, CoRR abs/2404.06395 (2024). Q. Team, Qwen2 technical report, arXiv preprint arXiv:2407.10671 (2024). H. Touvron, T. Lavril, G. Izacard, X. Martinet, M. Lachaux, T. Lacroix, B. Rozière, N. Goyal, E. Hambro, F. Azhar, A. Rodriguez, A. Joulin, E. Grave, G. Lample, Llama: Open and efficient foundation language models, CoRR abs/2302.13971 (2023). C. Team, Chatglm: A family of large language models from GLM-130B to GLM-4 all tools, CoRR abs/2406.12793 (2024). 
+
+Y. Zhong et al.: Preprint submitted to Elsevier Page 18 of 18
