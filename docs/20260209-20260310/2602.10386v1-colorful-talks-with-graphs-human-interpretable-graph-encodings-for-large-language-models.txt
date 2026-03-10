@@ -1,0 +1,784 @@
+Title: Colorful Talks with Graphs: Human-Interpretable Graph Encodings for Large Language Models
+
+URL Source: https://arxiv.org/pdf/2602.10386v1
+
+Published Time: Thu, 12 Feb 2026 01:18:34 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Colorful Talks with Graphs: Human-Interpretable Graph Encodings for Large Language Models 
+
+Angelo Zangari Peyman Baghershahi Sourav Medya 
+
+University of Illinois Chicago, Chicago, IL, USA 
+
+{azang,pbaghe2,medya}@uic.edu 
+
+Abstract 
+
+Graph problems are fundamentally challeng-ing for large language models (LLMs). While LLMs excel at processing unstructured text, graph tasks require reasoning over explicit structure, permutation invariance, and com-putationally complex relationships, creating a mismatch with the representations of text-based models. Our work investigates how LLMs can be effectively applied to graph prob-lems despite these barriers. We introduce a human-interpretable structural encoding strat-egy for graph-to-text translation that injects graph structure directly into natural language prompts. Our method involves computing a variant of Weisfeiler–Lehman (WL) similar-ity classes and maps them to human-like color tokens rather than numeric labels. The key insight is that semantically meaningful and human-interpretable cues may be more effec-tively processed by LLMs than opaque sym-bolic encoding. Experimental results on multi-ple algorithmic and predictive graph tasks show the considerable improvements by our method on both synthetic and real-world datasets. By capturing both local and global-range depen-dencies, our method enhances LLM perfor-mance especially on graph tasks that require reasoning over global graph structure. 
+
+1 Introduction 
+
+Large language models (LLMs) have advanced rapidly over the last few years, demonstrating sub-stantial improvements in reasoning, tool use, and multimodal capabilities across successive gener-ations. These advances have enabled LLMs to be deployed in domains traditionally dominated by specialized models, including program synthe-sis, scientific reasoning, and structured problem solving (DeepSeek-AI, 2025). Recently, the emer-gence of agentic LLM systems—capable of inter-acting with tools, APIs, and external environments via standardized protocols—has further blurred the boundary between general-purpose language mod-els and domain-specific reasoning systems. To-gether, these developments raise a natural question: 
+
+to what extent can LLMs serve as general solvers for structured reasoning tasks that have historically required specialized architectures? 
+
+Graph problems provide a particularly revealing testbed for this question. Unlike text or images, graphs are combinatorial objects with no canon-ical ordering, and many graph tasks require per-mutation invariance, symmetry awareness, and rea-soning over multi-hop relational structure (Wang et al., 2024). Moreover, a large class of canoni-cal graph problems (e.g., subgraph isomorphism) are NP-hard or NP-complete (Manchanda et al., 2020; Ranjan et al., 2022), placing substantial de-mands on systematic reasoning and abstraction. As a result, graph tasks expose a fundamental mis-match between graph structure and the sequential, text-based representations that LLMs are trained to process (Mao et al., 2024). Recent work has explored whether LLMs can nevertheless be applied to graph problems by trans-lating graphs into text. Early studies show that LLMs can answer simple queries such as node degree, edge existence, and local neighborhood questions when graphs are serialized into natural language prompts (Guo et al., 2023; Wang et al., 2023). Subsequent work expanded this line of in-quiry to include path finding, cycle detection, and limited forms of combinatorial reasoning (Fatemi et al., 2024; Sanford et al., 2024). In parallel, sev-eral approaches have proposed augmenting graph-to-text translations with additional structure, such as similarity cues, embeddings, or symbolic anno-tations, to better guide LLM reasoning (Liu et al., 2024a; Wang et al., 2024; Sun et al., 2023). Despite this progress, existing works remain lim-ited. Most studies focus on a simple set of tasks, typically emphasizing local or classification-style problems such as node classification or link pre-1
+
+> arXiv:2602.10386v1 [cs.LG] 11 Feb 2026
+
+diction. Evaluations are often restricted to small graphs, leaving open questions about scalability and task generality. Furthermore, as closed-source LLMs cannot be retrained on graph data, most methods rely on prompt engineering or represen-tational choices where theoretical grounding is un-clear. In particular, many graph-to-text encodings introduce symbols or numeric identifiers that are structurally meaningful but linguistically opaque. 
+
+Our Contributions. Our work is motivated by the hypothesis that human-interpretable structural representations can help bridge the gap between graph structure and LLM reasoning. LLMs are pretrained and aligned on vast corpora of human language and are therefore biased toward repre-sentations that resemble human explanatory con-ventions. We posit that graph structure, when expressed through interpretable and semantically grounded cues, may be more effectively exploited by LLMs than arbitrary numeric or symbolic encod-ings. Our contributions span representation design, theoretical motivation, and rigorous experiments with various tasks and data. They are as follows. 
+
+(i) Human-interpretable structural encoding : We introduce a graph-to-text encoding strategy that injects explicit structural information into LLM prompts using human-interpretable tokens derived from Weisfeiler–Lehman (WL) refinement. This proposed representation preserves permutation in-variance and structural similarity while aligning graph structure with linguistic abstractions familiar to pretrained LLMs. 
+
+(ii) Structure-preserving representation : We pro-vide a principled analysis connecting ordered WL refinement to distance-weighted notions of node connectivity. Under mild assumptions, we show that the induced WL ordering is consistent with a broad class of centrality-like measures. 
+
+(iii) Experiments : We conduct a comprehensive empirical study across diverse graph families and task types to assess the effectiveness of human-interpretable structural encoding. 
+
+2 Related Work 
+
+We begin with methods based on the idea that graphs can be represented as text and processed by LLMs. Initial studies (Fatemi et al., 2024; Guo et al., 2023; Wang et al., 2023) explored basic tasks such as node degree, edge existence, and simple structural queries. Some has broadened the scope to include limited forms of combinatorial reasoning. LLMs can often answer small or local queries reli-ably, but performance tends to degrade as graphs become larger or tasks require multi-step reasoning (Fatemi et al., 2024). 
+
+Different Ways of Applying LLMs on Graphs. 
+
+Another set of approaches provide LLMs an ad-ditional structure or guidance, such as augment-ing graph descriptions with similarity cues, em-beddings, or human-interpretable features. Prior work shows that LLMs can play several distinct roles within graph-related pipelines. Existing meth-ods fall broadly into three categories: (i) Solvers :LLMs directly compute answers to tasks such as degree queries, path finding, triangle counting, etc., using only text prompts (Wang et al., 2023; Guo et al., 2023; Fatemi et al., 2024; Zhang et al., 2024; Sun et al., 2023). (ii) Aligners : LLMs guide or interface with graph-learning models, enforce con-straints, or translate natural-language instructions into graph-processing steps (Jin et al., 2024b; Zhu et al., 2024; Tan et al., 2024; Li et al., 2025). 
+
+(iii) Encoders : LLMs convert graphs into detailed textual representations, embeddings, or rationales that downstream modules or humans can interpret (Zhao et al., 2023; Fatemi et al., 2024; Liu et al., 2024a; Zhu et al., 2025). Please refer to these re-cent surveys (Jin et al., 2024a; Ren et al., 2024). 
+
+Methods as Solvers using LLMs. A growing line of work examines LLMs used directly as solvers for graph queries. These methods vary along three orthogonal dimensions such as graph types, graph tasks, and prompt formats. Many solver-oriented studies evaluate LLMs on real-world text-attributed graphs such as Cora, Citeseer, PubMed, and the OGB datasets (Ye et al., 2024; Qin et al., 2023; Liu et al., 2024a; He et al., 2024). In parallel, several benchmarks for explicit graph-in-text rea-soning rely on synthetic graphs with controlled topology, such as NLGraph or G-Recall (Wang et al., 2023, 2024; Sanford et al., 2024). These datasets offer meaningful semantic labels, but their size and irregular structure introduce challenges for text-based models. Beyond these, a substantial number of works also experiment with synthetic graphs because their structure is easier to control and analyze (Wang et al., 2023, 2024; Sanford et al., 2024). When graphs are fully serialized into a single prompt, evaluations almost always restrict to small graphs since LLM performance declines quickly as the number of nodes or edges grows. Additional details on related work has been pro-vided in Appendix A. 2You are an expert in graph theory and …                                                  
+
+> Your task is to return the maximum flow of the
+> «TARGET_PAIR» …
+> «GRAPH» 1:22:43:4,54:3,55:2,3,4
+> WL( 1):1,WL( 2):2,WL( 3):3,WL( 4):3,WL( 5):4
+> Color( 1):red, Color( 2):orange, Color( 3):
+> green, Color( 4):green, Color( 5):cyan .
+> «TARGET_PAIR» 1,4.Use the provided markers
+> consistently …Think step -by -step before
+> responding .
+> Max flow
+> between node 1
+> and 4is 1.
+> <<ANSWER>> 1
+> Graph
+
+## LLM 
+
+Prompt 
+
+Solution  
+
+> <<Nodes>> 1,2,3,4,5
+> <<Edges>> 1: 2 2: 4
+> 3: 4,5 4: 3,5 5: 2,3,4
+
+Nodes + Adjacency List      
+
+> WL(1) = 1
+> WL(2) = 2
+> WL(3) = 3
+> WL(4) = 3
+> WL(5) = 4
+> Color(1) = red
+> Color(2) = orange
+> Color(3) = green
+> Color(4) = green
+> Color(5) = cyan
+
+WL(node) = value  Color(node) = color 
+
+> 3
+> 4
+> 3
+> 2
+> 1
+> Build
+> Co -WL
+> Prompt
+> Ordered
+> 1-WL
+> Refinement
+> Colorful
+> Ordered
+> WL (Co -WL)
+> • Context Description
+> • Few -shot  Description
+> • Query  Description
+
+Figure 1: Overview of the proposed Colorful Ordered Weisfeiler–Lehman (CL-OWL) pipeline. A graph is first represented as nodes with adjacency lists, then processed using ordered 1-WL refinement to compute node-level structural labels. These labels are mapped to human-tangible color tokens and embedded into a natural-language prompt. The resulting prompt enables an LLM to perform graph reasoning tasks (e.g., maximum-flow). 
+
+3 The Problem Setup 
+
+Unlike GNNs, LLMs are sequence models—they consume and produce text, and have no native in-terface for graphs. Using an LLM to solve a graph problem therefore requires a graph-to-text trans-lation step. The graph, the task description, and any auxiliary information must be encoded as a tex-tual sequence. The central objective of our work is to design a principled graph-to-text representation method that enables LLMs to reason about graphs. 
+
+Formulation. Solving a graph problem with an LLM requires transforming a structured, non-sequential object into a textual sequence. We for-malize the elements involved in this transformation and highlights the key factors that influence over-all effectiveness. Let G = ( V, E ) be a graph with node set V and edge set E ⊆ V × V , and let q ∈ Q
+
+denote a graph task (e.g., cycle detection, reachabil-ity between two nodes). LLMs operate over a set of text sequences W ⊂ Σ where Σ is a finite alphabet, and can be viewed as a function fθ : W → W ′
+
+where W ′ ⊂ Σ , parameterized by θ.We translate the graph and task into a textual prompt via a translation function τ : X → W ,where X encompasses all information supplied to the model—graph structure, auxiliary structural information, task description, and prompt scaffold-ing. This transformation may not be unique. Sub-sequently, for an input query q (a graph task) the model prediction becomes: 
+
+y = fθ
+
+ τ (G, q, x struct ). (1) Based on this formulation, the overall effective-ness of a method depends on two major compo-nents: (1) Information content xstruct : the struc-tural information from the graph. This may range from an edge list to richer structural summaries. 
+
+(2) Translation strategy τ : how the information is expressed in text. For example, one can include ordering of edges, natural-language descriptions, few-shot examples, explicit markers for labels or colors, and the level of verbosity. These compo-nents interact strongly. For example, adding more structural information improves expressiveness but may increase prompt length and complexity; like-wise, stronger models may benefit more from richer encoding. 
+
+4 Our Proposed Method 
+
+We introduce node-level structural identifiers based on Weisfeiler–Lehman (WL) (Shervashidze et al., 2011) refinement and map into a human-3interpretable form using colors. Figure 1 shows the overview of our method. 
+
+4.1 Node-level Structural Identifiers ( xstruct )
+
+Many graph problems require reasoning beyond local neighborhood. For example, cycle detec-tion, shortest paths, or flow-related tasks depend on multi-hop neighborhoods, symmetries, and recur-ring substructures. Therefore, identifiers that are created from global structural information enables better graph comprehension, and thus, becomes beneficial for all downstream tasks. Graph learning models (e.g., GNNs) aggregate a node’s neighbor-hood information through message passing to gen-erate structure-aware embeddings, such that similar nodes attain similar embeddings. However, such latent embeddings have no meaning as such for a different model as pure numerical values. To inject structural information, some prior ap-proaches directly use the continuous GNN embed-dings into the LLM prompts for graph problems (Baghershahi et al., 2025; Chen et al., 2024). Other methods replace node identifiers with alternative vocabularies or descriptive placeholders (Fatemi et al., 2024). These strategies suffer from a com-mon limitation. The injected symbols do not carry interpretable information for the LLM. Floating-point embeddings are tied to a specific model and training process, while renamed node identifiers remain arbitrary tokens whose relationships are not grounded in the model’s linguistic prior knowledge. To address these limitations, we construct node-level structural descriptors that: 1) are structure-aware to allow capturing global topological infor-mation, 2) preserve structural similarity to assign identical descriptors to nodes that are structurally similar, 3) acknowledge an ordered interpretation 
+
+to enable comparison between nodes based on the extent of their connectivity. These descriptors can be reliably used by LLMs. 
+
+Constructing a structural descriptor. We adapt or refine the Weisfeiler-Lehman (WL) (Sher-vashidze et al., 2011) coloring algorithm which is a heuristic for graph isomorphism test. The algo-rithm iteratively refines node labels by aggregating information from neighborhoods. At each itera-tion, a node updates its label based on its current label and the multiset of labels of its neighbors. After k iterations, the resulting label summarizes the node’s k-hop neighborhood structure. WL labels in their standard form are poorly suited for direct use in LLMs. The labels are ar-bitrary integers produced by hashing operations; their numeric values have no semantic meaning, no inherent ordering, and no interpretable relation to each other. This misalignment is particularly prob-lematic for LLMs that are pre-trained on natural language patterns and struggle with reasoning over such arbitrary integers or opaque identifiers. To address the above limitation, we modify the WL method to induce an ordering over node labels that are informative for LLMs. The key idea is to constrain the aggregation step so that label up-dates reflect not only structural similarity but also a notion of cumulative structural connectivity. 
+
+Ordered 1-WL refinement 
+
+We compute node-level structural descriptors us-ing a refinement procedure of the canonical 1-dimensional Weisfeiler–Lehman (1-WL) (Sher-vashidze et al., 2011). Let us initialize node la-bels ℓ(0)  
+
+> v
+
+∈ N (e.g., ℓ(0)  
+
+> v
+
+= 1 for all v ∈ V ). Let 
+
+N (v) be the self-exclusive neighborhood function s.t. N (v) = {u : ( v, u ) ∈ E}. For iterations 
+
+t = 0 , 1, . . . , T − 1, update each node label by aggregating the multiset of neighbor labels and applying a deterministic, order-preserving canoni-calization: 
+
+ℓ(t+1)  
+
+> v
+
+= ID 
+
+
+
+ℓ(t) 
+
+> v
+
+, Sort 
+
+
+
+{{ ℓ(t) 
+
+> u
+
+: u ∈ N (v) }} 
+
+ 
+
+Here {{·}} denotes a multiset and Sort( ·) converts it to a tuple that is sorted lexicographically (thus sorted in ascending numerical order and preserving multiplicities). The function ID( ·) assigns a unique integer identifier to each distinct pair  ℓ(t) 
+
+> v
+
+, Sort( ·)
+
+in a globally deterministic order , by (i) collecting all node messages m(t) 
+
+> v
+
+=  ℓ(t) 
+
+> v
+
+, Sort( {{ ℓ(t) 
+
+> u
+
+: u ∈N (v)}} ), (ii) sorting the set of unique messages lexicographically, and (iii) mapping the i-th mes-sage in this sorted list to identifier i. These labels form our node-level structural prompt augmenta-tion xstruct .
+
+Ordered 1-WL & Centrality 
+
+We formalize the relationship between our ordered 
+
+1-WL refinement and standard notions of node cen-trality. We define centrality as follows. 
+
+Definition 1 (Distance-shell counts and truncated connectivity) . For k > 0, define the k-th distance shell of v as Sk(v) = {u ∈ V : d(u, v ) = k},where d(·, ·) is shortest-path distance. For a weight 
+
+4sequence α0 ≥ α1 ≥ · · · ≥ αT > 0, define the truncated distance-weighted connectivity 
+
+CT (v) = 
+
+> T
+
+X
+
+> k=0
+
+αk |Sk(v)|.
+
+Theorem 1. Let ℓ(t) be the labels produced by ordered 1-WL on G.
+
+(1) Degree consistency. For any nodes v, w ∈ V ,
+
+deg( v) > deg( w) = ⇒ ℓ(1)  
+
+> v
+
+> ℓ (1)  
+
+> w
+
+.
+
+(2) Shell-dominance implies label dominance. Fix 
+
+T ≥ 1. Suppose there exist nodes v, w ∈ V such that (i) |Sk(v)| ≥ |Sk(w)| for all k = 1 , . . . , T, 
+
+and (ii) |Sk⋆ (v)| > |Sk⋆ (w)| for some k⋆ ≤ T, 
+
+and additionally the rooted T -hop neighborhoods of v and w are tree-unfoldings (i.e., have no colli-sions in the breadth-first expansion up to depth T ). Then ℓ(T ) 
+
+> v
+
+> ℓ (T ) 
+
+> w
+
+holds. 
+
+(3) Relation with connectivity. With (2), for any nonincreasing positive weights {αk}Tk=0 ,
+
+CT (v) > CT (w). Hence, ordered 1-WL in-duces an ordering that is consistent with a class of distance-weighted connectivity functions on locally tree-like neighborhoods. 
+
+The proof is given in Appendix B.1. Theo-rem 1 provides a connection between ordered 1-WL labels and distance-weighted connectivity. This shows the benefits of using 1-WL refinement as structural identifiers. 
+
+4.2 Translating Structural Information into Text ( τ ) & CL-OWL Prompting 
+
+To make xstruct usable by an LLM, it must be translated into text via the translation function 
+
+τ (G, q, x struct ). As discussed before, arbitrary in-tegers or symbolic codes are generally suboptimal for conveying structural meaning to LLMs. Mean-while, LLMs are effective at leveraging represen-tations that resemble natural explanatory language. An effective translation strategy should therefore express structural information in a form that is both faithful to the underlying graph properties and suit-able to exploit the linguistic priors of LLMs. Our objective is to map these labels into a tex-tual representation that preserves key properties: similarity-preserving, order-preserving, and con-ciseness. Nodes with similar structural features should have similar representations. For example, nodes with higher structural connectivity should be distinguishable from those with lower connectivity in a consistent and interpretable manner. 
+
+Colors as an interpretable similarity space. To achieve the above, we map WL-derived labels into colors. Colors provide a natural similarity space that is widely used in human communication to group and distinguish entities. In natural language, colors carry intuitive relational meaning (e.g., “red is closer to orange than blue”), and LLMs are well-equipped to exploit such associations. From a representational perspective, colors also admit an ordered interpretation. By restricting at-tention to a one-dimensional segment of the color spectrum, variations in hue can be associated with a monotonic structural scale derived from the or-dered WL labels. This allows us to encode both equivalence and graded similarity in a way that remains human-interpretable. Figure 2 shows an example. 
+
+Colorful-WL Prompting (CL-OWL) 
+
+Here we formally explain how our Colorful-ordered-WL (CL-OWL) translator τ constructs the LLM prompts. The main input to the LLM is a graph task T ⊂ U , where U ∈ V × E × R is a general set of graph problems/tasks, e.g. short-est path prediction. Each task is a set of tuples of query q and answer a as T = {(Q, S (Vs, E s), a ) : 
+
+S(Vs, E s) ∈ V × E, a ∈ R, Q ⊂ Vs}. Note that 
+
+S(Vs, E s) is a graph and not necessarily a subgraph of G, but we have Vs ∈ V and edges Es ∈ E. Also, 
+
+Q could be a singleton set, {u} ⊂ Vs, (e.g. in node classification) or a subset of nodes, {ui}mi=1 ⊂ Vs,(e.g., shortest path where m = 2 ). Given a tuple 
+
+T (i) = ( Q(i), S (V (i) 
+
+> s
+
+, E (i) 
+
+> s
+
+), a (i)) ∈ T, ∀i ∈ [|T |],our translator incorporates multiple channels of information in the prompts as follows: 
+
+1. Context descriptor. A descriptor τc : W ×
+
+V × E → W uses the input subgraph S(V (i) 
+
+> s
+
+, E (i) 
+
+> s
+
+)
+
+along with prespecified graph notation, task defi-nition, and LLM characterization templates to pro-vide a rich description as the task descriptor gener-ates a textual sequence P (i) 
+
+> c
+
+= τc(S(V (i) 
+
+> s
+
+, E (i) 
+
+> s
+
+)) .
+
+2. Colorful-WL Structure descriptor. A de-scriptor τcwl leverages the structural informa-tion collected from S(V (i) 
+
+> s
+
+, E (i) 
+
+> s
+
+) into the prompt. Specifically, let W L (.) be the WL mechanism which generates labels Lu = W L (u) ∈ Z+ for 
+
+∀u ∈ V (i) 
+
+> s
+
+, and let ¯Lu ∈ [0 , 1] be the normalized labels such that: 
+
+¯Lu = Lu − min v∈V Lv
+
+max v∈V Lv − min v∈V Lv
+
+,
+
+5Figure 2: Iterative refinement of WL labels and their mapping to human-interpretable colors, showing how structural equivalence classes evolve as increasingly larger neighborhoods are incorporated. 
+
+We use a color mapping function Ψ : [0 , 1] → Wc
+
+to obtain natural language color labels Cv =Ψ( ¯Lv), we use the, where Wc ⊂ W is a subset of natural language color words like {red, pink, yellow, ...}. To exemplify, choosing the RGB color spectrum, we can have Ψ = Ψ NLC ◦ ΨRGB ,where ΨRGB : [0 , 1] → [0 , 1] 3 which gives RGB channels color as ΨRGB ( ¯Lu) → (Ru, G u, B u),and ΨNLC : [0 , 1] 3 → W which maps the RGB channels to a natural language color tokens. The structure descriptor generates a textual sequence 
+
+P (i) 
+
+> cwl
+
+= τcwl (S(V (i) 
+
+> s
+
+, E (i) 
+
+> s
+
+)) .Notably, we express colors using natural lan-guage descriptors rather than alphanumeric encod-ings such as hexadecimal color codes. Unlike nu-meric labels or hexadecimal color codes, natural-language color tokens correspond to semantically grounded embeddings learned during pretraining, enabling the model to exploit similarity relation-ships already encoded in its representation space. 
+
+3. Few-shot Guidance descriptor. A few-shot builder τe is utilized to samples a set of queries and answers from the task such that I(i) ⊂ T . Specif-ically, we use a wrapper r(.) to put the few-shot examples in a fix template. Next, the builder puts all the wrapped examples with some description to generate P (i) 
+
+> e
+
+= τe(r(I(i))) .
+
+4. Query descriptor. The final component of the prompt is the query descriptor τq. It states the problem along with the wrapped query as P (i) 
+
+> q
+
+=
+
+τq(r({Q})) .Our CL-OWL translator mixes all the above components and makes the suitable structure-aware prompts as P (i) = τ (Q(i), S (V (i) 
+
+> s
+
+, E (i) 
+
+> s
+
+)) ,which could be a simple concatenation as P (i) =[P (i) 
+
+> c
+
+∥P (i)
+
+> cwl
+
+∥P (i) 
+
+> e
+
+∥P (i) 
+
+> q
+
+].
+
+Properties of the translation. This color-based translation is structure-, similarity-, and order-preserving, while remaining human-interpretable and aligned with LLM inductive biases. The result-ing color annotations form part of the translation function τ and are incorporated into the prompt. Figure 3 (more examples are in Appendix B.3) shows an example prompt with max-flow.                   
+
+> Task Time complexity Objective
+> Triangle Counting O(m3/2)Local Pattern Counting Cycle Check O(n+m)Global Structural Reasoning Reachability O(n+m)Global Connectivity Reasoning Shortest Path O(n+m)Combinatorial Reasoning Maximum Flow O(n m 2)Optimization
+
+Table 1: Task time complexity and characteristics (with 
+
+n = |V |, m = |E|) for algorithmic tasks. We also use node classification as a predictive task. 
+
+5 Experimental Results 
+
+We test whether human-tangible auxiliary struc-tural information by our method improves graph reasoning across different graph types and tasks. 
+
+Reproducibilty. The code is available at: https: //github.com/angelozangari/CL-OWL 
+
+5.1 Setup 
+
+The following contains major details on experimen-tal setups. Additional details are in Appendix D. 
+
+Graph Tasks. We evaluate our methods on a variety of local and global algorithmic tasks requir-ing different types of reasoning. Table 1 shows the time complexity of an algorithmic (optimal) solver for each task. We also evaluate node classification 
+
+as the most common graph predictive task. 
+
+Datasets. For algorithmic tasks (Table 1), we use synthetic graphs of multiple types, namely: Erd˝ os–Rényi, Barabási–Albert, and Path. For each type, we generate graphs with sizes from n = 5 
+
+to n = 100 . The upper bound reflects the practi-cal limit at which even strong LLMs (e.g., GPT-4-class) maintain non-zero accuracy on our hardest tasks. For node classification task, we sample sub-graphs from real-world datasets, specifically Cora, 6Prompt template for max-flow using the CL-OWL method 
+
+SYSTEM             
+
+> You are an expert in graph theory and graph machine learning. You have deep knowledge of the Weisfeiler-Leman (WL) algorithm, structural graph analysis, and graph visualization techniques. Graph structure is provided as adjacency lists: each line is ‘node: neighbor1, neighbor2, ...‘ and isolated nodes use ‘(none)‘. Always follow the example format and present the final answer after the ‘«ANSWER»‘ marker. Reason carefully about the graph before responding.
+
+USER (task and format)           
+
+> Your task is to return the maximum flow value between the «TARGET_PAIR» with unit capacities. A graph is represented as adjacency lists where each line is ‘node: neighbor1, ...‘. ‘«WL_LABELS»‘ shows Weisfeiler–Lehman structural labels for each node. ‘«COLORS»‘ shows colors assigned based on WL label similarity. Colors act as a similarity metric among nodes.
+
+«GRAPH» 
+
+> «GRAPH» 0: 1, 2, 3, 4, 5, 6, 8. 1: 0, 5, 6, 7, 8, 9. 2: 0, 5. 3: 0, 5, 7, 8, 9. 4: 0, 6, 7. 5: 0, 1, 2, 3, 6, 7, 8. 6: 0, 1, 4, 5, 9. 7: 1, 3, 4, 5. 8: 0, 1, 3, 5, 9. 9: 1, 3, 6, 8.
+
+«WL_LABELS» 
+
+> WL(0):8, WL(1):7, WL(2):0, WL(3):5, WL(4):1, WL(5):9, WL(6):4, WL(7):2, WL(8):6, WL(9):3
+
+«COLORS» 
+
+> Color(0):teal, Color(1):lime, Color(2):red, Color(3):green, Color(4):crimson, Color(5):teal, Color(6):lime, Color(7):orange, Color(8):green, Color(9):orange
+
+«TARGET_PAIR» 
+
+> «TARGET_PAIR» 2,9 Use the provided markers consistently and place the final answer after the «ANSWER» marker. Think step-by-step about the graph before responding.
+
+Figure 3: Prompt template for max-flow using the CL-OWL method 
+
+Citeseer, PubMed, (Yang et al., 2016) and OGBN-ArXiv (Hu et al., 2020). Additional details are in Appendix D. 
+
+Baselines. The recent work, Talk-Like-a-Graph (TLG) (Fatemi et al., 2024), introduces various types of methods for graph-to-text translation by graph traversal. Each method employs a distinct vocabulary of words for textual node encoding (e.g., a list of numbers representing an adjacency list, based on common English names, famous character names from television series, etc.), along with a special edge encoding. We compare our method against two variants. 1) TLG-A : node indices for node encoding and tuples representation for edges, and 2) TLG-F : Friends series’ characters for node encoding and tuples for edge representation. We use GPT-3.5 as the base LLM for the experiments unless specified otherwise. 
+
+Variations of our Method. We evaluate three variants of our method against the baselines as fol-lows: (i) L-OWL: Pure (Only) WL-based Labels; (ii) C-OWL: Pure (Only) WL-based Colors; (iii) 
+
+CL-OWL: WL-based Labels + Colors. 
+
+5.2 Quality on Graph Tasks 
+
+We evaluate our methods on graph algorithmic tasks. We sample 200 graphs for each task of sizes 10-30 nodes from Barabasi-Albert (BA) and Erdos-Renyi (ER) graph types (following the setup in (Fatemi et al., 2024; Wang et al., 2024)). To avoid non-trivial tasks, we make graphs sufficiently con-nected by setting an edge probability of p = 0 .2 for 7Cycle Check Maximum Flow Shortest Path Triangle Counting Variant Acc. (%) MAE ↓ Acc. (%) MAE ↓ Acc. (%) MAE ↓ Acc. (%) MAE ↓                                        
+
+> TLG-A 89.50 0.105 33.33 0.494 87.80 0.041 16.00 0.456 TLG-F 91.50 0.085 36.59 0.445 83.74 0.050 11.50 0.523 L-OWL 92.00 0.080 36.59 0.475 91.87 0.025 14.00 0.508 C-OWL 92.50 0.075 36.59 0.443 88.62 0.039 14.00 0.454
+> CL-OWL 93.00 0.070 36.59 0.438 86.99 0.042 14.50 0.469
+
+Table 2: Results on graph algorithmic tasks averaged over BA and ER datasets using gpt-4o (additional results are in Appendix E). CL-OWL generally achieves superior performance over the baselines. Overall, the color-based variants (CL-OWL and C-OWL) demonstrate more improvements compared to others.                                          
+
+> Source-to-Target Distance Range Maximum Flow Shortest Path
+> Method 10–15 16–25 26–40 41+ 10–15 16–25 26–40 41+ TLG-A 3.1 0.0 5.0 0.0 6.5 6.2 20.0 0.0 C-OWL 12.5 9.1 15.0 31.2 0.0 0.0 20.0 11.8
+> L-OWL 15.6 27.3 25.0 6.2 6.5 6.2 0.0 5.9 CL-OWL 25.0 9.1 5.0 18.8 12.9 6.2 6.7 5.9
+
+Table 3: Accuracy (%) by source–target distance range for Maximum Flow and Shortest Path. Best values per column are in bold; second-best are underlined. Our C-OWL variant generally outperforms the baselines. CL-OWL achieves superior performance on close range. L-OWL performs best on medium to long ranges, and color-based variants achieve superior performance on the longest range. 
+
+ER graphs and a minimum number of four edges per node for BA graphs. These specific graph types are more closer to real-world graphs compared to simpler structures, such as complete or path graphs. Results are shown in Table 2. For more chal-lenging tasks (shortest path, cycle check, and max flow), our proposed WL-enriched prompting (with-/without colors) achieves significant improvements over the baselines. This empirically verifies our claim, as including the WL-labels provides infor-mation from long-range dependencies that are ac-cessible and allow reasoning on these tasks that require global structural knowledge. The coloring variants (C-OWL and CL-OWL) show superior performance over the pure-WL methods. Regard-ing triangle counting, the WL-enriched prompts underperform simple prompting (baselines). We conjecture that the nature of triangle counting is pat-tern matching, and increasing the prompt length by including WL labels/colors may harm the detection of closer connections, resulting in a performance drop. 
+
+5.3 Effects on Long Range Dependencies 
+
+As we discussed in Section 3, one of the major motivations of our design is to capture long-range dependencies (e.g., global structure). To demon-strate this, we evaluate performance on the maxi-mum flow task where the source and target nodes are significantly farther apart. To achieve this, we construct 120 graphs with 50, 75, 100 nodes of path and ER graphs with p = 0 .015 (sparse, for high diameter), such that all the graphs’ diameters 
+
+gd are above a threshold, i.e., gd > 10. Table 3 shows the results over different source-to-target distance ranges. Clearly, enriching the prompt with WL-labels not only enhances perfor-mance across all ranges, but also the enhancement is larger as the distances increase. Indeed, encoding graphs from their Non-Elucidation space to the tex-tual sequence where position matters might make two nodes appear farther from each other in the sequence compared to their original shortest (path) distance in the graph. Therefore, attending to the WL-labels allows the LLM to compensate for the noisy signals from the positional-encoding mod-ule as its information is affected by the appearance position of the encoded node/edge tokens. 
+
+5.4 Scalability on Larger Graphs 
+
+Although the limitation of context window size for LLMs has been addressed by recent advanced mod-els, the dependence on positional encodings and attentions still affects their performance. Therefore, it is essential to assess the impact of our methods on the LLM’s performance across larger graph sizes. Here, we use the same experimental setting as Sec-tion 5.3, except that we do not evaluate across dif-8Maximum Flow Shortest Path                                         
+
+> Method 50 75 100 All 50 75 100 All TLG-A 5.00 4.76 0.00 2.53 5.00 14.29 5.26 7.59 C-OWL 45.00 4.76 7.89 16.46 0.00 9.52 7.89 6.33 L-OWL 50.00 9.52 5.26 17.72 10.00 4.76 2.63 5.06 CL-OWL 30.00 4.76 15.79 16.46 20.00 14.29 0.00 8.86
+
+Table 4: Scalability of Maximum Flow and Shortest Path for different graph sizes. We report accuracy (%). The best is in bold, and the second-best is underlined. Accuracy degrades rapidly with graph size for both tasks, with WL-based methods mitigating but not eliminating scaling failures. Note that the highest graph size used in (Fatemi et al., 2024) for TLG is 20. 
+
+ferent source-to-target distance ranges, but across different numbers of nodes. Table 4 shows the results for the maximum flow and the shortest-path task. We observe the same pattern as we do in Section 5.3. However, a more interesting finding can be seen by comparing the results with Table 2. Essentially, the positive perfor-mance gap between our method and the baselines is generally higher once we have larger graphs, which again supports our claim on the effective-ness of leveraging WL-labels/-colors for capturing global patterns of the graph. 
+
+5.5 Performance on Prediction Tasks 
+
+Besides the algorithmic task, we also show the ef-fectiveness of CL-OWL for node classification. Table 5 presents the results (F1-Macro) on four real-world benchmark datasets: Cora, Citeseer, PubMed, and OGBN-ArXiv. We first sample 30 graphs of five different sizes (10-50 nodes). Then, we sample 150 subgraphs from all the graphs. Be-cause of this, the dataset contains 600 graph-task instances in total. Overall, incorporating WL-based structural in-formation improves performance over the base-line, indicating that explicit structural cues can benefit predictive tasks beyond purely algorith-mic reasoning. The color-only variant (C-OWL) achieves the strongest results on Cora, Citeseer, and PubMed. In contrast, the color-label variant (CL-OWL) performs best on the larger and struc-turally more complex OGBN-ArXiv dataset, where human-tangible similarity cues appear to better sup-port long-range structural dependencies. These re-sults highlight that the relative benefit of different encodings depends on dataset scale and complexity, with color-based representations becoming more advantageous as graphs grow larger.                     
+
+> Method Cora Citeseer PubMed OGBN-ArXiv TLG-A 11.35 9.01 5.70 22.76 L-OWL 18.78 13.83 13.23 22.61 C-OWL 22.30 20.08 14.33 26.87 CL-OWL 20.93 13.63 11.94 40.94
+
+Table 5: Node-classification performance measured by F1-Macro (%). The color only variant perform best on Cora, Citeseer and PubMed, with the Colors and Full method trailing behind. On ArXiv the full method performs best, followed by the labels. 
+
+6 Conclusion 
+
+We have studied how LLMs can be better adapted to graph-structured reasoning through human-tangible auxiliary structural information. By in-troducing CL-OWL, an ordered WL–based graph-to-text representation and mapping structural equiv-alence classes to natural-language color tokens, we provide a principled way to expose graph struc-ture while preserving permutation invariance and linguistic alignment. We have provided a theoret-ical analysis connecting ordered WL refinement to distance-weighted connectivity, and a system-atic empirical evaluation across diverse graph tasks and graph families. Our results show that human-tangible structural cues can substantially improve LLM performance on graph reasoning, particularly for tasks requiring global structural understanding. 97 Ethical Considerations 
+
+This work focuses on improving the representa-tion of graph-structured data for large language models (LLMs) through human-interpretable aux-iliary structural information. Our method operates solely on abstract graph topology and synthetic or standard benchmark datasets, and does not in-volve human subjects, personal data, or sensitive attributes. We do not introduce any deployment mechanisms that could amplify social bias, privacy risks, or misuse beyond those already associated with existing LLMs. As such, we do not do not foresee any ethical issues from our study. 
+
+8 Limitations 
+
+We present some limitations of our work: • Generalization to NP-hard Problems. Al-though we evaluate a diverse set of synthetic and real-world graphs, the task set does not ex-haustively cover all graph reasoning problems, especially the NP-hard ones. • Human-interpretable Encodings are Heuristic. 
+
+While color-based encoding aligns well with human and linguistic priors, it is ultimately a heuristic design choice. Alternative inter-pretable representations may yield different or superior performance. 10 References 
+
+Peyman Baghershahi, Gregoire Fournier, Pranav Ny-ati, and Sourav Medya. 2025. From nodes to narra-tives: Explaining graph neural networks with llms and graph context. Preprint , arXiv:2508.07117. Runjin Chen, Tong Zhao, Ajay Kumar Jaiswal, Neil Shah, and Zhangyang Wang. 2024. Llaga: Large language and graph assistant. In Forty-first Interna-tional Conference on Machine Learning, ICML 2024, Vienna, Austria, July 21-27, 2024 . OpenReview.net. DeepSeek-AI. 2025. Deepseek-r1: Incentivizing rea-soning capability in llms via reinforcement learning. 
+
+Preprint , arXiv:2501.12948. Bahare Fatemi, Jonathan Halcrow, and Bryan Perozzi. 2024. Talk like a graph: Encoding graphs for large language models. In The Twelfth International Con-ference on Learning Representations, ICLR 2024, Vienna, Austria, May 7-11, 2024 . OpenReview.net. Dongqi Fu, Liri Fang, Zihao Li, Zhe Xu, Hanghang Tong, Vetle I. Torvik, and Jingrui He. 2025. Bring Complex Geometric Information to LLMs: A Posi-tional Survey of Graph Parametric Representation. In The Fourth Learning on Graphs Conference .Jiayan Guo, Lun Du, Hengyu Liu, Mengyu Zhou, Xinyi He, and Shi Han. 2023. GPT4Graph: Can Large Language Models Understand Graph Structured Data ? An Empirical Evaluation and Benchmarking. Yufei He, Yuan Sui, Xiaoxin He, and Bryan Hooi. 2024. UniGraph: Learning a Unified Cross-Domain Foun-dation Model for Text-Attributed Graphs. Weihua Hu, Matthias Fey, Marinka Zitnik, Yuxiao Dong, Hongyu Ren, Bowen Liu, Michele Catasta, and Jure Leskovec. 2020. Open graph benchmark: Datasets for machine learning on graphs. Advances in Neural Information Processing Systems (NeurIPS) , 33. Bowen Jin, Gang Liu, Chi Han, Meng Jiang, Heng Ji, and Jiawei Han. 2024a. Large Language Mod-els on Graphs: A Comprehensive Survey. IEEE Transactions on Knowledge and Data Engineering ,36(12):8622–8642. Bowen Jin, Chulin Xie, Jiawei Zhang, Kashob Kumar Roy, Yu Zhang, Zheng Li, Ruirui Li, Xianfeng Tang, Suhang Wang, Yu Meng, and Jiawei Han. 2024b. Graph Chain-of-Thought: Augmenting Large Lan-guage Models by Reasoning on Graphs. Jintang Li, Ruofan Wu, Yuchang Zhu, Huizhe Zhang, Liang Chen, and Zibin Zheng. 2025. Are Large Lan-guage Models In-Context Graph Learners? Rui Li, Jiwei Li, Jiawei Han, and Guoyin Wang. 2024. Similarity-based Neighbor Selection for Graph LLMs. Hao Liu, Jiarui Feng, Lecheng Kong, Ningyue Liang, Dacheng Tao, Yixin Chen, and Muhan Zhang. 2024a. One for all: Towards training one graph model for all classification tasks. In The Twelfth International Conference on Learning Representations, ICLR 2024, Vienna, Austria, May 7-11, 2024 . OpenReview.net. Zheyuan Liu, Xiaoxin He, Yijun Tian, and Nitesh V. Chawla. 2024b. Can we Soft Prompt LLMs for Graph Learning Tasks? In Companion Proceedings of the ACM Web Conference 2024 , pages 481–484. Sahil Manchanda, Akash Mittal, Anuj Dhawan, Sourav Medya, Sayan Ranu, and Ambuj Singh. 2020. Gcomb: Learning budget-constrained combinatorial algorithms over billion-sized graphs. Advances in Neural Information Processing Systems , 33:20000– 20011. Haitao Mao, Zhikai Chen, Wenzhuo Tang, Jianan Zhao, Yao Ma, Tong Zhao, Neil Shah, Mikhail Galkin, and Jiliang Tang. 2024. Position: graph foundation mod-els are already here. In Proceedings of the 41st Inter-national Conference on Machine Learning , ICML’24. JMLR.org. Yijian Qin, Xin Wang, Ziwei Zhang, and Wenwu Zhu. 2023. Disentangled Representation Learning with Large Language Models for Text-Attributed Graphs. Rishabh Ranjan, Siddharth Grover, Sourav Medya, Venkatesan Chakaravarthy, Yogish Sabharwal, and Sayan Ranu. 2022. Greed: A neural framework for learning graph distance functions. Advances in Neural Information Processing Systems , 35:22518– 22530. Xubin Ren, Jiabin Tang, Dawei Yin, Nitesh V. Chawla, and Chao Huang. 2024. A survey of large language models for graphs. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining, KDD 2024, Barcelona, Spain, August 25-29, 2024 , pages 6616–6626. ACM. Clayton Sanford, Bahare Fatemi, Ethan Hall, Anton Tsitsulin, Mehran Kazemi, Jonathan Halcrow, Bryan Perozzi, and Vahab Mirrokni. 2024. Understand-ing transformer reasoning capabilities via graph al-gorithms. In Advances in Neural Information Pro-cessing Systems 38: Annual Conference on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 - 15, 2024 .Nino Shervashidze, Pascal Schweitzer, Erik Jan van Leeuwen, Kurt Mehlhorn, and Karsten M. Borgwardt. 2011. Weisfeiler-lehman graph kernels. Journal of Machine Learning Research , 12(77):2539–2561. Shengyin Sun, Yuxiang Ren, Jiehao Chen, and Chen Ma. 2023. Large Language Models as Topological Structure Enhancers for Text-Attributed Graphs. Yuanfu Sun, Zhengnan Ma, Yi Fang, Jing Ma, and Qiaoyu Tan. 2025. GraphICL: Unlocking Graph Learning Potential in LLMs through Structured Prompt Design. 
+
+11 Yanchao Tan, Hang Lv, Pengxiang Zhan, Shiping Wang, and Carl Yang. 2024. Graph-oriented Instruction Tuning of Large Language Models for Generic Graph Mining. Jiabin Tang, Yuhao Yang, Wei Wei, Lei Shi, Lixin Su, Suqi Cheng, Dawei Yin, and Chao Huang. 2024. Graphgpt: Graph instruction tuning for large lan-guage models. In Proceedings of the 47th Inter-national ACM SIGIR Conference on Research and Development in Information Retrieval, SIGIR 2024, Washington DC, USA, July 14-18, 2024 , pages 491– 500. ACM. Heng Wang, Shangbin Feng, Tianxing He, Zhaoxuan Tan, Xiaochuang Han, and Yulia Tsvetkov. 2023. Can language models solve graph problems in natural language? In Advances in Neural Information Pro-cessing Systems 36: Annual Conference on Neural Information Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 .Yanbang Wang, Hejie Cui, and Jon M. Kleinberg. 2024. Microstructures and accuracy of graph recall by large language models. In Advances in Neural Information Processing Systems 38: Annual Conference on Neu-ral Information Processing Systems 2024, NeurIPS 2024, Vancouver, BC, Canada, December 10 - 15, 2024 .Zhe Xu, Kaveh Hassani, Si Zhang, Hanqing Zeng, Michihiro Yasunaga, Limei Wang, Dongqi Fu, Ning Yao, Bo Long, and Hanghang Tong. 2024. How to Make LLMs Strong Node Classifiers? Zhilin Yang, William W. Cohen, and Ruslan Salakhutdi-nov. 2016. Revisiting semi-supervised learning with graph embeddings. In Proceedings of the 33rd Inter-national Conference on Machine Learning (ICML) ,pages 40–48. Ruosong Ye, Caiqi Zhang, Runhui Wang, Shuyuan Xu, and Yongfeng Zhang. 2024. Language is all a graph needs. In Findings of the Association for Computa-tional Linguistics: EACL 2024 , pages 1955–1973, St. Julian’s, Malta. Association for Computational Linguistics. Zeyang Zhang, Xin Wang, Ziwei Zhang, Haoyang Li, Yijian Qin, and Wenwu Zhu. 2024. Llm4dyg: Can large language models solve spatial-temporal prob-lems on dynamic graphs? In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discov-ery and Data Mining, KDD 2024, Barcelona, Spain, August 25-29, 2024 , pages 4350–4361. ACM. Jianan Zhao, Le Zhuo, Yikang Shen, Meng Qu, Kai Liu, Michael Bronstein, Zhaocheng Zhu, and Jian Tang. 2023. GraphText: Graph Reasoning in Text Space. Qi Zhu, Da Zheng, Xiang Song, Shichang Zhang, Bowen Jin, Yizhou Sun, and George Karypis. 2024. Parameter-Efficient Tuning Large Language Models for Graph Representation Learning. Xi Zhu, Haochen Xue, Ziwei Zhao, Wujiang Xu, Jingyuan Huang, Minghao Guo, Qifan Wang, Kaix-iong Zhou, Imran Razzak, and Yongfeng Zhang. 2025. LLM as GNN: Graph Vocabulary Learning for Text-Attributed Graph Foundation Models. 
+
+12 A Additional Details on Related Work 
+
+Locality-driven interfaces. The most common strategy restricts the textual description of a graph to local neighborhoods, such as k-hop ego-nets, short paths, or small induced subgraphs. This ap-proach reduces prompt length and stabilizes gen-eration, but obscures long-range dependencies re-quired for global reasoning. Many early and re-cent solver-oriented works adopt locality-driven se-rialization, including NLGraph-style benchmarks and graph-in-text prompting methods (Wang et al., 2023; Guo et al., 2023; Sun et al., 2023; Zhao et al., 2023). Similar locality biases appear in text-attributed graph pipelines and hybrid graph–LLM systems that operate on bounded-depth neighbor-hoods (Qin et al., 2023; Ye et al., 2024; Chen et al., 2024). Empirical analyses show that such locality constraints correlate with failures on tasks requir-ing global connectivity or cycle reasoning (Wang et al., 2024; Fu et al., 2025). 
+
+Similarity-driven interfaces. A smaller body of work selects which nodes or substructures to expose to the LLM based on similarity under a learned encoder, often using cosine similarity in embedding space. The goal is to group seman-tically related nodes rather than strictly adjacent ones. However, similarity in text or embedding space does not necessarily correspond to topolog-ical similarity, and these methods introduce addi-tional design complexity. Representative examples include similarity-based neighbor selection and re-trieval strategies for graph LLMs (Li et al., 2024; Xu et al., 2024; Sun et al., 2025; Li et al., 2025). 
+
+Embedding-based interfaces. Another line of work injects continuous graph representations into LLMs by first encoding structure with a GNN and then aligning the resulting embeddings with the LLM input space via projectors or soft prompts. These methods can convey rich structural informa-tion but reduce transparency and often require train-ing or tuning. Examples include LLaGA and re-lated graph–LLM architectures that integrate GNN embeddings into language models (Chen et al., 2024; Liu et al., 2024b; Zhu et al., 2024; He et al., 2024; Tang et al., 2024). 
+
+Textual mapping to discrete symbols. Acomplementary strategy converts structural or embedding-derived information into discrete tex-tual tokens that can be directly consumed by LLMs. Talk Like a Graph systematically studies how differ-ent graph encodings affect LLM reasoning (Fatemi et al., 2024), while other works map graph structure or learned signals into labels or symbolic descrip-tions (Zhao et al., 2023; Tang et al., 2024). AuGLM is among the few approaches that explicitly trans-late embedding-derived information into textual la-bels for LLM consumption (Xu et al., 2024). These methods are closest in spirit to our work. Our approach belongs to the textual mapping cat-egory. Unlike prior methods that rely on arbitrary numeric labels or post hoc embedding translation, we derive a task-agnostic structural signal using Weisfeiler–Lehman refinement and encode it using human-interpretable, similarity-preserving textual attributes. This design maintains a fully text-based interface while exposing non-local structural infor-mation aligned with the inductive biases of LLMs. 
+
+B Additional Details on Our Method 
+
+B.1 Proof of Theorem 1 
+
+Here we provide the proof for Theorem 1 described in Section 4.1. 
+
+Proof sketch. (1) At t = 0 all nodes have ℓ(0)  
+
+> v
+
+= 1 ,hence m(0)  
+
+> v
+
+= (1 , (1 , 1, . . . , 1)) where the tuple length equals deg( v). Lexicographic order com-pares tuples first by prefix and then by length; since all entries are 1, larger degree yields a lexicograph-ically larger message, so ID (0) assigns a larger in-teger: deg( v) > deg( w) ⇒ ℓ(1)  
+
+> v
+
+> ℓ (1)  
+
+> w
+
+.
+
+(2) Under the tree-unfolding assumption up to depth T , the T -hop rooted neighborhood of a node can be represented by a rooted tree in which the number of nodes at depth k equals |Sk(·)|. Or-dered 1-WL on such a tree corresponds to bottom-up aggregation of sorted multisets of child labels. If |Sk(v)| ≥ | Sk(w)| for all k ≤ T with strict inequality at some k⋆, then at the earliest depth where the rooted trees differ, the multiset (hence the sorted tuple) of child labels for v strictly dom-inates that of w in lexicographic order. Because 
+
+ID (t) is order-preserving over messages, this dom-inance propagates through subsequent iterations, yielding ℓ(T ) 
+
+> v
+
+> ℓ (T ) 
+
+> w
+
+.
+
+(3) If αk are nonincreasing and positive, shell dominance with a strict inequality implies 
+
+CT (v) > CT (w) immediately by summation. Combining with (2) yields consistency between the induced WL order and CT (·) for this class of local neighborhoods. 13 Algorithm 1 Ordered 1-WL Refinement (Canoni-cal Relabeling) 
+
+Require: Graph G = ( V, E )
+
+Ensure: Final node labels ℓ : V → N (and option-ally the full history)  
+
+> 1:
+
+Initialize ℓv ← 1 for all v ∈ V 
+
+> 2:
+
+repeat  
+
+> 3:
+
+for all v ∈ V do  
+
+> 4:
+
+Mv ← sort  {{ ℓu : u ∈ N (v)}}  
+
+> 5:
+
+mv ← (ℓv, M v) ▷ node message  
+
+> 6:
+
+end for  
+
+> 7:
+
+U ← sort  {mv : v ∈ V } ▷ unique messages, lexicographically sorted  
+
+> 8:
+
+Define ID( m) as the index of m in U (0-based or 1-based)  
+
+> 9:
+
+for all v ∈ V do  
+
+> 10:
+
+ℓ′ 
+
+> v
+
+← ID( mv) 
+
+> 11:
+
+end for  
+
+> 12:
+
+ℓ ← ℓ′ 
+
+> 13:
+
+until ℓ does not change  
+
+> 14:
+
+return ℓ
+
+Algorithm 2 Map WL Labels to Color Names 
+
+Require: Labels ℓv for all v ∈ V
+
+Ensure: Color annotation Color( v) for all v ∈ V 
+
+> 1:
+
+mmin ← min v∈V ℓv, mmax ← max v∈V ℓv 
+
+> 2:
+
+r ← max(1 , m max − mmin ) 
+
+> 3:
+
+for all v ∈ V do  
+
+> 4:
+
+xv ← (ℓv − mmin )/r ▷ x v ∈ [0 , 1]  
+
+> 5:
+
+hv ← hmin + ( hmax − hmin ) · xv ▷ e.g., 
+
+[hmin , h max ] = [0 ◦, 180 ◦] 
+
+> 6:
+
+Color( v) ← HueToName( hv) 
+
+> 7:
+
+end for  
+
+> 8:
+
+return Color 
+
+B.2 The Pseudocodes 
+
+The psuedocde of ordered 1-WL refinement is shown in Algorithm 1. The same for color mapping is shown in Algorithm 2. 
+
+B.3 Prompt Structure 
+
+The prompt follows a clearly defined structure. First of all it is split in two parts: system and user prompt. To better visualize the prompt struc-ture we can refer to figures 3, 4, 5. More specifi-cally, Figure 3 solves max-flow with the CL-OWL method, Figure 4 solves cycle check with the L-OWL method and Figure 5 solves shortest path with the C-OWL method. The system prompt contains information that is useful to explain to the LLM it’s role in the conversation. It contains information such as "you are an expert in ...", expla-nation of the syntax that will be used and general guidlines (e.g. "think carefully before responding"). The user prompt contains the task definition, the graph and the explanation for both labels and colors. Blocks are marked explicitly using tokens such as 
+
+«GRAPH» , «WL_LABELS» , or «COLORS» to simplify parsing. Answer template: forced answer pattern such as «ANSWER» Yes/No or «ANSWER» [number] 
+
+to try to make evaluation deterministic. We addi-tionally include a short instruction such as “Think step-by-step and reason to solve the task.” This prompt pattern is widely used in LLM literature and helps stabilize reasoning without introducing model-specific biases. 
+
+C Reproducibility 
+
+Code. The code is available at: https://github. com/angelozangari/CL-OWL 
+
+The entire pipeline is designed to be easily exe-cutable and reproducible. Easiness of executability 
+
+is guaranteed by one main ./run.sh script that auto-mates all the pipeline stages. This includes the ini-tial setup, which ensures that all the required pack-ages are installed, and sets up the python virtual environment with the required packages. Then one can proceed with the dataset generation, followed by the LLM testing, the automatic parsing and the computation of the results. Each of these steps is executable singularly with a dedicated script com-mand. Regarding reproducibility , all the parameters in the pipeline are in a dedicated config/ folder, which contains exclusively .yaml files, in which all the needed parameters for dataset generation, LLM testing and reporting reside. Moreover, all the parts of the prompts (from the pre-task definition to the task instruction) have their content entirely confined to the config/ directory too. This way, if anyone wants to change the content of the prompt they can simply edit the configuration file of the prompt and avoid modifying the code. 
+
+D Detailed Experimental Setup 
+
+Synthetic Data Generation. When generating synthetic data we can choose the specific number of nodes we want our graphs to have, the graph type, the task to be solved and how many of this graph-type-task combination we want to generate. The specific statistics of the datasets used in section 14 Prompt template for cycle check using L-OWL 
+
+SYSTEM 
+
+You are an expert in graph theory and graph machine learning. You have deep knowledge of the Weisfeiler-Leman (WL) algorithm and structural graph analysis. Graph structure is provided as adjacency lists: each line is ‘node: neighbor1, neighbor2, ...‘ and isolated nodes use ‘(none)‘. Always follow the example format and present the final answer after the ‘«ANSWER»‘ marker. Reason carefully about the graph before responding. 
+
+USER (task and format) 
+
+Your task is to answer Yes/No whether the «TARGET_NODE» is part of any cycle. The following example demonstrates the format. A graph is represented as adjacency lists where each line is ‘node: neighbor1, neighbor2, ...‘ (use ‘(none)‘ for isolated nodes). ‘«WL_LABELS»‘ shows Weisfeiler–Leman structural labels for each node. WL labels capture the structural role of each node based on its neighborhood. WL labels are given the template: WL(i)=k, meaning that node i has WL label k. Nodes with closer labels are more similar; for instance if WL(node_1)=1, WL(node_2)=4, WL(node_3)=9, then node_1 is more similar to node_2 than to node_3. ‘«TARGET_NODE»‘ marks the queried node; ‘«TARGET_PAIR» a,b‘ marks the queried pair for edge/pairwise tasks. Always use the provided markers consistently and place the final answer after the ‘«ANSWER»‘ marker. Think step-by-step about the graph before responding. 
+
+«GRAPH» 
+
+«GRAPH» 0: 1, 2, 3, 4, 5, 6, 7, 8, 9 1: 0, 7, 8, 9 2: 0, 7 3: 0, 8, 9 4: 0, 7 5: 0, 7, 8, 9 6: 0, 7, 8 7: 0, 1, 2, 4, 5, 6, 8, 9 8: 0, 1, 3, 5, 6, 7, 9 9: 0, 1, 3, 5, 7, 8 
+
+«WL_LABELS» 
+
+«WL_LABELS» WL(0):7, WL(1):3, WL(2):0, WL(3):1, WL(4):0, WL(5):3, WL(6):2, WL(7):6, WL(8):5, WL(9):4 
+
+«TARGET_NODE» 
+
+«TARGET_NODE» 7 Use the provided markers consistently and place the final answer after the ‘«ANSWER»‘ marker. Think step-by-step about the graph before responding. 
+
+Figure 4: Prompt template for cycle check using L-OWL 
+
+5. More specifically, Table 6 contains the statistics for the datasets used in experiments 5.2. Instead, Table 7 shows statistics for dataset used in 5.3 and 5.4. 
+
+Real-World Datasets. We consider four widely used real-world citation and academic graphs: Cora, Citeseer, PubMed, and OGBN-ArXiv. For each dataset, we sample induced subgraphs of vary-ing sizes as described in Section 5.5, and compute structural statistics over the resulting instances. Table 8 reports the average number of edges, average degree, diameter, and density as a func-tion of subgraph size. Across all datasets, we ob-serve a consistent increase in the number of edges and average degree with graph size, while graph density decreases, reflecting the sparsity typical of real-world graphs. Diameters grow sublinearly with size, indicating that sampled subgraphs pre-serve small-world characteristics. OGBN-ArXiv subgraphs tend to exhibit higher average degree and variance compared to the other datasets, consis-tent with its denser and more heterogeneous global structure. 
+
+E Additional Results 
+
+Tables 9 and 10 report per-task reasoning perfor-mance stratified by graph type (BA, ER) and aggre-gated across graph types. These tables provide a 15 Prompt template for shortest path using C-OWL 
+
+SYSTEM 
+
+You are an expert in graph theory and graph machine learning. You have deep knowledge of the Weisfeiler-Leman (WL) algorithm, structural graph analysis, and graph visualization techniques. Graph structure is provided as adjacency lists: each line is ‘node: neighbor1, neighbor2, ...‘ and isolated nodes use ‘(none)‘. Always follow the example format and present the final answer after the ‘«ANSWER»‘ marker. Reason carefully about the graph before responding. 
+
+USER (task and format) 
+
+Your task is to return the shortest path length between the «TARGET_PAIR» (inf if no path). The following example demonstrates the format. A graph is represented as adjacency lists where each line is ‘node: neighbor1, neighbor2, ...‘ (use ‘(none)‘ for isolated nodes). ‘«COLORS»‘ shows colors assigned based on WL label similarity. Colors capture the structural role of each node based on its neighborhood. Colors are given the template: Color(i)=c, meaning that node i has color c. Colors can be used as a similarity metric among nodes (nodes with similar colors are more similar). ‘«TARGET_NODE»‘ marks the queried node; ‘«TARGET_PAIR» a,b‘ marks the queried pair for edge/pairwise tasks. Always use the provided markers consistently and place the final answer after the ‘«ANSWER»‘ marker. Think step-by-step about the graph before responding. 
+
+«GRAPH» 
+
+«GRAPH» 0: 1, 2, 3, 4, 5, 6, 8 1: 0, 5, 6, 7, 8, 9 2: 0, 5 3: 0, 5, 7, 8, 9 4: 0, 6, 7 5: 0, 1, 2, 3, 6, 7, 8 6: 0, 1, 4, 5, 9 7: 1, 3, 4, 5 8: 0, 1, 3, 5, 9 9: 1, 3, 6, 8 
+
+«COLORS» 
+
+«COLORS» Color(0):teal, Color(1):lime, Color(2):red, Color(3):green, Color(4):crimson, Color(5):teal, Color(6):lime, Color(7):orange, Color(8):green, Color(9):orange 
+
+«TARGET_PAIR» 
+
+«TARGET_PAIR» 2,9 Use the provided markers consistently and place the final answer after the ‘«ANSWER»‘ marker. Think step-by-step about the graph before responding. 
+
+Figure 5: Prompt template for shortest path using C-OWL 
+
+finer-grained view of model behavior beyond the aggregated results discussed in Section 5.2. Across tasks, we observe substantial variability between BA and ER graphs, particularly for tasks requiring global reasoning such as Maximum Flow and Shortest Path. Performance on BA graphs is generally higher for cycle-related tasks, while ER graphs often exhibit increased difficulty for flow-and path-based reasoning, reflecting differences in graph structure and connectivity patterns. Ag-gregated results therefore mask non-trivial graph-type effects that are visible only at this granularity. While WL-enriched prompting improves perfor-mance for several tasks under gpt-4o , the same trends are less consistent for gpt-3.5-turbo , sug-gesting that the effectiveness of structural encod-ings depends on the underlying model’s reasoning capacity. Overall, these detailed results support the con-clusions drawn in the main text while highlighting the sensitivity of graph reasoning performance to both graph type and model generation. 16 Graph Type Size Avg Edges Avg Degree Avg Diameter Density BA 10 20 .4 ± 5.6 4.08 ± 1.12 2.1 ± 0.3 0.454 BA 15 43 .7 ± 12 .2 5.83 ± 1.63 2.4 ± 0.5 0.417 BA 20 76 .4 ± 17 .1 7.64 ± 1.71 2.4 ± 0.5 0.402 BA 25 114 .2 ± 31 .6 9.13 ± 2.53 2.4 ± 0.5 0.381 BA 30 171 .3 ± 40 .6 11 .42 ± 2.71 2.3 ± 0.5 0.394 ER 10 9.7 ± 2.6 1.95 ± 0.51 4.8 ± 0.9 0.216 ER 15 20 .1 ± 3.6 2.68 ± 0.48 5.3 ± 1.5 0.192 ER 20 38 .2 ± 5.8 3.82 ± 0.58 4.5 ± 0.8 0.201 ER 25 59 .9 ± 7.2 4.79 ± 0.58 4.0 ± 0.3 0.200 ER 30 87 .0 ± 8.8 5.80 ± 0.59 4.0 ± 0.7 0.200 
+
+Table 6: Synthetic graph properties by type and size for the dataset used in algorithmic tasks 5.2. BA denotes Barabasi Albert and ER denotes Erdos Renyi. 
+
+Graph Type Size Avg Edges Avg Degree Avg Diameter Density Erdos Renyi 75 41 .0 ± 0.0 1.09 ± 0.00 N/A 0.015 Erdos Renyi 100 72 .4 ± 8.4 1.45 ± 0.17 N/A 0.015 Path 50 49 .0 ± 0.0 1.96 ± 0.00 49 .0 ± 0.0 0.040 Path 75 74 .0 ± 0.0 1.97 ± 0.00 N/A 0.027 Path 100 99 .0 ± 0.0 1.98 ± 0.00 N/A 0.020 
+
+Table 7: Synthetic graph properties by type and size for the dataset used in the experiments about long range dependencies 5.3 and scalability 5.4 in the main paper. 
+
+Dataset Size Avg Edges Avg Degree Avg Diameter Density Cora 10 12 .4 ± 2.4 2.49 ± 0.48 3.0 ± 0.7 0.276 Cora 20 29 .7 ± 6.7 2.97 ± 0.67 3.9 ± 0.9 0.156 Cora 30 46 .3 ± 9.7 3.09 ± 0.64 4.5 ± 1.1 0.106 Cora 40 61 .8 ± 14 .1 3.09 ± 0.71 4.6 ± 1.1 0.079 Cora 50 78 .7 ± 10 .1 3.15 ± 0.40 5.1 ± 1.2 0.064 Citeseer 10 12 .8 ± 3.3 2.56 ± 0.67 3.3 ± 0.8 0.285 Citeseer 20 28 .1 ± 6.7 2.81 ± 0.67 4.5 ± 1.6 0.148 Citeseer 30 43 .3 ± 6.7 2.89 ± 0.45 5.7 ± 1.8 0.100 Citeseer 40 57 .7 ± 10 .3 2.89 ± 0.51 6.1 ± 1.8 0.074 Citeseer 50 74 .7 ± 12 .3 2.99 ± 0.49 6.2 ± 1.8 0.061 Pubmed 10 11 .1 ± 1.8 2.21 ± 0.36 2.4 ± 0.5 0.246 Pubmed 20 26 .2 ± 6.6 2.62 ± 0.66 3.3 ± 0.8 0.138 Pubmed 30 41 .5 ± 11 .0 2.77 ± 0.74 3.9 ± 0.7 0.095 Pubmed 40 59 .8 ± 14 .1 2.99 ± 0.70 4.2 ± 0.7 0.077 Pubmed 50 81 .5 ± 24 .3 3.26 ± 0.97 4.2 ± 0.7 0.067 Ogbn-Arxiv 10 12 .7 ± 2.5 2.54 ± 0.51 2.6 ± 0.6 0.282 Ogbn-Arxiv 20 34 .6 ± 13 .0 3.46 ± 1.30 3.4 ± 1.1 0.182 Ogbn-Arxiv 30 63 .0 ± 30 .3 4.20 ± 2.02 3.9 ± 1.2 0.145 Ogbn-Arxiv 40 86 .9 ± 31 .0 4.35 ± 1.55 4.1 ± 1.1 0.111 Ogbn-Arxiv 50 131 .6 ± 44 .5 5.26 ± 1.78 3.8 ± 0.8 0.107 
+
+Table 8: Graph statistics by dataset and graph size. We sample from the real graphs. These datasets have been used in experiments in Section 5.5. Reported values are averages over generated instances with standard deviations where applicable. 
+
+17 Task Graph TLG-A TLG-F C-OWL L-OWL CL-OWL Acc.% MAE Acc.% MAE Acc.% MAE Acc.% MAE Acc.% MAE Cycle Check BA 100.00 0.0000 98.00 0.0200 100.00 0.0000 99.00 0.0100 100.00 0.0000 Cycle Check ER 79.00 0.2100 85.00 0.1500 85.00 0.1500 85.00 0.1500 86.00 0.1400 
+
+Cycle Check All 89.50 0.1050 91.50 0.0850 92.50 0.0750 92.00 0.0800 93.00 0.0700 
+
+Maximum Flow BA 26.09 0.5233 34.78 0.4954 30.43 0.4863 17.39 0.6408 30.43 0.3564 Maximum Flow ER 35.00 0.4870 37.00 0.4337 38.00 0.4330 41.00 0.4370 38.00 0.4573 
+
+Maximum Flow All 33.33 0.4938 36.59 0.4452 36.59 0.4430 36.59 0.4751 36.59 0.4385 
+
+Shortest Path BA 73.91 0.0870 78.26 0.0725 82.61 0.0580 78.26 0.0725 73.91 0.0870 Shortest Path ER 91.00 0.0308 85.00 0.0447 90.00 0.0349 95.00 0.0137 90.00 0.0317 
+
+Shortest Path All 87.80 0.0413 83.74 0.0499 88.62 0.0392 91.87 0.0247 86.99 0.0420 Triangle Count BA 11.00 0.4438 11.00 0.4701 12.00 0.4495 13.00 0.4660 13.00 0.3996 Triangle Count ER 21.00 0.4674 12.00 0.5764 16.00 0.4579 15.00 0.5509 16.00 0.5377 
+
+Triangle Count All 16.00 0.4556 11.50 0.5233 14.00 0.4537 14.00 0.5085 14.50 0.4686 
+
+Table 9: Per-task reasoning performance for gpt-4o , stratified by graph type (BA, ER) and aggregated ( All ). Accuracy is higher-is-better; MAE is lower-is-better. Bold and underline indicate best and second-best methods, respectively, computed only on aggregated (All) rows. 
+
+Task Graph TLG-A TLG-F C-OWL L-OWL CL-OWL Acc.% MAE Acc.% MAE Acc.% MAE Acc.% MAE Acc.% MAE Cycle Check BA 66.00 0.3400 51.00 0.4900 66.00 0.3400 75.00 0.2500 72.00 0.2800 Cycle Check ER 55.00 0.4500 52.00 0.4800 60.00 0.4000 54.00 0.4600 57.00 0.4300 
+
+Cycle Check All 60.50 0.3950 51.50 0.4850 63.00 0.3700 64.50 0.3550 64.50 0.3550 
+
+Maximum Flow BA 26.09 0.5746 21.74 0.6348 26.09 0.5971 30.43 0.5387 21.74 0.5522 Maximum Flow ER 15.00 0.7248 29.00 0.5377 10.00 0.7832 16.00 0.7032 11.00 0.7632 
+
+Maximum Flow All 17.07 0.6967 27.64 0.5558 13.01 0.7484 18.70 0.6724 13.01 0.7237 Shortest Path BA 13.04 0.6232 8.70 0.6087 8.70 0.6377 8.70 0.6377 8.70 0.6377 Shortest Path ER 14.00 0.6586 27.00 0.4347 9.00 0.7071 14.00 0.6653 10.00 0.6944 
+
+Shortest Path All 13.82 0.6520 23.58 0.4672 8.94 0.6941 13.01 0.6602 9.76 0.6838 Triangle Count BA 4.00 0.8557 4.00 0.8860 1.00 0.8616 6.00 0.8471 1.00 0.8818 Triangle Count ER 10.00 0.7703 2.00 0.8686 5.00 0.7024 8.00 0.7930 7.00 0.6888 
+
+Triangle Count All 7.00 0.8130 3.00 0.8773 3.00 0.7820 7.00 0.8201 4.00 0.7853 
+
+Table 10: Per-task reasoning performance for gpt-3.5-turbo , stratified by graph type (BA, ER) and aggregated (All ). Accuracy is higher-is-better; MAE is lower-is-better. Bold and underline indicate best and second-best methods, respectively, computed only on aggregated (All) rows. 
+
+18

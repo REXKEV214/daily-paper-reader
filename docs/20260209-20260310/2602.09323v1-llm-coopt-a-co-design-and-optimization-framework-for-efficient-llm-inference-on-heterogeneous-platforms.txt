@@ -1,0 +1,306 @@
+Title: LLM-CoOpt: A Co-Design and Optimization Framework for Efficient LLM Inference on Heterogeneous Platforms
+
+URL Source: https://arxiv.org/pdf/2602.09323v1
+
+Published Time: Wed, 11 Feb 2026 01:23:52 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# LLM-CoOpt: A Co-Design and Optimization Framework for Efficient LLM Inference on Heterogeneous Platforms 
+
+## Jie Kong 1, Wei Wang 1, Jiehan Zhou *1 , Chen Yu 2
+
+School of Computer Science and Engineering, Shandong University of Science and Technology, Qingdao, China. School of Computer Science and Engineering, Huazhong University of Science and Technology, Wuhan, China. Contributing authors: jiekong0112@sdust.edu.cn; wei wang@sdust.edu.cn; jiehan.zhou@sdust.edu.cn; yuchen@hust.edu.cn; 
+
+Abstract 
+
+Major challenges in LLMs inference remain frequent memory bandwidth bottle-necks, computational redundancy, and inefficiencies in long-sequence processing. To address these issues, we propose LLM-CoOpt, a comprehensive algorithm-hardware co-design framework aimed at improving both throughput and latency in LLM inference. LLM-CoOpt integrates three key strategies: (1) Key-Value Cache Optimization, termed Opt-KV, which improves memory access efficiency by optimizing both KV cache write and read paths, and introduces FP8 quantiza-tion to reduce memory footprint while maintaining accuracy; (2) Grouped-Query Attention for Computational Efficiency, termed Opt-GQA, which reduces the overall computational complexity by restructuring multi-head self-attention into grouped-query attention with shared key-value projections, enabling higher throughput and lower resource consumption; (3) Paged Attention for Long-Sequence Processing, termed Opt-Pa, which adopts a two-step strategy to first segment long sequences into manageable chunks and then apply lazy mem-ory mapping and computation, significantly reducing memory pressure and improving performance on long-context inputs. Experiments on the LLaMa-13B-GPTQ model demonstrate that LLM-CoOpt increases inference throughput by up to 13.43%, reduces latency by up to 16.79%, and maintains model accuracy. These results confirm that LLM-CoOpt provides a practical, high-performance optimization path for real-world inference of large-scale language models. 
+
+1 
+
+> arXiv:2602.09323v1 [cs.DC] 10 Feb 2026 Keywords: vLLM, Heterogeneous platform, memory optimization, dynamic quantization caching, Group Query Attention, Paged Attention
+
+# 1 Introduction 
+
+In recent years, Large language models based on the Transformer architecture [1], [2], such as LLaMa [3], ChatGPT [4], PaLM [5], BLOOM [6], and BERT [7], have made breakthroughs in the field of natural language processing. However, the exponen-tial growth of their scale has brought significant inference challenges, particularly on resource-constrained hardware. These challenges can be summarized into three major issues: 
+
+(1) Memory bottlenecks in KV Cache. During auto-regressive decoding, the Key-Value (KV) cache grows linearly with sequence length, number of layers, and hidden dimensions. This not only leads to memory bloat but also imposes heavy pressure on bandwidth, since every new query must access all historical keys and values. On heterogeneous platforms, such inefficiencies in memory utilization directly degrade throughput, as illustrated in Fig. 1  
+
+> Fig. 1 Memory Bottlenecks in KV Cache
+
+(2) Computational redundancy in multi-head attention. In the standard Transformer, each attention head independently generates key–value pairs, leading to redundant computation and low utilization of parallel hardware resources. Although methods such as Grouped Query Attention (GQA) partially alleviate this problem, their fixed grouping strategies fail to adapt to different sequence distributions and hardware parallelism, leaving significant inefficiency in practice, as illustrated in Fig. 2 2Fig. 2 MHA: multi-head attention(Based on [2]). 
+
+(3) Inefficiency in long-sequence processing. When processing long sequences, self-attention suffers from quadratic complexity ( O(T 2)) and system inef-ficiencies. Paged attention, though reducing memory growth, adds synchronization overhead and fragmentation, causing unstable memory use and fluctuating latency. As shown in Fig. 3, such issues make long-context inference inefficient and unstable, limiting real-time deployment.  
+
+> Fig. 3 Storage Fragmentation Issue
+
+Despite considerable research efforts, existing solutions have only partially addressed these challenges, often introducing new trade-offs in accuracy, efficiency, or hardware adaptability. Current studies can be broadly categorized into three direc-tions: KV cache compression, redundancy reduction in multi-head attention, and efficient mechanisms for long-sequence modeling. For KV cache management, static quantization has been applied to reduce memory usage [8], but it struggles to adapt to the varying dynamic ranges of different tensors [9, 10]. For instance, the distributions of query vectors and attention weights differ significantly, and uniform quantization exacerbates the trade-off between accuracy and efficiency [11]. The FP8 format [12] alleviates storage overhead but fails to meet the precision requirements of Softmax in attention computation, leading to numerical instability. Tao et al. [13] further explored asymmetric quantization to enable 1-bit compression while preserving performance. 3In terms of computational redundancy, the standard multi-head attention mech-anism incurs significant overhead since each head independently generates key–value pairs [14, 15]. Grouped Query Attention (GQA) [16–18] reduces this redundancy by sharing key–value heads, yet its fixed grouping strategy cannot adapt to dynamic input characteristics or hardware parallelism, resulting in suboptimal resource utilization. For long-sequence modeling, chunked or localized attention [19, 20] reduces memory usage but compromises contextual coherence due to missing cross-block dependencies. Unified sparse attention [21] and paged attention frameworks [22–24] improve scala-bility but still face synchronization overhead, fragmentation, or accuracy degradation. More recent efforts, such as JAQ [25] and hybrid SPM-Cache [26], attempt to balance efficiency and hardware friendliness, but at the cost of increased system complexity. Overall, while these approaches provide partial relief, none fully resolve the inherent conflicts between accuracy, efficiency, and hardware adaptability [27]. Based on the insights above, we propose LLM-CoOpt, an algorithm–hardware co-optimization framework that balances inference efficiency and accuracy for large-scale language model inference. The framework introduces three key techniques: Opt-KV for dynamic quantization cache optimization, Opt-GQA for lightweight grouped query attention, and Opt-Pa for paged attention optimization. Together, these inno-vations alleviate bottlenecks in memory bandwidth, computational redundancy, and long-sequence processing. Experiments on the LLaMa family show that LLM-CoOpt achieves significant throughput gains and latency reduction while maintaining strong accuracy on the ARC evaluation set. The remainder of this paper is organized as follows: Section 2 reveals performance bottlenecks when migrating Very Large Language Model (vLLM) to heterogeneous platform. Section 3 introduces the LLM-CoOpt framework and details. Section 4 describes the experimental setup and the evaluation of the results. Finally, Section 5 concludes the paper. 
+
+# 2 Background 
+
+vLLM is a high-performance inference engine specifically optimized for large-scale lan-guage model inference workloads, characterized by high throughput, low latency, and excellent scalability [28, 29]. By incorporating the PagedAttention mechanism [30], vLLM enables dynamic and efficient management of the KV cache [31]. It also supports a range of optimization strategies such as dynamic batching and sequence merging [32], which collectively alleviate memory fragmentation and reduce cache redundancy, thereby significantly enhancing hardware resource utilization. When deployed on a single GPU, vLLM demonstrates 2 × − 3× higher inference throughput and lower response latency compared to the HuggingFace Transformers framework. Moreover, vLLM is compatible with low-bit quantized models, such as those using INT4 [33, 34], enabling higher inference efficiency with negligible accuracy degradation [35, 36], mak-ing it particularly well-suited for deploying large-scale models in resource-constrained environments. However, when migrating vLLM from traditional GPU platforms to the heteroge-neous platform, multiple system-level bottlenecks and adaptation challenges emerge. 4Although the heterogeneous platform offers strong computational capabilities and supports low-precision arithmetic, its limited memory resources and significantly different memory hierarchy compared to mainstream GPUs lead to a series of per-formance bottlenecks during the migration process. To further clarify the root causes of these bottlenecks, the following sections analyze the system limitations exposed on heterogeneous platform by examining each stage of the vLLM inference pipeline. In the traditional vLLM inference pipeline, the inference process starts with token generation. During the token insertion phase, vLLM handles the KV cache using a block-based memory management strategy, where the KV tensor of each newly generated token is written to a newly allocated memory block. On the heterogeneous platform, direct migration to heterogeneous platform suffers from allocator inefficiency and increased latency due to allocator mismatch. Secondly, during the attention computation phase, all historical KV blocks are uniformly loaded into explicit memory without priority or differentiation, and then matrix multiplication operations are performed as shown in Eq. 1, which will result in all KVs being loaded into memory regardless of whether they are actually useful or not, including padding and duplicate tokens, which will result in saturated memory bandwidth. Also, the heterogeneous platform’s current memory is very limited com-pared to that of GPUs, making it prone to cache invalidation or overflow. Moreover, the computational workload increases linearly with sequence length, exhibiting com-plexity of O(t×d). Finally, K/V tensors are stored in FP16 or FP32 formats by default, which results in large data sizes and high memory usage that cannot efficiently adapt to the low-bit arithmetic supported by heterogeneous platform. Attn ( qt, K ≤t, V ≤t) = Softmax 
+
+ qtK⊺
+
+√d
+
+
+
+V (1) Where qt is the query vector, K≤t is the key matrix, V≤t is the value matrix, and d is the dimensionality of the vector. Compared to the traditional cache allocation strategy, the entire history block’s data is multiplied, and even parts of the block that do not affect the attention score are indiscriminately allocated to the cache. This leads to many unnecessary computations being executed by the Single Instruction Multiple Data (SIMD) units inside the hetero-geneous platform, reducing overall arithmetic utilization. Furthermore, it complicates the introduction of a dynamic cache management strategy. Additionally, invalid and valid tokens are mixed within the same logical page, increasing the overhead of sub-sequent data transfer and conversion. As a result, the computational workload grows linearly, as shown in Eq. 2. 
+
+U sed Cache = R × Sblock (2) Finally, when reading tokens, the system adopts a hierarchical storage struc-ture consisting of L1, L2 caches and Synchronous Dynamic Random Access Memory (DRAM), with different capacity and access latency characteristics of each cache layer, in which the L1 and L2 caches are fast to access but have limited capacity, while the DRAM has a large capacity and high access latency. The average load latency is shown in Eq. 3, TDRAM is around 400 cycles, there is the problem of low cache hit rate or 5critical metadata is not preloaded, and the actual latency will be close to the access latency of DRAM, which makes the kv data loading become a bottleneck. At the same time all blocks are moved into the kernel, with the load equation shown in Eq. 4. 
+
+Tef f ective = H × TCache + (1 − H) × TDRAM (3) Where H is the cache hit rate, TCache is the cache access latency, and TDRAM is the DRAM access latency. 
+
+Ckernel = B • Nblock • d2 (4) Where B represents the batch size, Nblock represents the number of blocks assigned to each sequence, and d represents the vector dimension of each attention header. To alleviate the system bottlenecks revealed in the stages above and further improve the adaptability and execution performance of vLLM on the heterogeneous platform, it is essential to focus on the performance-critical paths in the inference pipeline. Performance profiling reveals that certain modules are invoked frequently and consume significant resources during inference, thus becoming the ”hot functions” that most impact overall performance. Recent studies have introduced targeted optimizations of the KV cache, Page-dAttention, and GQA modules have been introduced to address key system-level challenges, including memory bandwidth bottlenecks, co-scheduling of compute and memory resources, management of large-scale datasets, and inefficient memory access patterns. These optimizations effectively reduce resource wastage and computational redundancy, resulting in a substantial improvement in the overall efficiency of the inference framework. 
+
+# 3 Method 
+
+To cope with the problem of inefficient attention computation and memory access, we propose the co-optimization framework LLM-CoOpt, which is designed for reasoning on large language models on hardware-constrained platforms. The framework con-sists of three approaches: Opt-KV optimizes KV cache accesses to improve memory bandwidth utilization; Opt-GQA employs grouped query attention to enhance head flexibility and reduce computation overhead; and Opt-Pa improves paging strategy to enhance memory paging efficiency and data locality. 
+
+## 3.1 Opt-KV 
+
+The Opt-KV method enhances memory efficiency and reduces computation in atten-tion inference via two stages: selectively caching only useful KV blocks while skipping redundant ones to cut memory writes, then compressing valid blocks into FP8 for-mat to save storage. It also supports on-demand FP8 decompression during inference, ensuring efficient memory access without losing accuracy. To clarify Opt-KV’s optimization, we formally describe its low-bit memory-efficient read and write mechanism. It involves two parts: skipping redundant KV blocks during writes, and enabling online dequantization during reads. In the write phase, for token 6index i, the method checks a condition, as shown in Eq. 5; if satisfied, the corresponding KV block is skipped. 
+
+slot idx i < 0 or slot idx i ∈ SkipSet (5) In the read phase, cached key/value (KV) tensors are dequantized from FP8 format before attention computation. The restored key eki and value evi are computed as shown in Eq. 6. 
+
+eki = dequant( kFP8  
+
+> i
+
+), evi = dequant( vFP8  
+
+> i
+
+) (6) This process is realized by a dedicated kernel function gather cached kv, ensuring data consistency and numerical correctness. 
+
+Algorithm 1 Opt-KV: KV Cache Optimization 
+
+Input: Q, K, V , H, t, B
+
+Output: O
+
+Phase 1: KV Cache Write Optimization for each token i do if slot idx i satisfies filtering condition then 
+
+skip caching of Ki, Vi
+
+else 
+
+reshape and store Ki, Vi into block wise cache structure 
+
+end if end for Phase 2: FP8-Aware KV Retrieval for each token i do 
+
+Load cached Ki, Vi based on mapped slot cache uses FP8 Apply on-the-fly dequantization 
+
+end for 
+
+73.2 Opt-GQA Value 0  Value 1  Value n           
+
+> Key 0 Key 1 Key n
+> Query 0 Query 1 Query n Query0 Query 1 Query n Query 0 Query 1 Query n
+
+Opt -GQA    
+
+> ………
+> ……
+> ……
+> Fig. 4 Opt-GQA: A Lightweight Grouped-Query Attention Design
+
+Fig. 4 illustrates the Opt-GQA method, which enhances attention flexibility and memory efficiency by enabling grouped-query attention. Instead of computing atten-tion over all heads uniformly, the method divides the query heads into multiple groups. Each group shares a corresponding key-value head, thereby reducing memory duplication and aligning the attention computation with the grouped query structure. The diagram consists of several key components: Each block at the top represents a query group, while the middle layer shows the associated key-value heads. Each key-value pair is shared among all query heads in its group. The bottom layer illustrates the distribution of query heads mapped to respective key groups. This grouped com-putation structure provides a trade-off between flexibility and efficiency in attention modeling. To provide a clear mathematical formulation of Opt-GQA, we describe its grouped-query attention mechanism, which improves attention flexibility and efficiency by partitioning query heads into groups that share the same KV heads. The query group mapping is defined as shown in Eq. 7. 
+
+Group q (i) = 
+
+ iHg
+
+
+
+, where Hg = Hq
+
+Hk
+
+(7) Where, Hq denotes the number of query heads, and Hk is the number of KV heads. 
+
+Hg thus represents the number of query heads per group. The group index for the 
+
+i − th query head is determined accordingly. The attention weight for each query is computed using grouped keys, as shown in Eq. 8. 
+
+αi = exp  qi · kg(i) − max j∈g(i)(qi · kj )P 
+
+> j∈g(i)
+
+exp  qi · kj − max j∈g(i)(qi · kj ) (8) Where qi is the query vector at position i, and k{g(i)} is the corresponding key from its group. The max( qi · kj )term ensures numerical stability during softmax normalization. 8Compared with traditional multi-head attention where each query uses its own KV pair, Opt-GQA enables multiple queries to share the same KV group, effec-tively reducing memory and computation overhead, particularly in multi-task inference scenarios. 
+
+Algorithm 2 Opt-GQA: Grouped-Query Attention Strategy 
+
+Input: Q, K, V , H, HKV , G
+
+Output: O
+
+Phase 1: Compute Query Group Mapping 
+
+Divide H into G groups: GroupIdx = 
+
+
+
+g | g =
+
+ hH/G 
+
+ 
+
+for each h ∈ [0 , H ]
+
+Phase 2: Grouped Attention Computation for each group g do 
+
+Select queries Og and corresponding shared Kg , Vg
+
+Compute attention weight 
+
+w = softmax Qg · KTg
+
+√dk
+
+!
+
+Compute group output 
+
+Og = w · Vg
+
+end for Phase 3: Concatenate Group Results 
+
+Concatenate all Og to form output O
+
+## 3.3 Opt-Pa  
+
+> Fig. 5 Opt-Pa: Optimized paged-attention design
+
+9Fig. 5 illustrates the Opt-Pa method, which enhances long-sequence processing by opti-mizing paged attention. Instead of indiscriminately handling all key–value blocks, it filters out invalid or padding blocks and applies block-wise softmax with shared mem-ory reduction. This two-stage design minimizes redundant access and synchronization, improving both efficiency and memory utilization. To better illustrate the Opt-Pa optimization process, we formalize its core compu-tation in two steps: selecting valid KV blocks and computing attention weights with shared-memory reduction. The valid block range is given in Eq. 9. ValidBlockIdx = 
+
+
+
+b b ∈
+
+
+
+0, tB
+
+ 
+
+(9) Where t is the input sequence length and B is the block size. This definition ensures that only blocks within the actual context are processed, effectively skipping padding or unused memory blocks to improve efficiency. The attention weight for the i-th token is calculated as shown in Eq. 10. 
+
+αi = exp  q • ki − max j (q • kj )P 
+
+> j
+
+exp  q • kj − max j (q • kj ) (10) Here, max j (q · kj ) denotes the maximum dot product within a block. Opt-Pa replaces warp-level reduction with the shared-memory function block sum , ensur-ing thread synchronization, improving softmax stability, and reducing broadcasting overhead. 
+
+Algorithm 3 Opt-Pa: Paged Attention Optimization 
+
+Input: Q, K, V , H, t, B
+
+Output: O
+
+Phase 1: Filter valid blocks for each token i in the input sequence do 
+
+Compute valid block indices: ValidBlockIdx = {b | b ∈ [0 , t/B ]}
+
+Load only valid K blocks into shared memory Compute Q • ki for each ki ∈ K
+
+Perform block-wise max reduction via block sum Compute softmax logits using shared-memory reduction 
+
+end for Phase 2: Filter and aggregate values 
+
+Skip KV blocks with padding or invalid data Reuse valid blocks to compute weighted sum: 
+
+O = X αi • vi
+
+10 4 Experiment and Result analysis 
+
+## 4.1 Experimental Environment 
+
+This study establishes a performance evaluation baseline based on the unoptimized vLLM [37] serving system, serving as a reference point for analyzing the effectiveness of the proposed optimization strategies. To ensure the reliability and reproducibility of the experimental results, all experiments are conducted within a consistent and controlled hardware and software environment. The experiments are conducted on the DCU Z100 platform, which demonstrates excellent computational performance in large-scale deep learning tasks. The platform features approximately 4MB of L2 cache and adopts a wavefront size of 64, support-ing SIMD execution with 64 threads per wavefront, making it suitable for highly parallel workloads. It is equipped with GDDR6 memory, offering around 512 GB/s of bandwidth to support high-throughput data access. Its compute units support FP16 precision, with a peak theoretical performance of approximately 15 TFLOPS, providing strong mixed-precision computing capabilities. For lower-precision tasks, FP8 operations are emulated via INT8 instructions, offering a degree of flexibility. In addition, the platform employs physically separated CPU and GPU memory regions, offering a controllable design space for multi-device data management. A series of quantized language models are employed in the evaluation, includ-ing LLaMa2-7B-GPTQ, LLaMa2-13B-GPTQ [38], LLaMa-7B-GPTQ, LLaMa-13B-GPTQ, and LLaMa-Pro-8B-GPTQ [39].The effectiveness of the optimization strate-gies is systematically assessed through a comprehensive analysis of key performance metrics, including inference accuracy, generation throughput, and latency. 
+
+## 4.2 Dataset 
+
+This experiment uses ShareGPT V3 unfiltered cleaned split dataset [40] for through-put evaluation. This dataset is a collection of large-scale real and diverse conversation datasets, which contains about 35,240 cleaned and de-emphasized conversation sam-ples, with a total data volume of about 178 MB. The dataset covers a variety of actual conversation scenarios and topic categories, such as Q&A, small talk, knowledge con-sulting, etc. The quality of this dataset is evaluated based on the coherence of text generation. The dialog generation quality of this dataset is evaluated based on the coherence, semantic consistency, and task completion of text generation. This experi-ment uses ARC dataset for accuracy evaluation. The ARC question set is divided into a Challenge Set (ARC C) and an Easy Set (ARC E) [41]. The Challenge Set com-prises only those questions that are incorrectly answered by both a retrieval-based algorithm and a word co-occurrence algorithm. This dataset consists exclusively of natural, grade-school science questions originally authored for human assessments and represents the largest publicly available collection of its kind, containing a total of 7,787 questions. 11 4.3 Experimental Results 
+
+This section presents the experimental results of Opt-KV, Opt-GQA, Opt-Pa, and LLM-CoOpt on the heterogeneous platform. LLM-CoOpt, which integrates Opt-KV, Opt-GQA, and Opt-Pa, exhibits the synergistic benefits of combining all three methods. The experiments provide a detailed evaluation of the model performance improvement by comparing it with the traditional vLLM inference framework, which is denoted as Original. Below, we present key data and analytical results to demon-strate the effectiveness and benefits of LLM-CoOpt in high-performance computing environments. 
+
+4.3.1 Inferring Performance Result 
+
+Inference latency refers to the time a model takes to generate outputs from given input data. Under identical conditions, lower inference latency indicates higher model efficiency and faster processing speed, which is especially critical for real-time, interac-tive, or latency-sensitive tasks. As a key metric for evaluating inference performance, inference latency reflects how quickly a model can produce results and affects system throughput and resource utilization. It is calculated as shown in Eq. 11. 
+
+Latency =
+
+> N
+
+X
+
+> i=1
+
+latency i (11) 
+
+N denotes the total number of inference tasks, while latency i represents the latency of the i-th task, the time required for the model to process the i-th input and generate a corresponding output. The resulting Latency reflects the overall time consumption for completing all task. 12 Fig. 6 Performance of optimized delay in different models 
+
+As shown in Fig. 6, various quantization and optimization methods exhibit distinct effect across models of different scales. After applying the LLM-CoOpt optimization method, vLLM reduced inference latency by 5.59%, 5.48%, 6.18%, 6.75% and 4.82% for LLaMa-7B-GPTQ, LLaMa-2-7B-GPTQ, LLaMa-13B-GPTQ, LLaMa-2-13B-GPTQ and LLaMa-Pro-8B-GPTQ. These consistent improvements across models of varying sizes and architectures highlight the robustness and adaptability of the LLM-CoOpt framework. The results suggest that LLM-CoOpt effectively addresses performance bottlenecks common to different quantized LLaMa variants, making it a generalized and scalable solution for latency reduction in large language model inference. Generation throughput, defined as the number of tokens generated per second during inference, serves as a key metric for evaluating model efficiency. A higher throughput under identical conditions reflects faster processing speed and better resource utilization, which is crucial for real-time or latency-sensitive applications such as interactive dialogue systems or live translation. It effectively indicates how quickly a model can produce output. Its calculation formula is shown in Eq. 12. 
+
+Generate T hroughput = T otal Generated T okens Generation T ime (12) Total Generated Tokens denotes the aggregate number of tokens generated across all inference requests, whereas Generation Time refers to the total time consumed to complete these requests. 13 Fig. 7 Performance of optimized generation throughput efficiency 
+
+As shown in Fig. 7, different optimization strategies exert a substantial impact on generation throughput. After applying the LLM-CoOpt optimization, the inference throughput increased by 7.20%, 6.13%, 12.13%, 10.85% and 5.72% for LLaMa-7B-GPTQ, LLaMa-2-7B-GPTQ, LLaMa-13B-GPTQ, LLaMa-2-13B-GPTQ and LLaMa-Pro-8B-GPTQ. These results indicate that LLM-CoOpt significantly enhances genera-tion throughput across various LLaMa model variants, demonstrating its effectiveness in optimizing runtime performance while preserving model compatibility and scalabil-ity. 
+
+4.3.2 Accuracy Analysis 
+
+The inference accuracy is evaluated using an objective assessment method, primarily applied to multiple-choice questions with four options and only one correct answer. A higher accuracy score reflects a stronger ability to understand, analyze, and generate appropriate responses. In contrast, a lower accuracy score indicates weaker perfor-mance in these areas, often leading to increased errors or incorrect outputs. The accuracy is calculated based on the formula shown in Eq. 13. 
+
+Accuracy = Ncorrect 
+
+Ntotal 
+
+× 100% (13) 
+
+Ncorrect refers to the number of correctly predicted samples, and Ntotal denotes the total number of samples in the test set. The experimental results indicate that the inference accuracy remains largely unchanged, demonstrating that the optimization strategies adopted in LLM-CoOpt do not compromise model correctness. As shown in Tables 1, on the ARC C dataset, LLaMa2-7B-GPTQ remained unaf-fected by the LLM-CoOpt optimization, and the accuracy of LLaMa-Pro-8B-GPTQ exhibited a slight decrease, dropping from 27.46% to 27.12%. 14 Table 1 Comparison of inference accuracy before and after optimization on the ARC-C dataset Model LLaMa-7B LLaMa2-7B LLaMa-13B LLaMa2-13B LLaMa-Pro-8B Original 27.46% 35.93% 39.66% 50.85% 27.46% LLM-CoOpt 27.80% 36.93% 40.01% 51.53% 27.72%                 
+
+> Table 2 Comparison of inference accuracy before and after optimization on the ARC-E dataset Model LLaMa-7B LLaMa2-7B LLaMa-13B LLaMa2-13B LLaMa-Pro-8B Original 30.16% 48.15% 52.03% 71.08% 42.15% LLM-CoOpt 31.04% 49.03% 53.20% 71.25% 42.50%
+
+As shown in Tables 2, on the ARC E dataset, accuracy increased slightly for all models. For example, LLaMa-Pro-8B exhibited an accuracy improvement from 42.15% to 42.5% under the LLM-CoOpt optimization. Based on the above analysis, LLM-CoOpt demonstrates significant improvements in throughput and latency, while having almost no impact on inference accuracy. Moreover, it even enhances the correctness rate in some model inferences. 
+
+# 5 Conclusion 
+
+In this paper, an end-to-end algorithm and hardware co-optimization framework is pro-posed to address the problems of video memory bandwidth bottleneck, computational redundancy, and inefficiency of long sequence processing in large-scale language model inference. Specifically, in terms of video memory management, video memory compres-sion and access optimization are achieved through Opt-KV and residual compensation mechanism; in terms of computational efficiency, Opt-GQA is designed to reduce redundant computation and improve throughput through dynamic query grouping and key-value sharing; and in terms of long-sequence processing, Opt-Pa is proposed to significantly improve the computational efficiency of long sequences by utilizing dynamic chunking and partitioned parallel induction techniques. partitioned paral-lel induction technique to significantly improve memory reuse efficiency and reduce Softmax global synchronization overhead. Experimental results demonstrate that the proposed framework significantly reduces inference latency and improves memory effi-ciency on LLaMa-series models, outperforming existing baseline methods. Looking ahead, we plan to explore optimized scaling in multi-modal scenarios by integrating dynamic batch processing and sparse computing techniques to meet the demands of more complex real-world deployments, and to support the efficient operation of AI models across diverse hardware platforms. 15 6 Acknowledgment 
+
+Thanks for Yalong Li and Junxiang Zhang’s discussion on the paper. This work was supported in part by the China NSFC under Grant 62072287; in part by the China NSFC under Grant W2412090; in part by the ghFund under Grant 202407027775; in part by the project ZR2024ME230 supported by Shandong Provincial Natural Science Foundation. 
+
+# References 
+
+[1] Wan, Z., al.: Efficient large language models: A survey. ArXiv abs/2312.03863 
+
+(2023) [2] Vaswani, al.: Attention is all you need. In: Proceedings of the 31st International Conference on Neural Information Processing Systems. NIPS’17, pp. 6000–6010. Curran Associates Inc., Red Hook, NY, USA (2017) [3] Touvron, H., al.: Llama: Open and efficient foundation language models. ArXiv 
+
+abs/2302.13971 (2023) [4] Leiter, C., al.: Chatgpt: A meta-analysis after 2.5 months. Machine Learning with Applications 16 , 100541 (2024) https://doi.org/10.1016/j.mlwa.2024.100541 [5] Chowdhery, A., al.: Palm: scaling language modeling with pathways. J. Mach. Learn. Res. 24 (1) (2023) [6] Scao, T.L., al.: BLOOM: A 176B-Parameter Open-Access Multilingual Language Model (2023). https://arxiv.org/abs/2211.05100 [7] Devlin, J., al.: BERT: Pre-training of deep bidirectional transformers for lan-guage understanding. In: Burstein, J., Doran, C., Solorio, T. (eds.) Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers), pp. 4171–4186. Association for Computational Linguis-tics, Minneapolis, Minnesota (2019). https://doi.org/10.18653/v1/N19-1423 . 
+
+https://aclanthology.org/N19-1423/ 
+
+[8] Joshi, V., al.: Qcqa: Quality and capacity-aware grouped query attention. ArXiv 
+
+abs/2406.10247 (2024) [9] Zirui Liu, Jiayi Yuan, Hongye Jin, Shaochen Zhong, Zhaozhuo Xu, Braver-man, V., Beidi Chen, Hu, X.: Kivi : Plug-and-play 2bit kv cache quantization with streaming asymmetric quantization (2023) https://doi.org/10.13140/RG.2. 2.28167.37282 [10] Sanovar, R., al.: Lean Attention: Hardware-Aware Scalable Attention Mechanism for the Decode-Phase of Transformers (2025). https://arxiv.org/abs/2405.10480 16 [11] Lou, C., al.: Sparser is Faster and Less is More: Efficient Sparse Attention for Long-Range Transformers (2024). https://arxiv.org/abs/2406.16747 [12] Micikevicius, P., al.: Fp8 formats for deep learning. ArXiv abs/2209.05433 
+
+(2022) [13] Tao, Q., al.: AsymKV: Enabling 1-bit quantization of KV cache with layer-wise asymmetric quantization configurations. In: Rambow, O., Wanner, L., Apidianaki, M., Al-Khalifa, H., Eugenio, B.D., Schockaert, S. (eds.) Proceed-ings of the 31st International Conference on Computational Linguistics, pp. 2316–2328. Association for Computational Linguistics, Abu Dhabi, UAE (2025). 
+
+https://aclanthology.org/2025.coling-main.158/ 
+
+[14] Chen, Y., al.: Optimised grouped-query attention mechanism for transformers. ArXiv abs/2406.14963 (2024) [15] Zhang, R., al.: LoRC: Low-Rank Compression for LLMs KV Cache with a Progressive Compression Strategy (2024). https://arxiv.org/abs/2410.03111 [16] Ainslie, J., al.: Gqa: Training generalized multi-query transformer models from multi-head checkpoints. ArXiv abs/2305.13245 (2023) [17] Brown, T.B., al.: Language models are few-shot learners. In: Proceedings of the 34th International Conference on Neural Information Processing Systems. NIPS ’20. Curran Associates Inc., Red Hook, NY, USA (2020) [18] Ouyang, L., al.: Training language models to follow instructions with human feedback. In: Proceedings of the 36th International Conference on Neural Infor-mation Processing Systems. NIPS ’22. Curran Associates Inc., Red Hook, NY, USA (2022) [19] Ju, Y., al.: Chunkformer: Learning long time series with multi-stage chunked transformer. ArXiv abs/2112.15087 (2021) [20] Qiu, J., al.: Blockwise self-attention for long document understanding. ArXiv 
+
+abs/1911.02972 (2019) [21] Yang*, S., Guo*, J., Tang, H., al.: Lserve: Efficient long-sequence llm serving with unified sparse attention. arXiv preprint arXiv:2502.14866 (2025) [22] Gholami, A., al.: Ai and memory wall. IEEE Micro 44 (3), 33–39 (2024) https: //doi.org/10.1109/MM.2024.3373763 [23] Dai, J., al.: Corm: Cache optimization with recent message for large language model inference. (2024). https://api.semanticscholar.org/CorpusID:269362347 
+
+[24] Zhu, X., al.: Efficient and optimal algorithms for tree summarization with weighted terminologies. IEEE Transactions on Knowledge and Data Engineering 17 35 (3), 2500–2514 (2023) https://doi.org/10.1109/TKDE.2021.3120722 [25] Wang, M., al.: Jaq: Joint efficient architecture design and low-bit quantiza-tion with hardware-software co-exploration. In: AAAI Conference on Artificial Intelligence (2025). https://api.semanticscholar.org/CorpusID:275405930 
+
+[26] Lai, al.: Lcm: Llm-focused hybrid spm-cache architecture with cache management for multi-core ai accelerators. In: Proceedings of the 38th ACM International Conference on Supercomputing. ICS ’24, pp. 62–73. Association for Comput-ing Machinery, New York, NY, USA (2024). https://doi.org/10.1145/3650200. 3656592 . https://doi.org/10.1145/3650200.3656592 
+
+[27] Kumar, A., al.: HELIOS: Adaptive Model And Early-Exit Selection for Efficient LLM Inference Serving (2025). https://arxiv.org/abs/2504.10724 [28] Chen, Y., al.: LongLoRA: Efficient Fine-tuning of Long-Context Large Language Models (2024). https://arxiv.org/abs/2309.12307 [29] Agrawal, A., al.: Taming throughput-latency tradeoff in llm inference with sarathi-serve. In: Proceedings of the 18th USENIX Conference on Operat-ing Systems Design and Implementation. OSDI’24. USENIX Association, USA (2024) [30] Kwon, W., al.: Efficient memory management for large language model serving with pagedattention. Proceedings of the 29th Symposium on Operating Systems Principles (2023) [31] Zhu, Y., al.: SentenceKV: Efficient LLM Inference via Sentence-Level Semantic KV Caching (2025). https://arxiv.org/abs/2504.00970 [32] Zheng, Z., al.: Batchllm: Optimizing large batched llm inference with global prefix sharing and throughput-oriented token batching. ArXiv abs/2412.03594 (2024) [33] Wu, X., al.: Understanding int4 quantization for language models: Latency speedup, composability, and failure cases. In: International Conference on Machine Learning (2023). https://api.semanticscholar.org/CorpusID:260550717 
+
+[34] Lin, Y., al.: Qserve: W4a8kv4 quantization and system co-design for efficient llm serving. ArXiv abs/2405.04532 (2024) [35] Dettmers, T., al.: LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale (2022). https://arxiv.org/abs/2208.07339 [36] Lin, J., al.: AWQ: Activation-aware Weight Quantization for LLM Compression and Acceleration (2024). https://arxiv.org/abs/2306.00978 [37] xuxzh1: vllm-v0.3.3-dtk24.04. https://developer.sourcefind.cn/codes/OpenDAS/ vllm/-/tree/vllm-v0.3.3-dtk24.04. 2024 18 [38] Touvron, H., al.: Llama 2: Open Foundation and Fine-Tuned Chat Models (2023) [39] Wu, C., al.: LLaMA pro: Progressive LLaMA with block expansion. In: Ku, L.-W., Martins, A., Srikumar, V. (eds.) Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pp. 6518–6537. Association for Computational Linguis-tics, Bangkok, Thailand (2024). https://doi.org/10.18653/v1/2024.acl-long.352 . 
+
+https://aclanthology.org/2024.acl-long.352/ 
+
+[40] gliang1001: ShareGPT V3 unfiltered cleaned split. https://www.modelscope.cn/ datasets/gliang1001/ShareGPT V3 unfiltered cleaned split. 2024 [41] Clark, P., al.: Think you have solved question answering? try arc, the ai2 reasoning challenge. ArXiv abs/1803.05457 (2018) 19

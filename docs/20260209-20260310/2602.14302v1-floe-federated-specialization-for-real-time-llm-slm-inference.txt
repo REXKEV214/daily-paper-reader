@@ -1,0 +1,972 @@
+Title: Floe: Federated Specialization for Real-Time LLM-SLM Inference
+
+URL Source: https://arxiv.org/pdf/2602.14302v1
+
+Published Time: Tue, 17 Feb 2026 02:20:37 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+> 1
+
+# Floe: Federated Specialization for Real-Time LLM–SLM Inference 
+
+Chunlin Tian , Kahou Tam , Yebo Wu , Shuaihang Zhong, Li Li , Nicholas D. Lane ,ChengZhong Xu , Fellow, IEEE 
+
+Abstract —Deploying large language models (LLMs) in real-time systems remains challenging due to their substantial com-putational demands and privacy concerns. We propose Floe, a hybrid federated learning framework designed for latency-sensitive, resource-constrained environments. Floe combines a cloud-based black-box LLM with lightweight small language models (SLMs) on edge devices to enable low-latency, privacy-preserving inference. Personal data and fine-tuning remain on-device, while the cloud LLM contributes general knowledge without exposing proprietary weights. A heterogeneity-aware LoRA adaptation strategy enables efficient edge deployment across diverse hardware, and a logit-level fusion mechanism enables real-time coordination between edge and cloud models. Extensive experiments demonstrate that Floe enhances user privacy and personalization. Moreover, it significantly improves model performance and reduces inference latency on edge devices under real-time constraints compared with baseline approaches. 
+
+Index Terms —Federated learning, Privacy-Preserving, Edge-Cloud Collaboration. 
+
+I. I NTRODUCTION 
+
+# LARGE Language Models (LLMs) [1] have become indis-pensable for natural language processing tasks [2], [3], yet their reliance on centralized cloud infrastructure creates critical challenges in data privacy, latency, and personalized adaptation (Figure 1.1a-1.2a). Federated Language Models [4], [5] address privacy concerns by decentralizing training while maintaining data locality. However, vanilla FedLLM faces three real-world limitations. First, proprietary restrictions hin-der practical deployment: state-of-the-art LLMs like Gemini Ultra [6] ( $191 M training cost) and GPT-4 [1] ( $78 M cost) [7] remain closed-source due to their immense development in-vestments, with closed-source models consistently outperform-ing open-source alternatives [7]. Second, hardware constraints limit feasibility: even open-source LLMs (e.g., DeepSeek [8], LLaMA [9]) require prohibitive resources, deploying LLaMA-65B in FP16 precision requires approximately 130 GB of memory, while full-parameter fine-tuning (FFT) exceeds 800 GB [10]. Third, edge heterogeneity complicates training: divergent device capabilities, memory limits, and runtime variance create system-level bottlenecks. To address these challenges, federated language model protocols [5] have been proposed, yet they remain frag-mented in tackling the full scope of constraints. Existing methods focus on isolated aspects with notable limitations: 1) Parameter-efficient fine-tuning (PEFT) approaches [11], [12] reduce training overhead but require edge devices to store full LLM copies (e.g., billions of parameters), incurring prohibitive memory costs. 2) Compression-based solutions [13], [14], [15] lower resource demands but risk domain knowledge loss due to lossy tuning and require computa-tionally intensive preprocessing [16]. Moreover, most PEFT-based and compression-based approaches require access to intermediate layer parameters, undermining LLM intellectual property protection. 3) Cryptography-enhanced frameworks [17], [18], [19], [20] protect model IP through ownership verification but introduce communication overhead and fail to guarantee edge device security against attacks. Although small language models (SLMs) [6], [21] now enable on-device deployment, they lack the advanced capabilities and tool integration (Figure 1.1b-1.2b) inherent to LLMs, which rely on massive training data and computational power. This situation presents a research question: How can we balance performance and privacy through collaborative yet privacy-preserving integration of LLMs and SLMs? 
+
+Designing a high-performance federated language models framework for personalized edge-device customization faces three critical challenges: 1) Privacy-preserving Collaboration: Protecting data and model ownership requires keeping raw user data (edge) and LLM parameters (cloud) private. The challenge lies in harnessing decentralized edge data and com-pute resources to enhance downstream performance without accessing local data or LLM internals. 2) Model Synergy: LLMs offer strong generalization but are hindered by their massive parameter counts on resource-limited edge devices. Meanwhile, SLMs support on-device inference but lack LLMs’ advanced reasoning and tool integration capabilities. Another key challenge is designing a collaborative framework that merges LLM generalization with SLM task-specific special-ization for scalable performance. 3) Heterogeneity-aware Or-chestration: Edge environments exhibit system heterogeneity, data heterogeneity, and runtime variance. The third challenge is to orchestrate collaborative training that balances accuracy, efficiency, and robustness under these dynamic constraints. In this paper, we propose Floe, an efficient federated language model framework that harmonizes a central cloud-hosted black-box LLM with edge-deployed lightweight SLMs to enhance downstream task performance while ensuring data privacy, LLM intellectual property, and managing edge device resource constraints. As shown in Figure 1.3, Floe operates in two phases: fine-tuning and inference. During fine-tuning, SLMs serve as the global base model, augmented by Low-Rank Adaptation (LoRA) [22], [23] adapters for collaborative parameter aggregation to diversify training data and expand device participation. To address hardware and runtime het-                                                        
+
+> arXiv:2602.14302v1 [cs.DC] 15 Feb 2026 2Request
+> Prompt:You'rea
+> personalAIassistant.
+> Context:
+> #Task:
+> #User-Profile:
+> Response
+> SpecializedSLM
+> Leak
+> Privacy
+> Low
+> Performance
+> Request
+> Response
+> 2.aInferencebyCloudLLM.2.bInferencebySpecializedSLM.
+> LLMEnd-useractivitylogs
+> ...
+> SLM
+> Fine-tuningFine-tuning
+> BreakModelCopyright
+> MemoryConstraintsLowPerformance
+> DataInsufficiency
+> 1.aFine-tuningLLMonEnd-user.1.bFine-tuningSLMonEnd-user.
+> ...
+> Fine-tuning
+> 3.aFederatedSLMsFine-tuningCrossEdgeDevices.
+> Fine-tuningFine-tuning
+> DatePrivacy-preserving
+> DataSufficiency
+> 3.bEdgeSLMandCloudLLMCo-inference.
+> Requestwith
+> PersonalContext
+> GenericLLM
+> SpecializedSLM
+> Requestwithout
+> PersonalContext
+> General
+> Knowledge
+> Response
+> High Performance
+> Model
+> Copyright
+
+A. Conventional LM Fine-tuning and Inference at the Edge. B. Floe: Edge SLM Meets Cloud LLMs.
+
+Fig. 1: Comparison of existing LM fine-tuning and inference approaches with Floe. Convention: (1.a) End-user fine-tunes LLM directly at the edge, breaking model copyright and facing memory constraints. (1.b) End-user fine-tunes specialized SLM at the edge is personalized but underperforms. (2.a) Inference by cloud LLM outperforms but risks privacy. (2.b) Inference by specialized edge SLM is privacy-friendly but underperforms. Floe: (3.a) Federated SLMs fine-tuning cross-edge devices with data sufficiency and privacy. (3.b) Harmonizing LLMs and SLMs improves privacy and performance. erogeneity, Floe introduces heterogeneity-aware adaptive-rank LoRA adapters, which dynamically adjust to varying resource budgets. Additionally, a parameter-free Mixture-of-Experts (MoE) router [24] mitigates data heterogeneity by intelligently routing tasks to specialized experts. In the inference phase, per-sonalized SLMs on resource-constrained devices leverage local user profiles and activity logs, while the cloud LLM provides high-level knowledge (e.g., strategic planning, outlines, and “dark knowledge”). The SLMs then integrate this contextual guidance to generate tailored outputs. Extensive experiments demonstrate the effectiveness and practical feasibility of Floe. To the best of our knowledge, Floe is the first federated language model framework across edge devices while logically protecting LLM intellectual property and user privacy through collaborative LLM-SLM generation. Overall, we highlight our contributions as follows:  
+
+> •
+
+We propose Floe, a federated language model framework that bridges collaboration between cloud-hosted LLMs and edge-deployed SLMs, jointly addressing intellectual property protection, data privacy, and performance en-hancement.  
+
+> •
+
+To tackle data/system heterogeneity and runtime variance in edge environments, we design heterogeneity-aware adaptive-rank LoRA adapters and a parameter-free MoE router, balancing model accuracy and training efficiency under resource constraints.  
+
+> •
+
+We evaluate Floe through extensive experiments on real-world edge devices, demonstrating superior accuracy and practical feasibility. II. R ELATED WORK 
+
+A. Large Language Models 1) Training Process: Large Language Models (LLMs) [1], [9], [6] achieve remarkable performance through scaling, typically undergoing two-stage training: (1) Auto-regressive pre-training on broad public datasets (e.g., Wikipedia, web texts) to acquire general knowledge, and (2) supervised fine-tuning on domain-specific data (e.g., medical [25], legal [26], financial [3]) for downstream task specialization. However, public datasets suffer from quality limitations, require ex-tensive curation, and risk depletion by 2026 [27], prompting reliance on privately-held data for LLM advancement. While individual parties often possess limited data, collaborative aggregation across distributed private datasets could unlock unprecedented LLM capabilities. 
+
+2) Inference Process: The inference pipeline of LLMs fol-lows a structured process from input to output generation [28], [29], [30], [31], as illustrated in Figure 2: (1) Tokenization : Raw text is encoded into token IDs. (2) Model Inference : The model iteratively predicts next-token probability distributions. (3) Decoding : Logits are processed via greedy selection, sampling [9], or advanced strategies to balance diversity and quality. (4) Termination : Generation stops upon reaching a token limit or end token. While closed-source LLMs restrict parameter access, their APIs (e.g., OpenAI API [29]) expose logits for downstream use. Recent works [32], [28], [33] demonstrate that ensembling logits from multiple models improves performance. For instance, Contrastive Decoding [34] enhances outputs by selecting tokens that maximize log-likelihood gaps between expert and amateur models. This raises a critical question: Can we fine-tune LLMs during decoding by modifying logits without accessing black-box model parameters? B. Federated Fine-tuning of LLMs 
+
+Federated Learning (FL) [35] enables privacy-preserving collaborative model training across decentralized devices. Its standard workflow comprises four phases: (1) global model broadcasting from server to clients, (2) local client-side train-ing, (3) model update aggregation from clients to server, 3Tokenizer Model Post    
+
+> Processing
+> RawText Input
+> IDs Logits Predictions
+> How's the
+> weather?
+> [30,3,2025,
+> 3,4,2023]
+> [-4.3636,
+> 4.6859]
+> Positive:99.9%
+> Negative:0.01%
+
+Fig. 2: LLMs inference process. The logits play a crucial role in determining the final output. TABLE I: Popular ML hardware specifications.                     
+
+> GPU Types Peak Perf. Memory Bandwidth Peak Power
+> Server-level NVIDIA A100 312 TFLOPS 80GB 1935 GB/s 300W NVIDIA A40 149.7 TFLOPS 48 GB 696 GB/s 300W Edge-level Jetson Orin NX 100 TOPS 16GB 102.4GB/s 25W Jetson Orin Nano 40 TOPS 8GB 68 GB/s 15W
+
+and (4) server-side global model updating. To address data scarcity and enhance LLM generalization in downstream tasks, recent studies [11], [12], [36], [37] have explored FL-based LLM fine-tuning, leveraging distributed private data while maintaining data locality. However, existing solutions tend to decouple the issue, concentrating only on specific aspects. Ef-fectively fine-tuning a black-box LLM across multiple devices in real-world scenarios should satisfy the following design requirements. 
+
+1) Memory constraints and model ownership: Full param-eter fine-tuning (FFT) of LLMs imposes prohibitive resource requirements, exemplified by LLaMA-65B’s 800GB memory demand for training [9], [10], [38], [39]. As shown in Table I, edge devices face severe computational constraints compared to server-grade GPUs, rendering FFT impractical in decen-tralized settings. To address this challenge, parameter-efficient fine-tuning (PEFT) methods have emerged, which freeze pre-trained LLM weights and adapt only lightweight modules during federated training. Representative approaches include prompt-based tuning (e.g., PromptFL [40], FedSP[41]) and LoRA (e.g., FederatedScope-LLM [11], FedIT [42]). While these techniques reduce computational overhead and com-munication costs, deploying LLMs during training remains memory-intensive for edge devices. For instance, even in FP16 precision, LLaMA-65B requires 130GB for model weights, and LLaMA-7B consumes 14GB, exceeding the capacity of most edge hardware. Second, these approaches inherently require “white-box” access to the full model parameters to apply the LoRA adapters, making them incompatible with the proprietary, black-box LLMs that dominate the state-of-the-art. Compression-based [13], [14], [43], [44] and model-splitting [45], [46], [47] approaches reduce resource demands but require white-box access to model parameters or transfer intermediate activations, thereby compromising intellectual property protection and introducing additional privacy risks. Furthermore, these methods require access to interme-diate layer parameters, failing to protect LLM intellectual property. Cryptographic solutions like FedIPR [20] pro-pose watermarking-based ownership verification, but intro-duce communication overheads and cannot guarantee edge-device security against attacks. As shown in Table II, while TABLE II: Performance comparison of LLMs and SLMs under different benchmarks [50].                     
+
+> Model BBH (%) MMLU (%) MATH (%) AceMath-7B[48] 29.99 26.48 63.37
+> Qwen2-72B [51] 57.48 48.92 41.77 Llama-3.1-70B[52] 55.93 47.88 38.07 IID Non-IID(1) Non-IID(2) Non-IID(3)
+> 10
+> 11
+> 12
+> 13
+> 14
+> Pass@1 (%)
+> Federated Centralized Base
+
+Fig. 3: Model performance on in-domain dataset across various Non-IID levels. (Model: Llama-7B; Dataset: CodeAlpaca; Benchmark: Humaneval) R=8 R=16 R=32   
+
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> Latency (h)
+> NX Nano NX + Web
+
+Fig. 4: Latency during fine-tuning with different LoRA rank on different edge devices. (Tiny-LLaMA on GSM-8K) SLMs enable edge deployment with superior performance in specialized domains (e.g., AceMath-7B-Instruct [48] achieves 63.37% on MATH[49]), they underperform in general tasks (BBH: 29.99%, MMLU: 26.48%) due to limited capacity and training data. In contrast, LLMs retain superior general knowl-edge but cannot be locally deployed on memory-constrained devices. This dichotomy motivates Floe, which harmonizes both architectures for lightweight, privacy-preserving, and high-performance federated language models. 2) Data heterogeneity: presents a significant challenge in FL [53], [54], which hinders statistical efficiency. For tradi-tional discriminative tasks, data heterogeneity usually refers to the in-domain (ID) data distribution across different clients. To address these issues, several strategies have been proposed in traditional FL, FedProx [55] enhances the stability of the 4glue_record  
+
+> cosmos_qa
+> glue_multirc
+> openbookqa drop
+> bool_q
+> squad_v1.1
+> squad_v2.0
+> translate_cs-en
+> translate_ru-en
+> translate_fr-en
+> translate_de-en
+> translate_fi-en
+> translate_ro-en
+> para_crawl_enes
+> translate_tr-en
+> glue_qqp
+> glue_mrpc
+> paws_wiki
+> winogrande
+> glue_wsc.fixed
+> pronoun_resolution
+> ARC-Challenge
+> natural_questions
+> ARC-Easy
+> glue_record
+> cosmos_qa
+> glue_multirc
+> openbookqa drop
+> bool_q
+> squad_v1.1
+> squad_v2.0
+> translate_cs-en
+> translate_ru-en
+> translate_fr-en
+> translate_de-en
+> translate_fi-en
+> translate_ro-en
+> para_crawl_enes
+> translate_tr-en
+> glue_qqp
+> glue_mrpc
+> paws_wiki
+> winogrande
+> glue_wsc.fixed
+> pronoun_resolution
+> ARC-Challenge
+> natural_questions
+> ARC-Easy
+> LoRA Embedding Similarity Heatmap by Task s
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+
+Fig. 5: Task embedding heatmap. Client 0 
+
+Client 1 
+
+Client 2 
+
+... 
+
+Client 3 
+
+Client N      
+
+> Heterogeneity-aware LoRA Trainer
+> 𝐀 0∈ℝ𝐀 0×𝐀
+> 𝐀 0∈ℝ𝐀 ×𝐀 0
+
+𝐀 0 𝐀 0     
+
+> 𝐀 1∈ℝ𝐀 1×𝐀
+> 𝐀 1∈ℝ𝐀 ×𝐀 1
+
+𝐀 1 𝐀 1     
+
+> 𝐀 2∈ℝ𝐀 2×𝐀
+> 𝐀 2∈ℝ𝐀 ×𝐀 2
+
+𝐀 2 𝐀 2     
+
+> 𝐀 3∈ℝ𝐀 3×𝐀
+> 𝐀 3∈ℝ𝐀 ×𝐀 3
+
+𝐀 3 𝐀 3     
+
+> 𝐀 𝐀 ∈ℝ𝐀 𝐀 ×𝐀
+> 𝐀 𝐀 ∈ℝ𝐀 ×𝐀 𝐀
+
+𝐀 𝐀 𝐀 𝐀 
+
+> Cluster
+
+𝐀 1 𝐀 𝐀 
+
+𝐀 1
+
+𝐀 𝐀 
+
+𝐀 0𝐀 0 𝐀 2 𝐀 3
+
+𝐀 0
+
+𝐀 2
+
+𝐀 3
+
+> Aggregator
+
+∆𝐀 1
+
+∆𝐀 2
+
+> Broadcast Global LoRA to Clients.
+> Upload Local LoRAs.
+
+Cloud Server Fig. 6: Workflow of Floe fine-tuning process. FL process through the addition of a proximal term. Favor [56] employs an estimation of data distribution based on discrepancies in uploaded model weights, utilizing statistical utility (non-IID level) as a criterion for selecting a high-quality subset of devices. Recent studies [57] indicate that architec-tures based on self-attention, such as Transformers, exhibit enhanced robustness to distribution shifts, thereby improving FL performance. As illustrated in Figure 3, we explore the fine-tuning of Llama-7B using CodeAlpaca [11], [58] across various Non-IID levels, evaluated via the Humaneval [59] benchmark. We employ a Latent Dirichlet Allocation (LDA) based partition strategy to simulate data heterogeneity. The levels Non-IID (1,2,3) correspond to Dirichlet concentration parameters of α = 0 .5, 0.3, and 0.1 respectively, representing increasing degrees of distribution skewness derived from the LDA topic inference. This evaluation demonstrates a high ro-bustness to in-domain heterogeneity. Despite robustness within a single domain, enhancing the generative capabilities of LLMs in practical applications necessitates a large and diverse dataset that spans multiple domains. To quantify cross-domain heterogeneity, we use a sentence-embedding model, Γ (here adopting BGE [60]) to evaluate the task embeddings on the multi-takes dataset Flan [61]. Figure 5 presents a heatmap that visualizes the similarity of task embeddings across different tasks. The results indicate that embeddings within the same domain exhibit higher similarity, highlighting the presence of data heterogeneity across different tasks. This underscores the need for Floe to reconcile two priorities: (1) leveraging cross-domain commonalities through federated learning, and (2) accommodating device-specific characteristics via person-alization, thereby mitigating data heterogeneity’s impact on model performance and efficiency. 3) System heterogeneity: arising from performance and efficiency variations across diverse hardware platforms, is especially pronounced in edge environments with thousands of distinct System-on-Chips that exhibit heterogeneous com-pute and storage capabilities. Profiling results (Figure 4) reveal three observations: (1) hardware disparities signifi-cantly affect latency; (2) foreground workloads exacerbate runtime variance; and (3) LoRA rank selection introduces non-trivial computational trade-offs. These findings motivate our heterogeneity-aware rank adaptation. Traditional approaches [62], [54], [63] address system heterogeneity through device selection strategies but fail to reduce per-device training overhead. For LLMs, high memory demands further restrict eligible device pools. Recent methods [64], [65] propose dynamic model compression: ZeroFL [64] partitions weights into active/inactive subsets for inference and sparse updates during backpropagation, while FedMef [65] preserves post-pruning accuracy via budget-aware parameter extrusion. How-ever, as discussed in Section II-B1, compression introduces additional computational overhead, degrades domain-specific knowledge, and undermines privacy through intermediate pa-rameter exposure. In contrast, SLMs mitigate these challenges by streamlining architectures and training data to focus on core task requirements. This motivates Floe to develop an adaptive heterogeneity-aware mechanism that dynamically ac-commodates system heterogeneity and runtime variance while maintaining model performance and privacy. 
+
+III. F LOE : F INE -TUNING PHASE 
+
+We now discuss how we leverage the derived principles to design a high-performance federated language model fine-tuning framework. Specifically, we first introduce the archi-tecture and overall workflow of Floe. After that, we discuss each component in detail. 
+
+A. System Overview 
+
+Figure 6 depicts Floe’s federated fine-tuning architecture, which adopts a client-server design with specialized small language models (SLMs) deployed on edge devices (data owners). The process comprises four key stages: ➊ To mini-mize tuning overhead and communication costs, LoRA mod-ules are used as the collaborative fine-tuning component. 
+
+➋ Heterogeneity Adaptation: Each device freezes its SLM parameters and dynamically adjusts its LoRA trainer within local memory/latency constraints to accommodate hardware and runtime variance. ➌ Model Upload: After local training, devices upload their personalized LoRA modules (encoding task-specific adaptations) to the central server. ➍ Hierarchical Aggregation: The server clusters LoRA modules based on embedding similarity, and aggregates them via a task-specific aggregator to update the global LoRA module. 5
+
+B. Heterogeneity-aware LoRA Trainer 
+
+The participating devices in federated fine-tuning often exhibit heterogeneous hardware configurations (e.g., vary-ing compute capabilities and memory budgets) and run-time variances. Consequently, a uniform configuration cannot efficiently accommodate heterogeneous devices. While 1B-3B SLMs are classified as ’small’ relative to cloud LLMs, performing FFT on them remains infeasible for edge hard-ware due to excessive memory overheads. Aligning with LoRA’s resource-dependent design philosophy, we employ a heterogeneity-aware LoRA trainer to bridge this gap, ensuring feasibility and maximizing participation across constrained edge devices. In vanilla LoRA, low-rank matrices A (initial-ized with Kaiming Uniform [66]) and B (zero-initialized) are sequentially applied to each layer to adapt residual weights. The forward computation is defined as: 
+
+y′ = y + ∆ y = W x + ∆ W x = W x + BAx, (1) where y ∈ R d is the output and x ∈ R k denote the input. 
+
+B ∈ R d×r , A ∈ R r×k with r ≪ min (d, k ). W represents the frozen model parameter. To address device heterogeneity, we dynamically configure LoRA ranks ( r) for each device. Given N devices, we define a set of LoRA modules Φ = 
+
+{ϕ1, ϕ 2, . . . , ϕ N }, where each ϕi is trained on local data. For device i, the LoRA rank ri is determined by: 
+
+ Ai ∈ Rri×k
+
+Bi ∈ Rd×ri , (2) subject to two constraints: 1) Memory Budget: Mr,i ≤ B i
+
+(device i’s memory capacity). 2) Latency Bound: Predicted training latency tr,i ≤ T (global round deadline to mitigate straggler effects [62], [54]). The function PredictLatency(r) is implemented as a look-up table (LUT) based on the offline profiling data. This allows the trainer to directly retrieve the pre-measured training duration for the specific device and rank, ensuring precise deadline compliance. To intuitively illustrate the dynamic rank adaptation, we present the selec-tion decision boundaries in Figure 7. This adaptive design ensures efficient resource utilization while maintaining training progress synchronization across heterogeneous edge devices. It is orthogonal to compression-like methods, enabling further reduction in additional parameters and computation overhead. To regulate local data leakage, Floe can employ configurable Local Differential Privacy [67], [68], [69]. Gaussian noise is injected into the aggregated updates to satisfy differen-tial privacy. The perturbed gradient is given by ˜g = ¯g +
+
+N (0 , σ 2
+
+> noise
+
+C2I), where N denotes the Gaussian distribution. Here, C is the gradient clipping threshold used to bound the sensitivity, σnoise is the noise multiplier, and I is the identity matrix, ensuring independent noise injection across parameters. This formulation follows the standard DP-SGD protocol [67], [68]. Higher noise ( σ) yields stronger privacy but requires budget tuning to mitigate accuracy loss. 
+
+C. Task-specific Router/Aggregator 
+
+To address cross-task heterogeneity under privacy and re-source constraints, we design a task-specific LoRA aggrega-tion strategy that extends beyond naive averaging. Each LoRA 
+
+Fig. 7: Illustration of Heterogeneity-aware Rank Selection. 
+
+Algorithm 1: Heterogeneity-Aware Rank Selection  
+
+> 1:
+
+Input: Rset : Available LoRA ranks; T : Global latency deadline; GetAvailableMemory () : Gets current free memory; PredictMemory (r): Predicts memory use for rank r; PredictLatency (r): Predicts latency for rank r. 
+
+> 2:
+
+Output: rselected : The optimal LoRA rank for the current round.  
+
+> 3:
+
+Function SELECT RANK()  
+
+> 4:
+
+rselected ← N one  
+
+> 5:
+
+Bi ← GetAvailableMemory ()  
+
+> 6:
+
+for r in sorted (Rset , reverse = true ) do  
+
+> 7:
+
+Mr,i ← PredictMemory (r) 
+
+> 8:
+
+/* Stage 1: check memory constraint */  
+
+> 9:
+
+if Mr,i ≤ B i then  
+
+> 10:
+
+tr,i ← PredictLatency (r) 
+
+> 11:
+
+/* Stage 2: check latency constraint */  
+
+> 12:
+
+if tr,i ≤ T then  
+
+> 13:
+
+rselected ← r 
+
+> 14:
+
+return rselected  
+
+> 15:
+
+end if  
+
+> 16:
+
+end if  
+
+> 17:
+
+end for  
+
+> 18:
+
+return rselected  
+
+> 19:
+
+End Function 
+
+module ϕi is first projected into a task-aware embedding space using a domain-conditioned encoder E(ϕi), capturing both its adaptation semantics and fine-tuning dynamics. This embed-ding reflects not only parameter updates but also behavioral traits relevant to downstream generation, which are critical for privacy-sensitive, personalized tasks executed on edge devices. We then compute cosine similarities between embeddings to quantify functional divergence and form semantically coherent clusters: 
+
+si,j = cos ( E(ϕi), E (ϕj )) . (3) To quantify functional divergence and form semantically co-herent groups, we adopt a clustering-based aggregation mech-anism. We first apply a k-means clustering algorithm to the embeddings E(ϕ) of all N client modules. This partitions the modules into M clusters, where each cluster represents a distinct, discovered task. The optimal number of clusters, 6
+
+M , is not a fixed setting. It is determined dynamically in each aggregation round by analyzing the cluster quality using the silhouette score. This enables the server to adapt to the actual task distribution among the participating clients. Once the M clusters are formed, we proceed with task-specific aggregation. Considering M distinct downstream tasks, T =
+
+T1, T 2, . . . , T M , and assuming that k LoRAs correspond to the same task Tt based on their similarity scores, we represent the parameters of each LoRA ϕi by Θi. The collective parameter for task Tt is then computed as the average of these parameters: 
+
+ΘTj = 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+Θi, ϕi ∈ Tt. (4) Unlike traditional federated methods that enforce a single shared model across diverse clients, this clustered aggregation preserves per-task specialization while mitigating negative transfer, especially under non-IID conditions and misaligned user intents (see Section II-B2). As visualized in Figure 6, this method produces efficient, task-specific updates well-suited for federated LLM fine-tuning under privacy constraints. While Floe currently utilizes a deadline-based synchronous protocol, the framework naturally supports asynchronous ex-tension to handle extreme device unavailability. Unlike global model aggregation which blocks for all clients, Floe’s Task-Specific Aggregator allows for Cluster-wise Asynchronous Updates . The server can update a specific cluster center ΘTj
+
+immediately upon receiving a local LoRA ϕi that maps to task Tj , independent of pending updates for other clusters. To further mitigate the impact of stragglers uploading outdated parameters (“stale” updates), a staleness-aware weighting mechanism is introduced. Let τm = tnow − tstart m denote the time lag of client m. We replace the uniform averaging in Eq. 4 with a time-decayed weighted aggregation: 
+
+Θasync Tj =
+
+Pkm=1 exp (−βτ m) · Θm
+
+Pkm=1 exp (−βτ m) (5) where β is a decay hyperparameter. This ensures that fresher updates contribute significantly to the global expert pool, while slower devices can still participate with reduced influence, preventing model degradation from obsolete gradients. 
+
+D. Convergence Analysis 
+
+We provide a theoretical guarantee for Floe’s training process. Since Floe employs a clustering-based aggregation strategy, we analyze the convergence within a specific task cluster C with K clients. We model the heterogeneity-aware LoRA update as a compressed gradient estimator. 
+
+1) Assumptions: We adopt standard assumptions for non-convex Federated Learning:  
+
+> •
+
+Assumption 1 (L-Smoothness): Fk is L-smooth: 
+
+∥∇ Fk(w) − ∇ Fk(v)∥ ≤ L∥w − v∥. 
+
+> •
+
+Assumption 2 (Bounded Variance): Stochastic gradients are unbiased with bounded variance σ2: E[∥∇ Fk(w; ξ)−∇Fk(w)∥2] ≤ σ2. 
+
+> •
+
+Assumption 3 (Bounded Dissimilarity): The non-IID degree is bounded by κ2: ∥∇ Fk(w) − ∇ F (w)∥2 ≤ κ2.Prompt: You're a personal                 
+
+> AIassistant.
+> Context:#Task:
+> Privacy-Detector
+> #User-Profile
+> Prompt : You're a personal
+> AI assistant.
+> Context : # Task:
+> :
+> GeneralTaskRequest
+> GenericLLM
+> ontheCloud
+> PrivacyTaskRequest
+> SpecializedSLM
+> onUserDevice
+> NexttokenLogits
+> Alignment
+> Output
+> PersonalizedLoRA
+> MoE-Router
+
+Fig. 8: Illustration of Floe inference process.  
+
+> •
+
+Assumption 4 (Rank Approximation Error): The adaptive LoRA rank rk acts as a compression opera-tor Qrk (·). The approximation error is bounded by δ:
+
+E[∥g − Qrk (g)∥2] ≤ (1 − δ)∥g∥2, where 0 < δ ≤ 1.
+
+2) Main Result: Let η be the learning rate and E be the local steps. The global model updates via wt+1 = wt −
+
+η PKk=1 pk∆wkt .
+
+Theorem 1. (Convergence). Under Assumptions 1-4, if η ≤ 
+
+> 130 LE
+
+, the average squared gradient norm after T rounds is bounded by: 
+
+1
+
+T 
+
+> T−1
+
+X
+
+> t=0
+
+E[∥∇ F (wt)∥2] ≤ 2[ F (w0) − F ∗]
+
+ηET 
+
++ O
+
+ σ2
+
+KE + η2L2E(κ2 + σ2)
+
+
+
++ O  (1 − δ)σ2
+
+(6) 
+
+Proof: We start with the L-smoothness expansion of the global objective function F (wt+1 ). By substituting the aggre-gated LoRA update rule: 
+
+E[F (wt+1 )] ≤ E[F (wt)] − η
+
+2 E∥∇ F (wt)∥2
+
++ ηL 
+
+2 E
+
+> K
+
+X
+
+> k=1
+
+pk(gkt − Qrk (gkt )) 
+
+> 2
+
+| {z }
+
+> Rank Approx. Error
+
+(7) The error term decomposes into the standard stochastic vari-ance σ2, the heterogeneity drift κ2, and the LoRA rank approximation error (1 − δ). Floe’s Task-Specific Aggregator 
+
+explicitly minimizes κ2 by clustering clients with similar gradients, while the heterogeneity-aware trainer trades off the rank error (1 − δ) to ensure system participation. Summing over T rounds yields the bound. □
+
+IV. F LOE : I NFERENCE PHASE 
+
+This section describes the Floe inference pipeline, which seamlessly integrates: Cloud-hosted LLMs leverage their broad generalization capabilities for high-level knowledge, and on-device SLMs specialize in privacy-sensitive user instruc-tions via local context adaptation. To optimize performance in heterogeneous task environments, we propose a parameter-free MoE router that dynamically merges LoRA modules, enabling adaptive task routing without introducing additional trainable parameters. 7
+
+A. Privacy Detector 
+
+To ensure that sensitive prompts never reach the cloud LLM, Floe deploys a lightweight on-device Privacy Detector. Executing ahead of the router in Figure 8, it decides—within sub-millisecond latency—whether a request must remain on the local SLM. The detector is a two-stage heuristic tuned for speed and coverage. Stage 1: applies rule-based screening: regular expressions catch numeric identifiers (phone numbers, credit-card numbers, national IDs) while a compact named-entity list flags tokens tied to health, finance, location, or family relations. the privacy flag is set to true, and the prompt bypasses the cloud. Prompts that clear Stage 1 enter Stage 2, a semantic back-off. The text is embedded with the BGE-base model [60]; cosine similarity is then computed against five centroids covering location and user-profile domains. Scores above the tuned threshold τ likewise trigger the privacy flag, capturing paraphrases and obfuscated wording that rules miss. 
+
+Algorithm 2: Privacy Detector 
+
+Input: Prompt x
+
+Output: Privacy ( true if x must not be sent to the cloud)  
+
+> 1
+
+Function DETECT (x): 
+
+> 2
+
+/* Stage 1: rule-based filter */  
+
+> 3
+
+if REGEX MATCH (x) or NERM ATCH (x) then  
+
+> 4
+
+return true ; // keep on device  
+
+> 5
+
+/* Stage 2: semantic back-off */  
+
+> 6
+
+e ← Γ( x) ; // BGE-base embedding  
+
+> 7
+
+foreach domain centroid 
+
+μj ∈ { health , finance , legal , location , profile } do  
+
+> 8
+
+sj ← cos( e, μj ) 
+
+> 9
+
+if max  
+
+> j
+
+sj > τ then  
+
+> 10
+
+return true  
+
+> 11
+
+return false 
+
+B. Prompt-wise MoE-based Router Plugin 
+
+In practical settings, the assumption that a single, univer-sal solution—such as directly averaging the LoRA modules for all downstream tasks—will suffice is inadequate. This inadequacy arises because end-user requests span a diverse range of prompts, each associated with distinct tasks. Con-sequently, as shown in Figure 9, an MoE [24] router has been developed to dynamically and effectively merge LoRA modules for each mixed-task prompt. This approach signifi-cantly extends the plug-and-play capabilities of Floe. An MoE layer comprises a router network, denoted as R, and a set of experts, E = (E1, E 2, . . . , E N ), where each expert Ei
+
+corresponds to a tuned LoRA module. Additionally, we define 
+
+A = ( A1, A 2, . . . , A N ) and B = ( B1, B 2, . . . , B N ) as the sets of matrices, each containing N LoRAs. For an input xi, the output yi is expressed as: 
+
+yi = Wxi +
+
+> N
+
+X
+
+> j=1
+
+ωij · Ej (xi)= Wxi +
+
+> N
+
+X
+
+> j=1
+
+ωij · Bj Aj xi, (8) where ωij modulates the contribution weights of each expert. Unlike conventional MoE architectures that rely on trainable gating networks (e.g., GShard [70], Switch Transformer [71]), we propose a parameter-free, prompt-driven router tailored for edge deployment. This design eliminates additional training and synchronization overhead, enabling efficient specialization without compromising latency or memory budgets. Given a mixed-task prompt x, we compute its embedding Γ( x) using a sentence encoder (BGE). To enable this comparison, each aggregated expert LoRA module ϕ (from Section III.C) must also be represented in this embedding space. This is achieved via a one-time, pre-calculation on the server. The server computes a static embedding for each expert ϕ by averaging the embeddings of k server-held, non-private representative samples ( ki,ϕ ) that define that expert’s domain (e.g., generic, public medical questions for a “medical” expert): 
+
+Γ( ϕ) = 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+Γ( ki·ϕ). (9) This static, pre-computed embedding Γ( ϕ), which contains no private user data, is then distributed to the edge devices to be used by the router. The router calculates cosine similarity between the prompt and each expert: 
+
+s(x, ϕ ) = cos(Γ( x), Γ( ϕ)) , (10) and applies a softmax to derive the gating weights: 
+
+Ω = softmax (sx). (11) This method has three key advantages for real-world deploy-ment: (1) No communication overhead—gate weights need not be learned or synchronized; (2) Low latency—matching completes in under 1 ms on Jetson-class devices; (3) Inter-pretability—each LoRA expert aligns with a known domain (e.g., medical, legal), supporting transparent, domain-specific control. Moreover, when downstream tasks evolve or new domains emerge, traditional MoE requires expensive retraining of the router. In contrast, our soft MoE enables flexible plug-and-play updates—experts can be added, removed, or replaced without modifying or retraining the core routing mechanism. 
+
+C. Logit-level LLM–SLM Alignment 
+
+To leverage complementary strengths, Floe performs logit-level fusion between the cloud LLM (general knowledge) and the on-device SLM (personalized context). For each decoding step i, both models independently produce probability distri-butions over the vocabulary. Let r<i denote the previously generated tokens. The cloud model predicts: 
+
+P LLM  
+
+> i
+
+= θl(r<i , t ), (12) 8Create a Java program     
+
+> to generate a Fibonacci
+> sequence up to a
+> specified number ,
+> useful for modeling
+> population growth in
+> epidemiology .
+> MoE Router
+> 0.41
+> Expert Adapter
+> Math Code Medical
+
+## . . .     
+
+> 0.32 0.06
+> Token 1 Token 2
+> Token 3
+> Mixed-task Scenario
+> “Find the sum of the
+> digits of a given integer
+> using Python ”
+
+Fig. 9: Illustration of MoE inference. The router computes similarity scores for all expert clusters (e.g., Math, Medical, Code). A Softmax function converts these scores into gating weights (e.g., 0.32, 0.41). The final model adaptation is a weighted summation of all experts, allowing for mixed-domain reasoning without hard selection thresholds. where t denotes non-sensitive task metadata. The edge model predicts: 
+
+P SLM  
+
+> i
+
+= θs(r<i , t, C ), (13) where C represents private user context retained locally. A lightweight alignment module computes a fusion weight w ∈
+
+[0 , 1] based on the divergence between the two distributions: 
+
+w = σ MLP ([ P SLM  
+
+> i
+
+; P LLM  
+
+> i
+
+]) , (14) where σ(·) denotes the sigmoid activation function. The final output distribution is given by: 
+
+P out  
+
+> i
+
+= w · P SLM  
+
+> i
+
++ (1 − w) · P LLM  
+
+> i
+
+. (15) This logit-level interpolation preserves the general reasoning capability of the LLM while incorporating user-specific adap-tations from the SLM, without exposing proprietary model parameters or transmitting raw private data. 
+
+D. Real-Time Robustness and Fallback Strategy 
+
+While the hybrid LLM-SLM architecture leverages global knowledge from the cloud, reliance on remote logits inevitably introduces dependencies on network stability and API avail-ability. To ensure strict real-time guarantees despite these external variances, Floe employs a two-tier mitigation strategy. First, the Privacy Detector serves as a natural traffic of-floader. By processing privacy-sensitive and often latency-critical user instructions (e.g., personal context management) entirely on the edge, Floe insulates the most frequent user in-teractions from network jitter. Second, for non-private queries that require cloud collaboration, we introduce a timeout-based fallback mechanism to mitigate tail latency. During the token-wise generation, the on-device SLM and cloud LLM inference occur in parallel. If the cloud logits PLLM i fail to arrive within a predefined latency budget τ (e.g., 200ms), the alignment module dynamically forces the fusion weight w → 1 in Eq. 15. This effectively enables the system to “fall back” to the local SLM prediction for the current token, prioritizing fluid user experience over global knowledge integration when network conditions degrade. This mechanism also optimizes cost efficiency by preventing indefinite waiting times and effectively managing API quota consumption. V. E XPERIMENT 
+
+A. Experiment Setup 1) Infrastructure: We deploy Floe on a server–client testbed consisting of one NVIDIA A40 GPU (server) and 15 heterogeneous Jetson devices (clients, 10 Jetson Nano and 5 Jetson Orin NX). Background workloads are injected to simulate runtime variance [72], [73]. We utilize Codecarbon [74] for tracking latency and energy consumption during the fine-tuning process. 
+
+2) Models and Datasets: To validate Floe’s performance and efficiency, we adopt a hybrid experimental setup com-bining commercial API-based and open-source models. For closed-source LLMs, we use GPT-4-Turbo [1] as the cloud-hosted backbone and fine-tune lightweight edge SLMs ( TinyL-lama [75]) for personalized adaptation. For open-source exper-iments, we deploy Gemma-7B [6] as the server-hosted LLM and Gemma-2B as the collaborative SLM. Our evaluation leverages two datasets: (1) CoGenesis [76], a real-world user interaction dataset for privacy-sensitive tasks partitioned by User IDs to reflect real-world data islands, and (2) Flanv2 [61], a multi-task benchmark spanning 10 distinct clusters [77] which are distributed across clients to simulate task-level non-IID heterogeneity: Struct-to-Text Conversion, Translation, Commonsense Reasoning, Sentiment Analysis, Closed-Book QA, Paraphrase Detection, Coreference Resolution, Reading Comprehension, Commonsense-Enhanced Reading Compre-hension, Natural Language Inference. 
+
+3) Evaluation Metrics: We assess Floe through two critical dimensions: (1) Downstream Task Performance : Using the Big-Bench Hard (BBH) [78] benchmark, which contains 23 challenging multi-domain reasoning tasks from the BIG-Bench suite, we measure the customized model’s world knowledge and problem-solving capabilities. Results on CoGenesis are validated using its dedicated test set. (2) System Efficiency :We quantify latency and energy consumption using the Wiki-Text2 [79] dataset, reflecting real-world deployment con-straints on edge devices. 
+
+4) Baselines: We compare Floe with the following base-lines for evaluation purposes. (1) SLM-base [6]: Directly evaluates the untuned small open-source Gemma-2B on the BBH benchmark. (2) SLM-Local : Local device (data owner) uses a single LoRA module to independently fine-tune the Gemma-2B model using its private dataset, without any coor-dination, then evaluated on BBH benchmark. (3) SLM-FedAvg 
+
+[80]: Using Gemma-2B as the global model, each local device independently trains LoRA modules on its own data. The server then applies the federated averaging method to directly average the updated LoRA parameters from all devices. (4) SLM-FedProto [81]: To address data heterogeneity by mitigat-ing the divergence between local and global class prototypes, thereby aligning the locally generated prototypes with their global counterparts. (5) LLM-base [6]: The untuned Gemma-7B model is directly evaluated on the BBH benchmark. (6) 9
+
+TABLE III: Results for instruction-tuning on Specialized SLM (Gemma-2B), generic black-box LLM (Gemma-7B) and other fine-tuning methods on the BBH benchmark (5-shot). Floe outperforms other baselines, and improves performance over the LLM-base by 3.6%, and 14.2% improvement over vanilla smaller LMs.                                                                                                                                                                                                                                         
+
+> Task SLM-base SLM-Local SLM-FedAvg SLM-FedProto LLM-base LLM-FedAvg LLM-FedMoE Floe
+> Boolean Expressions 76.1 73.3 73.9 74.3 82.0 80.4 82.4 82.9 Causal Judgement 47.3 47.8 47.8 47.8 56.0 56.6 57.1 58.2 Date Understanding 25.1 16.6 24.3 26.9 47.3 50.6 51.4 52.7 Disambiguation Qa 34.0 38.9 34.0 28.2 53.1 56.7 66.1 69.0 Dyck Languages 24.3 29.6 25.9 25.7 51.8 52.7 66.1 69.4 Formal Fallacies 46.2 46.2 46.2 46.1 50.6 57.1 51.0 53.1 Geometric Shapes 29.6 29.6 29.6 30.6 34.3 36.3 37.6 41.8 Hyperbaton 57.5 54.7 57.1 57.6 56.7 58.0 61.2 61.4 LDeduction (5) 23.5 22.3 22.7 24.1 30.2 29.8 37.6 40.8 LDeduction (7) 15.4 15.8 15.4 16.3 29.0 26.1 26.9 35.1 LDeduction (3) 33.2 39.3 34.8 36.3 49.0 47.3 50.6 52.7 Movie Recommendation 44.1 43.3 44.1 48.2 69.8 70.2 73.5 75.1 Multistep Arithmetic Two 0.4 0.4 1.2 2.9 1.6 2.9 2.0 2.9 Navigate 57.5 57.5 57.5 57.6 58.4 58.4 59.6 60.6 Object Counting 29.6 28.3 30.0 32.2 43.3 44.9 44.1 45.3 Penguins in a Table 27.3 25.9 26.6 31.2 45.4 46.1 44.7 44.7 Reasoning 17.8 14.6 17.4 16.3 43.7 42.4 40.4 41.2 Ruin Names 13.8 15.0 12.6 18.4 29.0 33.1 31.8 35.1 Salient 17.4 15.8 14.6 18.4 34.3 35.9 35.1 35.5 Snarks 53.1 56.6 48.0 49.1 59.5 61.3 57.8 59.5 Sports Understanding 55.5 59.5 54.7 50.2 76.7 73.5 74.3 75.9 Temporal Sequences 17.4 19.4 17.4 18.0 17.6 15.5 17.1 19.2 Tracking Shuffled Objects (5) 18.2 21.5 17.0 20.4 13.9 16.7 13.9 15.9 Tracking Shuffled Objects (7) 12.1 10.1 12.6 13.1 11.4 12.2 12.2 12.2 Tracking Shuffled Objects (3) 35.2 37.2 36.8 38.0 33.9 32.7 33.1 35.5 Web Of Lies 50.6 50.6 50.6 50.6 54.3 53.9 51.4 55.1 Word Sorting 7.7 6.1 8.5 6.9 22.4 22.4 23.3 24.6
+> Average 32.21 32.43 31.96 32.82 42.79 43.81 45.12 46.39
+
+LLM-FedAvg : Using Gemma-2B as the proxy model, and Gemma-7B as the base LLMs. After local tuning, the server (model owner) directly merges all updated LoRA with equal weight. Subsequently, the server employs proxy inference to evaluate the performance on the BBH dataset benchmark. 
+
+(7) LLM-FedMoE [82]: To address the issue of assigning equal importance to all LoRA parameters, a router network comprising a dense layer with trainable parameters is used. This network evaluates the importance of each LoRA and selects the top-3 most significant LoRA modules for the corresponding inputs. 
+
+5) Hyperparameter Settings and Reproducibility: For local training, we train each LoRA module according to Stanford-Alpaca [83] format on NVIDIA Jetson Nano for a spec-trum of tasks with 3 epochs. We set the learning rate to 
+
+1e−5, and dynamically adjust the learning rate using a cosine annealing scheduler. The training batch size and gradient accumulation steps are both 4. We enable training with half-precision floating-point parameters to reduce memory usage and speed up training. During the proxy inference process, for fair comparison, we conduct three runs to determine average performance, each utilizing different 5-shot examples per task. 
+
+B. Overall Performance RQ1: Can Floe effectively proxy fine-tune closed-source LLMs using smaller models while maintaining excellent performance on multi-task downstream inputs? 
+
+Table III presents the overall comparison results of all schemes evaluated on the multi-task benchmark (BBH). It is evident that Floe significantly outperforms other baselines across various tasks. Notably, Floe improves performance accuracy by 14.2% compared to the standard small model and by 3.6% over the conventional LLM. Moreover, Floe proves particularly effective in handling complex mixed-task inputs, outperforming FedAvg by 2.6% and FedMoE by 1.3%. Unlike traditional models, obtaining even small accuracy improve-ments for LLMs can require significant training overhead. Floe’s gain is achieved with significantly lower system cost. As shown in Table IV, the hybrid system (LLM + SLM) outperforms standalone models in most tasks. For instance, combining GPT-4-turbo with an SLM achieves scores of 7.84 in Instructions and 7.65 in Paper Abstracts, surpassing both vanilla GPT-4-turbo (6.46/7.94) and TinyLlama-1.1B (7.66/7.32). Notably, GPT-3.5-turbo paired with an SLM ex-ceeds GPT-4-turbo’s standalone performance in Emails (6.43 vs. 3.79). While TinyLlama-1.1B outperforms GPT-3.5-turbo in Instructions and Paper Abstracts, hybrid systems further amplify performance, particularly in Emails, likely due to the SLM’s ability to refine domain-specific nuances. These results validate the hybrid architecture’s ability to balance scalability (LLMs) and efficiency (SLMs) for edge deployments. The key factor driving this performance is that Floe utilizes smaller models to fine-tune on local data, employing logit offset to proxy fine-tune inaccessible black-box LLMs. Additionally, Floe incorporates personalized LoRA modules to address data heterogeneity across different tasks, offering a more tailored approach compared to the generic one-for-all solution. Further-more, Floe uses a prompt-wise MoE-based router to effectively handle the properties of diverse real-world requests. 10 Vanilla 20% 50% Floe                             
+
+> 0
+> 4
+> 8
+> 12
+> 16
+> 20
+> 24
+> 28
+> 32
+> 36
+> 40 Accuracy (%)
+> Vanilla 20% 50% Floe
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> 16
+> 18 Memory (G)
+> Vanilla 20% 50% Floe
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9Parameter (B)
+> Vanilla 20% 50% Floe
+> 0
+> 150
+> 300
+> 450
+> 600
+> 750
+> 900
+> 1050
+> 1200 MACs (G)
+> Vanilla 20% 50% Floe
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> 90
+> 100 Comp. Latency (s)
+> Vanilla 20% 50% Floe
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> 16
+> 18
+> 20 Energy (Wh)
+> Vanilla 20% 50% Floe
+> 0
+> 15
+> 30
+> 45
+> 60
+> 75
+> 90
+> 105
+> 120
+> 135
+> Comm. Latency (s)
+> Vanilla 20% 50% Floe
+> 0
+> 15
+> 30
+> 45
+> 60
+> 75
+> 90
+> 105
+> 120 Perplexity
+
+Fig. 10: Efficiency comparison of using vanilla model (Gemma-7B), compressed model (rate 20% and 50%) and small model (Gemma-2B) as the global collaborative model. TABLE IV: Performance comparison of LLMs and SLMs.                   
+
+> Model Instructions Emails Paper Abstracts Generic LLM GPT-3.5-turbo 3.76 3.03 3.59 GPT-4-turbo 6.46 3.79 7.94
+> Vanilla SLM TinyLlama-1.1B 7.66 5.92 7.32 Generic LLM + Specialized SLMs + GPT-3.5-turbo 7.84 6.23 7.65 + GPT-4-turbo 7.82 6.43 7.87
+
+C. System Effectiveness RQ2: How does Floe enhance system efficiency, particularly in reducing training energy consumption and latency? 
+
+To evaluate the system efficiency of Floe, we examine the detailed statistics of different compression methods, including average model performance on BBH benchmark, perplexity, memory requirements, parameters, MACs (multiply accu-mulate operations), communication and computation latency, and energy consumption. The experiments are conducted on WikiText-2 and are executed on NVIDIA A40 for vanilla Gemma-7B, and NVIDIA Jetson Nano for other models, monitoring both energy consumption and duration with the Monsoon Power Monitor. 20% and 50% denote the model compression ratios; subsequently, the compressed models are deployed as global collaborative models for training. As shown in Figure 10, compared to traditional model compression, Floe only needs fewer parameters to fine-tune while occupying less memory footprint and obtaining the highest accuracy. The underlying driver is that traditional methods broadcast a lossy version as the shared model, yet the required mem-ory remains significantly large. Meanwhile, the small model effectively speeds up the overall runtime, and Floe achieves significant energy savings. Assuming a network bandwidth of 100MBps, Floe reduces 99% upload and download latency, due to its compact size and the efficient use of LoRA mod-ules. This reduction is particularly beneficial for clients with limited network capacity. It is also extremely user-friendly for resource-constrained devices, particularly those powered by batteries. Notably, while model compression enhances privacy by not exposing full parameters, it still necessitates access to all model parameters during the compression process. This highlights Floe benefits in boosting system efficiency and resource optimization, offering a practical solution for deploying advanced machine learning in resource-constrained environments. 
+
+D. Ablation Study 
+
+To explore the impact of the distinct modules of Floe, we develop three model variants: (1) Floe −M , where the heterogeneity-aware LoRA trainer is omitted, causing the server to dispatch the same standard model to devices with heterogeneous memory capacities. (2) Floe −P , where the task-specific router/aggregator scheme are disabled. (3) Floe −R,where the prompt-wise parameter-free MoE router is removed to assess its efficacy in handling mixed-task inputs. 
+
+RQ3: What impact does the device-specific model pruner have on the heterogeneity memory budgets? 
+
+Taking a closer look at the strategies employed by the device-specific pruner, Figure 11 illustrates the model fine-tuning scenarios on hardware-heterogeneous edge devices. As shown in Figure 11 left, i.e., Floe −M , the memory wall hinders effective model deployment. This limitation restricts the model fine-tuning using the data in resource-constraint devices, consequently diminishing the diversity and quantity of the overall training data and adversely affecting the model performance. Meanwhile, it also undermines the foundational goal of federated learning, which is to facilitate collaboration across multiple devices. As shown in Figure 11 right, by 11 1 2 3 4 5 6 7 8 9 10          
+
+> Inference Round
+> 1
+> 0
+> 1
+> Norm. Memory Budget
+> Available
+> OOM 12345678910
+> Inference Round
+> 1
+> 0
+> 1
+> Norm. Memory Budget
+> Available
+> OOM
+
+Fig. 11: Analysis of model tuning on various edge device memory budgets. Left: Floe −M ; Right: Floe. 
+
+(a) Local-1 (b) Local-2 (c) Local-3 (d) F loe −P (e) F loe −R (f) Floe 
+
+Fig. 12: Performance magnitudes of local fine-tuning, F loe −P (w/o personalized LoRA scheme), F loe −R (w/o MoE router) and Floe on different downstream tasks, evaluated on BBH benchmark. adaptive rank of the model following the memory budgets of the edge devices, the range of available devices of deployment is expanded. This enhancement boosts the robustness and scalability of Floe, expanding its utility across a broader array of resource-constrained environments. 
+
+RQ4: What impact do the personalized LoRA scheme and MoE router have on the heterogeneity data and mixed-task inputs? 
+
+As shown in Figure 12, we present the performance mag-nitudes of F loe −P and F loe −R across 10 BBH subtasks. We observe that local fine-tuning without federated collaboration excels only in specific tasks, often due to insufficient data. In contrast, F loe −P , which fails to address data heterogeneity and merely aggregates updated LoRA modules from local devices, results in suboptimal performance across most tasks. Furthermore, although F loe −R incorporates a personalized LoRA scheme for fine-tuning, it still struggles to handle prac-tical mixed-task inputs effectively. These findings underscore the critical importance of both the personalized LoRA scheme and the MoE router in maintaining F loe performance in environments characterized by diverse data and task demands. 
+
+RQ5: Can Floe generalize to open-source and closed-source model pairs? 
+
+To validate Floe’s adaptability beyond the Gemma family, we extended our evaluation to the state-of-the-art Llama-3 ecosystem and the closed-source Gemini-1.5-Flash API. As detailed in Table V, pairing the server-hosted Llama-3.1-70B with edge-optimized Llama-3.2 models reveals that performance gains scale with local capacity: the 3B model achieves a substantially higher boost (+5.6%) compared to the 1B variant (+3.3%), suggesting that stronger local experts can more effectively leverage global logits. Furthermore, the framework demonstrates robust compatibility with external APIs, delivering consistent improvements (+2.6%) even when TABLE V: Ablation Study on Model Heterogeneity.                  
+
+> Server / Edge Pair Method BBH Acc. Gain
+> Server: Llama-3-70B Edge: Llama-3-1B SLM-Only 32.5% -LLM-Only 55.9% -Floe 59.2% +3.3% Server: Llama-3-70B Edge: Llama-3-3B SLM-Only 44.1% -Floe 61.5% +5.6% Server: Gemini-1.5-Flash Edge: Llama-3-1B LLM-Only (API) 51.2% -Floe 53.8% +2.6%
+
+utilizing the lightweight Gemini-1.5-Flash backend, thereby confirming Floe’s effectiveness across diverse open-source and proprietary architectures. 
+
+E. Hyperparameter Sensitivity Number of experts. To thoroughly investigate the relationship between model performance and the number of LoRA mod-ules, we systematically vary the quantity of LoRA components during proxy inference and evaluate their downstream task per-formance on the challenging BBH benchmark. As illustrated in Figure 14, increasing the number of LoRA modules generally correlates with measurable improvements in task outcomes, demonstrating a clear trend toward enhanced model capability. This phenomenon can be explained by the increased architec-tural flexibility afforded by a larger pool of LoRA modules, which creates an expanded configuration space for dynamic parameter adaptation. Specifically, the greater diversity of low-rank matrices enables more precise specialization of neural network pathways in response to the heterogeneous input dis-tributions characteristic of mixed-task scenarios. The observed performance gains stem from two synergistic mechanisms: (1) The expanded module pool allows the router network to select task-optimal combinations of LoRA components, effectively 12 0.0 0.2 0.4 0.6 0.8 1.0     
+
+> Fusion Weight w(0=LLM, 1=SLM)
+> 0
+> 200
+> 400
+> 600
+> 800
+> Token Frequency
+> Distribution of Fusion Weights ( w) on BBH Benchmark
+> Mean w0.725
+
+Fig. 13: Distribution of dynamic fusion weights. creating a hierarchical adaptation process where different sub-modules specialize in distinct input patterns or knowledge domains. (2) The increased configuration granularity pre-vents the parameter interference issues common in mono-lithic adaptation approaches, as specialized LoRA modules can independently adjust their rank-decomposed weightings without disrupting other functional components. This modular architecture not only enhances adaptability to complex input structures but also maintains parameter efficiency by focusing computational resources on task-critical pathways. 
+
+Routing alignment accuracy. To explicitly evaluate the decision-making quality of the MoE-Router (beyond down-stream perplexity), we measured its routing alignment accu-racy. We mapped the BBH tasks into the discovered latent clus-ter domains (e.g., Logical Reasoning, Knowledge, Linguistics) and tracked the Top-1 expert selection frequency. The router achieves an average alignment accuracy of 87.6% across all tasks. Specifically, for distinct domains like “Boolean Expres-sions” and “Object Counting,” the routing accuracy exceeds 92%, indicating high stability. Misclassifications primarily occur in ambiguous tasks (e.g., “Date Understanding”), yet the soft-gating mechanism mitigates this by blending experts, preventing catastrophic performance drops. 
+
+Dynamic reweighting. To decode the decision logic of the alignment network, Fig. 13 visualizes the distribution of fusion weights w across the BBH benchmark. The weights span the full [0 , 1] spectrum with a mean of ≈ 0.725 , confirming dynamic arbitration rather than a static average. This distinct skew towards w > 0.5 empirically validates the Specialization Hypothesis : the fine-tuned SLM typically yields lower entropy (higher confidence) than the zero-shot Cloud LLM. Conse-quently, the network prioritizes the local expert for domain-specific tokens, while reserving the Cloud LLM ( w < 0.5) as a fallback regularizer during high-uncertainty scenarios. 
+
+Impact of Network Latency To empirically validate the ro-bustness of token-level communication, we evaluated the end-to-end generation latency on a Jetson Orin NX device while simulating varying network Round-Trip Times (RTT) ranging from 0ms to 500ms. As illustrated in Figure 16, for masked region (RTT < 100 ms), the total latency curve remains flat and identical to the standalone SLM baseline ( ≈ 65ms/token). In this region, the communication overhead is completely masked by the local computation time ( tnet < t edge −tcloud ), resulting in zero effective latency penalty. For bounded region (RTT Vanilla 7B 1 3 20 all 
+
+# of LoRA 
+
+20 
+
+30 
+
+40 
+
+> Accuracy (%)
+
+Fig. 14: Hyperparameter sensitivity of the number of experts. Why are people scared of snakes?                                                                                                                                                                                                         
+
+> I’mnottalkingaboutthefearofsnakesingeneral,butthefearofsnakes
+> thatarevenomous.
+> Snakesareoftenfearedandhatedbypeople.Theyareoftenportrayedas
+> evilanddangerouscreaturesinmoviesandTVshows.However,snakes
+> areactuallyquiteharmlessandbeneficialtotheenvironment.Thereare
+> manyreasonswhypeoplearescaredofsnakes.Somepeopleareafraidof
+> snakesbecausetheyhavebeenbittenbyone.Othersareafraidofsnakes
+> becausetheyhaveseentheminmoviesoronTV.Stillothersareafraidof
+> snakesbecausetheyhaveheardstoriesaboutthemfromotherpeople.
+> Snakesareoftenfearedbecauseoftheirabilitytomovequicklyand
+> silently,theirabilitytostrikequicklyandwithoutwarning,andtheirabilityto
+> biteandinjectvenom.Snakesarealsooftenassociatedwithdangerand
+> death,astheyareknowntoberesponsibleformanydeathseachyear.In
+> addition,snakesareoftenseenasasymbolofevilanddarkness,which
+> canfurthercontributetotheirfear.Themostdangeroussnakeintheworld
+> isthekingcobra.ThissnakeisfoundinAsiaandisknownforitslarge
+> sizeanddeadlyvenom.Thekingcobraisalsoknownforitsaggressive
+> behaviorandabilitytostrikequicklyandwithoutwarning.
+
+User Input
+
+Output
+
+SLM (Gemma-2B) 
+
+:
+
+Vanilla LLMs (Gemma-7B)
+
+Floe
+
+Fig. 15: Case study. With identical inputs, Floe generates more detailed and comprehensive outputs than SLM and LLM. 
+
+> 100 ms), as network conditions degrade, the latency momen-tarily rises but is immediately capped by the fallback timeout threshold ( Twait ). The plateau in Figure R1 confirms that even under catastrophic network lag, the end-to-end latency does not explode but gracefully reverts to the local SLM speed. These results demonstrate that Floe’s real-time performance is robust: it benefits from cloud intelligence when the network permits, while strictly preventing communication overhead from dominating the inference cycle in adverse environments. 
+
+F. Privacy Evaluation 
+
+We evaluate the effectiveness of the two-stage privacy de-tector described above using a labeled subset of the CoGenesis dataset, consisting of 3,000 real-world prompts annotated as either sensitive (e.g., containing personal-related content) or non-sensitive. The detector achieves an F1 score of 94.3%, with 97.1% precision and 91.7% recall, demonstrating strong accuracy in privacy classification. Importantly, over 93% of prompts identified as sensitive are correctly routed to the on-device SLM, fully bypassing the cloud LLM and preventing any personal data from leaving the edge. These results validate 13 0 100 200 300 400 500 600 
+
+> Network Round-Trip Time (RTT) [ms]
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> End-to-End Latency [ms/token]
+> Latency Masking
+> (Optimal Zone)
+> Fallback Triggered
+> (Bounded Latency)
+> Floe End-to-End Latency
+> Local SLM Baseline (120ms)
+> Timeout Budget (200ms)
+
+Fig. 16: Impact of network RTT on end-to-End latency. The communication overhead is either masked by parallel local computation (Green Zone) or strictly bounded by the fallback timeout (Red Zone), ensuring stable real-time response. the design of the detector: the rule-based Stage 1 offers low-latency coverage of explicit entities (e.g., phone numbers, medical terms), while the semantic Stage 2 reliably captures paraphrased or implicit privacy cues via cosine similarity to category centroids. This combination ensures both efficiency and robustness in privacy-sensitive prompt routing. 
+
+G. Case Study 
+
+RQ7: How does Floe perform in practice inputs compared to the vanilla models? 
+
+We present a comparative analysis of output samples gen-erated Floe. As demonstrated in the case studies of Figure 15, Floe consistently produces responses that surpass baseline models across multiple quality dimensions. Specifically, the generated text exhibits enhanced fluency through more natural syntactic structures, improved relevance via precise contextual alignment with input prompts, and increased informativeness characterized by richer detail density and conceptual depth. This performance advantage stems from our novel method-ology that synergistically combines two key innovations: (1) Proxy fine-tuning enables effective knowledge distillation by leveraging federated learning principles, where the small-scale model acts as a local knowledge integrator that captures task-specific patterns while preserving privacy constraints. This process creates a robust initialization point for subsequent adaptation. (2) The prompt-wise MoE routing mechanism implements dynamic architecture selection, wherein a train-able router network adaptively activates the most appropriate LoRA modules based on input characteristics. This granu-lar parameter-efficient approach allows precise control over knowledge fusion from different expert modules, resulting in optimized output quality without compromising computational efficiency. The combination of these techniques creates a hierarchical knowledge transfer framework that enhances both the semantic coherence and functional adaptability. VI. L IMITATIONS 
+
+Despite its promising results, Floe still faces several im-portant limitations. (1) The two-stage Privacy Detector is a heuristic, not a formal privacy guarantee. As identified in our evaluation (Section V.F), the detector achieves 91.7% recall, which implies that a percentage of sensitive queries may be misclassified as “General Task Requests”. In such cases, this sensitive information would be unintentionally leaked to the cloud-hosted LLM. There is an inherent trade-off in tuning the detector’s similarity threshold ( τ ): a more conservative threshold would increase recall (improving privacy) but reduce precision, causing more non-sensitive prompts to be unnec-essarily restricted to the on-device SLM. (2) The logit-level fusion mechanism (Section IV.C) fundamentally assumes that the vocabulary distributions of the cloud LLM and the on-device SLM are known and mappable. While this is feasible for models with open-source tokenizers like GPT-4 (using tiktoken) or for fully open-source stacks (like our Gemma-7B/2B experiment ), this approach would fail if a black-box LLM provider does not expose its tokenizer or logit vocabulary. In such a “fully black-box” scenario, logit fusion is infeasible. (3) The heterogeneity-aware LoRA trainer (Section III.B) dynamically selects the rank ri based purely on system constraints, namely the device’s memory budget ( Bi) and a global latency bound ( T ). This approach prioritizes system feasibility and maximizes device participation by preventing OOM errors. However, this creates a trade-off: a client with highly valuable or abundant local data but weak hardware will be assigned a low rank. This low rank limits the capacity of its update, potentially preventing the final aggregated model from fully benefiting from that client’s rich data. VII. C ONCLUSION 
+
+This paper introduces Floe, a high-performance federated learning framework that synergizes cloud-hosted black-box LLMs with edge-deployed lightweight SLMs to address pri-vacy preservation, resource constraints, and model ownership challenges in decentralized LLM fine-tuning and inference. The framework ensures data privacy and minimizes memory overhead by retaining sensitive user data and personalization on edge devices, while leveraging the LLM’s general knowl-edge through a novel logits-based coordination mechanism. To accommodate edge hardware diversity, Floe employs a heterogeneity-aware LoRA fine-tuning strategy that dynami-cally adapts model parameters to varying resource budgets. Additionally, a parameter-efficient prompt-wise MoE router enhances adaptability to diverse input distributions. Unlike prior approaches that focus solely on accuracy, Floe offers a deployment-friendly and scalable solution, making it well-suited for real-time, privacy-critical applications on resource-constrained devices. ACKNOWLEDGMENTS 
+
+This research received support from the Science and Technology Development Fund of Macau (0107/2024/RIA2), Joint Science and Technology Research Project with Hong Kong and Macau in Key Areas of Nansha District’s Science and Technology Plan (EF2024-00180-IOTSC) and the Multi-Year Research Grant of University of Macau 14 
+
+(MYRG-GRG2023-00211-IOTSC-UMDF, MYRG-GRG2024-00180-IOTSC). Please ask Dr. Li Li (llili@um.edu.mo) for correspondence. REFERENCES [1] OpenAI, “GPT-4 technical report,” CoRR , vol. abs/2303.08774, 2023. [2] microsoft, “Your Everyday AI Companion — Microsoft Bing.” https: //www.bing.com/new. [3] S. Wu, O. Irsoy, S. Lu, V. Dabravolski, M. Dredze, S. Gehrmann, P. Kambadur, D. S. Rosenberg, and G. Mann, “Bloomberggpt: A large language model for finance,” CoRR , vol. abs/2303.17564, 2023. [4] W. Kuang, B. Qian, Z. Li, D. Chen, D. Gao, X. Pan, Y. Xie, Y. Li, B. Ding, and J. Zhou, “Federatedscope-llm: A comprehensive package for fine-tuning large language models in federated learning,” in Proceed-ings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pp. 5260–5271, 2024. [5] Y. Wu, C. Tian, J. Li, H. Sun, K. Tam, Z. Zhou, H. Liao, Z. Guo, L. Li, and C. Xu, “A survey on federated fine-tuning of large language models,” 2025. [6] T. Mesnard, C. Hardin, and R. Dadashi, “Gemma: Open models based on gemini research and technology,” CoRR , vol. abs/2403.08295, 2024. [7] S. U. HAI, “Ai index: State of ai in 13 charts,” 2024. [8] DeepSeek-AI, “Deepseek-v3 technical report,” 2024. [9] H. Touvron, T. Lavril, G. Izacard, X. Martinet, M.-A. Lachaux, T. Lacroix, B. Rozi` ere, N. Goyal, E. Hambro, F. Azhar, A. Rodriguez, A. Joulin, E. Grave, and G. Lample, “LLaMA: Open and Efficient Foundation Language Models,” arXiv e-prints , p. arXiv:2302.13971, Feb. 2023. [10] K. Lv, Y. Yang, T. Liu, Q. Gao, Q. Guo, and X. Qiu, “Full parameter fine-tuning for large language models with limited resources,” arXiv preprint arXiv:2306.09782 , 2023. [11] W. Kuang, B. Qian, Z. Li, D. Chen, D. Gao, X. Pan, Y. Xie, Y. Li, B. Ding, and J. Zhou, “Federatedscope-llm: A comprehensive package for fine-tuning large language models in federated learning,” CoRR ,vol. abs/2309.00363, 2023. [12] T. Fan, Y. Kang, G. Ma, W. Chen, W. Wei, L. Fan, and Q. Yang, “FATE-LLM: A industrial grade federated learning framework for large language models,” CoRR , vol. abs/2310.10049, 2023. [13] G. Xiao, J. Lin, and S. Han, “Offsite-tuning: Transfer learning without full model,” CoRR , vol. abs/2302.04870, 2023. [14] Z. Yao, R. Y. Aminabadi, M. Zhang, X. Wu, C. Li, and Y. He, “Zero-quant: Efficient and affordable post-training quantization for large-scale transformers,” in Advances in Neural Information Processing Systems 35: Annual Conference on Neural Information Processing Systems 2022, NeurIPS 2022, New Orleans, LA, USA, November 28 - December 9, 2022 (S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh, eds.), 2022. [15] Y. Zhao, H. Xie, Z. Wang, C. Tian, L. Li, Y. Zhu, R. P. Martins, C.-H. Chan, and M. Zhang, “A one-shot floating-point compute-in-memory macro featuring pvt robustness and mismatch tolerance for edge llms,” in 2025 IEEE Custom Integrated Circuits Conference (CICC) , pp. 1–3, 2025. [16] X. Ma, G. Fang, and X. Wang, “Llm-pruner: On the structural pruning of large language models,” Advances in neural information processing systems , vol. 36, pp. 21702–21720, 2023. [17] S. Shao, W. Yang, H. Gu, J. Lou, Z. Qin, L. Fan, Q. Yang, and K. Ren, “Fedtracker: Furnishing ownership verification and traceability for federated learning model,” CoRR , vol. abs/2211.07160, 2022. [18] J. Zhang, X. Cheng, W. Wang, L. Yang, J. Hu, and K. Chen, “FLASH: towards a high-performance hardware acceleration architecture for cross-silo federated learning,” in 20th USENIX Symposium on Networked Systems Design and Implementation, NSDI 2023, Boston, MA, April 17-19, 2023 (M. Balakrishnan and M. Ghobadi, eds.), pp. 1057–1079, USENIX Association, 2023. [19] S. Sav, A. Pyrgelis, J. R. Troncoso-Pastoriza, D. Froelicher, J. Bossuat, J. S. Sousa, and J. Hubaux, “POSEIDON: privacy-preserving federated neural network learning,” in 28th Annual Network and Distributed System Security Symposium, NDSS 2021, virtually, February 21-25, 2021 , The Internet Society, 2021. [20] L. Fan, B. Li, H. Gu, J. Li, and Q. Yang, “Fedipr: Ownership verification for federated deep neural network models,” CoRR , vol. abs/2109.13236, 2021. [21] G. Team, R. Anil, S. Borgeaud, J.-B. Alayrac, J. Yu, R. Soricut, J. Schalkwyk, A. M. Dai, A. Hauth, K. Millican, et al. , “Gemini: a family of highly capable multimodal models,” arXiv preprint arXiv:2312.11805 ,2023. [22] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen, “Lora: Low-rank adaptation of large language models,” in 
+
+The Tenth International Conference on Learning Representations, ICLR 2022, Virtual Event, April 25-29, 2022 , OpenReview.net, 2022. [23] C. Tian, Z. Shi, Z. Guo, L. Li, and C.-Z. Xu, “Hydralora: An asym-metric lora architecture for efficient fine-tuning,” Advances in Neural Information Processing Systems , vol. 37, pp. 9565–9584, 2024. [24] R. A. Jacobs, M. I. Jordan, S. J. Nowlan, and G. E. Hinton, “Adaptive mixtures of local experts,” Neural Comput. , vol. 3, no. 1, pp. 79–87, 1991. [25] Y. Li, Z. Li, K. Zhang, R. Dan, S. Jiang, and Y. Zhang, “Chatdoctor: A medical chat model fine-tuned on a large language model meta-ai (llama) using medical domain knowledge,” Cureus , vol. 15, no. 6, 2023. [26] J. Cui, Z. Li, Y. Yan, B. Chen, and L. Yuan, “Chatlaw: Open-source legal large language model with integrated external knowledge bases,” 
+
+CoRR , vol. abs/2306.16092, 2023. [27] P. Villalobos, J. Sevilla, L. Heim, T. Besiroglu, M. Hobbhahn, and A. Ho, “Will we run out of data? an analysis of the limits of scaling datasets in machine learning,” arXiv preprint arXiv:2211.04325 , 2022. [28] OpenAI, “Using logit bias to alter token probability with the openai api,” 2024. Accessed at https://help.openai.com/en/articles/5247780-using-logit-bias-to-alter-token-probability-with-the-openai-api. [29] A. Liu, X. Han, Y. Wang, Y. Tsvetkov, Y. Choi, and N. A. Smith, “Tuning language models by proxy,” CoRR , vol. abs/2401.08565, 2024. [30] C. Tian, X. Qin, K. Tam, L. Li, Z. Wang, Y. Zhao, M. Zhang, and C. Xu, “CLONE: customizing llms for efficient latency-aware inference at the edge,” CoRR , vol. abs/2506.02847, 2025. [31] C. Tian, X. Qin, and L. Li, “Greenllm: Towards efficient large language model via energy-aware pruning,” in 2024 IEEE/ACM 32nd Interna-tional Symposium on Quality of Service (IWQoS) , pp. 1–2, 2024. [32] Z.-Y. Dou, X. Wang, J. Hu, and G. Neubig, “Domain differential adap-tation for neural machine translation,” arXiv preprint arXiv:1910.02555 ,2019. [33] Y. He, Z. Huang, X. Xu, R. S. M. Goh, S. Khan, W. Zuo, Y. Liu, and C.-M. Feng, “Cpt: Consistent proxy tuning for black-box optimization,” 
+
+arXiv preprint arXiv:2407.01155 , 2024. [34] X. L. Li, A. Holtzman, D. Fried, P. Liang, J. Eisner, T. Hashimoto, L. Zettlemoyer, and M. Lewis, “Contrastive decoding: Open-ended text generation as optimization,” arXiv preprint arXiv:2210.15097 , 2022. [35] J. Koneˇ cn´ y, H. B. McMahan, F. X. Yu, P. Richt´ arik, A. T. Suresh, and D. Bacon, “Federated learning: Strategies for improving communication efficiency,” CoRR , vol. abs/1610.05492, 2016. [36] C. Tian, Z. Shi, L. Li, C.-z. Xu, et al. , “Ranking-based client imitation selection for efficient federated learning,” in Forty-first International Conference on Machine Learning , 2024. [37] Z. Ning, C. Tian, M. Xiao, W. Fan, P. Wang, L. Li, P. Wang, and Y. Zhou, “Fedgcs: A generative framework for efficient client selection in federated learning via gradient-based optimization,” arXiv preprint arXiv:2405.06312 , 2024. [38] Y. Wu, L. Li, and C.-z. Xu, “Breaking the memory wall for hetero-geneous federated learning via progressive training,” in Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 1 , pp. 1623–1632, 2025. [39] Y. Wu, L. Li, C. Tian, D. Chen, and C. Xu, “Neulite: Memory-efficient federated learning via elastic progressive training,” arXiv preprint arXiv:2408.10826 , 2024. [40] H. Zhao, W. Du, F. Li, P. Li, and G. Liu, “Fedprompt: Communication-efficient and privacy-preserving prompt tuning in federated learning,” in IEEE International Conference on Acoustics, Speech and Signal Processing ICASSP 2023, Rhodes Island, Greece, June 4-10, 2023 ,pp. 1–5, IEEE, 2023. [41] C. Dong, Y. Xie, B. Ding, Y. Shen, and Y. Li, “Tunable soft prompts are messengers in federated learning,” in Findings of the Association for Computational Linguistics: EMNLP 2023, Singapore, December 6-10, 2023 (H. Bouamor, J. Pino, and K. Bali, eds.), pp. 14665–14675, Association for Computational Linguistics, 2023. [42] J. Zhang, S. Vahidian, M. Kuo, C. Li, R. Zhang, G. Wang, and Y. Chen, “Towards building the federated GPT: federated instruction tuning,” 
+
+CoRR , vol. abs/2305.05644, 2023. [43] K. Tam, C. Tian, L. Li, H. Zhao, and C. Xu, “Fedhybrid: Breaking the memory wall of federated learning via hybrid tensor management,” in Proceedings of the 22nd ACM Conference on Embedded Networked Sensor Systems , pp. 394–408, 2024. 15 
+
+[44] Y. Wu, L. Li, C. Tian, T. Chang, C. Lin, C. Wang, and C.-Z. Xu, “Heterogeneity-aware memory efficient federated learning via progres-sive layer freezing,” in 2024 IEEE/ACM 32nd International Symposium on Quality of Service (IWQoS) , pp. 1–10, IEEE, 2024. [45] I. Ceballos, V. Sharma, E. Mugica, A. Singh, A. Roman, P. Vepakomma, and R. Raskar, “Splitnn-driven vertical partitioning,” arXiv preprint arXiv:2008.04137 , 2020. [46] Y. Hu, X. Liu, G. Yang, L. Li, K. Zeng, Z. Zhao, S. Chen, L. Zhao, W. Li, and K. Li, “Tightllm: Maximizing throughput for llm inference via adaptive offloading policy,” IEEE Transactions on Computers , 2025. [47] C. Tian, L. Li, K. Tam, Y. Wu, and C.-Z. Xu, “Breaking the memory wall for heterogeneous federated learning via model splitting,” IEEE Transactions on Parallel and Distributed Systems , 2024. [48] Z. Liu, Y. Chen, M. Shoeybi, B. Catanzaro, and W. Ping, “Acemath: Advancing frontier math reasoning with post-training and reward mod-eling,” arXiv preprint arXiv:2412.15084 , 2024. [49] D. Hendrycks, C. Burns, S. Kadavath, A. Arora, S. Basart, E. Tang, D. Song, and J. Steinhardt, “Measuring mathematical problem solving with the math dataset,” arXiv preprint arXiv:2103.03874 , 2021. [50] C. Fourrier, N. Habib, A. Lozovskaya, K. Szafer, and T. Wolf, “Open llm leaderboard v2.” https://huggingface.co/spaces/open-llm-leaderboard/ open llm leaderboard, 2024. [51] A. Yang, B. Yang, B. Hui, and B. Zheng, “Qwen2 technical report,” 2024. [52] A. Grattafiori, A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, A. Letman, A. Mathur, A. Schelten, A. Vaughan, et al. , “The llama 3 herd of models,” arXiv preprint arXiv:2407.21783 , 2024. [53] Y. Zhao, M. Li, L. Lai, N. Suda, D. Civin, and V. Chandra, “Federated learning with non-iid data,” CoRR , vol. abs/1806.00582, 2018. [54] C. Tian, L. Li, Z. Shi, J. Wang, and C. Xu, “HARMONY: heterogeneity-aware hierarchical management for federated learning system,” in 55th IEEE/ACM International Symposium on Microarchitecture, MICRO 2022, Chicago, IL, USA, October 1-5, 2022 , pp. 631–645, IEEE, 2022. [55] A. K. Sahu, T. Li, M. Sanjabi, M. Zaheer, A. Talwalkar, and V. Smith, “On the convergence of federated optimization in heterogeneous net-works,” CoRR , vol. abs/1812.06127, 2018. [56] H. Wang, Z. Kaplan, D. Niu, and B. Li, “Optimizing federated learning on non-iid data with reinforcement learning,” in IEEE INFOCOM 2020-IEEE Conference on Computer Communications , (Toronto), pp. 1698– 1707, IEEE, 2020. [57] L. Qu, Y. Zhou, P. P. Liang, Y. Xia, F. Wang, L. Fei-Fei, E. Adeli, and D. L. Rubin, “Rethinking architecture design for tackling data heterogeneity in federated learning,” CoRR , vol. abs/2106.06047, 2021. [58] S. Chaudhary, “Code alpaca: An instruction-following llama model for code generation.” https://github.com/sahil280114/codealpaca, 2023. [59] M. Chen, J. Tworek, H. Jun, Q. Yuan, and H. P. de Oliveira Pinto, “Evaluating large language models trained on code,” CoRR ,vol. abs/2107.03374, 2021. [60] J. Chen, S. Xiao, P. Zhang, K. Luo, D. Lian, and Z. Liu, “Bge m3-embedding: Multi-lingual, multi-functionality, multi-granularity text embeddings through self-knowledge distillation,” 2024. [61] J. Wei, M. Bosma, V. Y. Zhao, K. Guu, A. W. Yu, B. Lester, N. Du, A. M. Dai, and Q. V. Le, “Finetuned language models are zero-shot learners,” CoRR , vol. abs/2109.01652, 2021. [62] F. Lai, X. Zhu, H. V. Madhyastha, and M. Chowdhury, “Oort: Efficient federated learning via guided participant selection,” in 15th USENIX Symposium on Operating Systems Design and Implementation, OSDI 2021, July 14-16, 2021 (A. D. Brown and J. R. Lorch, eds.), pp. 19–35, USENIX Association, 2021. [63] J. Liu, X. Wei, X. Liu, H. Gao, and Y. Wang, “Group-based hierarchical federated learning: Convergence, group formation, and sampling,” in 
+
+Proceedings of the 52nd International Conference on Parallel Process-ing, ICPP 2023, Salt Lake City, UT, USA, August 7-10, 2023 , pp. 264– 273, ACM, 2023. [64] X. Qiu, J. Fernandez-Marques, P. P. Gusmao, Y. Gao, T. Parcollet, and N. D. Lane, “Zerofl: Efficient on-device training for federated learning with local sparsity,” 2022. [65] H. Huang, W. Zhuang, C. Chen, and L. Lyu, “Fedmef: Towards memory-efficient federated dynamic pruning,” 2024. [66] K. He, X. Zhang, S. Ren, and J. Sun, “Delving deep into rectifiers: Surpassing human-level performance on imagenet classification,” in 
+
+2015 IEEE International Conference on Computer Vision, ICCV 2015, Santiago, Chile, December 7-13, 2015 , pp. 1026–1034, IEEE Computer Society, 2015. [67] M. Abadi, A. Chu, I. Goodfellow, H. B. McMahan, I. Mironov, K. Talwar, and L. Zhang, “Deep learning with differential privacy,” in 
+
+Proceedings of the 2016 ACM SIGSAC conference on computer and communications security , pp. 308–318, 2016. [68] R. C. Geyer, T. Klein, and M. Nabi, “Differentially private federated learning: A client level perspective,” arXiv preprint arXiv:1712.07557 ,2017. [69] K. Wei, J. Li, M. Ding, C. Ma, H. H. Yang, F. Farokhi, S. Jin, T. Q. Quek, and H. V. Poor, “Federated learning with differential privacy: Algorithms and performance analysis,” IEEE transactions on information forensics and security , vol. 15, pp. 3454–3469, 2020. [70] D. Lepikhin, H. Lee, Y. Xu, D. Chen, O. Firat, Y. Huang, M. Krikun, N. Shazeer, and Z. Chen, “Gshard: Scaling giant models with conditional computation and automatic sharding,” 2020. [71] W. Fedus, B. Zoph, and N. Shazeer, “Switch transformers: Scaling to trillion parameter models with simple and efficient sparsity,” 2022. [72] Microsoft, “Capture browser trace in the azure portal.” https://learn. microsoft.com/en-us/azure/azure-portal/capture-browser-trace, 2024. [73] K. Tocz´ e, N. Schmitt, U. Karg´ en, A. Aral, and I. Brandi´ c, “Edge workload trace gathering and analysis for benchmarking,” in 2022 IEEE 6th International Conference on Fog and Edge Computing (ICFEC) ,pp. 34–41, 2022. [74] codecarbon, “Track and reduce co2 emissions from your computing.” https://codecarbon.io/, 2023. [75] P. Zhang, G. Zeng, T. Wang, and W. Lu, “Tinyllama: An open-source small language model,” 2024. [76] K. Zhang, J. Wang, E. Hua, B. Qi, N. Ding, and B. Zhou, “Cogenesis: A framework collaborating large and small language models for secure context-aware instruction following,” arXiv preprint arXiv:2403.03129 ,2024. [77] J. Wei, M. Bosma, V. Y. Zhao, K. Guu, A. W. Yu, B. Lester, N. Du, A. M. Dai, and Q. V. Le, “Finetuned language models are zero-shot learners,” in The Tenth International Conference on Learning Representations, ICLR 2022, Virtual Event, April 25-29, 2022 , OpenReview.net, 2022. [78] A. Srivastava, A. Rastogi, A. Rao, A. A. M. Shoeb, A. Abid, A. Fisch, A. R. Brown, A. Santoro, A. Gupta, and et al., “Beyond the imitation game: Quantifying and extrapolating the capabilities of language mod-els,” CoRR , vol. abs/2206.04615, 2022. [79] S. Merity, C. Xiong, J. Bradbury, and R. Socher, “Pointer sentinel mixture models,” in 5th International Conference on Learning Repre-sentations, ICLR 2017, Toulon, France, April 24-26, 2017, Conference Track Proceedings , OpenReview.net, 2017. [80] H. B. McMahan, E. Moore, D. Ramage, and B. A. y Arcas, “Fed-erated learning of deep networks using model averaging,” CoRR ,vol. abs/1602.05629, 2016. [81] Y. Tan, G. Long, L. Liu, T. Zhou, and J. Jiang, “Fedproto: Federated prototype learning over heterogeneous devices,” CoRR ,vol. abs/2105.00243, 2021. [82] T. Zadouri, A. ¨Ust¨ un, A. Ahmadian, B. Ermis, A. Locatelli, and S. Hooker, “Pushing mixture of experts to the limit: Extremely parameter efficient moe for instruction tuning,” CoRR , vol. abs/2309.05444, 2023. [83] R. Taori, I. Gulrajani, T. Zhang, Y. Dubois, X. Li, C. Guestrin, P. Liang, and T. B. Hashimoto, “Stanford alpaca: An instruction-following llama model.” https://github.com/tatsu-lab/stanford alpaca, 2023.

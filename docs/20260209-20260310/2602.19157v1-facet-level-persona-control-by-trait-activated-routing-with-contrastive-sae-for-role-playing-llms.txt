@@ -1,0 +1,194 @@
+Title: Facet-Level Persona Control by Trait-Activated Routing with Contrastive SAE for Role-Playing LLMs
+
+URL Source: https://arxiv.org/pdf/2602.19157v1
+
+Published Time: Tue, 24 Feb 2026 02:10:23 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Facet-Level Persona Control by Trait-Activated Routing with Contrastive SAE for Role-Playing LLMs 
+
+Wenqiu Tang 1[0009 −0008 −6687 −4460] , Zhen Wan 2[0009 −0008 −4550 −4794] , Takahiro Komamizu 1[0000 −0002 −3041 −4330] , and Ichiro Ide 1[0000 −0003 −3942 −9296]  
+
+> 1
+
+Nagoya University, Nagoya, Aichi, Japan 
+
+tangw@cs.is.i.nagoya-u.ac.jp , taka-coma@acm.org , ide@i.nagoya-u.ac.jp  
+
+> 2
+
+Kyoto University, Kyoto, Japan 
+
+zhenwan.nlp@gmail.com 
+
+Abstract. Personality control in Role-Playing Agents (RPAs) is com-monly achieved via training-free methods that inject persona descriptions and memory through prompts or retrieval-augmented generation, or via supervised fine-tuning (SFT) on persona-specific corpora. While SFT can be effective, it requires persona-labeled data and retraining for new roles, limiting flexibility. In contrast, prompt- and RAG-based signals are easy to apply but can be diluted in long dialogues, leading to drift-ing and sometimes inconsistent persona behavior. To address this, we propose a contrastive Sparse AutoEncoder (SAE) framework that learns facet-level personality control vectors aligned with the Big Five 30-facet model. A new 15,000-sample leakage-controlled corpus is constructed to provide balanced supervision for each facet. The learned vectors are integrated into the model’s residual space and dynamically selected by a trait-activated routing module, enabling precise and interpretable per-sonality steering. Experiments on Large Language Models (LLMs) show that the proposed method maintains stable character fidelity and out-put quality across contextualized settings, outperforming Contrastive Activation Addition (CAA) and prompt-only baselines. The combined SAE+Prompt configuration achieves the best overall performance, con-firming that contrastively trained latent vectors can enhance persona control while preserving dialogue coherence. 
+
+Keywords: Big Five personality dataset · Contrastive learning · Activa-tion steering for LLMs 
+
+# 1 Introduction 
+
+Personality in Role-Playing Agents (RPAs) —Large Language Models (LLMs) conditioned to enact consistent psychological traits of certain characters— has emerged as a primary driver of in-character coherence and user trust. Contempo-rary training-free RPA stacks typically combine carefully engineered personality system prompts and persona descriptors, Retrieval-Augmented Generation (RAG)  
+
+> arXiv:2602.19157v1 [cs.CL] 22 Feb 2026 2Wenqiu Tang, Zhen Wan, Takahiro Komamizu, and Ichiro Ide
+
+for persona-relevant knowledge, while training-based RPA involves supervised finetuning on role-related corpus to internalize stylistic or behavioral constraints, enabling coherent role enactment beyond ordinary LLM chatbots [2, 27]. However, both RPA methods have limitations. Training-free pipelines can suffer from instruction-following degradation when long, role-related context (e.g., RAG passages) is injected, often introducing prompt noise and diluting the intended persona signal. Training-based RPA, in turn, typically demands substantial data and computation, and risks catastrophic forgetting of the model’s original general-purpose capabilities. Such issues reflect broader challenges of maintaining controllable, interpretable generation of LLMs. These limitations (Prompt brittleness/leakage long-context dilution, weak controllability, poor interpretability, and the cost/forgetting of training ) motivate a lightweight, interpretable inference-time control resilient to long context. Many studies have shown that using Control Vectors (CVs) can effectively shape style and personality-like traits in LLMs’ generations by adding small, attribute-aligned shifts to the residual stream, steering internal activations toward the desired direction [3, 9, 15, 24] . Although CVs have shown strong effects, several studies indicate instability in acquisition and usage; CVs derived from small or biased prompt-sets may capture prompt-specific artifacts rather than generalizable semantic directions, yielding noisy or brittle interventions [6, 24]. To stabilize CVs for RPAs, we adopt a data-centric inference-time controller that couples facet-pure data with representation learning based on a Sparse AutoEncoder (SAE). First, a leakage-controlled Big Five personality [21] cor-pus at the facet level supplies balanced positive/negative pairs and minimizes prompt/template artifacts. Next, an SAE yields a disentangled latent basis in which a contrastive objective learns compact within-facet and separated across-facet directions; these facet-aligned directions are injected as lightweight activation edits composed with standard RPA prompting without weight updates, improving stability, controllability, and interpretability under long context. Accordingly, our goal is to learn high-purity personality CVs effectively incorpo-rated into existing RPA pipelines. Leveraging these CVs, we improve personality-simulation accuracy without sacrificing dialogue stability or role fidelity. The contributions of this paper are as follows: 1. Dataset Construction (Section 3): We release a high-purity Big Five 
+
+30-facet corpus (15k instances, 500 per facet) designed to isolate single sub-dimensions, use first-person phrasing, and minimize cross-trait leakage. 2. Novel Framework (Section 4): We introduce a Contrastive-Learning (CL) objective for CVs in the SAE latent space, which promotes within-facet compactness and across-facet separation for more stable control. In addition, we employ an Agent-Based Decision Module to insert only the question-relevant CVs, thereby reducing noise. Together, these components achieve more discriminative and reliable personality steering. 3. Superior Performance (Section 5): We introduce contextual-based bench-mark persona fidelity and conduct detailed analysis on five steered methods, Facet-level Persona Control with Contrastive SAE for Role-Playing LLMs 3
+
+where our CV-SAE+Prompt method attains the best overall results, indicat-ing a robust way to steer RPA’s personality. 
+
+# 2 Related Work 
+
+Personality control methods can be roughly grouped into two families: Inference-time control , and Training-time control [2, 22]. We focus on Inference-time control 
+
+because it offers a strong trade-off between effectiveness and practicality. Unlike training-time methods, it does not require collecting large persona corpora or updating model weights, avoiding data costs, computational cost, and poten-tial forgetting [8, 13]. Within inference-time methods, prior work has explored decoding-time control, such as Plug-and-Play Language (PPLM) [18]), while effective, these methods incur substantial decoding-time compute, are sensitive to hyperparameters, and can sometimes degrade fluency or semantic fidelity [18].In the contrast, Inference-time control using Control Vectors (CVs) or prompt meth-ods [20, 24], makes them lightweight, composable with standard decoders, and easy to ablate without retraining or modifying pretrained parameters. There are two ways for generating CVs in the inference-time control: CV-SAE and CV-CAA. CV-SAE trains an SAE to obtain a disentangled feature space, then compute CVs from contrasts between persona-positive and negative samples [25, 30]. In the contrast, CV-CAA (CAA: Contrastive Activation Addition) directly computes a mean activation difference between paired prompts expressing opposite attributes [1, 20]. Though simple and parameter-free, CVs’ directions may overlap across traits, motivating orthogonalization or denoising to prevent cross-trait interference. Unlike prior SAE/CAA pipelines, the proposed method (i) replaces generic templates with a professional, leakage-controlled 30-facet corpus, (ii) uses CL in SAE space to align and separate facet directions, and (iii) employs an agent policy that selects and schedules vectors from situational cues, rather than injecting all Big Five facet vectors at once. 
+
+# 3 Big Five Dataset Construction 
+
+The Big Five personality traits form a psychological model that describes five broad dimensions of human personality. [23]. We constructed a facet-level Big Five dataset based on the NEO Personality Inventory (NEO-PI) [5] in a three-step pipeline shown in Fig. 1 NEO-PI splits each dimension in Big Five into six facets (30 in total). The constructed dataset consists of scenario-based positive and negative samples for each facet. In the first step of the pipeline, for each facet, we summarize the official definition in NEO-PI and representative questionnaire items, and extract a small set of core behavioral cues that represent the essential trait tendency for both positive and negative poles of each trait. We then map these cues to everyday contexts (study, work, daily life, and social/leisure) and design brief 
+
+scenario templates (e.g., group work, receiving feedback, and helping a friend) 4 Wenqiu Tang, Zhen Wan, Takahiro Komamizu, and Ichiro Ide 
+
+Fig. 1: Pipeline for constructing the Big Five personality dataset, illustrated with the Assertiveness facet as an example. that naturally evoke the target facet. This cue-to-scenario design grounds each instance in a realistic situation rather than an abstract self-report. In the last step, using these templates, a GPT-5-class model [16] generates short first-person sentences (maximum 18 words with simple vocabulary). For each scenario, the model produces a positive sample expressing the facet and a minimal-edit negative 
+
+counterpart that keeps the same context but reverses the behavior. This yields 250 positive and 250 negative instances per facet (15,000 in total). Finally, we adopt a three-step validation pipline. In the construction phase, (i) a secondary LLM screens all items to check facet correctness, polarity clarity, and linguistic simplicity, and flags potentially problematic cases; (ii) we then randomly sample 50 items from each facet-specific subset and ask ten psychology graduate students (five female and five male in their twenties) to judge the same criteria, and compare their judgments with those of the secondary LLM on the sampled items to verify and calibrate the initial automatic screening. Items that are flagged in either step (i) or (ii) are revised or regenerated until no obvious facet or polarity errors remain. After this, (iii) we train a 30-way facet classifier on the resulting corpus and evaluate it on a held-out split, obtaining 78.4% macro-F1 with only 6.2% of misclassifications crossing Big Five dimensions, which indicates that samples are generally aligned with their intended facet and that cross-dimension leakage is limited. The final corpus is therefore substantially facet-consistent and context-grounded , and well suited for studying fine-grained personality control and evaluation 
+
+# 4 Contrastive Sparse AutoEncoder (SAE) Training and Agent-Based Decision Module 
+
+Fig. 2 shows an overview of the proposed framework for steering an RPA’s personality expression by injecting learned CVs into the model’s hidden layers. Facet-level Persona Control with Contrastive SAE for Role-Playing LLMs 5
+
+Fig. 2: Proposed framework: Contrastive Sparse AutoEncoder (SAE) training and Agent-Based Decision Module for Control Vector (CV) injection. It contains two steps: (i) SAE-based CV training mechanism enhanced with a Contrastive Learning (CL) loss to distill corpus-mined factors into facet-aligned CVs, which enhances effectiveness and strength in real-world applications, im-proving the model’s output quality along the intended control direction, and (ii) Self-reflection decision mechanism that dynamically selects which set of CVs to inject to precisely steer the models behaviours. 
+
+4.1 Contrastive SAE Training 
+
+We map a hidden representation h(x) of x into a pretrained SAE space to obtain a sparse latent code z through an encoding function fenc where each latent dimension is activated only by its associated concept in relevant contexts, thus yielding stronger control signals. After training the encoder and decoder of an SAE on hidden states collected from the WikiText-103-raw-v1 corpus, a standard language-modeling dataset adopted in recent SAE studies, we decode the learned control vector z back into the model’s residual space as v = fdec (z), and an injection is performed as: 
+
+h′(x) = h(x) + αv, (1) where v is the CV, and α controls the injection strength. Following prior work [10], we use F-statistics and linear probes to select the 
+
+dsteer “top activated” features ( dsteer ≤ d), where d is the original dimensionality of the SAE space. After deciding these features, we construct a CV v ∈ Rd that 6 Wenqiu Tang, Zhen Wan, Takahiro Komamizu, and Ichiro Ide 
+
+is nonzero only on the dsteer selected coordinates. We initialize it in the SAE space using the class-centroid difference as: 
+
+v = ( μ+ − μ−) ⊙ m, (2) where μ+ and μ− are the mean SAE codes for positive and negative samples from the generated BFI dataset, and m ∈ { 0, 1}d masks the active coordinates. The total objective to learn the CVs is a linear combination of a prototype contrast loss LCE , a positive pull loss Ldist , and a regularization factor as: 
+
+Ltotal = LCE + β Ldist + λ∥v ⊙ m∥22, (3) where β and λ are tunable weight parameters. 
+
+Prototype contrast loss LCE : Given a CV v, our goal is to pull representa-tions toward the positive centroid and push them away from the negative one . CL naturally enforces this push–pull geometry [4, 11], yielding discriminative facet directions. For a negative sample with SAE code z, we inject a masked vector v
+
+and ℓ2-normalize it as: 
+
+z+ = z + v
+
+∥z + v∥2
+
+. (4) We likewise normalize ˜μ+ = μ+/∥μ+∥2 and ˜μ− = μ−/∥μ−∥2 for stability. Based on them, cosine scores are defined as c+ = ⟨z+, ˜μ+⟩ and c− = ⟨z+, ˜μ−⟩. Following ArcFace/CosFace [7, 26], we impose an angular margin on the positive side and a cosine margin on the negative side as: 
+
+˜c+ = cos   arccos( c+) + mpos 
+
+, ˜c− = c− + mneg , (5) where mpos > 0 and mneg > 0 are margins. Using scale s > 0 (equivalently, temperature τ = 1 /s ), we form logits ℓ = [ s˜c+, s ˜c−] and minimize the two-way cross-entropy loss that treats the positive prototype as the target as: 
+
+LCE = − 1
+
+B
+
+> B
+
+X
+
+> i=1
+
+log exp( s˜c+,i )exp( s˜c+,i ) + exp( s˜c−,i ) . (6) 
+
+Positive pull loss Ldist : We use a distance-based loss that compares the injected representation to the class centroids in the active subspace as: 
+
+Ldist (v) = z+ − u+ 
+
+> 2
+
+− z+ − u−
+
+> 2
+
+, (7) where z+ is the post-injection representation, and u+ and u− are the positive and negative centroids, respectively. 
+
+4.2 Agent-Based Decision Module 
+
+Guided by Trait Activation [21], we activate only the trait cued by the current prompt (e.g., writing advice → Openness , not Extraversion ), avoiding competi-tion between CVs. Accordingly, we select best -matching CVs per turn; persona Facet-level Persona Control with Contrastive SAE for Role-Playing LLMs 7
+
+knowledge come from RAG/prompt conditioning, while the vector acts as an 
+
+amplifier , routing by contextual cues. To realize this idea, we use the role -play model’s base LLM as a routing agent. Before producing the final answer, as shown in Figure 2, the agent receives the user’s query and infers which facet-level CVs are most strongly cued by the question. Based on the agent’s analysis, we inject CVs corresponding to the most relevant facets for the given prompt in each dimension which is composed of six facet-level CVs. This process allows fine-grained steering while keeping inference-time control targeted. 
+
+# 5 Experiments 
+
+In personality measurement, abstract (i.e., non-contextualized) items are global self-descriptions posed without an explicit frame of reference, whereas contextual-ized items incorporate a frame of reference by stipulating the setting/role/time [19]. We followed the In-Character benchmark, which evaluates 44 abstract Big Five open-ended questions and uses GPT-4o [17] as the judge [27]. However, ab-stract Big Five questions can elicit socially desirable responses [19]. Grounded in reference-group effects and trait-activation theory [21], we rewrote all 44 items into contextualized questions using GPT-4o, adding minimal temporal/situational cues to reduce bias while preserving semantics. 
+
+5.1 Evaluation Protocol 
+
+We evaluated on two compact, open-weight instruction followers that are widely used in RPA pipelines (e.g., RoleLLM): Qwen/Qwen3-4B-Instruct-2507 (Qweb3-4B for short) [29] and mistralai/Mistral-7B-Instruct-v0.7 (Mistral-7B for short) [12]. Qwen3-4B delivers strong small-scale performance, while Mistral-7B provides efficient attention and competitive results at the 7B scale. In order to observe the behaviors of RPAs, this experiment reports four evaluation metrics: Full-Accuracy (FA), Mean Squared Error (MSE), Mean Absolute Error (MAE), and Muti-Turn Rate (MTR). FA, MSE and MAE evaluate correctness in estimating characters: FA is the proportion of characters (out of 26) for which all five Big Five dimensions are predicted correctly, and MSE and MAE are per-dimension errors and stability across paraphrased questions. MTR evaluates whether the agent maintains the intended persona while answering, and whether the response contains any of the errors including repetition, out of characters, and multi-turn dialogue, which are also evaluated by LLM. 
+
+5.2 Implementation and Comparison Methods 
+
+In the proposed method (called CV-SAE), we injected CV at the mid-residual-layer with the strongest stylistic effects, specifically the 15th layer in Qwen3-4B [29] and the 16th layer in Mistral-7B [12], aligned with prior findings [14, 20] and our preliminary results. SAE is trained at the same layer. 8 Wenqiu Tang, Zhen Wan, Takahiro Komamizu, and Ichiro Ide 
+
+Table 1: Performance of Qwen3-4B [29] and Mistral-7B [12] on Big Five personality questions. Best results for each metric are bolded .                                                                                                        
+
+> Method Abstract Questions Contextual Questions FA (↑)MSE (↓)MAE (↓)MTR (↓)FA (↑)MSE (↓)MAE (↓)MTR (↓)
+> Qwen3-4B
+> Baselines
+> Base RPA 7.7 16.0 31.3 0.0 7.7 14.2 30.2 0.1 Prompt-Label 50.0 10.9 24.9 0.0 30.7 11.7 26.2 0.1 CV-CAA 73.1 4.8 16.1 0.0 76.9 4.2 14.7 0.0 Proposed
+> CV-SAE 76.9 4.9 16.5 0.0 76.9 3.4 14.3 0.0 Combined
+> CV-CAA+Prompt 81.0 3.7 14.2 0.0 81.0 3.4 14.1 0.2 CV-SAE+Prompt 81.0 3.2 14.1 0.0 88.5 2.4 12.1 0.1 Mistral-7B
+> Baselines
+> Base RPA 19.2 15.5 32.8 5.6 3.9 17.8 34.7 1.4 Prompt-Label 42.3 9.5 24.8 1.6 42.3 9.5 24.8 1.3
+> CV-CAA 76.9 4.2 15.6 29.1 84.7 4.2 16.6 25.6
+> Proposed
+> CV-SAE 73.1 5.4 18.7 7.0 80.8 3.97 15.1 3.1
+> Combined
+> CV-CAA+Prompt 38.5 9.3 23.8 1.8 46.2 10.0 24.6 1.4 CV-SAE+Prompt 84.6 3.8 14.9 4.2 88.5 3.1 13.7 3.8
+
+To validate our proposal, we have the following experiment setups. Base RPA 
+
+denotes no additional intervention. Prompt-Label denotes conditional generation on explicit Big Five [23] labels using per-dimension low/medium/high facet-covering descriptors chosen by the character’s overall score [28]. CV-SAE and CV-CAA denote injecting CVs derived from an SAE and CAA, respectively. Combined Methods (CV-CAA+Prompt and CV-SAE+Prompt) are RPAs that combine CV injection methods with Prompt-Label to assess their complementarity. 
+
+5.3 Results 
+
+Table 1 summarizes the experimental results. First, both CV methods (CV-SAE, CV-CAA) substantially outperformed the Prompt-Label baseline across FA, MSE, and MAE, confirming the effectiveness of direct vector modulation over prompt-only conditioning. However, CV-CAA showed unstable behavior on Mistral-7B [12], where its MTR increased sharply, indicating that contrastive activation cues could destabilize dialog flow. In contrast, CV-SAE achieved a stronger overall balance —Improving accuracy while maintaining response smoothness— suggesting that SAE yielded more stable and disentangled CV injection. In Facet-level Persona Control with Contrastive SAE for Role-Playing LLMs 9  
+
+> (a) CV-SAE with Qwen3-4B [29] (b) CV-CAA with Qwen3-4B [29]
+> (c) CV-SAE with Mistral-7B [12] (d) CV-CAA with Mistral-7B [12]
+
+Fig. 3: Effect of control strength α on Role-Play Agent (RPA) performance across backbones and control methods. Results are reported under the abstract (solid) and contextual (dashed) settings. Blue denotes FA, orange denotes MSE, green denotes MAE, and red denotes MTR. particular, integrating prompts with CVs amplifies the contrast between the two approaches. The combined CV-SAE+Prompt consistently attained the highest FA and the lowest reconstruction errors (MAE/MSE) across both backbones, pushing the overall performance to a new peak. Conversely, CV-CAA+Prompt severely collapsed on Mistral-7B (FA dropping from 76.9 to 38.5), showing that prompt signals interfere with contrastive activations rather than reinforcing them. On Qwen3-4B, this interference was less pronounced, yet SAE-based combined method remained superior in both accuracy and stability. CV methods were resilient —and often improved— under contextualized ques-tions. On Mistral-7B, FA increased for CV-SAE, CV-CAA, and CV-SAE+Prompt. On Qwen3-4B, CV-SAE+Prompt gained +7.5 pp, while CV-SAE/CAA held steady or improved slightly. By contrast, Prompt-Label alone did not generalize as well: on Qwen, FA dropped from 50.0 (abstract) to 30.7 (contextual), suggesting that explicit labels without latent steering struggled to adapt to situational cues. 
+
+5.4 Effect of Injection Strength α
+
+As described in Eq. 1, α scales the CV. A too small value yields under-steering, while a too large value perturbs the semantic space and degrades responses. To identify a stable operating point, we swept α and reported the performance. As shown in Fig. 3, mid-range α values with CV-SAE delivered high FA and low 10 Wenqiu Tang, Zhen Wan, Takahiro Komamizu, and Ichiro Ide 
+
+Table 2: Effect of Contrastive Learning (CL) — The left block reports cosine similarities between the injected representation z and the positive/negative Extraversion centroids (μ+, μ −) on the Extraversion subset of our corpus. The right block reports full-accuracy (FA) on Abstract (Abst.) and Contextual (Cont.) Extraversion questions for ten role agents under three training settings. .                               
+
+> Similarities to centroids Full-accuracy Qwen3-4B [29] Mistral-7B [12] Qwen3-4B [29] Mistral-7B [12]
+> ⟨z,μ+⟩ ⟨ z,μ−⟩ ⟨ z,μ+⟩⟨z,μ−⟩Abst. Cont. Abst. Cont. Before training 0.92 0.84 0.64 0.38 11.5 11.5 23.1 3.9 Train w/o CL 0.76 ( ↓) 0.31 ( ↓) 0.29 ( ↓)−0.01 (↓)0.0 ( ↓)3.9 ( ↓)3.9 ( ↓)0.0 ( ↓)Train w/ CL 0.93 ( ↑) 0.59 ( ↓) 0.75 ( ↑)0.21 ( ↓) 76.9 ( ↑) 80.7 ( ↑) 76.9 ( ↑) 84.6 ( ↑)
+
+errors with minimal MTR, whereas CV-CAA peaked at a smaller α and showed faster MTR growth as α increased. Increasing α sharply inflated the three stability indicators, MSE, MAE, and MTR; In interview settings, the RPA’s personality became inconsistent even within the same question set (MAE and MSE rose faster), and output coherence as well as instruction following deteriorated (MTR kept increasing). Accordingly, we tuned α on a preferring mid-range values for SAE and smaller values for CAA to balance accuracy and stability. Across the four graphs in Fig. 3, CV-CAA exhibited a consistently higher (worse) MTR than SAE on both Qwen3-4B [29] and Mistral-7B [12], indicating more dialogue drift and less stable answers. Since CV-SAE injects CVs only in the middle layers, whereas CV-CAA injects a small control signal into every layer, the way of injection affects the performance. We hypothesize that the control signal learned by CV-CAA was less “pure”; As α increased, off-target semantic components were introduced alongside the intended concept direction, which degraded the response quality and inflated MTR. In contrast, CV-SAE provided a more concentrated “purer” steering direction; It carried less extraneous content and thus amplified the intended concept more reliably, leading to a higher FA without a rise in MTR. 
+
+5.5 Effect of CL 
+
+To further understand the effect of CL, we conducted an ablation study under three training settings— Before Training , Training without Contrastive Learning ,and Training with CL (see Table 2). In each setting, we (i) computed the cosine similarity between the injected representation z and the positive/negative Extraversion centroids (μ+, μ −) estimated from the Extraversion subset of our corpus, and (ii) evaluated full-accuracy on ten representative role agents (selected from 26 personas) using both Abstract and Contextual items. As shown in Table 2, CV-SAE relying solely on the distance-based ( ℓ2)loss indeed reduced the cosine similarity to the negative centroid μ− on both Facet-level Persona Control with Contrastive SAE for Role-Playing LLMs 11 
+
+Qwen3-4B [29] and Mistral-7B [12]. However, this also undesirably decreased the similarity to the positive centroid μ+, respectively, deviating from the intended training objective. Correspondingly, Table 2 shows that CV-SAE without CL sharply dropped the overall full-accuracy, even lower than the untrained baseline. In contrast, introducing CL not only increased ⟨z, μ+⟩ while suppressing ⟨z, μ−⟩
+
+but also lead to a substantial full-accuracy improvement across both abstract and contextual questions confirming that contrastive optimization effectively aligned latent representations with the intended trait polarity. 
+
+# 6 Conclusion 
+
+We introduced an SAE-based contrastive CV for RPA personality steering. It uses a facet-accurate personality corpus to compute latent centroids and a reflection module to select relevant CVs. Combined with top-k latent filtering and contrastive tuning at mid-residual layers, the method achieves stable facet-level personality control. On Qwen3-4B [29] and Mistral-7B [12], SAE vectors improved accuracy and reduced error with minimal drift, outperforming CAA and prompting while preserving persona knowledge for interpretable long-context role-play. 
+
+# References 
+
+1. Allbert, R., Wiles, J.K., Grankovsky, V.: Identifying and manipulating personality traits in LLMs through activation engineering. Engineering and Applied Sciences 
+
+2(2), 1–13 (Jun 2025) 2. Chen, J., Wang, X., Xu, R., Yuan, S., Zhang, Y., et al.: From persona to per-sonalization: A survey on role-playing language agents. Transactions on Machine Learning Research (2863), 1–50 (Oct 2024) 3. Chen, R., Arditi, A., Sleight, H., Evans, O., Lindsey, J.: Persona vectors: Monitoring and controlling character traits in language models. Computing Research Repository, arXiv Preprint, arXiv:2507.21509 (Sep 2025) 4. Chen, T., Kornblith, S., Norouzi, M., Hinton, G.: A simple framework for contrastive learning of visual representations. In: Proceedings of the 37th International Confer-ence on Machine Learning. Proceedings of Machine Learning Research, vol. 119, pp. 1597–1607 (Jul 2020) 5. Costa, P.T.J., McCrae, R.R.: The revised neo personality inventory (neo-pi-r). In: The SAGE Handbook of Personality Theory and Assessment: Personality Measurement and Testing, vol. 2, pp. 179–198. SAGE Publications Ltd. (2008) 6. Da Silva, P.Q., Sethuraman, H., Rajagopal, D., Hajishirzi, H., Kumar, S.: Steering off course: Reliability challenges in steering language models. In: Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics. vol. 1, pp. 19856–19882 (Jul 2025) 7. Deng, J., Guo, J., Yang, J., Xue, N., Kotsia, I., Zafeiriou, S.: ArcFace: Additive angular margin loss for deep face recognition. IEEE Transactions on Pattern Analysis and Machine Intelligence 44 (10), 5962–5979 (Oct 2022) 8. Ding, N., Qin, Y., Yang, G., Wei, F., Yang, Z., et al.: Parameter-efficient fine-tuning of large-scale pre-trained language models. Nature Machine Intelligence 5(3), 220–235 (Dec 2023) 12 Wenqiu Tang, Zhen Wan, Takahiro Komamizu, and Ichiro Ide 9. Durmus, E., Tamkin, A., Clark, J., Wei, J., Marcus, J., et al.: Evaluating feature steering: A case study in mitigating social biases (Oct 25, 2024), https://anthropic.com/research/evaluating-feature-steering/ (Accessed: Nov 1, 2025) 10. He, Z., Jin, M., Shen, B., Payani, A., Zhang, Y., Du, M.: SAE-SSV: Supervised steering in sparse representation spaces for reliable control of language models. In: Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing. pp. 2207–2236 (Nov 2025) 11. Hu, H., Wang, X., Zhang, Y., Chen, Q., Guan, Q.: A comprehensive survey on contrastive learning. Neurocomputing 610 (128645), 1–12 (Dec 2024) 12. Jiang, A.Q., Sablayrolles, A., Mensch, A., Bamford, C., Chaplot, D.S., et al.: Mistral 7B. Computing Research Repository, arXiv Preprint, arXiv:2310.06825 (May 2023) 13. Keskar, N.S., McCann, B., Varshney, L.R., Xiong, C., Socher, R.: CTRL: A Con-ditional Transformer Language Model for controllable generation. Computing Research Repository, arXiv Preprint, arXiv:1909.05858 (Sep 2019) 14. Kissane, C., Krzyzanowski, R., Conmy, A., Nanda, N.: SAEs (usually) transfer between base and chat models. AI Alignment Forum (Jul 18, 2024), https://www.alignmentforum.org/posts/fmwk6qxrpW8d4jvbd/saes-usually-transfer-between-base-and-chat-models/ (Accessed: Nov 1, 2025) 15. Konen, K., Jentzsch, S., Diallo, D., Schütt, P., Bensch, O., et al.: Style vectors for steering generative large language models. In: Findings of the Association for Computational Linguistics: EACL 2024. pp. 782–802 (Mar 2024) 16. OpenAI: Introducing gpt-5: A unified system for expert-level reasoning and multi-modal capabilities. Tech. rep. (August 2025), https://openai.com/index/introducing-gpt-5/ (Accessed: Oct 1, 2025) 17. OpenAI: Gpt-4o system card. Tech. rep., OpenAI (Aug 8, 2024), https://cdn.openai.com/gpt-4o-system-card.pdf (Accessed: Nov 10, 2025) 18. Pascual, D., Egressy, B., Meister, C., Cotterell, R., Wattenhofer, R.: A Plug-and-Play method for controlled text generation. In: Findings of the Association for Computational Linguistics: EMNLP 2021. pp. 3973–3997 (Nov 2021) 19. Paulhus, D.L., John, O.P.: Egoistic and moralistic biases in self-perception: The interplay of self-deceptive styles with basic traits and motives. Journal of Personality 
+
+66 (6), 1025–1060 (1998) 20. Rimsky, N., Gabrieli, N., Schulz, J., Tong, M., Hubinger, E., Turner, A.M.: Steering Llama 2 via contrastive activation addition. In: Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics. vol. 1, pp. 15504–15522 (Aug 2024) 21. Tett, R.P., Burnett, D.D.: A personality trait-based interactionist model of job performance. Journal of Applied Psychology 88 (3), 500–517 (Jun 2003) 22. Tseng, Y.M., Huang, Y.C., Hsiao, T.Y., Chen, W.L., Huang, C.W., et al.: Two tales of persona in LLMs: A survey of role-playing and personalization. In: Findings of the Association for Computational Linguistics: EMNLP 2024. pp. 16612–16631 (Nov 2024) 23. Tupes, E.C., Christal, R.E.: Recurrent personality factors based on trait ratings. Journal of Personality 60 (2), 225–251 (1992) 24. Turner, A.M., Thiergart, L., Udell, D., Leech, G., Mini, U., MacDiarmid, M.: Activation addition: Steering language models without optimization. Computing Research Repository, arXiv Preprint, arXiv:2308.10248v4 (Jun 2024) 25. Wang, A., Shu, D., Wang, Y., Ma, Y., Du, M.: Improving LLM reasoning through interpretable role-playing steering. In: Findings of the Association for Computational Linguistics: EMNLP 2025. pp. 731–751 (Nov 2025) Facet-level Persona Control with Contrastive SAE for Role-Playing LLMs 13 26. Wang, H., Wang, Y., Zhou, Z., Ji, X., Gong, D., et al.: CosFace: Large margin Cosine loss for deep Face recognition. In: Proceedings of the 2018 IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 5265–5274 (Jun 2018) 27. Wang, X., Xiao, Y., Huang, J.t., Yuan, S., Xu, R., et al.: InCharacter: Evaluating personality fidelity in role-playing agents through psychological interviews. In: Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics. vol. 1, pp. 1840–1873 (Aug 2024) 28. Wang, Y., Zhao, J., Ones, D.S., He, L., Xu, X.: Evaluating the ability of large language models to emulate personality. Scientific Reports 15 (519), 1–9 (Jan 2025) 29. Yang, A., Li, A., Yang, B., Zhang, B., Hui, B., et al.: Qwen3 technical report. Computing Research Repository, arXiv Preprint, arXiv:2505.09388 (May 2025) 30. Zhao, H., Wu, X., Yang, F., Shen, B., Liu, N., Du, M.: Denoising concept vectors with sparse autoencoders for improved language model steering. Computing Research Repository, arXiv Preprint, arXiv:2505.15038 (Jul 2025)

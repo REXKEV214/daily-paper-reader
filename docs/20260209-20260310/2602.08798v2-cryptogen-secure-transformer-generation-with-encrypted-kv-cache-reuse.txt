@@ -1,0 +1,1018 @@
+Title: CryptoGen: Secure Transformer Generation with Encrypted KV-Cache Reuse
+
+URL Source: https://arxiv.org/pdf/2602.08798v2
+
+Published Time: Mon, 16 Feb 2026 01:06:49 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Secure Transformer Generation with Encrypted KV-Cache Reuse 
+
+Hedong Zhang 1, Neusha Javidnia 2, Shweta Pardeshi 2, Qian Lou 1, Farinaz Koushanfar 2
+
+Abstract —The widespread deployment of cloud-hosted gener-ative models raises a fundamental challenge: enabling efficient autoregressive generation while preserving the privacy of both user prompts and model parameters in untrusted environments. We address this challenge in a client–server setting where an untrusted server hosts an autoregressive Transformer and the client requires cryptographic protection for both inputs and inference. We present CryptoGen , the first system to enable scalable privacy-preserving neural generation with persistent encrypted key–value (KV) cache reuse. Discriminative-task se-cure inference systems incur quadratic latency and memory growth when adapted to autoregressive decoding due to the lack of native encrypted KV-cache support. In contrast, CryptoGen 
+
+achieves near-linear scaling by securely reusing and updating encrypted KV caches throughout generation. CryptoGen inte-grates homomorphic encryption and secret sharing to support both prefilling and generation. Key techniques include a unified encrypted KV-cache framework, heterogeneous SIMD encodings for different phases, optimized cipher–cipher matrix–matrix and matrix–vector operations, and efficient noise refresh and ciphertext concatenation mechanisms. Evaluation on generative Transformer models trained on WikiText-2, PTB, and LAM-BADA shows that for input lengths of 128–512 tokens, CryptoGen 
+
+achieves 4.4×–7.6× lower per-token latency than state-of-the-art discriminative secure inference systems, while maintaining near-linear latency and memory scaling, with advantages increasing for longer sequences. CryptoGen is released as an open-source library. 
+
+I. I NTRODUCTION 
+
+Fueled by the massive influx of data, sophisticated algo-rithms, and extensive computational resources, modern gen-erative machine learning has achieved remarkable success across various domains, including medical diagnosis and ex-planation, electronic health record analysis, and credit risk assessment[1], [2], [3], [4]. These models are typically realized through autoregressive Transformers, a class of neural network architectures that leverage attention mechanisms to capture long-range dependencies and contextual relationships among input tokens[5]. In a generative setting, computation proceeds in two distinct yet interdependent phases[6]. The prefilling 
+
+phase encodes the user and system prompts to establish contextual embeddings, while the generation phase produces output tokens autoregressively—each new token conditioned on both the prefilled context and all previously generated tokens. A central question arises when deploying these powerful models: how can one enable secure access to generative AI    
+
+> 1University of Central Florida. 2University of California, San Diego. Corresponding author: Qian Lou (qian.lou@ucf.edu).
+
+services without compromising user or model privacy? One approach is to distribute the model for local execution on client devices[7][8]. However, this option is undesirable for at least two reasons. First, once released, the model can be copied freely, eliminating the model owner’s opportu-nity to monetize or control its usage. Second, such models may have been trained on sensitive or proprietary data, and distributing them risks exposing private information about data owners—potentially violating regulations such as HIPAA in healthcare contexts[9], [10], [11]. Alternatively, providers may offer the model as a cloud-based web service, allowing clients to send prompts and receive generated outputs over the network[12]. Yet this approach also raises serious privacy and liability concerns. Users must trust the service not to inspect, store, or misuse their prompts, while data custodians may themselves be reluctant to process user inputs on their servers to avoid legal liability in the event of data breaches. Neither option offers a satisfactory privacy solution for both parties. Our work aims to resolve this conundrum of secure neu-ral network generation . More concretely, we seek to enable a protocol in which the user obtains the model’s gener-ation results without revealing their private inputs, while the service provider gains no knowledge of these inputs and simultaneously preserves the confidentiality of its model parameters[13]. Such a design provides dual-sided privacy guarantees—protecting both the user’s data and the model owner’s intellectual property. To achieve this vision, we leverage powerful tools from modern cryptography, particularly Fully Homomorphic En-cryption (FHE) and Multi-Party Computation (MPC). FHE enables computation to be performed directly on encrypted data without decryption, allowing clients to delegate heavy computation to untrusted servers while preserving data confidentiality[14], [15], [16]. In contrast, MPC distributes the client’s input among multiple parties—often via secret shar-ing—and executes the computation collaboratively through secure protocols[17]. Prior work has shown that hybrid HE– MPC designs are particularly effective for discriminative se-cure inference: FHE efficiently supports linear layers, while MPC evaluates non-linear functions (e.g., activations and Softmax) more naturally, outperforming using either technique alone[18], [19], [20], [21], [22]. However, secure generation is qualitatively harder than secure classification. Existing state-of-the-art systems—including Gazelle[18], IRON[19], BOLT[20], and THOR[21]—are optimized for discriminative (encoder-style) 1
+
+> arXiv:2602.08798v2 [cs.CR] 12 Feb 2026
+
+inference, where the full input is known and computation can be executed in a single batched pass that densely fills SIMD slots. In contrast, auto-regressive decoding is stateful and sequential: each new token depends on an ever-growing Key–Value (KV) cache from prior steps[6]. This creates two fundamental obstacles when directly applying discriminative-style encrypted inference to generation. (1) No encrypted KV-cache reuse: without an efficient encrypted KV-cache mechanism, systems must repeatedly reprocess a growing prefix, yielding quadratic latency and memory growth. (2) 
+
+Packing mismatch across phases: the outer-based (token-batched) encodings used to maximize SIMD utilization in prefilling become sparse when only a single token is available in decoding, wasting slots and homomorphic work. These challenges make na¨ ıve extensions of discriminative secure inference frameworks impractical for low-latency, long-context generation. To overcome these challenges, we introduce CryptoGen ,a scalable and low-latency system for secure neural network generation that intricately combines homomorphic encryption with traditional secret sharing. CryptoGen makes four key contributions:  
+
+> •
+
+Unified Secure Generation Framework: CryptoGen 
+
+establishes a unified yet modular cryptographic frame-work that explicitly separates the prefilling and auto-regressive generation phases while maintaining consis-tent cryptographic semantics across both. The frame-work decomposes Transformer inference into HE-based linear modules, MPC-based nonlinear primitives, and a lightweight orchestration layer that coordinates data exchange between them. This design provides a reusable, extensible library for secure generative inference and forms the foundation for cross-phase integration with encrypted Key–Value (KV) caches.  
+
+> •
+
+Heterogeneous SIMD Encodings: To accommodate the structural divergence between prefilling and decoding, 
+
+CryptoGen adopts heterogeneous data encodings in encrypted computing. We use outer-based packing to maximize SIMD utilization across many tokens in pre-filling, and switch to inner-based packing for single-token decoding to avoid sparse-slot waste. For linear layers, we leverage diagonal representations of weights to reduce rotation and permutation overhead. Together, these encodings bridge batched prefilling and token-by-token generation without forcing costly re-encoding of the entire context.  
+
+> •
+
+Optimized Ciphertext–Ciphertext Computations: We design new cipher–cipher multiplication algorithms tai-lored to encrypted attention in the autoregressive stage. Two complementary methods are proposed—an in-ner–inner CT ×CT multiplication for generation-phase self-attention and an inner–outer CT ×CT multiplication for cross-stage attention between generation and prefilling caches. Both algorithms incorporate logarithmic-depth rotations and element-duplication operations to realign ciphertext slots efficiently, reducing the original quadratic attention complexity to a linear form and achieving significant speedup in encrypted attention and scalable performance for the long-sequence generation.  
+
+> •
+
+Encrypted KV-Cache Management: We introduce a fully encrypted KV-cache framework that supports noise-refresh and ciphertext-concatenation mechanisms for dy-namic cache updates during generation. A collaborative HE–MPC refresh protocol securely restores ciphertext noise budgets, while a slot-aware concatenation scheme appends new encrypted keys and values into compact cache ciphertexts with minimal overhead. Together, these techniques maintain ciphertext freshness, memory effi-ciency, and continuity throughout long-sequence genera-tion. Together, these innovations bridge the gap between stateless encrypted inference and stateful autoregressive generation. We evaluate CryptoGen on generative Transformer models trained on WikiText-2, PTB, and LAMBADA, and show that for input lengths of 128–512 tokens, CryptoGen achieves 
+
+4.4×–7.6× lower per-token latency than prior secure inference systems designed for discriminative tasks, while maintaining near-linear latency and memory scaling as sequence length grows. II. B ACKGROUND 
+
+A. Auto-regressive Transformer Generation 
+
+In this paper, we focus on transformer-based generative models[5]. Such generative tasks are typically divided into two stages: prefilling and auto-regressive generation. 
+
+Prefilling. At this stage, the model receives a complete prompt 
+
+X = {x1, x 2, . . . , x m}, where each token embedding xi ∈
+
+R1×d1 , m denotes the length of the prompt and d1 is the embedding dimension. The input prompt is processed through a stack of transformer layers, each containing a multi-head self-attention (MHSA) module followed by a feed-forward network (FFN)[5]. For the l-th attention block with h heads, the input X ∈
+
+Rm×d1 is linearly projected into query, key, and value repre-sentations for each head: 
+
+Qh = XW (h) 
+
+> Q
+
+, K h = XW (h) 
+
+> K
+
+, V h = XW (h) 
+
+> V
+
+,
+
+where W (h) 
+
+> Q
+
+, W (h) 
+
+> K
+
+, W (h) 
+
+> V
+
+∈ Rd1×d2 , and d2 = d1/H with H
+
+being the number of attention heads. Each head performs scaled dot-product attention: 
+
+Oh = Softmax 
+
+ QhK⊤
+
+> h
+
+√d2
+
++ M
+
+
+
+Vh.
+
+where M is a causal mask that enforces unidirectional depen-dencies in generative tasks[5]. The outputs from all heads are concatenated and linearly transformed: 
+
+O = Concat( O1, . . . , O H )WO ,
+
+where WO ∈ Rd1×d1 is the output projection matrix and O ∈
+
+Rm×d1 represents the attention output of the layer. A position-wise feed-forward network is then applied to each token[23]: 
+
+F F N (x) = W2GELU (W1x + b1) + b2.
+
+Residual connections and layer normalization are applied after both the attention and feed-forward sublayers. Through these computations, the model encodes the entire prompt in parallel and produces key–value (KV) represen-tations for each layer. These cached KV pairs serve as the contextual memory used during the subsequent auto-regressive decoding stage[6]. 
+
+Auto-regressive Generation. After the prefilling stage, the model enters the auto-regressive generation stage, in which new tokens are produced sequentially based on the cached context. In each decoding step t > m , the model takes as input the embedding of the previously generated token xt ∈ R1×d1
+
+and projects it into Q(t) 
+
+> h
+
+, K (t) 
+
+> h
+
+, V (t) 
+
+> h
+
+∈ R1×d2 for each head . Unlike the prefilling phase, the attention block computes attention only for the new query Q(t) 
+
+> h
+
+while reusing all previously cached keys and values: 
+
+O(t) 
+
+> h
+
+= Softmax Q(t) 
+
+> h
+
+[K(1)  
+
+> h
+
+, . . . , K (t) 
+
+> h
+
+]⊤
+
+√d2
+
+!
+
+[V (1)  
+
+> h
+
+, . . . , V (t) 
+
+> h
+
+].
+
+The results of all heads are concatenated, projected, and passed through the same feed-forward and normalization layers as in the prefilling stage to produce the hidden representation ht
+
+and the next-token prediction P (xt+1 | x≤t).
+
+B. KV Cache in Generation Caching 𝐾𝑒𝑦𝑠  Caching 𝑉𝑎𝑙𝑢𝑒 𝑠 
+
+> Prefilling
+
+×     
+
+> 𝑞 0
+> 𝑞 1
+> …
+> 𝑞 𝑡
+> 𝑣 0
+> 𝑣 1
+> …
+> 𝑣 𝑡
+> 𝑘 0
+> 𝑇 𝑘 1
+> 𝑇 …𝑘 𝑡
+> 𝑇
+> Queries Keys Values
+> 𝑟 0
+> 𝑟 1
+> …
+> 𝑟 𝑡
+> Results
+> Auto -regressive
+> Generation
+
+×𝑞 𝑡 +1          
+
+> 𝑣 0
+> 𝑣 1
+> …
+> 𝑣 𝑡
+> 𝑘 0
+> 𝑇 𝑘 1
+> 𝑇 …𝑘 𝑡
+> 𝑇 𝑟 𝑡 +1
+> 𝑘 𝑡 +1
+> 𝑇
+> Cache Memory
+> 𝑣 𝑡 +1
+> Caching 𝑘 𝑡 +1
+> 𝑇 Restoring from
+> cache 𝐾 Caching 𝑣 𝑡 +1
+> 𝑇
+> Values computed in this step Values taken from cache
+> TStep 1
+> Step t+1
+
+Fig. 1: KV cache in auto-regressive Transformer generation. KV Cache is essential for efficient, scalable autoregressive generation. This is because KV cache avoids redundant linear projections and repeated attention computation. Formally, by caching previously computed keys and values, the per-step attention cost can be reduced from quadratic O(t2) recom-putation to a linear O(t) incremental computation that only involves the new query. Figure 1 illustrates the standard key-value caching mechanism used in auto-regressive Transformer generation. The output at step t depends solely on the new query q(t) attending over all available cached keys and values, while previous queries q(1) , . . . , q (t−1) do not participate in the current step. Therefore, the model can cache the previously computed keys and values from earlier tokens instead of recomputing them at every decoding step[24]. During each step, only the new projections q(t), k (t), v (t) are computed and the existing keys and values are reused from the cache. 
+
+C. Cryptographic Primitives 
+
+Homomorphic Encryption. Homomorphic Encryption (HE) is a powerful cryptographic technique that allows com-putations to be performed directly on encrypted data (i.e. ciphertexts) without first decrypting them[14], [25]. The re-sulting ciphertext, when decrypted, matches the result of performing the same computations on the original plaintext data. HE schemes (particularly lattice-based FHE[16], [26]) are well-suited for efficiently processing linear operations. This efficiency comes from two key properties. First, their underlying mathematical structure directly supports arithmetic operations such as additions and multiplications, which are the building blocks of matrix-vector products. Second, modern FHE schemes support ”batching,” allowing a single ciphertext to hold thousands of data values in SIMD (Single Instruction, Multiple Data) slots[27]. This enables massive parallel compu-tation, as a single homomorphic operation (e.g., a ciphertext-plaintext multiplication) can perform an entire layer’s compu-tation at once in a non-interactive manner on the server. Recent work has advanced private inference and training over (fully) homomorphic encryption, including HE-friendly secure inference pipelines, private Transformer inference, and privacy-preserving NLP/vision models[28], [29], [30], [31], [32], [33], [34]. At the same time, systems and architec-ture efforts have improved the performance of FHE-style computation through better scheme support and hardware acceleration[35], [36], [37], [38], [39], [40], [41], [42], [43]. Conversely, HE is fundamentally inefficient for non-linear functions (like GELU, ReLU, or Softmax) [44], [45], [46]. This is because HE operations are inherently polynomial. Non-linear functions must be approximated by low-degree polynomials (e.g., Taylor series). This approach has two major drawbacks: (1) it introduces precision errors that can harm model accuracy, and (2) evaluating these polynomials requires multiple, slow ciphertext-ciphertext multiplications. Each such multiplication significantly increases the compu-tational ”noise” in the ciphertext, which quickly grows to unmanageable levels, requiring an extremely costly ”bootstrap-ping” procedure (a noise reset) that makes deep computations impractical. 
+
+Multi-Party Computation. Multi-Party Computation (MPC) enables a set of mutually distrusting parties (e.g., a client with a private input and a server with a private model) to jointly compute a common function without any party revealing their private inputs[17]. MPC protocols typically rely on secret-sharing mechanisms. MPC is efficient for non-linear functions. Unlike HE, MPC can execute operations like comparisons (the basis of ReLU) or secure exponentiation (for Softmax) exactly and relatively cheaply using specialized sub-protocols (like garbled circuits or secure comparisons) that require only a few rounds of low-bandwidth communication. This avoids the approximation errors and extreme ”bootstrapping” costs associated with HE[47]. However, MPC is not suitable for large-scale linear op-erations found in Transformers. Performing a matrix-vector multiplication in MPC would require the client and server to exchange a large volume of intermediate shares over the network for every single layer. This high communication overhead and sensitivity to network latency make it signifi-cantly slower for linear algebra than HE, which, as mentioned, performs these operations non-interactively on the server. 
+
+Hybrid HE and MPC Frameworks. Hybrid frameworks are widely used in secure inference to combine the respec-tive strengths of HE and MPC[18], [20], [19], [22]. In a typical hybrid design, the server executes compute-intensive and SIMD-friendly linear operations in the HE domain. When a non-linear function is encountered, the HE ciphertext is converted into MPC secret shares via a secure conversion protocol. The client and server then jointly execute an MPC protocol to evaluate the function. Finally, the resulting shares are converted back into an HE ciphertext for subsequent linear computations. Therefore, CryptoGen also adopted this hybrid framework. 
+
+D. Data Encodings in Encrypted Computing Feature Dimension 
+
+> Plaintext Input
+> Outer -based Encoding
+> Inne r-based Encoding
+> Diagona l-based Encoding
+> Ciphertext (Slot=4)
+> CT1
+> CT2
+> CT3
+> CT4
+> Encrypted
+> Encoding
+> 𝑥 0
+> 𝑥 1
+> 𝑥 2
+> 𝑥 3
+
+Fig. 2: Three ciphertext packing strategies in encrypted com-puting: (a) outer-based, (b) inner-based, and (c) diagonal encoding. Different packings expose different forms of SIMD parallelism and lead to different trade-offs between the number of ciphertexts, cross-ciphertext reductions, and rotation over-head. In HE, a ciphertext can pack a vector of plaintext values into SIMD slots, enabling one homomorphic operation to be applied to many elements in parallel[27]. When implementing Transformer inference over encrypted data, the choice of packing (i.e., how we map a matrix or vector into ciphertexts) directly determines the amount of available parallelism and the cost of HE primitives such as ciphertext rotations and slot-wise aggregations. We summarize three commonly used encodings for en-crypted linear algebra, as illustrated in Figure 2. 
+
+Outer-based encoding. Given a matrix A ∈ Rm×n, outer-based encoding packs each column A:,j into one cipher-text. We call it outer-based because it naturally matches an outer-product style matrix multiplication: when computing 
+
+y = Ax , each ciphertext-column can be scaled by the cor-responding scalar (or packed) entry xj and then accumulated across columns. This encoding exposes high parallelism across columns, but it typically requires aggregating (adding) many ciphertexts to form the final result. 
+
+Inner-based encoding. Inner-based encoding packs each row 
+
+Ai, : into one ciphertext. This layout aligns with inner-product computation during matrix multiplication: the i-th output el-ement is the inner product ⟨Ai, :, x ⟩, which can be realized by an element-wise multiplication between the packed row and a packed input vector, followed by a slot-summation (usually implemented via a sequence of rotations and addi-tions). Compared to outer-based encoding, inner-based encod-ing reduces cross-ciphertext accumulation but often increases within-ciphertext rotation overhead for the reduction. 
+
+Diagonal encoding. Diagonal encoding packs a row-first di-agonal of A into one ciphertext. Concretely, the k-th diagonal ciphertext contains elements Ai, (i+k) mod n for i ∈ { 1, . . . , m }
+
+(with appropriate padding when dimensions do not match). This encoding is widely used to implement y = Ax with a small number of ciphertexts: multiplying each diagonal ciphertext with a (rotated) version of the packed vector x
+
+and then summing over diagonals yields y. Diagonal encoding often reduces the number of ciphertexts but relies heavily on rotations to align slots. THREAT MODEL 
+
+We consider a client-server setting for outsourced inference under the semi-honest (honest-but-curious) model, a funda-mental and widely used assumption across secure computation and privacy-preserving ML[18], [20], [21]: the server follows the protocol but may try to infer information from what it observes, while the client holds the secret key material and does not collude with the server. Our goal is confidentiality of the client prompt and generated outputs; in particular, the KV cache is maintained and reused only in encrypted form so that it does not reveal token content. We do not address malicious deviations, side-channel leakage, or integrity/verifiability in this work, as these threats are largely orthogonal to our focus and can be incorporated via established complementary techniques[20], [21]. III. M OTIVATION 
+
+A. Prior Work: Secure Inference for Discriminative Trans-formers 
+
+Most prior systems for privacy-preserving Transformer in-ference target discriminative (encoder-style) workloads, where the entire input sequence is available before inference and the computation can be executed in a single batched pass. Table 1 summarizes representative systems, including Gazelle[18], IRON[19], BOLT[20], and THOR[21]. Although some of these works evaluate Transformer generative models, their pro-tocols still focus on discriminative settings (e.g., classification) or on producing a single next-token output—which is closer to the prefilling stage than to token-by-token decoding. Among these systems, BOLT[20] is the state-of-the-art baseline in our comparison. Its performance largely comes from a carefully chosen outer–diagonal encoding strategy for linear layers: it packs the input activation matrix X using an outer-based (column-wise) encoding, and represents the weight matrix W in a diagonal form (i.e., row-first diagonals). This enables fast ciphertext–ciphertext matrix multiplication with fewer rotations and fewer homomorphic operations than inner-product based formulations, while avoiding slot waste when the token dimension is large (as in prefilling). In short, BOLT achieves high throughput by maximizing SIMD utilization over many tokens and minimizing rotation-heavy reductions. 
+
+B. Why Prior Works Do Not Extend to Auto-regressive Gen-eration 
+
+BOLT’s outer–diagonal design is tailored to prefilling-style computation, where the token dimension is large and can fully occupy ciphertext slots. In auto-regressive decoding, however, the model consumes one new token at a time and must attend to an ever-growing history stored in the KV cache. This breaks the core assumption behind outer-based packing: that SIMD slots can be filled with many independent tokens. Figure 3 Feature               
+
+> Dimension
+> Outer -based
+> Packing
+> Phase 1: Prefilling
+> Phase 2: Generation
+> Weight
+> ×
+> Weight
+> Padding
+> (Waste) 𝐾 2𝐾 1𝐾 0𝐾 𝑡 −1…
+> Sparse Query
+> ×𝐾 𝑡
+> Waste
+> Computation
+> KV Cache (History) Step t+iw/ Naï ve Caching
+> Full 𝑄
+> Future Token
+> Full 𝐾
+> ⊗
+> ⊗𝑥 𝑡 +𝑖 −1(Old )
+> 𝑥 𝑡 +𝑖 (New)
+> Encrypted ⊗Outer ×Outer CT ×CT
+> Input  𝑥 0
+> 𝑥 𝑡
+> …
+
+Fig. 3: Why outer-based encodings (including BOLT’s outer– diagonal design) do not fit token-by-token decoding with an encrypted KV cache: after prefilling, each step introduces only one new token, leading to sparse ciphertext utilization or redundant recomputation. illustrates this mismatch. During prefilling (Phase 1), outer-based packing is ideal because the batch of tokens densely fills SIMD slots. After switching to decoding, the new token at step t+i occupies only a tiny fraction of slots, leaving most slots as padding (Phase 2). With an encrypted KV cache, the system either (i) performs attention and linear layers on sparse ciphertexts (wasting work on padding), or (ii) recomputes past tokens to artificially refill slots (wasting work on redundant computation). Crucially, if the KV cache cannot be reused efficiently, the system must repeatedly re-encode and re-process a growing prefix, leading to latency and memory costs that grow quadrat-ically with sequence length rather than linearly. 
+
+C. Motivation: Secure Generation with Encrypted KV Cache Reuse BOLT (non -scalable)  
+
+> CryptoGen (scalable)
+> Time (s)
+> Step
+> Memory Usage (GB)
+
+Fig. 4: Scalability comparison of secure auto-regressive generation. The latency of discriminative inference frame-work(BOLT) is unscalable due to the lack of KV cache reuse. CryptoGen maintains near-linear scaling with sequence lenght by using KV cache. Refer to Section VI-A for detailed end-to-end performance analysis. Figure 4 highlights the core gap in prior work: existing HE-based systems are optimized for batched, discriminative inference, but do not provide an efficient mechanism to 
+
+reuse and update the KV cache throughout token-by-token decoding. Without such support, secure generation becomes fundamentally unscalable in both latency and memory. This motivates CryptoGen: we aim to build a secure in-ference framework specialized for auto-regressive generation that (i) maintains an encrypted KV cache across steps, (ii) supports efficient per-token incremental computation, and (iii) achieves near-linear scaling with sequence length, analogous to plaintext decoding. In the remainder of the paper, we present the design of CryptoGen and show how its encoding choices and linear-algebra kernels are tailored to stateful decoding rather than one-shot prefilling. IV. C RYPTO GEN 
+
+A. CryptoGen Framework 
+
+Current HE-based Transformer inference frameworks are predominantly designed for discriminative tasks, operating under a stateless execution model. They fail to accommo-date autoregressive generation, where computation shifts from batch-parallel prefilling to token-sequential decoding and must reuse a growing Key-Value (KV) cache. 
+
+CryptoGen addresses this gap with a heterogeneous-encoding framework that aligns ciphertext layout with the available parallelism in each phase, enabling encrypted KV-cache reuse and fast end-to-end decoding. Figure 5 summa-rizes the process and the corresponding primitive types. 
+
+Process Overview (Figure 5). CryptoGen executes Trans-former inference as a pipeline that alternates between CT ×PT History                        
+
+> KV Cache
+> Input Tokens 𝑋 1,𝑋 2,…,𝑋 𝑛
+> Prefilling
+> Iteration Step: 0
+> 𝑀𝑎𝑡𝑚𝑢𝑙
+> 𝑄 𝑝𝑟𝑒𝑓𝑖𝑙𝑙 𝐾 𝑝𝑟𝑒𝑓𝑖𝑙𝑙 𝑉 𝑝𝑟𝑒𝑓𝑖𝑙𝑙
+> ⨅𝐺𝑒𝐿𝑈
+> 𝑥 1
+> 𝑀𝑎𝑡𝑚𝑢𝑙
+> 𝑥 2
+> 𝑀𝑎𝑡𝑚𝑢𝑙
+> 𝑥 3
+> 𝑀𝑎𝑡𝑚𝑢𝑙
+> 𝑘 1𝑣 1𝑘 2𝑣 2𝑘 3𝑣 3
+> Generation
+> Iteration Step: 1→t
+> 𝑞 3
+> Step: 3
+> 𝑂 𝑝𝑟𝑒𝑓𝑖𝑙𝑙
+> 𝑆 1𝑆 2𝑆 3
+> 𝑂 3
+> 𝑆 𝑝𝑟𝑒𝑓𝑖𝑙𝑙 𝑆
+> 𝐿𝑖𝑛𝑒𝑎𝑟
+> ⨅𝐺𝑒𝐿𝑈
+> ⨅𝑠𝑜𝑓𝑡𝑚𝑎𝑥
+> 𝑥 2𝑥 3𝑥 4
+> 𝐿𝑖𝑛𝑒𝑎𝑟
+> ⨅𝑠𝑜𝑓𝑡𝑚𝑎𝑥
+> 𝑥 1
+> 𝑥 𝑡 …
+> xN
+> 𝑥 𝑡 …
+> Outer -Diagonal Ct ×Pt Inner -Inner Ct ×Ct
+> Inner -Outer Ct ×Ct
+> Inner -Diagonal Ct ×Pt
+> Diagonal -Outer Ct ×Ct
+> Outer Ct ×Ct
+
+Fig. 5: CryptoGen inference workflow. It combines (i) prefilling with outer-diagonal CT ×PT matrix multiplication (CPMM) and (ii) autoregressive decoding with inner-diagonal CT ×PT vector-matrix multiplication (CPVM), bridged by a heterogeneous encrypted KV cache and MPC-based nonlinear primitives. linear layers (ciphertext activations, plaintext weights) and CT ×CT attention operations (both operands encrypted), while maintaining a persistent, encrypted KV cache: 
+
+Prefilling phase (batch-parallel). Given a prompt 
+
+{X1, . . . , X m}, CryptoGen packs tokens with outer-diagonal encoding and evaluates CT ×PT matrix multiplication (outer-diagonal CPMM) for the linear projections (e.g., 
+
+Qpref ill , K pref ill , V pref ill ). Attention during prefilling is eval-uated using outer-outer CT ×CT operations over the outer-packed activations. The resulting Kpref ill and Vpref ill are stored as the outer-packed segment of the encrypted KV cache. 
+
+Decoding phase (token-sequential). At each decoding step t, the input collapses to a single token Xt. CryptoGen switches to inner-diagonal encoding and evaluates CT ×PT vector-matrix multiplication (inner-diagonal CPVM) to com-pute (qt, k t, v t) without padded slots. To consume the het-erogeneous KV cache, attention is computed via encoding-aware CT ×CT kernels: (i) inner-inner CT ×CT between inner-packed operands, and (ii) inner-outer CT ×CT between an inner-packed operand and an outer-packed operand. In ad-dition, CryptoGen uses a diagonal-outer CT ×CT multiplica-tion when a diagonal-aligned operand must interact with an outer-packed cache block. The newly generated (kt, v t) are appended as the inner-packed segment of the KV cache. 
+
+KV-cache management (stateful, long-context). Hetero-geneous encoding makes KV reuse possible, but it also requires careful ciphertext management: CryptoGen stores outer-packed and inner-packed cache segments compactly and reduces noise overhead via refresh/compaction mechanisms (Section 4.4). 
+
+Module Decomposition. Accordingly, CryptoGen consists of: (1) heterogeneous encoding and CT ×PT linear modules 
+
+(Section IV-B), which explain why our outer-/inner-diagonal encodings improve CT ×PT efficiency over prior encodings; (2) heterogeneous-encoding CT ×CT kernels for attention (Section IV-C), including outer-outer, inner-inner, inner-outer, and diagonal-outer interactions; and (3) encrypted KV-cache management (Section IV-D) to store heterogeneous cache states compactly and reduce noise/communication overhead. 
+
+B. Heterogeneous Encoding based CT-PT Multiplication 
+
+Design principles. CryptoGen’s CT ×PT linear layers are the dominant building blocks for the Q/K/V projections and feed-forward networks, but their efficiency is highly sensitive to ciphertext packing. Our design follows three principles. (1) 
+
+Match packing to input cardinality: use batch-parallel packing during prefilling and single-token packing during decoding to avoid padded slots. (2) Minimize per-step work during decoding: the CT ×PT cost for generating the next token should be independent of the prompt length m. (3) Preserve KV-cache reuse: the packing choices must be compatible with later CT ×CT attention over a persistent (and heterogeneous) encrypted KV cache. 
+
+Why heterogeneous encoding for CT ×PT? Table I pre-views the key consequence of our design: by switching packing layouts across phases, CryptoGen reduces the per-step CT ×PT cost during decoding from being proportional to the prompt length m to being independent of m. As high-lighted in Figure 5, Transformer inference alternates between CT ×PT projections (ciphertext activations, plaintext weights) and CT ×CT attention over a persistent KV cache. A single packing scheme cannot simultaneously (i) exploit token-level SIMD parallelism in prefilling and (ii) avoid padded slots when decoding one token at a time. 
+
+Prefilling implementation (outer-diagonal CPMM). During prefilling, the input is a multi-token prompt X ∈ Zm×d1 
+
+> p
+
+.CryptoGen uses outer-diagonal encoding to pack a batch of tokens across ciphertext slots (Figure 6(a,b)) and evaluates CT ×PT ciphertext-plaintext matrix multiplication (CPMM). This realizes batch-parallel Q/K/V projections with high SIMD utilization and produces outer-packed Kpref ill and 
+
+Vpref ill that can be reused directly by attention. 
+
+Decoding implementation (inner-diagonal CPVM). During autoregressive decoding, the input collapses to a single token 
+
+xt ∈ Z1×d1 
+
+> p
+
+. CryptoGen switches to inner-diagonal encoding 
+
+to pack one token across slots (Figure 6(c,d)) and evalu-ates CT ×PT ciphertext-plaintext vector-matrix multiplication 
+
+(CPVM), mapping feature dimensions across slots to avoid padding. This makes the per-step CT ×PT cost independent of m while producing inner-packed (qt, k t, v t) that are com-patible with heterogeneous CT ×CT attention kernels in Sec-tion 4.3. 
+
+a) Complexity Comparisons of Heterogeneous Encoding-based CPMM and priors.: In Table I, we analyze the computational complexity of ciphertext-plaintext linear layers under CryptoGen’s heterogeneous encoding strategy, with a particular focus on the per-step cost during auto-regressive generation. In this regime, scalability critically requires that computation be independent of the prefilling batch size m.Methods Mult Rot Ct Stage Prefill Gen Total Prefill Gen Total Prefill Gen Total Gazelle * O(md 1) O(md 1 · k) O(md 1) O(md 1 · k) O( md 1 
+
+> d2
+
+) O( md 1 
+
+> d2
+
+· k)
+
+98304 491520 589824 96768 483840 580608 1664 8320 9984 
+
+IRON * O( md 1d2 
+
+> n
+
+) O( md 1d2 
+
+> n
+
+· k) 0 0 0 O(
+
+q md 1d2 
+
+> n
+
+) O(
+
+q md 1d2 
+
+> n
+
+· k)
+
+768 3840 4608 0 0 0 56 280 336 
+
+BOLT * O( md 1d2 
+
+> n
+
+) O( md 1d2 
+
+> n
+
+· k) O(
+
+r 
+
+> m2d21d2
+> n2
+
+) O(
+
+r 
+
+> m2d21d2
+> n2
+
+· k) O( m(d1+d2) 
+
+> n
+
+) O( m(d1+d2) 
+
+> n
+
+· k)
+
+768 3840 4608 43 215 258 12 60 72 
+
+ThOR * O( md 1d2 
+
+> n
+
+) O( md 1d2 
+
+> n
+
+· k) O(d2 + md 1 
+
+> n
+
+) O(( d2 + md 1 
+
+> n
+
+) · k) O( md 1 
+
+> n
+
+) O( md 1 
+
+> n
+
+· k)
+
+9908 49540 59448 282 1410 1692 13 65 78 
+
+CryptoGen O( md 1d2 
+
+> n
+
+) O( d1d2 
+
+> n
+
+· k) O(
+
+r 
+
+> m2d21d2
+> n2
+
+) O(log d1 · k) O( m(d1+d2) 
+
+> n
+
+) O(⌈ d1 
+
+> n
+
+⌉ · k)
+
+768 64 ×5 1088 43 25 68 12 1×5 17 
+
+TABLE I: CT ×PT complexity comparison under different packing strategies. We report the number of ciphertext-plaintext multiplications (Mult), homomorphic rotations (Rot), and ciphertexts (Ct) in prefilling and autoregressive decoding (Gen, k
+
+generated tokens). Parameters: m = 128 , d 1 = 768 , d 2 = 64 , n = 8192 .*Gazelle, IRON, BOLT, and ThOR are not designed for autoregressive decoding with KV cache reuse; they pre-allocate empty slots for future tokens and append generated tokens to the padded prefill sequence to emulate autoregression. Cache   
+
+> 𝑊 21 𝑊 22
+> 𝑊 11 𝑊 12
+> 𝑋 11
+> 𝑋 21
+> 𝑋 31
+> 𝑋 41
+> 𝐾 11
+> 𝐾 21
+> 𝐾 31
+> 𝐾 41
+> Prefilling
+
+Plaintext Computation       
+
+> 𝑋 12
+> 𝑋 22
+> 𝑋 32
+> 𝑋 42
+> 𝐾 12
+> 𝐾 22
+> 𝐾 32
+> 𝐾 42
+> 𝑊 21 𝑊 22
+> 𝑊 11 𝑊 12
+> Generation
+> 𝑋 51𝑋 52
+> 𝐾 11
+> 𝐾 21
+> 𝐾 31
+> 𝐾 41
+> 𝐾 51
+> 𝐾 22
+> 𝐾 22
+> 𝐾 32
+> 𝐾 42
+> 𝐾 52
+> Token Weight
+> (a) (b)
+> (c) (d)
+
+Outer -diagonal Encoding  
+
+> 𝐾 11
+> 𝐾 21
+> 𝐾 31
+> 𝐾 41
+> 𝑋 11
+> 𝑋 21
+> 𝑋 31
+> 𝑋 41
+> 𝑊 11
+> 𝑊 11
+> 𝑊 11
+> 𝑊 11
+> 𝑊 21
+> 𝑊 21
+> 𝑊 21
+> 𝑊 21
+> 𝑋 12
+> 𝑋 22
+> 𝑋 32
+> 𝑋 42
+> 𝐾 12
+> 𝐾 22
+> 𝐾 32
+> 𝐾 42
+> 𝑋 12
+> 𝑋 22
+> 𝑋 32
+> 𝑋 42
+> 𝑊 22
+> 𝑊 22
+> 𝑊 22
+> 𝑊 22
+> 𝑊 12
+> 𝑊 12
+> 𝑊 12
+> 𝑊 12
+> 𝑋 11
+> 𝑋 21
+> 𝑋 31
+> 𝑋 41
+> CT Rot( CT )
+> 𝑋 51
+> 𝑋 52
+> 𝑋 51
+> 𝑋 52
+> 𝑊 11
+> 𝑊 22
+> 𝑊 11
+> 𝑊 22
+> 𝑊 21
+> 𝑊 12
+> 𝑊 21
+> 𝑊 12
+> 𝑋 52
+> 𝑋 51
+> 𝑋 52
+> 𝑋 51
+> 𝐾 51
+> 𝐾 52
+> 𝐾 51
+> 𝐾 52
+
+Inner -diagonal Encoding     
+
+> 𝑋 51
+> 𝑋 52
+> 𝑋 51
+> 𝑋 52
+> 𝑋 52
+> 𝑋 51
+> 𝑋 52
+> 𝑋 51
+> 𝑊 11
+> 𝑊 22
+> 𝑊 11
+> 𝑊 22
+> 𝑊 21
+> 𝑊 12
+> 𝑊 21
+> 𝑊 12
+> 𝐾 51
+> 𝐾 52
+> 𝐾 51
+> 𝐾 52
+> CT Rot( CT )
+> Tokens (L= 4), Dim( d= 2)
+> New Tokens (l= 1)
+
+Fig. 6: Heterogeneous encoding layouts for CT ×PT linear layers. (a, b) outer-diagonal encoding packs a batch of tokens (X1 . . . X 4) across slots for batch-parallel prefilling (outer-diagonal CPMM). (c, d) inner-diagonal encoding packs one token ( X5) across slots for token-sequential decoding (inner-diagonal CPVM). Existing HE-based Transformer inference sys-tems—including Gazelle, IRON, ThOR, and BOLT—adopt batch-oriented encoding layouts originally designed for stateless, discriminative workloads. While their packing strategies differ (inner-based encoding, block-based encoding, diagonal-based encoding, and outer-based encoding, respectively), all of these methods preserve a batch-parallel ciphertext layout during generation. As a result, the single newly generated token must be padded into a batch of size m,causing the per-step generation cost to remain proportional to the prompt length. In contrast, CryptoGen decouples generation complexity from the prefilling batch size by enforcing heterogeneous encoding across inference stages. Outer-diagonal CPMM is retained during prefilling to exploit token-level parallelism, while inner-diagonal CPVM is activated during decoding to match the single-token input cardinality. Consequently, the per-step ciphertext-plaintext cost during generation is reduced from O  md 1d2
+
+> n
+
+ to O  d1d2
+
+> n
+
+, eliminating the dominant source of inefficiency present in batch-oriented encodings. Furthermore, heterogeneous encoding enables more efficient accumulation within each generation step. Whereas prior ap-proaches require O(d1) or O(m) homomorphic rotations due to linear-depth slot aggregation or padded batch processing, CryptoGen performs local aggregation over compact inner-based encoding ciphertexts, reducing the rotation complexity to O(log d1). The ciphertext footprint per decoding step is likewise bounded by O(⌈d1/n ⌉), independent of the prompt length. These complexity reductions are summarized quantitatively in Table I. By aligning ciphertext layout with the cardinality of the input at each inference stage, heterogeneous encoding al-lows CryptoGen to preserve high throughput during prefilling while achieving scalable, low-latency decoding during auto-regressive generation. While heterogeneous encoding reshapes the complexity of linear projections, attention computation further requires re-solving interactions over a heterogeneous encrypted KV cache, which we address in the next section. 
+
+C. Auto-Regressive Ciphertext-Ciphertext Multiplication (ARCC) 
+
+In autoregressive decoding, the attention mechanism com-putes the score vector s = qK T and the context vector 
+
+o = aV , where a = Softmax( s). Unlike CT ×PT linear layers, these operations are inherently stateful because they must interact with the encrypted KV cache accumulated from the prompt and previously generated tokens. Due to CryptoGen’s heterogeneous encoding strategy, the KV cache is heterogeneous : the prefilling history is stored in an outer-packed layout, while the generated history is stored in an inner-packed layout. Consequently, standard homogeneous CT ×CT matrix multiplication protocols are no longer directly applicable. Forcing a single unified packing would either destroy decoding efficiency (by reintroducing padded slots) or eliminate KV reuse (by requiring re-encoding at every step). At each step, the inner-packed query must therefore interact efficiently with both cache segments. We address this with 
+
+Autoregressive Ciphertext-Ciphertext Multiplication (ARCC) ,a family of encoding-aware CT ×CT kernels that implement incremental attention over heterogeneous KV caches. 𝐄𝐧𝐜𝐨𝐝𝐢𝐧𝐠                                                                                                                                 
+
+> 𝐓𝐫𝐚𝐧𝐬𝐦𝐢𝐬𝐬𝐢𝐨𝐧 (𝑄 ,3)
+> Inner -Inner CT ×CT
+> 𝑄 1𝑄 2𝑄 3𝑄
+> 𝑄 1𝑄 1𝑄 1𝑄 2𝑄 2𝑄 2𝑄 3𝑄 3𝑄 3𝑄′
+> 𝐾 11 𝐾 12 𝐾 13 𝐾 21 𝐾 22 𝐾 23 𝐾 31 𝐾 32 𝐾 33 𝐾
+> 𝑅 11 𝑅 12 𝑅 13 𝑅 21 𝑅 22 𝑅 23 𝑅 31 𝑅 32 𝑅 33 𝑅 1𝑄′ ×𝐾
+> 𝑅 11 𝑅 12 𝑅 13 𝑅 21 𝑅 22 𝑅 23 𝑅 31 𝑅 32 𝑅 33 𝑅 2𝑅𝑜𝑡 (𝑅 1,3)
+> 𝑅 11 𝑅 12 𝑅 13 𝑅 21 𝑅 22 𝑅 23 𝑅 31 𝑅 32 𝑅 33 𝑅 3𝑅𝑜𝑡 (𝑅 1,6)
+> 𝑅 1𝑅 2𝑅 3𝑅 1𝑅 2𝑅 3𝑅 1𝑅 2𝑅 3𝑅 𝑅 1+R2+R3
+> 𝐄𝐧𝐜𝐨𝐝𝐢𝐧𝐠
+> 𝐓𝐫𝐚𝐧𝐬𝐦𝐢𝐬𝐬𝐢𝐨𝐧 (R4,1)
+> 𝑅 11𝑅 21 𝑅 31 𝑅 12 𝑅 22 𝑅 32 𝑅 13 𝑅 23 𝑅 33
+> 𝑅 11𝑅 21 𝑅 31 𝑅 12 𝑅 22 𝑅 32 𝑅 13 𝑅 23 𝑅 33
+> 𝑅 11𝑅 21 𝑅 31 𝑅 12 𝑅 22 𝑅 32 𝑅 13 𝑅 23 𝑅 33
+> Inner -Outer CT ×CT
+> 𝑄 1𝑄 1𝑄 1𝑄 2𝑄 2𝑄 2𝑄 3𝑄 3𝑄 3𝑄
+> 𝐾 11 𝐾 21 𝐾 31𝐾 12𝐾 22 𝐾 32𝐾 13𝐾 23𝐾 33 𝐾
+> 𝑅 1𝑄 ×𝐾
+> 𝑅 2𝑅𝑜𝑡 (𝑅 1,1)
+> 𝑅 3𝑅𝑜𝑡 (𝑅 1,2)
+> 𝑅 1+R2+R3𝑅 2𝑅 3𝑅 1𝑅 4
+> 𝑄 1𝑄 2𝑄 3𝑄 1𝑄 2𝑄 3𝑄 1𝑄 2𝑄 3
+> 𝑅 1𝑅 2𝑅 3𝑅 Rotation+ Add
+> Add
+> a
+> bc
+> 𝑅 1𝑅 2𝑅 3
+
+Fig. 7: Autoregressive Ciphertext-Ciphertext (ARCC) kernels for attention over a heterogeneous KV cache: (a) plaintext 
+
+qK T for reference; (b) ARCC inner-inner mode (query with the transposed outer-packed prefilling cache); (c) ARCC inner-outer mode (query with the transposed inner-packed generated cache). 
+
+ARCC Inner–Inner Mode. From an algebraic perspective, this kernel handles the multiplication of two operands that both possess an inner-based packing format. In the autoregressive phase, this logic is applied to compute the attention scores against the prefilling history spref ill = qK Tpref ill and to aggregate the values for the generated history oauto = aV auto .For spref ill , although the prefilling cache Kpref ill is physi-cally stored in the outer-based packing layout, the attention operation targets its transpose KTpref ill . Algebraically, the transpose of an outer-based packing matrix behaves as an inner-based packing format, matching the inner-packed query 
+
+q. Thus, we treat this as an inner-inner interaction. Since the q
+
+and a utilize inner-based packing, their scalar components are compacted into a single ciphertext. However, the computation requires each valid scalar slot to correspond precisely with an entire inner-based packing structure. To resolve this slot misalignment as depicted in the interaction flow (as shown in Figure 7(b) Q′&K and Figure 8), we must first decouple and replicate the scalars before executing the multiplication steps. Since the ciphertext q contains the full vector, we first isolate each scalar feature qj . This is achieved by applying a plaintext mask to zero out other elements, followed by a specific rotation to replicate qj across all valid slots. This creates a ”broadcasted” ciphertext where every slot holds 
+
+qj , aligning the scalar with the target matrix structure. This broadcasted ciphertext is homomorphically multiplied with the 𝑐   
+
+> 𝑏
+> 𝑎 0
+> 0
+> 0
+> 0
+> 1
+> 0
+> 0
+> 0
+> 1
+> 0
+> 0
+> 0
+> 1
+> 0
+> 0
+> 0
+> 0
+> 0
+> ×𝑎
+> 𝑐
+> 𝑐
+> 𝑏
+> 𝑏
+> 𝑎
+> 𝑎
+> 𝑐
+> 𝑏
+
+Encoding Transmission( 𝑉 , 𝑑 )   
+
+> 𝑅𝑜𝑡𝑎𝑡𝑒
+> 𝐴𝑑𝑑
+> &
+> 𝑀 𝐶 𝑀 𝐵
+> 𝑀 𝐴 log (𝑑 )
+> 𝑉 𝑉 3
+> 𝑉 2
+> 𝑉 1
+
+Fig. 8: Encoding transmission for ARCC inner-inner: masking and rotating an inner-packed vector to broadcast a scalar feature qj across valid slots, aligning it with an outer-packed cache block before CT ×CT multiplication. corresponding outer-packed K. The results are accumulated across the feature dimension j to form the final score vector. 
+
+ARCC Inner-Outer Mode. This kernel handles the mul-tiplication between an inner-packed operand and an outer-packed operand. In autoregressive decoding, it is used to (i) compute attention scores against the generated history 
+
+sauto = qK Tauto and (ii) aggregate values for the prefilling history opref ill = aV pref ill . For sauto , the generated cache 
+
+Kauto is physically stored in an inner-packed layout, but attention requires KTauto , which behaves as an outer-packed structure. Therefore, the interaction between the inner-packed 
+
+q and the outer-packed KTauto is classified as inner-outer. To implement this, we leverage the physical alignment between the query and the row-stored keys to perform a parallel Dot-product Reduction as illustrated in Figure 7(c). We first execute a single SIMD multiplication between the inner-packed q and the outer-packed K, producing a ciphertext of element-wise products. To aggregate these products into a scalar score without sequential summation, we employ a ”folding sum” technique. This involves performing a series of rotations by powers of 2 and accumulating the results. This reduces the summation complexity from linear O(d)
+
+to logarithmic O(log d), fully exploiting the SIMD slots for efficient reduction. 
+
+Complexity and Scalability Analysis. Table II summarizes the asymptotic complexity of CryptoGen compared to state-of-the-art secure inference baselines adapted for auto-regression. As shown in Table II, BOLT and THOR are statistically bound to their rigid packing layouts (Outer/Diagonal-based). In auto-regression, adding a single token breaks their structure, forcing a ”stateless” execution where the entire history must be re-processed or re-encoded at every step L. This results in a quadratic O(L2) cumulative complexity for attention. In contrast, CryptoGen’s Heterogeneous KV-Cache and ARCC kernels enable true stateful processing. By computing only the incremental interaction between the new query and the cached history, CryptoGen reduces the per-step workload to a linear scan O(L).Even for the per-step computation, baselines suffer from redundant computation. BOLT/THOR requires the same linear 
+
+O(d) rotations with that of prefilling stage. CryptoGen mini-TABLE II: Complexity of CT ×CT attention operations per stage. We report asymptotic rotation and CT ×CT costs in prefilling ( m tokens) and autoregressive decoding (current length k), where d is the hidden dimension and n is the SIMD slot count.                        
+
+> Method Prefilling Phase Autoregressive Phase Rotation CT ×CT Rotation CT ×CT
+> BOLT O(d)O(m2)O(d)O(k2)
+> THOR O(d)O(m2)O(d)O(k2)
+> CryptoGen O(d)O(m2)O(log d)O(k)
+> Note: Baselines (BOLT/THOR) incur O(L2)complexity in generation due to stateless re-computation of the full attention matrix at each step. CryptoGen reduces this to a linear scan O(L)via stateful caching.
+
+mizes this overhead using the ”Folding Sum” technique within its Inner-Inner/Outer kernels, compressing the accumulation depth to logarithmic O(log d). This significantly lowers the constant latency factor for both linear projections and attention scoring. 
+
+D. Encrypted KV-Cache Management 
+
+Maintaining a persistent Key-Value (KV) cache in the encrypted domain presents unique challenges that do not exist in plaintext generation. During auto-regressive generation, the cache must evolve dynamically: historical states from the pre-filling phase must be preserved, while new token embeddings are continuously appended. Two critical bottlenecks arise in this process: 1) Noise Accumulation: Homomorphic operations (espe-cially multiplications) consume the noise budget of ci-phertexts. The newly generated tokens ( km+1 , v m+1 ) are themselves the product of deep computations (CT ×PT and CT ×CT), leaving them with a critically low remain-ing budget. Simply appending these ”noisy” ciphertexts to the cache can quickly push the cumulative noise beyond the decryption threshold, causing correctness failure. 2) Slot Inefficiency and Memory Explosion: Without op-timization, each new token would occupy a fresh ci-phertext. Since a single token vector uses only a frac-tion of the available SIMD slots (e.g., d = 768 vs 
+
+n = 8192 ), this naive appending leads to severe slot underutilization. This effectively regresses the system to a discriminative-like framework where each generated key-value pair occupies a dedicated ciphertext, mirroring the naive caching limitations discussed in Section III-B. Consequently, the number of cache ciphertexts grows linearly with sequence length, triggering a quadratic increase in computational cost for future attention steps and exhausting system memory. To overcome these barriers, CryptoGen introduces a spe-cialized cache management framework that integrates two synergistic strategies (formally described in Algorithm 1 in Appendix A): 
+
+Lazy Noise Refreshing (Addressing Noise). To ensure computational stability without incurring excessive communi-cation overhead, CryptoGen adopts a Lazy Refreshing strategy. Instead of refreshing the cache at every step, the server monitors the noise budget and triggers a collaborative refresh protocol only when the budget approaches exhaustion. As detailed in the appendix, the server masks the noisy ciphertext with a random secret share ( K/V − r) and sends it to the client. The client decrypts and re-encrypts the data to generate a ”fresh” ciphertext, which the server then reconstructs by removing the mask ( K/V ref resh + r). This protocol restores the noise margin without leaking plaintext. By amortizing the refresh cost over many generation steps, the MPC communi-cation overhead becomes negligible. 
+
+Ciphertext Concatenation (Addressing Inefficiency). To maximize memory efficiency, CryptoGen implements a Ci-phertext Concatenation protocol that merges multiple token vectors into compact cache blocks. Leveraging the inner-diagonal encoding , newly generated keys and values are naturally aligned for packing. The system calculates a specific slot offset based on the current cache capacity ( B = ⌈n/d 2⌉)and utilizes homomorphic addition to append the masked new token ( km+1 , v m+1 ) into the next available slot block of the current cache ciphertext. This slot-aware accumulation ensures that cache ciphertexts are densely packed. It keeps the total number of ciphertexts nearly constant relative to the sequence length, thereby reducing the complexity of the QK T attention operation from what would be a linear growth under naive caching to a significantly flatter curve. By combining these mechanisms, CryptoGen reduces both the ciphertext count and update latency by more than one order of magnitude compared to baseline approaches, enabling stable and scalable long-context generation. V. E XPERIMENTAL METHODOLOGIES 
+
+A. Experimental Setup 
+
+All experiments are conducted on a workstation equipped with an AMD Ryzen Threadripper PRO 3955WX CPU featur-ing 16 physical cores (32 threads), running at a base frequency of 2.20 GHz with up to 3.90 GHz boost frequency. The ma-chine is provisioned with 125 GiB of system memory and runs Ubuntu 22.04.5 LTS (Linux kernel 6.8.0-85-generic). Crypto-Gen follows the standard two-party semi-honest MPC setting as in prior work. The code is compiled using gcc 11.4.0 and 
+
+g++ 11.4.0 . Plaintext baselines are executed on the same machine under identical software configurations to ensure a fair comparison. 
+
+B. Cryptographic Libraries and Parameters 
+
+CryptoGen is implemented as a hybrid HE–MPC frame-work. For homomorphic encryption, we use the Microsoft SEAL library[48], [49] and adopt the BFV scheme[50], [16], which supports exact integer arithmetic and is well suited for our fixed-point quantized Transformer model. The HE parameters follow SEAL’s recommended settings for 128-bit security. We use a polynomial modulus degree of n = 8192 .The model weights and activations are converted into fixed-point integers. We use a plaintext modulus of approximately 
+
+p ≈ 229 , which accommodates the dynamic range of GPT-2 activations after quantization. The ciphertext modulus is cho-sen to be q ≈ 2220 , providing a sufficiently large noise budget to support the continuous multiplication of ciphertext-plaintext and ciphertext-ciphertext in auto-regressive generation. And the larger ciphertext modulus ensures stable encrypted compu-tation without frequent noise refreshing with using encrypted KV cache. For nonlinear components such as GELU, LayerNorm, and softmax, CryptoGen employs the EzPC [51], [52], [53]secure computation library, running a standard two-party semi-honest MPC protocol. All nonlinearities are executed in the MPC domain, while linear layers—including attention projections and feed-forward transformations—are performed using HE operations. This division of labor mirrors prior hybrid ap-proaches while enabling efficient and noise-stable encrypted decoding. 
+
+C. Model and Datasets 
+
+We evaluate CryptoGen using the GPT-2 base architecture, which consists of 12 Transformer decoder layers with ahidden size of 768, 12 attention heads, and GELU activations. 
+
+a) Accuracy & Efficiency.: We evaluate the perplex-ity of the Wikitext-2[54], Penn Treebank (PTB)[55], and LAMBADA[56] test datasets with and without using Crypto-Gen. We also compare the runtime of CryptoGen and BOLT when generating sequences of different lengths. Since BOLT is originally designed for discriminative Trans-former inference, we adapt it to the autoregressive setting. Specifically, we pre-allocate a sequence of placeholder tokens equal to the desired generation length. During generation, each newly predicted token replaces one placeholder, and the prefix combined with all previously generated tokens is fed into the model to predict the next token. This approach enables BOLT to perform auto-regressive decoding while preserving its original HE-MPC execution pipeline and packing strategy. Both CryptoGen and BOLT use a fixed prefix of 64 tokens taken from the corresponding test sets. We measure decoding latency across generation lengths ranging from 64 to 512 tokens, generating one token at a time in an autoregressive manner. 
+
+D. Non-linear Layer Computation 
+
+For the nonlinear operations required in Transformers, such as GELU activations and Softmax normalization, CryptoGen 
+
+employs MPC protocols. This hybrid approach avoids the costly polynomial approximations typically required in FHE-only systems. We adopt the efficient MPC protocols of BOLT [20], which are optimized for the semi-honest two-party setting. The overview of performing nonlinear computations within this hybrid framework is as follows: To securely switch from HE to MPC, the server first generates a random plaintext mask and homomorphically subtracts it from the input HE ciphertext. This blinded ciphertext is then sent to the client for decryption. This process effectively splits the input into two secret shares: the client holds the decrypted blinded value, while the server holds the random mask. Privacy is preserved as neither party can reconstruct the true input value. Subsequently, the client and the server jointly execute the designated MPC protocol on their respective shares. To convert the result back to an HE ciphertext, the client encrypts the resulting output share and sends it to the server. The server then homomorphically adds its own output share (derived from the MPC computation on its initial mask) to the client’s ciphertext, yielding the final encrypted result of the nonlinear function. 
+
+GELU and Polynomial Optimization. For activations like GELU, CryptoGen utilizes the highly optimized 4-degree polynomial approximations. These approximations exploit properties of the GELU function to reduce the computational domain. First, GELU behaves linearly ( GeLU )x ≈ x or 
+
+GeLU )x ≈ 0) outside a small input range. The polynomial ap-proximation is therefore only applied within this critical range ([-3.2, 3.2])[57]. Second, the protocol leverages the symmetry of GeLU function, allowing the polynomial to be evaluated only on positive inputs, further halving the approximation domain. To minimize the communication cost of evaluating this 4-degree polynomial, the 4-degree polynomial can be reformulated as a composition of two 2-degree polynomials. By doing this, a sequential multiplication step can be skipped, saving one round of MPC protocol communication. 
+
+Softmax. For the computationally expensive Softmax function, 
+
+CryptoGen implements the efficient integer-only protocol, which avoids expensive Look-Up Tables. After normalizing the inputs by subtracting xmax , the core mechanism securely decomposes the input ˜xi into ˜xi = ( −ln 2) · z + p. This decomposition is achieved by first computing the integer z
+
+using a secure fixed-point multiplication and a right-shift (to simulate division by −ln 2). The value p is then computed from z and ˜xi. Because p is guaranteed to be in a small fixed range ( (−ln 2, 0] ) , the exp (p) term can be accurately and cheaply computed with a simple 2-degree polynomial. The final exp ( ˜ xi) = exp (p) >> z result is calculated by applying the polynomial’s output to a sequence of secure multiplexers controlled by the secret-shared bits of z. The final division in Softmax is handled using an established secure reciprocal protocol from SIRNN[58]. VI. R ESULTS 
+
+A. End-to-End Performance 
+
+Figure 4 compares the end-to-end runtime of CryptoGen and BOLT under autoregressive inference. Due to BOLT’s packing scheme, the effective sequence length must align with the ciphertext block size. When the number of generated tokens does not fill an entire block, BOLT must pad the input, producing the staircase-shaped latency curve observed in the figure. Each step increase results in a sharp latency jump, and the overall computation scales quadratically with the sequence length. In contrast, CryptoGen exhibits a linear growth pattern. Its ciphertext-ciphertext multiplications in the QK T computation involve only a single new ciphertext Q at each auto-regressive step, making the scaling behavior highly predictable. More importantly, CryptoGen maintains an encrypted KV cache throughout generation, eliminating the need to recompute all past key and value vectors at every step. This reduces the attention cost from O(L2) to O(L) throughout the entire decoding process. In addition, unlike BOLT—which must reprocess the full prefix and all generated tokens at every step—CryptoGen only encrypts and processes one new token per step. As a result, the number of ciphertexts involved in the linear layers and attention modules remains nearly constant, also reducing both computation and communication in MPC-heavy components such as softmax and GeLU. Consequently, CryptoGen demonstrates substantially better end-to-end scal-ing and improves per-step latency by 4.4 × to 7.6 × over BOLT as the sequence length increases. In addition to runtime, Figure 3 also reports the memory usage during autoregressive decoding. The memory behav-ior of the two systems differs substantially. BOLT exhibits a staircase-shaped memory pattern that mirrors its runtime curve. Because BOLT must repeatedly pad the input to match the ciphertext block size, each increase in sequence length expands the number of packed ciphertexts it maintains. This causes both the intermediate ciphertext buffers and the attention-related ciphertext matrices to grow proportionally, leading to sharp memory spikes at each block boundary. Furthermore, BOLT recomputes all key and value vectors at every decoding step, producing a large volume of transient ciphertexts whose size increases with the prefix length. In contrast, CryptoGen maintains a significantly more stable memory footprint across all generation lengths. Its encrypted KV cache avoids regenerating past key and value cipher-texts, preventing quadratic growth in intermediate tensors. CryptoGen’s inner-encoding scheme and encrypted KV cache concatenation also keep the number of ciphertexts per layer nearly constant, independent of the current prefix length. As a consequence, the memory cost of attention and feed-forward layers remains flat as the sequence length increases. Addition-ally, because CryptoGen processes only one new token per iteration, it avoids the need to store full-sequence ciphertext batches, resulting in substantially lower and smoother memory consumption. In general, CryptoGen achieves both lower peak memory and more predictable usage patterns than BOLT, fur-ther highlighting the scalability benefits of its hybrid HE–MPC design.               
+
+> Wikitext2 PTB LAMBADA
+> Plaintext 30 .63 ±0.031 53 .65 ±0.045 55 .86 ±0.091
+> CryptoGen 30.66 54.64 55.92
+
+TABLE III: Perplexity of Plaintext and CryptoGen inference. Table III further reports the perplexity of CryptoGen com-pared with plaintext GPT-2 inference on Wikitext-2, PTB, and LAMBADA. Across all three datasets, CryptoGen preserves model accuracy with negligible degradation. The perplexity values differ from plaintext by less than a small margin, demonstrating that our fixed-point integer representation and hybrid HE-MPC computation do not introduce meaningful numerical drift. These results confirm that CryptoGen main-tains the same generation quality as the original model while enabling fully privacy-preserving inference. 
+
+B. Computation Algorithm Comparison BOLT  CryptoGen   
+
+> Times (s)
+> Total Times (s)
+> Token Length=64 Token Length=128 Token Length=256
+> CT ×PT CT ×CT Nonlinear
+
+Fig. 9: Breakdown end-to-end inference between CryptoGen & BOLT Figure 9 presents a detailed breakdown of the run-time of CryptoGen and BOLT at token length 64,128,256. We categorize the execution time into three primary components: ciphertext-plaintext multiplications (CT×PT), ciphertext-ciphertext multiplications (CT×CT), and MPC-based nonlinear operations. The two systems demonstrate different scaling behaviors as the sequence length grows. From the perspective of component proportions, we observe that when the token length is small (e.g. L = 64 ), the runtime contributions of CT×PT and CT×CT in BOLT are relatively close. However, as the sequence length increases, the CT×CT component grows significantly faster than CT×PT. This behav-ior is expected: CT×CT operations correspond to QK T and 
+
+softmax · V computations, whose computational cost scales quadratically with the sequence length in non–autoregressive HE execution. In contrast, CT×PT operations originate from the linear layers, whose complexity grows linearly with L,resulting in much slower growth. CryptoGen exhibits a different pattern. Although the propor-tion between CT×PT and CT×CT also changes with increasing token length, the CT×PT cost remains nearly constant across all sequence lengths. This is because CryptoGen processes only a single new ciphertext token at each auto-regressive step, so the CT×PT workload does not depend on the current prefix length. The only component that grows with L is the CT×CT portion, which reflects the inherent length-dependent attention cost. Consequently, the variation in CryptoGen’s breakdown is primarily due to the linear growth of CT×CT, while CT×PT remains stable regardless the length of sequence . 
+
+a) Nonlinear MPC operations.: A similar trend can be observed in the MPC-based nonlinear components. BOLT repeatedly processes the full prefix and generated tokens, caus-ing the number of secret shares and communication rounds to increase with L. CryptoGen processes only one new token per iteration, which significantly reduces the volume of MPC communication. Consequently, CryptoGen exhibits nearly flat nonlinear cost curves, while BOLT’s nonlinear overhead grows steadily as the sequence length increases. 
+
+C. Breakdown Analysis of a Single Transformer Block                                                                                                
+
+> Token Length 64 128 256 512 Method BOLT CryptoGen BOLT CryptoGen BOLT CryptoGen BOLT CryptoGen
+> x∗W(CT ×PT) / s 1.77 0.74 3.21 0.86 9.90 0.74 26.54 0.64 Linear 2 (CT ×PT) / s 0.37 0.60 0.64 0.57 1.12 0.55 2.35 0.52 Linear 3 (CT ×PT) / s 1.35 2.80 2.50 2.85 4.63 2.97 7.35 2.64 Linear 4 (CT ×PT) / s 1.26 2.76 2.51 2.68 5.86 2.90 8.28 2.76
+> QK ⊤(CT ×CT) / s 2.47 0.27 7.09 3.55 24.86 12.25 77.23 28.27 Softmax * V (CT ×CT) / s 2.80 0.35 8.80 3.76 28.09 12.32 95.47 28.41 Softmax (Nonlinear) / s 0.57 0.17 1.57 0.19 3.77 0.24 4.97 0.29 GeLU / s 0.75 1.12 1.27 1.12 1.80 1.07 2.23 1.18 Norm / s 0.58 0.79 0.83 0.87 1.02 0.80 1.28 0.84 Total / s 11.92 9.6 28.42 16.45 81.05 33.84 225.7 65.55
+
+TABLE IV: Runtime Breakdown of a Single Transformer Block Across Different Sequence Lengths for BOLT and CryptoGen Table IV presents the detailed runtime breakdown of a single Transformer block under different token lengths ( L =64 , 128 , 256 , 512 ) for both BOLT and CryptoGen. Each row corresponds to a major computational component, including CT ×PT,CT ×CT, and MPC-based nonlinear operations. The breakdown reveals how different subsystems scale with se-quence length and highlights the root causes of the perfor-mance divergence between the two frameworks. 
+
+CT ×PT Components (Linear 2/3/4). Across all sequence lengths, CryptoGen maintains nearly constant CT ×PT run-time. This is because CryptoGen processes only one new ci-phertext token at each auto-regressive step; thus, the workload of CT ×PT linear layers is independent of the current prefix length. As a result, CryptoGen’s CT ×PT cost remains flat even as the sequence length grows from 64 to 512. For BOLT, CT ×PT runtime increases steadily with se-quence length. Since BOLT processes the entire token length at each generation step, the number of input ciphertexts grows linearly with L. Consequently, the CT ×PT time of BOLT roughly triples from L = 64 to L = 256 and increases by more than 15 × at L = 512 .
+
+CT ×CT Components ( QK ⊤ and Softmax ·V ). The most significant discrepancy appears in CT ×CT operations. As the sequence length increases, BOLT exhibits extremely rapid growth in both the QK ⊤ and softmax ·V stages. For instance, the QK ⊤ time rises from 2.47 s at L = 64 to 77.23 s at L = 512 (a 31 × increase), while softmax · V grows from 2.80 s to 95.47 s (a 34 × increase). This behavior comes from BOLT’s non-autoregressive execution model: without encrypted KV caching, both Q and all historical K/V vectors must be recomputed at each step, resulting in a quadratic time complexity in the sequence length ( O(L2)). At long sequences, CT ×CT operations dominate BOLT’s total runtime. CryptoGen, on the other hand, exhibits only linear growth in CT ×CT runtime. With encrypted KV caching, CryptoGen performs CT ×CT operations only between the new Q cipher-text and cached K/V vectors. Thus, the CT ×CT cost grows approximately proportionally with L (e.g., softmax · V : 0.35 s 
+
+→ 28.41 s), avoiding the quadratic explosion seen in BOLT. 
+
+MPC Nonlinear Components. The MPC-based nonlinear operations also show distinct trends. In CryptoGen, the nonlin-ear workload remains mostly constant since these operations only involve the new token. In BOLT, however, the nonlinear runtime increases moderately with sequence length due to the expanding ciphertext representations that must participate in MPC. Although the growth is not as dramatic as CT ×CT, it contributes noticeably to BOLT’s total runtime at larger L.Furthermore, it is worth noting the impact of our noise management strategy. Due to the Lazy Refreshing policy, the communication overhead of the noise refresh protocol is effectively amortized over the entire generation process. In our evaluation with sequence lengths up to 512, the overhead remains negligible, contributing less than 1%. 
+
+a) Total Runtime per Layer.: Summing all components highlights the cumulative effect of the above trends. As shown in Table IV, BOLT’s total per-layer latency increases from 11.92 s at L = 64 to 225.7 s at L = 512 , while Cryp-toGen increases from 9.6 s to 65.55 s. CryptoGen therefore achieves a 3.4 × speedup at L = 512 , and maintains far more predictable scaling due to linear-time attention and constant-time linear layers. In contrast, BOLT’s quadratic attention cost quickly dominates, becoming the primary bottleneck at longer sequence lengths. VII. C ONCLUSION 
+
+In this paper, we presented CryptoGen, a hybrid HE-MPC framework that enables efficient and privacy-preserving auto-regressive Transformer generation. By combining heteroge-neous encoding for prefilling and generation stage and two complementary ciphertext-ciphertext multiplication, Crypto-Gen fundamentally changes the scaling behavior of secure generation. Our design eliminates the quadratic overhead in-herent in prior HE-only approaches such as BOLT and reduces the complexity of attention from O(L2) to O(L) in auto-regressive process. We implemented CryptoGen on GPT-2 and conducted ex-tensive evaluations on Wikitext-2, PTB, and LAMBADA. Experimental results show that CryptoGen preserves model accuracy, achieving perplexity nearly identical to plaintext inference. In end-to-end runtime, CryptoGen demonstrates substantially better scalability than BOLT: while BOLT suffers from quadratic growth due to repeated recomputation of all prefix tokens, CryptoGen maintains linear-time latency and achieves 4.4×–7.6× speedup at longer sequence lengths. Our component-level breakdown further confirms that CryptoGen keeps CT ×PT and nonlinear MPC operations constant per step, while attention-related CT ×CT operations grow only linearly. Overall, CryptoGen provides a new path toward practi-cal, privacy-preserving autoregressive generation by heteroge-neously combining different stages of the decoding pipeline, effectively reducing ciphertext volume, minimizing MPC com-munication, and ensuring predictable linear scaling. In future work, we plan to extend CryptoGen to larger language models, explore more advanced ciphertext packing strategies, and in-vestigate integration with GPU-accelerated secure computation to further improve performance. REFERENCES [1] T. A. A. Abdullah, M. S. M. Zahid, and W. Ali, “A review of interpretable ml in healthcare: Taxonomy, applications, challenges, and future directions,” Symmetry , vol. 13, p. 2439, 2021. [Online]. Available: https://api.semanticscholar.org/CorpusID:245363460 [2] N. Kozodoi, J. Jacob, and S. Lessmann, “Fairness in credit scoring: Assessment, implementation and profit implications,” European Journal of Operational Research , vol. 297, no. 3, pp. 1083–1094, 2022. [3] A. Rajkomar, E. Oren, K. Chen, A. M. Dai, N. Hajaj, M. Hardt, P. J. Liu, X. Liu, J. Marcus, M. Sun et al. , “Scalable and accurate deep learning with electronic health records,” NPJ digital medicine , vol. 1, no. 1, p. 18, 2018. [4] W. Wang, Z. Ma, Z. Wang, C. Wu, J. Ji, W. Chen, X. Li, and Y. Yuan, “A survey of llm-based agents in medicine: How far are we from baymax?” 
+
+arXiv preprint arXiv:2502.11211 , 2025. [5] A. Vaswani, “Attention is all you need,” Advances in Neural Information Processing Systems , 2017. [6] A. Radford, J. Wu, R. Child, D. Luan, D. Amodei, I. Sutskever et al. ,“Language models are unsupervised multitask learners,” OpenAI blog ,vol. 1, no. 8, p. 9, 2019. [7] K. Alizadeh, S. I. Mirzadeh, D. Belenko, S. Khatamifard, M. Cho, C. C. Del Mundo, M. Rastegari, and M. Farajtabar, “Llm in a flash: Efficient large language model inference with limited memory,” in Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , 2024, pp. 12 562–12 584. [8] H. Touvron, T. Lavril, G. Izacard, X. Martinet, M.-A. Lachaux, T. Lacroix, B. Rozi` ere, N. Goyal, E. Hambro, F. Azhar et al. ,“Llama: Open and efficient foundation language models,” arXiv preprint arXiv:2302.13971 , 2023. [9] W. Moore and S. Frye, “Review of hipaa, part 1: history, protected health information, and privacy and security rules,” Journal of nuclear medicine technology , vol. 47, no. 4, pp. 269–272, 2019. [10] M. Fredrikson, S. Jha, and T. Ristenpart, “Model inversion attacks that exploit confidence information and basic countermeasures,” in 
+
+Proceedings of the 22nd ACM SIGSAC conference on computer and communications security , 2015, pp. 1322–1333. [11] H. Hu, Z. Salcic, L. Sun, G. Dobbie, P. S. Yu, and X. Zhang, “Membership inference attacks on machine learning: A survey,” ACM Computing Surveys (CSUR) , vol. 54, no. 11s, pp. 1–37, 2022. [12] F. He, T. Zhu, D. Ye, B. Liu, W. Zhou, and P. Yu, “The emerged security and privacy of llm agent: A survey with case studies,” ACM Computing Surveys , 2024. [13] W. Du and M. J. Atallah, “Secure multi-party computation problems and their applications: a review and open problems,” in Proceedings of the 2001 workshop on New security paradigms , 2001, pp. 13–22. [14] C. Gentry, “Fully homomorphic encryption using ideal lattices,” in 
+
+Proceedings of the forty-first annual ACM symposium on Theory of computing , 2009, pp. 169–178. [15] H. Chen, K. Laine, and R. Player, “Simple encrypted arithmetic library-seal v2. 1,” in International conference on financial cryptography and data security . Springer, 2017, pp. 3–18. [16] J. Fan and F. Vercauteren, “Somewhat practical fully homomorphic encryption,” Cryptology ePrint Archive , 2012. [17] A. C. Yao, “Protocols for secure computations,” in 23rd annual sympo-sium on foundations of computer science (sfcs 1982) . IEEE, 1982, pp. 160–164. [18] C. Juvekar, V. Vaikuntanathan, and A. Chandrakasan, “ {GAZELLE }:A low latency framework for secure neural network inference,” in 27th USENIX security symposium (USENIX security 18) , 2018, pp. 1651– 1669. [19] M. Hao, H. Li, H. Chen, P. Xing, G. Xu, and T. Zhang, “Iron: Private inference on transformers,” Advances in neural information processing systems , vol. 35, pp. 15 718–15 731, 2022. [20] Q. Pang, J. Zhu, H. M¨ ollering, W. Zheng, and T. Schneider, “Bolt: Privacy-preserving, accurate and efficient inference for transformers,” in 
+
+2024 IEEE Symposium on Security and Privacy (SP) . IEEE, 2024, pp. 4753–4771. [21] J. Moon, D. Yoo, X. Jiang, and M. Kim, “THOR: Secure transformer inference with homomorphic encryption,” Cryptology ePrint Archive, Paper 2024/1881, 2024. [Online]. Available: https://eprint.iacr.org/2024/1881 [22] W.-j. Lu, Z. Huang, Z. Gu, J. Li, J. Liu, C. Hong, K. Ren, T. Wei, and W. Chen, “Bumblebee: Secure two-party inference framework for large transformers,” Cryptology ePrint Archive , 2023. [23] D. Hendrycks, “Gaussian error linear units (gelus),” arXiv preprint arXiv:1606.08415 , 2016. [24] M. Shoeybi, M. Patwary, R. Puri, P. LeGresley, J. Casper, and B. Catan-zaro, “Megatron-lm: Training multi-billion parameter language models using model parallelism,” arXiv preprint arXiv:1909.08053 , 2019. [25] C. Gentry, A. Sahai, and B. Waters, “Homomorphic encryption from learning with errors: Conceptually-simpler, asymptotically-faster, attribute-based,” in Annual cryptology conference . Springer, 2013, pp. 75–92. [26] Z. Brakerski, C. Gentry, and V. Vaikuntanathan, “(leveled) fully ho-momorphic encryption without bootstrapping,” ACM Transactions on Computation Theory (TOCT) , vol. 6, no. 3, pp. 1–36, 2014. [27] S. Halevi and V. Shoup, “Algorithms in helib,” in Annual Cryptology Conference . Springer, 2014, pp. 554–571. [28] Y. Zhang, J. Xue, M. Zheng, M. Xie, M. Zhang, L. Jiang, and Q. Lou, “Cipherprune: Efficient and scalable private transformer inference,” 
+
+arXiv preprint arXiv:2502.16782 , 2025. [29] Y. Zhang, M. Zheng, Y. Shang, X. Chen, and Q. Lou, “Heprune: Fast private training of deep neural networks with encrypted data pruning,” Advances in Neural Information Processing Systems , vol. 37, pp. 51 063–51 084, 2024. [30] M. Zheng, Q. Lou, and L. Jiang, “Primer: Fast private transformer inference on encrypted data,” DAC 2023 , 2023. [31] J. Xue, Y. Zhang, Y. Wang, X. Wang, H. Zheng, and Q. Lou, “Crypto-train: Fast secure training on encrypted dataset,” in Proceedings of the 1st ACM Workshop on Large AI Systems and Models with Privacy and Safety Analysis , 2023, pp. 97–104. [32] Q. Lou and L. Jiang, “Hemet: A homomorphic-encryption-friendly privacy-preserving mobile neural network architecture,” ICML 2021 ,2021. [33] B. Feng, Q. Lou, L. Jiang, and G. C. Fox, “Cryptogru: Low latency privacy-preserving text analysis with gru,” EMNLP 2021 , 2021. [34] Q. Lou, B. Song, and L. Jiang, “Autoprivacy: Automated layer-wise parameter selection for secure neural network inference,” NeurIPS 2020 ,2020. [35] Y. Zhu, H. You, W. Zhang, J. Xu, Q. Lou, S. Yan, and L. Ju, “Dahe: Parameter-adaptive and memory efficient fpga acceleration of homomorphic encryption,” IEEE Transactions on Computers , 2025. [36] M. Kumar, J. Xue, M. Zheng, and Q. Lou, “Tfhe-coder: Evaluating llm-agentic fully homomorphic encryption code generation,” arXiv preprint arXiv:2503.12217 , 2025. [37] X. Deng, S. Fan, Z. Hu, Z. Tian, Z. Yang, J. Yu, D. Cao, D. Meng, R. Hou, M. Li et al. , “Trinity: A general purpose fhe accelerator,” 
+
+Accepted by MICRO’24 , 2024. [38] M. Zheng, C. Chu, Q. Lou, N. Youngblood, M. Li, S. Moazeni, and L. Jiang, “Ofhe: An electro-optical accelerator for discretized tfhe,” in 
+
+Proceedings of the 29th ACM/IEEE International Symposium on Low Power Electronics and Design , 2024, pp. 1–6. [39] Y. Zhang, X. Chen, and Q. Lou, “Hebridge: Connecting arithmetic and logic operations in fv-style he schemes,” in Proceedings of the 12th Workshop on Encrypted Computing & Applied Homomorphic Cryptography , 2023, pp. 23–35. [40] M. Zheng, F. Chen, L. Jiang, and Q. Lou, “Priml: An electro-optical accelerator for private machine learning on encrypted data,” in 2023 24th International Symposium on Quality Electronic Design (ISQED) .IEEE, 2023, pp. 1–7. [41] M. Zheng, Q. Lou, F. Chen, L. Jiang, and Y. Zhu, “Cryptolight: An electro-optical accelerator for fully homomorphic encryption,” in 
+
+Proceedings of the 17th ACM International Symposium on Nanoscale Architectures , 2022, pp. 1–2. [42] M. Han, Y. Zhu, Q. Lou, Z. Zhou, S. Guo, and L. Ju, “coxhe: A software-hardware co-design framework for fpga acceleration of homomorphic computation,” in 2022 Design, Automation & Test in Europe Conference & Exhibition (DATE) . IEEE, 2022, pp. 1353–1358. [43] L. Jiang, Q. Lou, and N. Joshi, “Matcha: A fast and energy-efficient accelerator for fully homomorphic encryption over the torus,” in The Design Automation Conference (DAC 2022) , 2022. [44] Q. Lou and L. Jiang, “She: A fast and accurate deep neural network for encrypted data,” in Advances in Neural Information Processing Systems (NeurIPS) 2019 , 2019, pp. 10 035–10 043. [45] Q. Lou, Y. Shen, H. Jin, and L. Jiang, “Safenet: A secure, accurate and fast neural network inference,” 2021. [46] A. W. B. Yudha, J. Xue, Q. Lou, H. Zhou, and Y. Solihin, “Boostcom: Towards efficient universal fully homomorphic encryption by boosting the word-wise comparisons,” in (PACT’24) The International Conference on Parallel Architectures and Compilation Techniques (PACT) , 2024. [47] D. Li, R. Shao, H. Wang, H. Guo, E. P. Xing, and H. Zhang, “Mpc-former: fast, performant and private transformer inference with mpc,” 
+
+arXiv preprint arXiv:2211.01452 , 2022. [48] K. L. H. C. Kim, K. Lauter, R. Player, and S. Voloshynovskiy, “Mi-crosoft seal (release 3.5),” https://github.com/microsoft/SEAL , 2020. [49] K. Laine, “Simple encrypted arithmetic library - seal,” in Financial Cryptography , 2017. [50] Z. Brakerski, “Fully homomorphic encryption without modulus switch-ing from classical gapsvp,” in Annual cryptology conference . Springer, 2012, pp. 868–886. [51] N. Chandran, D. Gupta, A. Rastogi, R. Sharma, and S. Tripathi, “Ezpc: Programmable and efficient secure two-party computation for machine learning,” in 2019 IEEE European Symposium on Security and Privacy (EuroS&P) . IEEE, 2019, pp. 496–511. [52] D. Rathee, A. Bhattacharya, R. Sharma, D. Gupta, N. Chandran, and A. Rastogi, “Secfloat: Accurate floating-point meets secure 2-party computation,” in 2022 IEEE Symposium on Security and Privacy (SP) .IEEE, 2022, pp. 576–595. [53] D. Rathee, M. Rathee, N. Kumar, N. Chandran, D. Gupta, A. Rastogi, and R. Sharma, “Cryptflow2: Practical 2-party secure inference,” in 
+
+Proceedings of the 2020 ACM SIGSAC conference on computer and communications security , 2020, pp. 325–342. [54] S. Merity, C. Xiong, and R. Socher, “Pointer sentinel mixtures,” arXiv preprint arXiv:1609.07843 , 2016. [55] M. P. Marcus et al. , “Building a large annotated corpus of english: The penn treebank,” in Computational linguistics , 1993. [56] D. Paperno et al. , “The lambada dataset: Word prediction requiring a broad discourse context,” in ACL , 2016. [57] S. Kim, A. Gholami, Z. Yao, M. W. Mahoney, and K. Keutzer, “I-bert: Integer-only bert quantization,” in International conference on machine learning . PMLR, 2021, pp. 5506–5518. [58] D. Rathee, M. Rathee, R. K. K. Goli, D. Gupta, R. Sharma, N. Chandran, and A. Rastogi, “Sirnn: A math library for secure rnn inference,” in 
+
+2021 IEEE Symposium on Security and Privacy (SP) . IEEE, 2021, pp. 1003–1020. APPENDIX 
+
+A. KV Cache Management 
+
+Algorithm 1 Noise Refresh and Concatenation of K/V auto 
+
+Require: Current caches Kauto m , V auto m ;new entries kauto m+1 , v auto m+1 ∈ Z1×d2 
+
+> p
+
+;slot count n
+
+Ensure: Updated caches Kauto m+1 , V auto m+1  
+
+> 1:
+
+Step 1: Noise Budget Check  
+
+> 2:
+
+if Cache noise budget exhausted then  
+
+> 3:
+
+Server samples a random plaintext vector r 
+
+> 4:
+
+Server computes masked share: 
+
+K/V auto share = K/V auto m − r 
+
+> 5:
+
+Server → Client: send K/V auto share  
+
+> 6:
+
+Client decrypts and re-encrypts: 
+
+K/V auto ref resh = K/V auto share  
+
+> 7:
+
+Client → Server: send K/V auto ref resh  
+
+> 8:
+
+Server reconstructs refreshed ciphertext: 
+
+K′/V ′auto m = K/V auto ref resh + r 
+
+> 9:
+
+Replace original caches with refreshed versions: 
+
+K/V auto m = K′/V ′auto m 
+
+> 10:
+
+end if  
+
+> 11:
+
+B = ⌈n/d 2⌉ 
+
+> 12:
+
+pos (m+1) = (( m+1) mod B) · d2 
+
+> 13:
+
+Step 2: Cache Concatenation (Key)  
+
+> 14:
+
+ct new = MultPlain( kauto m+1 , mask pos (m+1) ) 
+
+> 15:
+
+Kauto m+1 = Kauto m + ct new  
+
+> 16:
+
+Step 3: Cache Concatenation (Value)  
+
+> 17:
+
+ct new ← MultPlain( vauto m+1 , mask pos (m+1) ) 
+
+> 18:
+
+V auto m+1 = V auto m + ct new  
+
+> 19:
+
+return Kauto m+1 , V auto m+1 
+
+To ensure the scalability and correctness of long-sequence generation, CryptoGen implements a dual-strategy manage-ment framework as formalized in Algorithm 1. This algorithm addresses two primary bottlenecks: homomorphic noise explo-sion and memory inefficiency. 1. Lazy Noise Refreshing (Lines 1-10) The ”Lazy” strategy minimizes communication overhead by triggering a collaborative refresh only when the ciphertext’s noise budget approaches the decryption threshold.  
+
+> •
+
+The server applies a random mask r to the noisy cache 
+
+K/V auto m and sends the blinded share to the client.  
+
+> •
+
+The client decrypts and re-encrypts the data, effectively resetting the noise budget without learning the underlying plaintext. This amortization ensures that the refresh cost becomes negligible over long generation steps. 2. Slot-Aware Ciphertext Concatenation (Lines 11-19) To prevent memory explosion, we avoid storing each new token in a dedicated ciphertext.  
+
+> •
+
+Leveraging inner-diagonal encoding, the system calcu-lates the optimal slot offset pos (m + 1) based on the current cache capacity B = ⌈n/d 2⌉. 
+
+> •
+
+New keys km+1 and values vm+1 are homomorphically added into the next available slots of the existing cache ciphertext. This mechanism keeps the total number of ciphertexts nearly constant, reducing the attention com-plexity from linear growth to a significantly flatter curve.

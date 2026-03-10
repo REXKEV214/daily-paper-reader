@@ -1,0 +1,1132 @@
+Title: CyclicJudge: Mitigating Judge Bias Efficiently in LLM-based Evaluation
+
+URL Source: https://arxiv.org/pdf/2603.01865v1
+
+Published Time: Tue, 03 Mar 2026 03:35:30 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# CyclicJudge: Mitigating Judge Bias Efficiently in LLM-based Evaluation 
+
+Ziyi Zhu 1, Olivier Tieleman 1, Alexey Bukhtiyarov 1, Jinghong Chen 2
+
+> 1
+
+Slingshot AI 2Department of Engineering, University of Cambridge  
+
+> Correspondence: ziyi@slingshotai.com
+
+Abstract 
+
+LLM-as-judge evaluation has become standard practice for open-ended model assessment; however, judges exhibit systematic biases that cannot be eliminated by increasing the number of scenarios or generations. These biases are often similar in magnitude to the model differ-ences that benchmarks are designed to detect, resulting in unreliable rankings when single-judge evaluations are used. This work intro-duces a variance decomposition that partitions benchmark score variance into scenario, gener-ation, judge, and residual components. Based on this analysis, CyclicJudge , a round-robin assignment of judges, is demonstrated to be the optimal allocation strategy. It eliminates bias precisely while requiring each judge only once per cycle, maintaining the cost of single-judge evaluation. Empirical validation on MT-Bench supports all theoretical predictions. 
+
+1 Introduction 
+
+LLM-as-judge evaluation has become the de facto standard for open-ended model assessment (Zheng et al., 2023). A growing body of work documents that LLM judges are systematically biased: some models are consistently lenient, others strict, with additional position, verbosity, and self-preference effects (Zheng et al., 2023; Shi et al., 2024; Wang et al., 2024). A standard ANOVA on our data con-firms that judge main effect is highly significant for all evaluated models (§4.2). Crucially, systematic bias does not average away. Adding more test scenarios or regenerating re-sponses reduces random noise but leaves judge bias intact. The only way to eliminate judge bias is to use multiple judges whose biases cancel. Yet run-ning every judge on every item multiplies evalua-tion cost by the panel size and sacrifices generation diversity at a fixed budget. We show that CyclicJudge , a round-robin as-signment of judges to items, resolves this tension. To establish this formally, we develop a variance decomposition rooted in generalizability theory (Brennan, 2001; Shavelson and Webb, 1991) that separates benchmark score variance into scenario, generation, judge, and residual components. Our contributions are: 1. A mixed-effects model that decomposes bench-mark variance into random noise and systematic judge bias, showing they require fundamentally different remedies (§3.1–3.2). 2. A proof that round-robin cycling dominates both all-judges and random-judge strategies: it elim-inates bias while maximizing generation diver-sity at any budget (§3.3). 3. Empirical validation confirming all theoretical predictions match subsampling variance (§4). 
+
+2 Related Work 
+
+LLM judge biases and multi-judge approaches. 
+
+LLM judges exhibit systematic position bias (Wang et al., 2024; Shi et al., 2024), length bias (Dubois et al., 2024), self-preference (Wataoka et al., 2024), and cognitive biases (Koo et al., 2024); see Gu et al. (2024) for a comprehensive survey. Multi-judge panels reduce bias through cancellation (Verga et al., 2024), and psychometric reliability analy-sis shows single-shot evaluations are unreliable (Schroeder and Wood-Doughty, 2024). 
+
+Budget-constrained evaluation. Saha et al. (2026) derives optimal allocation of judge queries using multi-armed bandit theory, Luettgau et al. (2025) develops hierarchical Bayesian models with partial pooling for low-data regimes, and Miller (2024) provides formulas for standard errors and power analysis. Dorner et al. (2025) establishes fundamental impossibility results for judge-based evaluation. These works optimize allocation across items or model uncertainty within levels, but do not address the judges-versus-generations tradeoff. 1
+
+> arXiv:2603.01865v1 [cs.CL] 2 Mar 2026
+
+Benchmark reliability and generation variance. 
+
+Madaan et al. (2025) empirically measures variance across hundreds of models and benchmarks, and Alvarado Gonzalez et al. (2025) shows via ANOVA and ICC that the majority of domain slices exhibit rank inversions in single-run leaderboards. Zhang et al. (2025) proposes a hierarchical model decom-posing variance into within-prompt and between-prompt components, but does not include a judge facet. Mizrahi et al. (2024) shows that prompt para-phrasing can reverse model rankings. Our method-ology extends this line by separating systematic judge bias from random noise. 
+
+3 Methodology 
+
+3.1 Model Specification 
+
+Consider evaluating model θ on n scenarios from a dataset D of N total scenarios, with m independent generations per scenario, each scored by K judges drawn from a pool of Ktot . The same K judges score every scenario–generation cell (a crossed de-sign). We model each score as: 
+
+Xijℓ = μθ + αi + βij + γℓ + εijℓ (1) where i ∈ {1, . . . , n } indexes scenarios, j ∈{1, . . . , m } indexes generations within scenario i,and ℓ indexes the K selected judges. Each term has a distinct source: • μθ: true ability of model θ (the estimand). • αi iid 
+
+∼ (0 , σ 2
+
+> α
+
+): scenario effect—how much in-dividual scenario difficulty varies for model θ.
+
+σ2 
+
+> α
+
+absorbs the scenario ×model interaction; a dataset whose scenarios all test the same aspects of model θ equally has σ2 
+
+> α
+
+= 0 .• βij iid 
+
+∼ (0 , σ 2 
+
+> β
+
+): generation effect—variability from stochastic decoding. σ2 
+
+> β
+
+is model-specific; a deterministic model has σ2 
+
+> β
+
+= 0 .• γℓ: judge bias—a fixed constant for each judge, with centering constraint PKtot  
+
+> ℓ=1
+
+γℓ = 0 and pop-ulation dispersion σ2 
+
+> γ
+
+= K−1
+
+> tot
+
+P 
+
+> ℓ
+
+γ2 
+
+> ℓ
+
+. It is fixed rather than random because judge tendencies are persistent properties documented in prior work (Wang et al., 2024; Koo et al., 2024). • εijℓ iid 
+
+∼ (0 , σ 2 
+
+> ε
+
+): residual—captures judge-level noise and all factor interactions (Appendix F). The random effects (α, β, ε ) are mutually indepen-dent with finite second moments; no distributional assumptions are required—only first and second moments enter the decomposition. The n scenarios and K judges are each drawn by simple random sampling without replacement, independently of each other and of all random effects. All two-way and three-way interactions are ab-sorbed into εijℓ (Appendix F). 
+
+3.2 Variance Decomposition 
+
+The benchmark score is the grand mean ¯X =
+
+> 1
+> nmK
+
+P 
+
+> i,j,ℓ
+
+Xijℓ , which decomposes as ¯X = μθ +¯α+ ¯β +¯ γ + ¯ ε, where each bar denotes a hierarchical sample mean. 
+
+Proposition 1 (Variance decomposition) .
+
+Var( ¯X) = σ2
+
+> α
+
+n + σ2
+
+> β
+
+nm + σ2
+
+> ε
+
+nmK | {z }
+
+> random noise
+
++ σ2
+
+> γ
+
+K · Ktot − KKtot − 1
+
+| {z } 
+
+> Vγ: judge bias
+
+(2) Each noise term shrinks with more data at or above its hierarchy level. The bias term Vγ re-sponds only to K and vanishes exactly at K = Ktot .The proof uses the law of total variance, condition-ing on the judge selection, combined with a finite population correction for sampling K from Ktot 
+
+centered bias values (Appendix A). 
+
+3.3 Allocation Strategies 
+
+Given a per-scenario budget of B judge calls, the design question is how to allocate judges across generations. The scenario term σ2
+
+> α
+
+/n is fixed once scenarios are chosen; we compare three strategies for the remaining variance. 
+
+Strategy A: All judges per generation. Use all 
+
+Ktot judges for each of m = B/K tot generations. Judge bias cancels exactly ( ¯γ = 0 ): 
+
+VA(B) = Ktot σ2 
+
+> β
+
++ σ2
+
+> ε
+
+nB (3) 
+
+Strategy B: Random single judge per genera-tion. Use m = B generations, each scored by one uniformly random judge. The random bias acts as additional noise: 
+
+VB (B) = σ2 
+
+> β
+
++ σ2 
+
+> γ
+
++ σ2
+
+> ε
+
+nB (4) 
+
+Strategy C: CyclicJudge (round-robin). Use 
+
+m = B generations ( B divisible by Ktot ), assign-ing judge j mod Ktot to generation j. Bias cancels exactly while generation count matches Strategy B: 
+
+VC (B) = σ2 
+
+> β
+
++ σ2
+
+> ε
+
+nB (5) 2With one generation per scenario ( m = 1 ), the same variance and bias cancellation are achieved by cycling judges across scenarios instead: as-sign judge i mod Ktot to scenario i (n divisible by Ktot ). 
+
+Dominance of CyclicJudge. Direct comparison shows VC ≤ min( VA, V B ):
+
+VA − VC = (Ktot − 1) σ2
+
+> β
+
+nB ≥ 0 (6) 
+
+VB − VC = σ2
+
+> γ
+
+nB ≥ 0 (7) 
+
+VA − VB = (Ktot − 1) σ2 
+
+> β
+
+− σ2
+
+> γ
+
+nB (8) All three gaps are O(1 /B ), so the practical ad-vantage of CyclicJudge is largest at small budgets, where most benchmarks operate. The ranking of A vs. B depends on whether (Ktot −1) σ2 
+
+> β
+
+≷ σ2 
+
+> γ
+
+: all judges beat random only when judge bias is large relative to generation variance. Because scenario variance dominates the per-observation budget (Table 2), maximizing the num-ber of distinct scenarios ( m = 1 generation each) always reduces total variance (Appendix D). 
+
+4 Experiments 
+
+4.1 Domain and Data 
+
+We apply our methodology to MT-Bench (Zheng et al., 2023), a multi-turn conversational bench-mark with 80 two-turn questions spanning 8 cate-gories. We evaluate three models—Qwen 2.5 7B Instruct (Yang et al., 2024), Llama 3.3 70B Instruct (Grattafiori et al., 2024), and GPT-5.2—generating 
+
+m = 10 independent conversations per scenario. Each generation is scored by Ktot = 5 LLM judges (Qwen 2.5 7B Instruct, Llama 3.3 70B Instruct, GPT-5.2, Gemini 3 Flash, Claude Sonnet 4.6) using the official single-answer grading prompt (scores 1–10 per turn, averaged). Three of the five judges coincide with the evaluated models, enabling direct observation of self-preference effects. This yields a fully crossed design with 4,000 scores per model, 12,000 total. Variance components are estimated via crossed ANOVA (Appendix B) with 95% boot-strap CIs (2,000 scenario-level resamples). 
+
+4.2 Judge Bias Estimates 
+
+We test whether judge identity has a significant effect using a two-way ANOVA, treating each scenario–generation pair as a subject crossed with 
+
+Table 1: Mean score ± 95% CI at the default operating point ( n=80 , m=1 , K=1 ). Bold : highest score per judge column. The ranking is judge-dependent: Qwen rates itself first, reversing the consensus ordering. 
+
+Judge Model Qwen Llama GPT GPT 7.91 ± 0.16 8.81 ± 0.11 8.67 ± 0.12 
+
+Llama 7.87 ± 0.17 8.71 ± 0.11 6.90 ± 0.21 Qwen 8.02 ± 0.16 8.39 ± 0.16 6.10 ± 0.20 Qwen 2.5 7B           
+
+> Llama 3.3 70B
+> GPT-5.2
+> Evaluated model
+> Qwen 2.5 7B
+> Llama 3.3 70B
+> GPT-5.2
+> Gemini 3 Flash
+> Claude Sonnet 4.6
+> Judge model
+> +0.887 +0.009 -0.808
+> +1.257 +0.848 +0.091
+> -1.040 -0.962 -0.044
+> +0.032 +0.711 +0.991
+> -1.136 -0.607 -0.230
+> 1.0
+> 0.5
+> 0.0
+> 0.5
+> 1.0
+> Judge bias
+
+Figure 1: Estimated judge biases ˆγℓ = ¯X·· ℓ − ¯X··· for each judge–model pair. 
+
+K judges. The judge main effect is highly signif-icant for all three models: F (4 , 3196) = 638 for Qwen, 446 for Llama, and 602 for GPT-5.2, all with p < 10 −300 .Figure 1 shows the estimated per-judge bias 
+
+ˆγℓ = ¯X·· ℓ − ¯X··· for each judge–model pair. GPT-5.2 and Claude Sonnet 4.6 are consistently strict (negative bias), while Llama 3.3 70B is consistently lenient. For a single judge, the bias toward differ-ent models can differ by up to ≈1.7 points on the 1–10 scale (Figure 1). Since competitive models on current leaderboards are routinely separated by 
+
+< 0.5 points (Chiang et al., 2024), a single-judge evaluation can easily reverse rankings. Table 1 illustrates this concretely: at the default operating point ( n=80 , m=1 , K=1 ), using Qwen as the sole judge ranks Qwen first—despite being the weakest model by the consensus of all other judges—while the GPT-5.2 judge agrees on the correct ordering but compresses all non-self scores below 7. Different single-judge evaluations thus produce not only different scores but different rank-ings, a consequence of the self-preference bias doc-umented by Wataoka et al. (2024). 3Table 2: Variance component estimates. Middle: per-observation variances. Bottom: contribution to bench-mark score variance Var( ¯X) at the default operating point ( n=80 , m=1 , K=1 ). 
+
+Component Qwen Llama GPT 
+
+ˆμθ (mean score) 7.13 7.87 8.72 
+
+Per-observation variance 
+
+ˆσ2 
+
+> α
+
+(scenario) 1.530 0.882 0.634 
+
+ˆσ2 
+
+> β
+
+(generation) 0.266 0.238 0.076 
+
+ˆσ2 
+
+> γ
+
+(judge) 0.947 0.503 0.339 
+
+ˆσ2 
+
+> ε
+
+(residual) 1.486 1.130 0.564 
+
+Contribution to Var( ¯X) (×10 −3)
+
+ˆσ2
+
+> α
+
+/n 19.13 11.03 7.92 
+
+ˆσ2 
+
+> β
+
+/nm 3.33 2.97 0.94 
+
+ˆσ2 
+
+> γ
+
+· FPC /K 946.50 502.50 339.00 
+
+ˆσ2 
+
+> ε
+
+/nmK 18.57 14.12 7.05 
+
+4.3 Variance Components 
+
+Table 2 reports the estimated variance components with 95% bootstrap CIs. The per-observation val-ues are analogous to population variances; to obtain each component’s contribution to benchmark score variance Var( ¯X), divide by the corresponding de-nominator in Eq. 2. Scenario variance ˆσ2 
+
+> α
+
+is the largest per-observation component and scales inversely with model capability: Qwen 2.5 7B has the high-est value (1.530), reflecting uneven performance across scenarios characteristic of smaller models. Generation variance ˆσ2 
+
+> β
+
+is moderate for Qwen and Llama but near zero for GPT-5.2, consistent with the observation that stronger models produce more deterministic outputs; as frontier models increas-ingly rely on RL post-training (Matsutani et al., 2025), generation variance may shrink further. Judge bias ˆσ2 
+
+> γ
+
+is notably larger for weaker mod-els since judges disagree more when scoring lower-quality outputs and self-preference effects are more consequential (Table 1). At the default operating point ( n=80 , m=1 , K=1 ), the benchmark-level variance is dominated by judge-bias ( >94%). 
+
+4.4 Strategy Comparison 
+
+Figure 2 validates the three allocation strategies via 5,000 subsampling repetitions at each budget level (Ktot -multiples). Markers show empirical variance; dashed lines show exact predictions from empir-ical pool variances (Appendix E). The O(10 −3)
+
+scale arises from averaging O(1) per-observation components over nB cells (Table 2). To calibrate: 
+
+Var( ¯X) = 7 × 10 −3 corresponds to a standard de-viation of ≈ 0.08 on the 1–10 scoring scale, or a 10 20 30 40 50              
+
+> 10 4
+> 10 3
+> Var(benchmark score)  Qwen 2.5 7B
+> 10 20 30 40 50
+> Budget per scenario
+> Llama 3.3 70B
+> 10 20 30 40 50
+> GPT-5.2
+> All 5 judges Random 1 judge Cycle 5 judges Theory
+
+Figure 2: Benchmark score variance Var( ¯X) vs. per-scenario budget for three strategies: all judges (A), ran-dom single judge (B), and CyclicJudge (C). 
+
+95% CI of ±0.16 —meaningful given that model score differences on MT-Bench are often < 0.5
+
+points (§4.2). At B=5 , switching from random to cycling cuts variance by ∼30–35% across models. Predictions match the empirical results precisely. CyclicJudge dominates everywhere since it elimi-nates judge bias while maximizing generation di-versity. The A vs. B ranking is model-dependent: for Qwen and Llama, high generation variance makes random judging preferable to all-judges; for GPT-5.2, low generation variance reverses the com-parison. 
+
+5 Conclusion 
+
+Systematic judge bias is a persistent property of LLM evaluators that does not diminish with more scenarios or generations. The conventional multi-judge approach, in which every judge scores every item, significantly increases costs and reduces gen-eration diversity. CyclicJudge addresses this challenge by employ-ing a straightforward round-robin assignment, en-suring that biases are neutralized as each judge eval-uates an equal number of items, while maintaining the same per-item cost as single-judge evaluation. Variance decomposition demonstrates that this cy-cling approach outperforms both alternatives at all budget levels, regardless of the model’s variance profile. The method requires no model-specific tun-ing and can be implemented as a direct substitute for single-judge pipelines, providing practitioners with a cost-neutral path to more reliable LLM eval-uation. 
+
+Limitations 
+
+The linear random effects model is an approxi-mation for bounded ordinal outcomes; a GLMM would be more principled but complicates closed-form results. Our judge pool of Ktot = 5 limits exploration of larger panels. The “maximize sce-4narios” recommendation assumes scenarios are in-terchangeable draws from the dataset; in practice, some scenarios may be more informative than oth-ers, and item-selection methods (Maia Polo et al., 2024) could alter the tradeoff. The allocation anal-ysis assumes a balanced design; extensions to adap-tive designs remain future work. Finally, our bud-get analysis treats all judge calls as equal cost; in practice, judges vary widely in price and latency, so a cost-weighted allocation that accounts for per-model pricing would be needed for real deployment decisions. 
+
+References 
+
+Miguel Angel Alvarado Gonzalez, Michelle Bruno Her-nandez, Miguel Angel Peñaloza Perez, Bruno Lopez Orozco, Jesus Tadeo Cruz Soto, and Sandra Malagon. 2025. Do repetitions matter? strength-ening reliability in LLM evaluations. Preprint ,arXiv:2509.24086. Robert L. Brennan. 2001. Generalizability Theory .Springer, New York. Wei-Lin Chiang, Lianmin Zheng, Ying Sheng, Anasta-sios Nikolas Angelopoulos, Tianle Li, Dacheng Li, Hao Zhang, Banghua Zhu, Michael Jordan, Joseph E. Gonzalez, and Ion Stoica. 2024. Chatbot arena: An open platform for evaluating LLMs by human prefer-ence. In Proceedings of the 41st International Con-ference on Machine Learning .Florian E. Dorner, Vivian Y. Nastl, and Moritz Hardt. 2025. Limits to scalable evaluation at the frontier: LLM as judge won’t beat twice the data. In Interna-tional Conference on Learning Representations .Yann Dubois, Balázs Galambosi, Percy Liang, and Tat-sunori B. Hashimoto. 2024. Length-controlled Al-pacaEval: A simple way to debias automatic evalua-tors. Preprint , arXiv:2404.04475. Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schel-ten, Alex Vaughan, Amy Yang, Angela Fan, Anirudh Goyal, Anthony Hartshorn, Aobo Yang, Archi Mi-tra, Archie Sravankumar, Artem Korenev, Arthur Hinsvark, and 537 others. 2024. The Llama 3 herd of models. Preprint , arXiv:2407.21783. Jiawei Gu, Xuhui Jiang, Zhichao Shi, Hexiang Tan, Xue-hao Zhai, Chengjin Xu, Yinghan Li, Jie Liu, Yiwen Li, Yicheng Shen, Jian Jiang, Shengyao Guo, and Pengjun Xie. 2024. A survey on LLM-as-a-judge. 
+
+Preprint , arXiv:2411.15594. Ryan Koo, Minhwa Lee, Vipul Raheja, Jong Inn Park, Zae Myung Kim, and Dongyeop Kang. 2024. Bench-marking cognitive biases in large language models as evaluators. In Findings of the Association for Com-putational Linguistics: ACL 2024 .Lennart Luettgau, Alexander Coppock, Yves Dubois, Christopher Summerfield, and Cozmin Ududec. 2025. HiBayES: A hierarchical Bayesian model-ing framework for AI evaluation statistics. Preprint ,arXiv:2505.05602. Lovish Madaan, Samarth Singh, Rylan Schaeffer, An-drew Poulton, Sanmi Koyejo, Pontus Stenetorp, Sha-ran Narang, and Dieuwke Hupkes. 2025. Quantify-ing variance in evaluation benchmarks. In Interna-tional Conference on Learning Representations .Felipe Maia Polo, Lucas Weber, Leshem Choshen, Yuekai Sun, Gongjun Xu, and Mikhail Yurochkin. 2024. tinyBenchmarks: Evaluating LLMs with fewer examples. In Proceedings of the 41st International Conference on Machine Learning .Kohsei Matsutani, Shota Takashiro, Gouki Minegishi, Takeshi Kojima, Yusuke Iwasawa, and Yutaka Matsuo. 2025. RL squeezes, SFT expands: Acomparative study of reasoning LLMs. Preprint ,arXiv:2509.21128. Evan Miller. 2024. Adding error bars to evals: Astatistical approach to language model evaluations. 
+
+Preprint , arXiv:2411.00640. Moran Mizrahi, Guy Kaplan, Dan Malkin, Rotem Dror, Dafna Shahaf, and Gabriel Stanovsky. 2024. State of what art? A call for multi-prompt LLM evaluation. 
+
+Transactions of the Association for Computational Linguistics , 12. Aadirupa Saha, Aniket Wagde, and Branislav Kve-ton. 2026. LLM-as-judge on a budget. Preprint ,arXiv:2602.15481. Kayla Schroeder and Zach Wood-Doughty. 2024. Can you trust LLM judgments? reliability of LLM-as-a-judge. Preprint , arXiv:2412.12509. Richard J. Shavelson and Noreen M. Webb. 1991. Gen-eralizability Theory: A Primer . Sage Publications, Newbury Park, CA. Lin Shi, Chiyu Ma, Wenhua Liang, Xingjian Diao, We-icheng Ma, and Soroush Vosoughi. 2024. Judging the judges: A systematic study of position bias in pairwise comparison with LLM-as-a-judge. Preprint ,arXiv:2406.07791. Pat Verga, Sebastian Hofstatter, Sophia Althammer, Yix-uan Su, Aleksandra Leontiadis, Gautier Izacard, and Fabio Petroni. 2024. Replacing judges with juries: Evaluating LLM generations with a panel of diverse models. Preprint , arXiv:2404.18796. Peiyi Wang, Lei Li, Liang Chen, Dawei Zhu, Binghuai Lin, Yunbo Cao, Qi Liu, Tianyu Liu, and Zhifang Sui. 2024. Large language models are not fair evaluators. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics .
+
+5Koki Wataoka, Tsubasa Takahashi, and Ryokan Ri. 2024. Self-preference bias in LLM-as-a-judge. 
+
+Preprint , arXiv:2410.21819. An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayi-heng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Ji-axi Yang, Jingren Zhou, Junyang Lin, Kai Dang, and 24 others. 2024. Qwen2.5 technical report. Preprint ,arXiv:2412.15115. Yifan Zhang, Dingwen Cai, and Xingjian Chen. 2025. Beyond the singular: Revealing the value of multi-ple generations in benchmark evaluation. Preprint ,arXiv:2502.08943. Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Stoica. 2023. Judging LLM-as-a-judge with MT-Bench and Chatbot Arena. In Advances in Neural Information Processing Sys-tems , volume 36. 
+
+A Proof of Proposition 1 
+
+We prove the variance decomposition in three steps: (1) grand mean decomposition, (2) law of total variance, and (3) finite population correction for judge bias. 
+
+Step 1: Grand mean decomposition. Starting from Xijℓ = μθ + αi + βij + γℓ + εijℓ , we average hierarchically. 
+
+Average over K judges within generation (i, j ).
+
+The terms μθ, αi, and βij are constant across judges: 
+
+¯Xij · = 1
+
+K
+
+X
+
+> ℓ∈SJ
+
+Xijℓ 
+
+= μθ + αi + βij + 1
+
+K
+
+X
+
+> ℓ∈SJ
+
+γℓ
+
+| {z }
+
+> ¯γ
+
++ 1
+
+K
+
+X
+
+> ℓ∈SJ
+
+εijℓ 
+
+| {z }
+
+> ¯εij
+
+(9) The judge bias mean ¯γ is the same for every 
+
+(i, j ) cell because the same SJ evaluates all cells (crossed design). 
+
+Average over m generations within scenario i.
+
+¯Xi·· = μθ + αi + 1
+
+m
+
+> m
+
+X
+
+> j=1
+
+βij 
+
+| {z }
+
+> ¯βi
+
++¯ γ + 1
+
+mK 
+
+X
+
+> j,ℓ
+
+εijℓ 
+
+| {z }
+
+> ¯εi·
+
+(10) 
+
+Average over n scenarios. 
+
+¯X = μθ + ¯ γ + 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+αi
+
+| {z }
+
+> ¯α
+
++ 1
+
+nm 
+
+X
+
+> i,j
+
+βij 
+
+| {z }
+
+> ¯β
+
++ 1
+
+nmK 
+
+X
+
+> i,j,ℓ
+
+εijℓ 
+
+| {z }
+
+> ¯ε
+
+(11) 
+
+Step 2: Law of total variance. Let S denote the judge selection. By the law of total variance: 
+
+Var( ¯X) = E Var( ¯X | S ) + Var  E[ ¯X | S ]
+
+(12) Conditioning on S:
+
+Term (I): Conditional variance. Given S, the bias ¯γ is a constant. The remaining randomness comes from ¯α, ¯β, ¯ε, which are means of mutually independent zero-mean random variables: 
+
+Var( ¯X | S ) = σ2
+
+> α
+
+n + σ2
+
+> β
+
+nm + σ2
+
+> ε
+
+nmK (13) This does not depend on S, so E[Var( ¯X | S )] 
+
+equals the same expression. 
+
+Term (II): Variance of conditional mean. Since 
+
+E[ αi] = E[ βij ] = E[ εijℓ ] = 0 :
+
+E[ ¯X | S ] = μθ+¯ γ =⇒ Var  E[ ¯X | S ] = Var(¯ γ)
+
+(14) 
+
+Step 3: Finite population correction. ¯γ is a sam-ple mean of K values drawn without replacement from the centered population {γ1, . . . , γ Ktot }.
+
+Lemma 2 (Finite population correction) . Let 
+
+a1, . . . , a P satisfy P 
+
+> i
+
+ai = 0 with σ2 
+
+> a
+
+=
+
+P −1 P 
+
+> i
+
+a2 
+
+> i
+
+. If S is a simple random sample of size k drawn without replacement: 
+
+Var 1
+
+k
+
+X
+
+> i∈S
+
+ai
+
+!
+
+= σ2
+
+> a
+
+k · P − kP − 1 (15) 
+
+Proof. Define indicator variables Zi ∈ { 0, 1} for 
+
+i = 1 , . . . , P , where Zi = 1 if and only if element 
+
+i is selected in the sample S. The sample sum is 
+
+T = PPi=1 Ziai, and the sample mean is ¯aS =
+
+T /k .Under simple random sampling without replace-ment (SRSWOR) of size k from P elements, each element is selected with probability Pr( Zi = 1) = 
+
+k/P , so: 
+
+Var( Zi) = kP
+
+
+
+1 − kP
+
+
+
+= k(P −k)
+
+P 2 (16) 6For i̸ = j, the joint selection probability is 
+
+Pr( Zi=1 , Z j =1) = k(k−1)    
+
+> P(P−1)
+
+, giving: 
+
+Cov( Zi, Z j ) = E[ ZiZj ] − E[ Zi] E[ Zj ]= k(k−1) 
+
+P (P −1) − k2
+
+P 2 = − k(P −k)
+
+P 2(P −1) 
+
+(17) Since T = P 
+
+> i
+
+Ziai and the ai are constants, expanding the variance gives: 
+
+Var( T )=
+
+> P
+
+X
+
+> i=1
+
+a2 
+
+> i
+
+Var( Zi) + 2 X
+
+> i<j
+
+aiaj Cov( Zi, Z j )= k(P −k)
+
+P 2
+
+X
+
+> i
+
+a2 
+
+> i
+
+− k(P −k)
+
+P 2(P −1) · 2X
+
+> i<j
+
+aiaj
+
+(18) We now simplify each factor. By definition, P 
+
+> i
+
+a2 
+
+> i
+
+= P σ 2
+
+> a
+
+. For the cross-term, the centering constraint P 
+
+> i
+
+ai = 0 implies: 
+
+0 = 
+
+X 
+
+> i
+
+ai
+
+2
+
+= X
+
+> i
+
+a2 
+
+> i
+
++ 2 X
+
+> i<j
+
+aiaj
+
+=⇒ 2X
+
+> i<j
+
+aiaj = −P σ 2
+
+> a
+
+(19) Substituting both identities into (18) (the two negatives in the second term yield a positive contri-bution): 
+
+Var( T ) = k(P −k)
+
+P 2 · P σ 2 
+
+> a
+
++ k(P −k)
+
+P 2(P −1) · P σ 2
+
+> a
+
+= k(P −k) σ2
+
+> a
+
+P −1 (20) Finally, dividing by k2:
+
+Var(¯ aS ) = Var( T )
+
+k2 = σ2
+
+> a
+
+k · P −kP −1 (21) The FPC factor equals 1 when k = 1 and 0 when 
+
+k = P (biases cancel exactly). Applying to judge biases ( aℓ = γℓ, P = Ktot , k = K): 
+
+Var(¯ γ) = σ2
+
+> γ
+
+K · Ktot − KKtot − 1 (22) Combining Terms (I) and (II) completes the proof. 
+
+B Estimation of Variance Components 
+
+Because judges are crossed (not nested), we use a crossed ANOVA. 
+
+Residual noise. The residual mean square esti-mates σ2 
+
+> ε
+
+:
+
+ˆσ2 
+
+> ε
+
+= MS W
+
+=
+
+P
+
+> i,j,ℓ
+
+(Xijℓ − ¯Xij · − ¯X·· ℓ + ¯X··· )2
+
+(nm − 1)( K − 1) (23) 
+
+Generation variance. The between-generation mean square: 
+
+MS G = Kn(m − 1) 
+
+X
+
+> i,j
+
+( ¯Xij · − ¯Xi·· )2 (24) with E[MS G] = σ2 
+
+> ε
+
++ Kσ 2 
+
+> β
+
+. Judge bias drops out because the same judges evaluate every generation within a scenario. 
+
+Scenario variance. The between-scenario mean square: 
+
+MS S = mK n − 1
+
+X
+
+> i
+
+( ¯Xi·· − ¯X··· )2 (25) with E[MS S ] = σ2 
+
+> ε
+
++ Kσ 2 
+
+> β
+
++ mK σ 2
+
+> α
+
+.
+
+Method-of-moments estimators. 
+
+ˆσ2 
+
+> β
+
+= (MS G − MS W )/K (26) 
+
+ˆσ2 
+
+> α
+
+= (MS S − MS G)/(mK ) (27) 
+
+Judge bias. We estimate ˆγℓ = ¯X·· ℓ − ¯X··· and compute: 
+
+ˆσ2 
+
+> γ
+
+= 1
+
+Ktot 
+
+X
+
+> ℓ
+
+ˆγ2 
+
+> ℓ
+
+− ˆσ2
+
+> ε
+
+nm · Ktot − 1
+
+Ktot 
+
+(28) 
+
+C Allocation Strategy Derivations 
+
+We derive the benchmark score variance for each strategy. The n scenarios are fixed, so σ2
+
+> α
+
+/n con-tributes a constant offset and is excluded. 
+
+Strategy A: All Ktot judges per generation. 
+
+Budget B = mK tot , so m = B/K tot . Per-scenario mean: 
+
+¯Xi = μθ + αi + 1
+
+m
+
+X
+
+> j
+
+βij + 1
+
+Ktot 
+
+X
+
+> ℓ
+
+γℓ
+
+| {z }
+
+> = 0
+
++ 1
+
+mK tot 
+
+X
+
+> j,ℓ
+
+εijℓ (29) Judge bias cancels exactly. The benchmark vari-ance from generation and residual noise: 
+
+VA = 1
+
+n
+
+σ2
+
+> β
+
+m + σ2
+
+> ε
+
+mK tot 
+
+!
+
+= Ktot σ2 
+
+> β
+
++ σ2
+
+> ε
+
+nB (30) 7Strategy B: Random single judge per generation. 
+
+Budget B = m, each generation scored by ℓj ∼
+
+Uniform ({1, . . . , K tot }). Per-scenario mean: 
+
+¯Xi = μθ + αi + 1
+
+m
+
+X
+
+> j
+
+ βij + γℓj + εijℓ j
+
+ (31) Each term in the sum is independent with variance 
+
+σ2 
+
+> β
+
++ σ2 
+
+> γ
+
++ σ2 
+
+> ε
+
+:
+
+VB = σ2 
+
+> β
+
++ σ2 
+
+> γ
+
++ σ2
+
+> ε
+
+nB (32) 
+
+Strategy C: Round-robin cycling. Budget B =
+
+m (multiple of Ktot ), generation j scored by judge 
+
+j mod Ktot . Each judge appears m/K tot times, so bias cancels: 
+
+1
+
+m
+
+> m
+
+X
+
+> j=1
+
+γj mod Ktot = 1
+
+Ktot 
+
+> Ktot
+
+X
+
+> ℓ=1
+
+γℓ = 0 (33) The residuals for different j are independent with variance σ2 
+
+> ε
+
+:
+
+VC = σ2 
+
+> β
+
++ σ2
+
+> ε
+
+nB (34) 
+
+D Scenario Coverage 
+
+The strategies above fix n and optimize the per-scenario budget. A complementary question is how to split a total generation budget Bgen = nm be-tween scenarios and generations per scenario. Un-der cycling, substituting n = Bgen /m into Eq. 5 gives: 
+
+VC (Bgen , m ) = m σ 2 
+
+> α
+
++ σ2 
+
+> β
+
++ σ2
+
+> ε
+
+Bgen 
+
+(35) This is linear in m with positive slope σ2
+
+> α
+
+/B gen ,so variance is minimized at m = 1 , maximizing the number of distinct scenarios up to the dataset size N . The same monotonicity holds for Strate-gies A and B. Once the scenario pool is exhausted (n = N ), excess budget should go to additional generations. 
+
+E Exact Bootstrap Predictions 
+
+The allocation formulas in §3.3 assume infinite-population generation draws. When validating via bootstrap subsampling from a finite pool of 
+
+mmax observed generations, we compute exact pre-dictions using the empirical pool variances. For all three strategies, the subsampling observations within each scenario are i.i.d. draws from the rel-evant pool, so V (B) = C/ (nB ) where C is the pool variance. 
+
+Strategy A. Each draw is a generation-level mean ¯Xig ·, with m = B/K tot draws per scenario. The pool variance is: 
+
+CA = Ktot · 1
+
+n
+
+X
+
+> i
+
+1
+
+mmax 
+
+X
+
+> g
+
+( ¯Xig · − ¯Xi·· )2 (36) 
+
+Strategy B. Each draw is a single cell Xigℓ with generation and judge chosen uniformly at random, with m = B draws per scenario: 
+
+CB = 1
+
+n
+
+X
+
+> i
+
+1
+
+mmax Ktot 
+
+X
+
+> g,ℓ
+
+(Xigℓ − ¯Xi·· )2 (37) 
+
+Strategy C. Each judge ℓ gets B/K tot indepen-dent draws from its column; the per-scenario mean averages these Ktot independent sub-means. The relevant pool variance is the within-column genera-tion variance: 
+
+CC = 1
+
+nK tot 
+
+X
+
+> i,ℓ
+
+1
+
+mmax 
+
+X
+
+> g
+
+(Xigℓ − ¯Xi·ℓ)2 (38) These empirical constants converge to the pop-ulation formulas (Eqs. 3–5) as mmax → ∞ , but for finite mmax they account for the bias in plug-in variance estimates (the (mmax −1) /mmax correc-tion) and the fact that the crossed ANOVA residual uses global judge centering while CC uses within-scenario-judge centering. 
+
+F Omitted Interactions 
+
+A full crossed three-factor design has 23 = 8
+
+terms (constant, three main effects, three two-way interactions, one three-way). Our model retains the constant and three main effects, ab-sorbing all interactions into εijℓ : (i) generations are nested within scenarios, not crossed, so the scenario ×generation “interaction” is confounded with βij ; (ii) with one score per (i, j, ℓ ) cell, the three-way interaction is aliased with the residual; (iii) the scenario ×judge interaction (αγ )iℓ , while estimable, adds n(Ktot −1) parameters and enters the allocation analysis only through the residual— which our empirical predictions (§4) capture with-out parametric assumptions. 8

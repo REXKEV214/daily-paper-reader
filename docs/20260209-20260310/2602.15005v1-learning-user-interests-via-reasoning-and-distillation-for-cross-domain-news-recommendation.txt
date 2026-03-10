@@ -1,0 +1,416 @@
+Title: Learning User Interests via Reasoning and Distillation for Cross-Domain News Recommendation
+
+URL Source: https://arxiv.org/pdf/2602.15005v1
+
+Published Time: Tue, 17 Feb 2026 03:22:42 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# Learning User Interests via Reasoning and Distillation for Cross-Domain News Recommendation 
+
+Mengdan Zhu 1,2 * Yufan Zhao 1 Tao Di 1 Yulan Yan 1 Liang Zhao 2
+
+> 1
+
+Microsoft 2Emory University 
+
+{mengdan.zhu, liang.zhao}@emory.edu 
+
+{Yufan.Zhao, Tao.Di, yulanyan}@microsoft.com 
+
+Abstract 
+
+News recommendation plays a critical role in online news platforms by helping users dis-cover relevant content. Cross-domain news rec-ommendation further requires inferring user’s underlying information needs from heteroge-neous signals that often extend beyond direct news consumption. A key challenge lies in moving beyond surface-level behaviors to cap-ture deeper, reusable user interests while main-taining scalability in large-scale production sys-tems. In this paper, we present a reinforce-ment learning framework that trains large lan-guage models to generate high-quality lists of interest-driven news search queries from cross-domain user signals. We formulate query-list generation as a policy optimization problem and employ GRPO with multiple reward sig-nals. We systematically study two compute di-mensions: inference-time sampling and model capacity, and empirically observe consistent improvements with increased compute that ex-hibit scaling-like behavior. Finally, we perform on-policy distillation to transfer the learned pol-icy from a large, compute-intensive teacher to a compact student model suitable for scalable deployment. Extensive offline experiments, ab-lation studies and large-scale online A/B tests in a production news recommendation system demonstrate consistent gains in both interest modeling quality and downstream recommen-dation performance. 
+
+1 Introduction 
+
+Personalized news recommendation plays a cen-tral role in modern online news platforms (Das et al., 2007; Lavie et al., 2010) by helping users efficiently discover relevant content under severe information overload. Large-scale news services stream tens of thousands of articles from diverse sources every day, far exceeding what users can manually consume. As a result, effective recom-mendation systems are critical for matching user 
+
+> *Work done during internship at Microsoft.
+
+interests, improving engagement, and enabling scal-able content discovery in online news ecosystems (IJntema et al., 2010). Recent advances in large language models (LLMs) have further expanded the design space of recommendation systems (Wu et al., 2024). Ow-ing to their strong reasoning ability (Wei et al., 2023), rich world knowledge, and semantic gen-eralization capacity (Shehmir and Kashef, 2025), LLMs offer new opportunities to move beyond traditional collaborative filtering and embedding-based approaches that primarily rely on historical interaction similarity. In contrast, LLMs can rea-son over heterogeneous user signals and generate semantically meaningful representations that cap-ture higher-level interests, enabling more flexible, diverse, and potentially long-term-oriented recom-mendation strategies (Zhang et al., 2025a). The limitations of the traditional embedding-based cross-domain recommendation methods are that they are hard to learn reasonable and person-alized embeddings for all users (Zhu et al., 2021), and collaborative filtering methods often fail to capture deeper sequential signals (He et al., 2017). However, cross-domain recommendation demands deeper user understanding beyond shallow behav-ior patterns. Our approach that leverages LLMs to reason over heterogeneous user signals could effectively addresses these limitations. We reformulate cross-domain interest discov-ery as a query-list generation problem for news recommendation. Given heterogeneous user sig-nals from multiple user interaction domains, we train an instruction-tuned LLM to generate lists of news search queries that represent reusable user interests. The model is optimized using Group Relative Policy Optimization (GRPO) with five re-ward signals, including retrieval alignment, interest coverage, query specificity, intra-list diversity, and structural validity. We systematically study the effect of additional 1
+
+> arXiv:2602.15005v1 [cs.CL] 16 Feb 2026
+
+compute along two dimensions: inference-time sampling and model capacity . Increasing either dimension consistently improves interest quality and downstream retrieval performance, exhibiting clear scaling-like behavior. To make the approach practical for online serving, we further apply on-policy distillation. This transfers the learned policy from a large teacher model to a compact student model with low latency and high throughput. This work makes the following contributions: • Scaling properties of LLMs for interest mod-eling under noisy signals. We show that, when trained with multiple product-aligned reward models, our models can effectively infer reusable user interests from heterogeneous and noisy cross-domain signals. Moreover, both increas-ing model capacity (space scaling) and inference-time sampling (time scaling) lead to consistent, scaling-law–like improvements in interest quality and downstream retrieval performance. • On-policy distillation for scalable interest gen-eration. We propose an on-policy distillation framework that transfers the learned, compute-intensive LLM policy into a compact student model that performs lightweight reasoning to generate query lists. The distilled model pre-serves most of the interest modeling and re-trieval gains while enabling low-latency, high-throughput serving in production systems. • Validation on offline evaluations and online A/B tests. We demonstrate the effectiveness of the proposed approach through comprehen-sive offline evaluation and controlled online A/B tests, showing consistent improvements in inter-est modeling quality and downstream recommen-dation performance. To the best of our knowledge, this work represents a pioneering deployment of a reasoning-driven re-inforcement learning framework for user interest modeling in a large-scale commercial news recom-mendation system. 
+
+2 Related Work 
+
+User Interest Modeling and Sequential Recom-mendation. User interest modeling typically learn user preferences from historical interactions such as clicks, queries, or browsing histories. The field has transitioned from traditional collaborative filter-ing to deep sequential modeling. Early approaches utilized RNN architectures (Okura et al., 2017; Hi-dasi et al., 2015) to capture temporal patterns. The adoption of self-attention mechanisms marked a significant shift, enabling models to capture long-range item dependencies (Kang and McAuley, 2018; Sun et al., 2019). In the context of news recommendation, models like NRHUB (Wu et al., 2019) and hierarchical frameworks (Qi et al., 2021) were developed to capture multi-level user inter-ests. For large-scale industrial graphs, PinSage (Pal et al., 2020) demonstrated the power of random-walk graph convolutions. More recently, the HSTU (Zhai et al., 2024) framework, have scaled these concepts to trillion-parameter generative transduc-ers for industry-scale recommendations. 
+
+LLMs for RecSys. LLMs have recently been ex-plored for recommendation systems (RecSys) (Wu et al., 2024). LLMs for RecSys can be catego-rized into non-generative and generative paradigms (Wang et al., 2024). Non-generative approaches keep the conventional "score-then-rank" structure but use LLMs for feature engineering (Xi et al., 2024), or representation learning (Hou et al., 2023). Generative approaches instead generate recommen-dations directly. This paradigm typically involves prompting, which utilizes prompt engineering to leverage the LLM’s zero-shot or few-shot capa-bilities (Hou et al., 2024), and fine-tuning, where models are fine-tuned on recommendation datasets to align their generative outputs with user prefer-ences (Lin et al., 2024). Unlike traditional fine-tuning, our work explores using GRPO to optimize the reasoning trajectories for a query-list deep user interest generation in recommendation systems. 
+
+3 System Overview 
+
+Our system operates on multiple streams of user behavioral data collected across search logs, click logs, browsing interactions, and news engagements. Each user is represented using anonymized hashed identifiers to ensure privacy. These heterogeneous data sources capture a broad spectrum of user be-haviors and thus provide strong signals for generat-ing high-quality lists of interest-driven news search queries for downstream retrieval. Our framework consists of three stages as illus-trated in Fig. 1: • Data Cleaning: Raw behavioral logs are inher-ently noisy, mixed with malformed or irrelevant search queries (e.g., random strings, phone num-bers, navigational inputs), and behaviors that are less correlated with users’ underlying interests. Consequently, it is essential to filter out these irrelevant or non-informative signals prior to the 2Cross -domain          
+
+> User Signals
+> Search Queries
+> Click Logs
+> Browser History
+> Data
+> Cleaning
+> Raw Behavior
+> Clean Behavior
+> Lightweight
+> RoBERTa
+> Teacher LLM
+> …
+> Reward
+> Design 𝑟 !
+> 𝑟 "
+> 𝑟 #
+> …
+> 𝑹 𝒂𝒍𝒊𝒈𝒏
+> 𝑹 𝒄𝒐𝒗
+> 𝑹 𝒔𝒑𝒆𝒄
+> 𝑹 𝒅𝒊𝒗
+> 𝑹 𝒔𝒕𝒓𝒖𝒄𝒕
+> GRPO
+> 𝓙 𝑫𝒓 .𝑮𝑹𝑷𝑶 (𝜽 )
+> Student LLM
+> …
+> On -policy
+> Distillation
+> 𝑲𝑳 (𝝅 𝝍 ||𝝅 𝜽 )
+
+Figure 1: Overview of the Reasoning-driven User Interest Generation for News Search Queries (Teacher Model) and On-policy Distillation for Online Serving (Student Model) in the large-scale RecSys. 
+
+user interest modeling. • User Interest Generation: Cleaned behaviors are fed into a strong teacher LLM, which generates a list of interest-driven news search queries under a reinforcement learning framework with multiple reward signals. • On-Policy Distillation: In practice, one key challenge for LLM-based recommendation is compute-intensive. While the teacher LLM can generate high-quality interests, its inference is computationally heavy, incurring substantial serving cost that are incompatible with large-scale online recommendation. To bridge this de-ployment gap, we distill the teacher policy into a lightweight student model for production. In online serving, the student generates a list of interest queries, which is then used to retrieve candidate news articles via ANN-based retrieval. 
+
+4 Method 
+
+Our goal is to infer a list of news search queries that represent reusable deep user interests from noisy cross-domain behavioral logs in a large-scale commercial news recommendation system. We be-gin by formalizing the problem (Section 4.1), then describe the noise cleaning pipeline (Section 4.2), followed by our interest-generation model trained with multi-reward reinforcement learning (Sec-tion 4.3). Finally, we present our on-policy distilla-tion procedure that distills the teacher’s reasoning capability to an efficient student model for online serving (Section 4.4). 
+
+4.1 Problem Formulation 
+
+Let u denote a user and Bu = {b1, b 2, . . . , b t}u
+
+denote the multiset of raw behavioral signals ob-served for that user across various platforms. Our objective is to infer a list of user interests as news search queries: 
+
+Zu = {z1, z 2, . . . , z n}u, (1) where each zi is a short natural-language phrase describing a user interest. We model interest generation as a policy opti-mization problem: 
+
+πθ(Zu | B u), (2) where πθ outputs a list of n queries given cross-domain signals. We adopt a three-stage training strategy: (1) fil-ter out noisy user signals, (2) optimize a teacher policy with GRPO to directly align generated inter-est queries with retrieval utility and desired interest properties, and (3) distill the learned policy into a student model that is efficient for online serving. 
+
+4.2 Noise Cleaning 
+
+Real-world raw behavioral logs often contain substantial noisy and irrelevant information that does not reflect a user’s underlying interest. To mit-igate the impact of this noise on the downstream reasoning process, we employ a lightweight binary classifier fϕ. We obtain supervision by annotating a subset of behavioral signals using GPT5 with a designed prompt (see Appendix B), and train a RoBERTa-based classifier to distinguish infor-mative behaviors from irrelevant noise. For each raw behavioral signal bt, the classifier assigns a label yt ∈ { 0, 1}, where yt = 1 indicates a signal that should be retained for interest modeling, and 
+
+yt = 0 indicates noise to be discarded. The refined behavioral set ˜Bu is formally defined as: 
+
+˜Bu = {bt | fϕ(bt) = 1 }u. (3) 
+
+4.3 Interest Generation with Multi-Reward Reinforcement Learning 
+
+To derive high-quality interest queries from cleaned cross-domain behaviors ˜Bu without ground-truth labels Z∗
+
+> u
+
+, we formulate the interest discovery process as a policy optimization problem with a composite reward that reflects downstream retrievability and desired interest properties. 
+
+Policy Formulation. Inspired by the self-evolution capabilities observed in DeepSeek-R1-Zero (Guo et al., 2025), we adopt Dr.GRPO (Liu 3et al., 2025), an improved variant of GRPO, to guide the policy towards maximizing our multi-dimensional rubric objectives, using the group av-erage as a baseline. Formally, given a user u with cleaned behaviors 
+
+˜Bu, the policy πθ generates a group of G candidate interest lists 
+
+{Z (1)  
+
+> u
+
+, Z(2)  
+
+> u
+
+, . . . , Z(G) 
+
+> u
+
+}, (4) where each Z(g) 
+
+> u
+
+= {z(g)
+
+> u, 1
+
+, . . . , z (g)
+
+> u,n
+
+} is a list of n
+
+interest queries sampled from the old policy πθold .Each list Z(g) 
+
+> u
+
+receives a scalar reward rg =
+
+R(u, Z(g) 
+
+> u
+
+), and the objective maximizes the ex-pected return over the sampled group. The objective function is defined to maximize the expected return: 
+
+JDr.GRPO (θ) = E
+
+"
+
+1
+
+G
+
+> G
+
+X
+
+> g=1
+
+ℓg(θ)
+
+#
+
+− βD KL (πθ ∥ πref ),
+
+(5) where 
+
+ℓg(θ) = min 
+
+
+
+ρg ˆAg, clip( ρg, 1 − ϵ, 1 + ϵ) ˆAg
+
+
+
+,
+
+(6) the probability ratio for the g-th sampled interest list is defined as 
+
+ρg = πθ(Z(g) 
+
+> u
+
+| ˜Bu)
+
+πθold (Z(g) 
+
+> u
+
+| ˜Bu) , (7) with Z(g) 
+
+> u
+
+denoting the g-th sampled interest query list for user u.The advantage term is computed using a group-relative baseline: 
+
+ˆAg = rg − 1
+
+G
+
+> G
+
+X
+
+> j=1
+
+rj . (8) 
+
+Reward Design. We decompose the quality of the generated interest list Zu into five complemen-tary criteria: 
+
+R(u, Zu) = 
+
+> 5
+
+X
+
+> m=1
+
+λmRm(u, Zu), (9) where: • Retrieval Alignment ( Ralign ): Ensures that each generated query can successfully retrieve rele-vant articles from our internal ANN-based index. • Interest Coverage ( Rcov ): Encourages the gen-erated query set to collectively reflect the diverse latent interests inferred from user behaviors. • Query Specificity ( Rspec ): Encourages content-rich and non-generic queries that better capture personalized user intent. • Intra-list Diversity ( Rdiv ): Promotes semantic non-redundancy among generated queries within the same list. • Structural Validity ( Rstruct ): A binary reward verifying whether the output satisfies predefined structural constraints. In practice, Ralign is computed by retrieving, for each query, its top-K articles ( K = 10 ) from our internal ANN-based news index and averaging the embedding similarities as a soft alignment score. 
+
+Rdiv is calculated as the average pairwise cosine distance between query embeddings obtained from Qwen3-Embedding-8B (Zhang et al., 2025b). Both 
+
+Rcov and Rspec are implemented using Rubrics as Rewards (Gunjal et al., 2025), where an LLM eval-uator assesses interest coverage and query speci-ficity based on the prompt template provided in Appendix A. Rstruct is a binary rule-based score verifying adherence to the required output format. All Rm are normalized before computing the over-all reward R.
+
+4.4 On-Policy Distillation of Interest Models 
+
+While the GRPO-trained teacher produces high-quality interest lists, direct online serving is of-ten infeasible due to latency and high compute cost. We therefore transfer the teacher’s policy into a compact student model via on-policy distil-lation (Machines, 2025), which combines (i) the exploration coverage of student rollouts with (ii) dense token-level supervision from the teacher. We formulate the distillation objective as mini-mizing the expected reverse Kullback-Leibler (KL) Divergence between the student πψ and teacher πθ
+
+distributions:       
+
+> Ldistill (ψ) = Ey<t ∼πψ[DKL (πψ(·| ˜Bu, y <t )|| πθ(·| ˜Bu, y <t ))] .
+> (10)
+
+At each decoding step t, we evaluate the diver-gence between the student and teacher distribu-tions conditioned on the student’s generated prefix 
+
+y<t and encourage the student to approximate the teacher’s distribution at that prefix. 
+
+5 Experiments 
+
+5.1 Experimental Setup Datasets. We conduct experiments on real-world user interaction logs collected from an internal, large-scale production news recommendation sys-tem. The dataset includes cross-domain signals 4from web browsing, search queries, and news rec-ommendation logs. For each user, we retain up to the most recent 50 interaction events in each domain, and a subset of users is sampled for ex-periments. Data from November 2025 is used for training and validation (with 10% held out for vali-dation), while data from the first week of December 2025 is reserved for evaluation based on down-stream news retrieval and user engagement. The statistics of the processed dataset are summarized in Table 1. 
+
+Evaluation Metrics. We evaluate performance using standard retrieval and ranking metrics, in-cluding Recall@K, NDCG@K, and MRR, where 
+
+K ∈ { 5, 10 }. All metrics are computed on the held-out test set and averaged across users. 
+
+Baselines. To evaluate the performance of the proposed method, we compare it with several repre-sentative baselines. GRU (Okura et al., 2017) is an early neural news recommendation model that em-ploys an autoencoder with GRU to learn news and user representations. SASRec (Kang and McAuley, 2018) introduces self-attention to model sequential user behaviors. NRHUB (Wu et al., 2019) models user interests by aggregating heterogeneous behav-ioral signals from multiple interaction types. Pin-Sage (Pal et al., 2020) represents user interests by clustering interaction embeddings using a hierar-chical (Ward) clustering strategy. More recently, HSTU (Zhai et al., 2024) adopts a Transformer-based architecture to capture fine-grained sequen-tial user behaviors. 
+
+Implementation Details. We use Qwen2.5-32B-Instruct as the teacher model and Qwen2.5-0.5B-Instruct as the student model. The teacher model is trained with GRPO to generate lists of interest-driven search queries from heterogeneous cross-domain user signals. The learned policy is then distilled on-policy into the student model for low-latency serving (see Appendix D). All experiments are conducted on a cluster of 128 NVIDIA A100 GPUs. During evaluation, each generated interest query is used to retrieve candidate news articles via ANN-based retrieval, and the top-K retrieved items are aggregated for downstream evaluation. For all baseline methods, we follow their original implementations and recommended settings, and conduct extensive hyperparameter tuning to ensure a fair comparison. 
+
+Statistic Overall 
+
+# Users 500,000 # News 1,214,552 Avg. browsing events per user 37 Avg. search queries per user 13 Avg. news clicks per user 39 
+
+> Table 1: Statistics of the processed dataset.
+> Figure 2: Model capacity scaling for interest genera-tion. All models belong to the Qwen2.5 family and are trained with identical objectives and inference settings. Increasing parameter size from 0.5B to 32B consistently improves Recall@10 and NDCG@10, demonstrating scaling-like behavior in deep user interest modeling.
+
+5.2 Main Results 
+
+Table 2 reports the main results on the test set. Overall, our approach consistently outperforms all baseline methods across all evaluation metrics. Among the baselines, HSTU (Zhai et al., 2024) achieves the strongest performance, highlighting the advantage of large-capacity sequential models in capturing complex user behavior patterns. Building on this strong baseline, both our RL-trained teacher model and the distilled student model further improve performance, indicating that explicitly learning reusable and abstract user in-terests from heterogeneous cross-domain signals provides complementary benefits beyond sequence modeling alone. The RL-trained teacher model based on Qwen2.5-32B achieves the best results across all metrics, demonstrating the effectiveness of reinforcement learning for interest-driven query generation. Notably, the distilled Qwen2.5-0.5B model preserves most of the performance gains while substantially reducing model size, suggest-ing that on-policy distillation can effectively trans-fer the learned interest modeling capability to a compact model suitable for efficient deployment. 
+
+5.3 Ablation Study Model Size Scaling. We analyze the impact of model capacity by varying the size of the interest generation model while keeping the training pro-5Method Recall@5 Recall@10 NDCG@5 NDCG@10 MRR 
+
+GRU (Okura et al., 2017) 0.144 0.189 0.129 0.159 0.117 SASRec (Kang and McAuley, 2018) 0.158 0.206 0.141 0.173 0.129 NRHUB (Wu et al., 2019) 0.162 0.212 0.145 0.178 0.133 PinSage (Pal et al., 2020) 0.168 0.220 0.149 0.184 0.138 HSTU (Zhai et al., 2024) 0.216 0.250 0.194 0.228 0.184 
+
+Ours (RL-trained, Qwen2.5-32B) 0.257 0.271 0.209 0.241 0.199 Ours (Distilled, Qwen2.5-0.5B) 0.233 0.261 0.196 0.235 0.180                    
+
+> Table 2: Evaluations of methods on the offline dataset.
+> Figure 3: Inference-time sampling scaling with best-of-
+> Nselection. Increasing the number of sampled candi-date interest lists ( N∈ { 1,2,4,8,16 ,32 }) consistently improves Recall@10 and NDCG@10, exhibiting dimin-ishing returns at larger N.
+> Distillation Method Recall@10 NDCG@10
+> Teacher (Qwen2.5-32B) 0.271 0.241 Supervised Distillation 0.245 0.207 On-policy Distillation 0.261 0.235
+> No Distillation 0.187 0.179
+> Table 3: Comparison of different distillation strategies.
+
+cedure and inference settings fixed. As shown in Fig. 2, increasing model size consistently improves retrieval metrics and interest quality, indicating that larger models enable stronger abstraction and rea-soning over cross-domain user behaviors, resulting in scaling-like performance gains. 
+
+Inference-time Sampling Scaling. We analyze time scaling by increasing the number of sam-pled candidate interest lists at inference time. As shown in Fig. 3, for each user we generate N ∈{1, 2, 4, 8, 16 , 32 } lists and select the final output via a best-of-N strategy based on the composite reward R. Increasing N consistently improves downstream retrieval performance with diminish-ing returns, indicating additional headroom from inference-time compute in offline evaluation. In production, we use N = 1 due to latency con-straints. 
+
+On-Policy Distillation. We evaluate on-policy distillation by comparing it with supervised dis-tillation and training without teacher guidance. As shown in Table 3, on-policy distillation con-sistently outperforms supervised distillation and 
+
+Metric Lift (%) p-value 
+
+DAU +0.95% 0.012 CTR +0.22% 0.031 Cold User DAU +4.38% 0.004 
+
+> Table 4: Online A/B experiment results over a 7-day flight. All lifts are statistically significant.
+
+closes much of the gap to the teacher model, in-dicating more effective supervision under low-latency serving constraints. 
+
+5.4 Online Experiment 
+
+We further evaluate the proposed approach through an online experiment in a large-scale pro-duction news recommendation system. The method is deployed as an additional recall path alongside existing retrieval components, without replacing any existing modules. We conduct a 7-day online A/B flight experiment, comparing the proposed ap-proach against the production baseline under iden-tical traffic allocation. As shown in Table 4, the proposed method leads to consistent improvements in DAU and CTR dur-ing the online flight. Notably, we observe a substan-tially larger gain in cold-user DAU. This suggests that leveraging heterogeneous cross-domain sig-nals enables the model to better infer user interests even when direct news interaction history is lim-ited, resulting in more personalized and relevant recommendations for cold users. 
+
+6 Conclusion 
+
+In this paper, we presented a reasoning-driven re-inforcement learning framework for cross-domain user interest modeling in large-scale news recom-mendation systems. Extensive offline evaluation, ablation studies, and large-scale online A/B tests further validate the effectiveness of our method. This work represents an important step toward de-ployable reasoning-centric reinforcement learning for recommendation systems, and opens new direc-tions for combining LLM reasoning, scalable RL, and industrial recommendation pipelines. 6References 
+
+Abhinandan Das, Mayur Datar, Ashutosh Garg, and Shyam Rajaram. 2007. Google news personalization: Scalable online collaborative filtering. In Proceed-ings of WWW 2007 , pages 271–280. Anisha Gunjal, Anthony Wang, Elaine Lau, Vaskar Nath, Yunzhong He, Bing Liu, and Sean Hendryx. 2025. Rubrics as rewards: Reinforcement learn-ing beyond verifiable domains. arXiv preprint arXiv:2507.17746 .Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu, Shi-rong Ma, Peiyi Wang, Xiao Bi, and 1 others. 2025. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 .Xiangnan He, Lizi Liao, Hanwang Zhang, Liqiang Nie, Xia Hu, and Tat-Seng Chua. 2017. Neural collabora-tive filtering. In Proceedings of the 26th international conference on world wide web , pages 173–182. Balázs Hidasi, Alexandros Karatzoglou, Linas Bal-trunas, and Domonkos Tikk. 2015. Session-based recommendations with recurrent neural networks. 
+
+arXiv preprint arXiv:1511.06939 .Yupeng Hou, Zhankui He, Julian McAuley, and Wayne Xin Zhao. 2023. Learning vector-quantized item representation for transferable sequential recom-menders. In Proceedings of the ACM Web Confer-ence 2023 , pages 1162–1171. Yupeng Hou, Junjie Zhang, Zihan Lin, Hongyu Lu, Ruobing Xie, Julian McAuley, and Wayne Xin Zhao. 2024. Large language models are zero-shot rankers for recommender systems. In European Conference on Information Retrieval , pages 364–381. Springer. Wouter IJntema, Frank Goossen, Flavius Frasincar, and Frederik Hogenboom. 2010. Ontology-based news recommendation. In Proceedings of the 2010 EDBT/ICDT Workshops , pages 1–6. Wang-Cheng Kang and Julian McAuley. 2018. Self-attentive sequential recommendation. In 2018 IEEE international conference on data mining (ICDM) ,pages 197–206. IEEE. Talia Lavie, Michal Sela, Ilit Oppenheim, Ohad Inbar, and Joachim Meyer. 2010. User attitudes towards news content personalization. International journal of human-computer studies , 68(8):483–495. Xinyu Lin, Wenjie Wang, Yongqi Li, Shuo Yang, Fuli Feng, Yinwei Wei, and Tat-Seng Chua. 2024. Data-efficient fine-tuning for llm-based recommendation. In Proceedings of the 47th international ACM SIGIR conference on research and development in informa-tion retrieval , pages 365–374. Zichen Liu, Changyu Chen, Wenjun Li, Penghui Qi, Tianyu Pang, Chao Du, Wee Sun Lee, and Min Lin. 2025. Understanding r1-zero-like training: A critical perspective. Preprint , arXiv:2503.20783. Thinking Machines. 2025. On-policy distillation. Thinking Machines Lab Blog. Shumpei Okura, Yukihiro Tagami, Shingo Ono, and Akira Tajima. 2017. Embedding-based news recom-mendation for millions of users. In Proceedings of the 23rd ACM SIGKDD international conference on knowledge discovery and data mining , pages 1933– 1942. Aditya Pal, Chantat Eksombatchai, Yitong Zhou, Bo Zhao, Charles Rosenberg, and Jure Leskovec. 2020. Pinnersage: Multi-modal user embedding framework for recommendations at pinterest. In Pro-ceedings of the 26th ACM SIGKDD international conference on knowledge discovery & data mining ,pages 2311–2320. Tao Qi, Fangzhao Wu, Chuhan Wu, Peiru Yang, Yang Yu, Xing Xie, and Yongfeng Huang. 2021. Hierec: Hierarchical user interest modeling for personalized news recommendation. In Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Con-ference on Natural Language Processing (Volume 1: Long Papers) , pages 5446–5456. Association for Computational Linguistics. Sarama Shehmir and Rasha Kashef. 2025. Llm4rec: A comprehensive survey on the integration of large lan-guage models in recommender systems—approaches, applications and challenges. Future Internet ,17(6):252. Fei Sun, Jun Liu, Jian Wu, Changhua Pei, Xiao Lin, Wenwu Ou, and Peng Jiang. 2019. Bert4rec: Se-quential recommendation with bidirectional encoder representations from transformer. In Proceedings of the 28th ACM international conference on informa-tion and knowledge management , pages 1441–1450. Qi Wang, Jindong Li, Shiqi Wang, Qianli Xing, Runliang Niu, He Kong, Rui Li, Guodong Long, Yi Chang, and Chengqi Zhang. 2024. Towards next-generation llm-based recommender systems: A sur-vey and beyond. arXiv preprint arXiv:2410.19744 .Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc Le, and Denny Zhou. 2023. Chain-of-thought prompting elic-its reasoning in large language models. Preprint ,arXiv:2201.11903. Chuhan Wu, Fangzhao Wu, Mingxiao An, Tao Qi, Jian-qiang Huang, Yongfeng Huang, and Xing Xie. 2019. Neural news recommendation with heterogeneous user behavior. In Proceedings of the 2019 conference on empirical methods in natural language processing and the 9th international joint conference on natu-ral language processing (EMNLP-IJCNLP) , pages 4874–4883. Likang Wu, Zhi Zheng, Zhaopeng Qiu, Hao Wang, Hongchao Gu, Tingjia Shen, Chuan Qin, Chen Zhu, Hengshu Zhu, Qi Liu, Hui Xiong, and Enhong Chen. 2024. A survey on large language models for recom-mendation. World Wide Web , 27:60. 
+
+7Yunjia Xi, Weiwen Liu, Jianghao Lin, Xiaoling Cai, Hong Zhu, Jieming Zhu, Bo Chen, Ruiming Tang, Weinan Zhang, and Yong Yu. 2024. Towards open-world recommendation with knowledge augmenta-tion from large language models. In Proceedings of the 18th ACM Conference on Recommender Systems ,pages 12–22. Jiaqi Zhai, Lucy Liao, Xing Liu, Yueming Wang, Rui Li, Xuan Cao, Leon Gao, Zhaojie Gong, Fangda Gu, Michael He, and 1 others. 2024. Actions speak louder than words: Trillion-parameter sequential transducers for generative recommendations. arXiv preprint arXiv:2402.17152 .Yang Zhang, Fuli Feng, Jizhi Zhang, Keqin Bao, Qifan Wang, and Xiangnan He. 2025a. Collm: Integrating collaborative embeddings into large language models for recommendation. Preprint , arXiv:2310.19488. Yanzhao Zhang, Mingxin Li, Dingkun Long, Xin Zhang, Huan Lin, Baosong Yang, Pengjun Xie, An Yang, Dayiheng Liu, Junyang Lin, Fei Huang, and Jingren Zhou. 2025b. Qwen3 embedding: Advancing text embedding and reranking through foundation models. 
+
+arXiv preprint arXiv:2506.05176 .Yongchun Zhu, Ruobing Xie, Fuzhen Zhuang, Kaikai Ge, Ying Sun, Xu Zhang, Leyu Lin, and Juan Cao. 2021. Learning to warm up cold item embeddings for cold-start recommendation with meta scaling and shifting networks. In Proceedings of the 44th Inter-national ACM SIGIR Conference on Research and Development in Information Retrieval , pages 1167– 1176. 
+
+8A Prompt for the Rubrics-as-Rewards. 
+
+Prompt for Rewards Rspec and Rcov 
+
+System Prompt 
+
+You are a strict evaluator for a user inter-est query generation system in a large-scale news recommendation setting. Score the generated query list using the rubrics be-low. Be consistent and conservative. Do not reward generic or vague queries. Return JSON only. 
+
+User Prompt 
+
+Input: Cleaned Cross-domain User Behav-iors {USER_BEHAVIOR_CONTEXT} Model Output: Generated Interest Query List {GENERATED_QUERY_LIST} 
+
+Rubrics (1) Query Specificity ( Rspec ) Evaluate each query individually and then average. For each query zi, assign wi ∈ { 0, 1}:• 1 if zi is specific and content-rich (e.g., includes concrete top-ics/events/entities, clear constraints, or an unambiguous intent). • 0 if zi is generic, overly broad, ambigu-ous, or mainly a platform/common category term (e.g., “news”, “sports”, “technology”, “YouTube”, “Google”). Compute: 
+
+Rspec = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+wi.
+
+(2) Interest Coverage ( Rcov ) First, ex-tract a set of distinct major interest themes from the user behaviors, then measure whether the query list covers them. 
+
+Step A (Theme extraction): Extract a set of distinct major interest themes from the behaviors. Use as many themes as necessary to summarize the behaviors without being overly granular (i.e., do not split into near-duplicate subtopics). Each theme should be short (a few words) and represent a coherent interest area. 
+
+Step B (Theme coverage): For each theme 
+
+tj , assign cj ∈ { 0, 1}:
+
+• 1 if at least one query in the list clearly targets theme tj .• 0 if no query clearly covers tj (weak or indirect matches should be scored 0). Let K be the number of extracted themes. Compute: 
+
+Rcov = 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+cj .
+
+Output Format 
+
+Return a JSON object only :
+
+{"R_spec": <float between 0 and 1>, "R_cov": <float between 0 and 1>, "spec_per_query": [0 or 1, ...], "themes": ["...", "...", "..."], "covered": [0 or 1, ...] }
+
+B Prompt for Noise Cleaning 
+
+Prompt for Behavioral Noise Filtering 
+
+System Prompt 
+
+You are a strict classifier for filtering user behavioral signals in a large-scale news rec-ommendation system. Your task is to determine whether a single user behavior reflects a meaningful informa-tional interest that can contribute to long-term news interest modeling. Be conservative. Platform navigation, lo-gin actions, generic website visits, or utility queries should be filtered out. Return JSON only. 
+
+User Prompt 
+
+Input: A single user behavioral signal {USER_BEHAVIOR} 
+
+Label Definition 
+
+Assign y ∈ { 0, 1}:• 1 (Keep) : The behavior reflects a meaningful informational interest, topic, event, entity, or issue that could correspond to reusable news interests. • 0 (Filter) : The behavior is navi-
+
+9gational, transactional, login-related, platform-related, generic browsing, random strings, or utility-oriented (e.g., “google”, “youtube”, “facebook login”, “bank account login”, “weather today”, URL-only visits). 
+
+Examples Keep (1): 
+
+• “Ukraine Russia conflict latest up-dates” • “NVIDIA earnings report Q4” • “electric vehicle battery technology” • “US Federal Reserve interest rate deci-sion” 
+
+Filter (0): 
+
+• “google” • “youtube” • “bank login” • “facebook sign in” • “www.amazon.com” • “weather” 
+
+Output Format 
+
+Return a JSON object only: 
+
+{"label": 0 or 1 }                   
+
+> Reward Setting Recall@10 NDCG@10
+> Full rewards 0.271 0.241 w/o Ralign 0.162 0.141 w/o Rcov 0.115 0.093 w/o Rspec 0.196 0.184 w/o Rdiv 0.179 0.144 w/o Rstruct 0.193 0.184
+
+Table 5: Reward-level ablation study of the multi-reward GRPO objective. 
+
+C Reward Decomposition. 
+
+We perform reward-level ablation by removing each component individually. As shown in Ta-ble 5, all rewards are necessary but serve distinct    
+
+> Model Users/sec
+> Teacher (Qwen2.5-32B) 2Student (Qwen2.5-0.5B) 67
+
+Table 6: Inference efficiency comparison using vLLM on a single NVIDIA A100 GPU. 
+
+roles. Removing retrieval alignment ( Ralign ) signif-icantly degrades performance, as the model gener-ates overly fine-grained interests that are semanti-cally plausible but weakly supported by the news index. Excluding interest coverage ( Rcov ) causes the largest drop: without anchoring queries to ma-jor user themes, the model exploits other rewards and drifts toward disconnected interests, leading to severe reward hacking. Removing query speci-ficity ( Rspec ) produces overly coarse and generic interests, weakening personalization and ranking quality. Intra-list diversity ( Rdiv ) prevents redun-dancy, while structural validity ( Rstruct ) ensures stable downstream execution. 
+
+D Inference Efficiency Comparison 
+
+Table 6 compares the inference efficiency of the RL-trained teacher model and the distilled stu-dent model ( N =1) under identical hardware set-tings using vLLM on a single NVIDIA A100 GPU. The teacher model (Qwen2.5-32B) achieves only 2 users per second due to its large parameter size and expensive decoding cost. In contrast, the distilled student model (Qwen2.5-0.5B) reaches 67 users per second, representing over a 30× improvement in throughput. This significant reduction in com-putational overhead makes it more suitable for the low-latency and high-concurrency requirements of large-scale online recommendation systems. 10

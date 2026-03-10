@@ -1,0 +1,902 @@
+Title: $\phi$-DPO: Fairness Direct Preference Optimization Approach to Continual Learning in Large Multimodal Models
+
+URL Source: https://arxiv.org/pdf/2602.22601v1
+
+Published Time: Fri, 27 Feb 2026 01:36:44 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# ϕ-DPO: Fairness Direct Preference Optimization Approach to Continual Learning in Large Multimodal Models 
+
+## Thanh-Dat Truong 1, Huu Thien Tran 1, Jackson Cothren 2, Bhiksha Raj 3, Khoa Luu 11CVIU Lab, University of Arkansas, USA 2Dep. of Geosciences, University of Arkansas, USA 
+
+> 3
+
+## Carnegie Mellon University, USA 
+
+{tt032, jcothre, khoaluu }@uark.edu, bhiksha@cs.cmu.edu http://uark-cviu.github.io/projects/Fai-DPO 
+
+## Abstract 
+
+Fairness in Continual Learning for Large Multimodal Models (LMMs) is an emerging yet underexplored chal-lenge, particularly in the presence of imbalanced data dis-tributions that can lead to biased model updates and sub-optimal performance across tasks. While recent continual learning studies have made progress in addressing catas-trophic forgetting, the problem of fairness caused by im-balanced data remains largely underexplored. This paper presents a novel Fairness Direct Preference Optimization (FaiDPO or ϕ-DPO) framework for continual learning in LMMs. In particular, we first propose a new continual learning paradigm based on Direct Preference Optimiza-tion (DPO) to mitigate catastrophic forgetting by aligning learning with pairwise preference signals. Then, we iden-tify the limitations of conventional DPO in imbalanced data and present a new ϕ-DPO loss that explicitly addresses dis-tributional biases. We provide a comprehensive theoretical analysis demonstrating that our approach addresses both forgetting and data imbalance. Additionally, to enable ϕ-DPO-based continual learning, we construct pairwise pref-erence annotations for existing benchmarks in the context of continual learning. Extensive experiments and ablation studies show the proposed ϕ-DPO achieves State-of-the-Art performance across multiple benchmarks, outperform-ing prior continual learning methods of LMMs. 
+
+## 1. Introduction 
+
+Large multimodal models (LMMs) have shown their strong performance as general-purpose assistants in various vi-sual learning tasks [5, 19, 55, 56, 65–67]. The success of LMMs typically relies on supervised finetuning on care-fully curated, large-scale multi-task datasets. In practical deployment, LMMs often suffer from performance degra-dation when encountering novel knowledge, tasks, or shifts in data distribution. However, fully retraining large models to incorporate new knowledge and capabilities is compu-
+
+Figure 1. Our Fairness DPO ( ϕ-DPO) approach to Contin-ual Learning in LMMs . Prior continual learning methods, e.g ., 
+
+LoRA , struggle under imbalanced multimodal data and suffer from catastrophic forgetting . The vanilla DPO is still influenced by the imbalanced data distributions . Our ϕ-DPO approach can (1) mitigate forgetting, (2) adapt continuously to new learn-ing tasks, and (3) maintain robustness under data imbalance. 
+
+tationally expensive and time-consuming. Meanwhile, di-rect fine-tuning on the new datasets may result in a perfor-mance drop for previously learned tasks [116]. This phe-nomenon is called the catastrophic forgetting problem. In addition, although recent Retrieval-Augmented Generation (RAG) improves the contextual understanding of LMMs for more accurate responses [40, 41, 87, 108], RAG-LMM systems struggle with distribution shifts and novel tasks. Since the retrieval only augments the input without updat-ing model parameters, the internal knowledge representa-tions remain unchanged. Therefore, to ensure the reliable performance of the LMMs in a dynamic and adaptive en-vironment, it is crucial to develop a Continual Learning paradigm for LMMs (Figure 1) so that the models can in-crementally acquire new information and skills while pre-serving the knowledge learned previously. In continual learning, two primary challenges are iden-tified: (1) Catastrophic Forgetting and (2) Fairness. Fair-ness in LMMs is particularly crucial for real-world deploy-ment, since the biased or inconsistent behaviors can result in unequal outcomes and reduce trustworthiness, especially 1   
+
+> arXiv:2602.22601v1 [cs.LG] 26 Feb 2026 Figure 2. The Imbalanced Distribution of Multimodal Contin-ual Learning Benchmarks. The distribution of samples across ScienceQA topics is highly skewed, i.e . categories with fewer training examples ( e.g . Grammar, Phonological Awareness, Word Study) exhibit significantly lower accuracy, while topics with richer data ( e.g . Biology, Physics) achieve stronger performance.
+
+in human-centric applications. Recent studies of continual learning in LMMs [13, 116] have introduced several meth-ods to address the catastrophic forgetting problem. How-ever, fairness remains a fundamental issue in the contin-ual learning of LMMs that has been unexplored .As shown in Figure 2, multimodal datasets often exhibit significant topic imbalance, introducing bias during each in-cremental task and resulting in skewed performance. This imbalance poses two key challenges: (1) Representation Alignment and (2) Adaptability and Forgetting. Unlike tra-ditional LMMs trained on diverse modality pairs in a single stage, continual multimodal learning proceeds sequentially, requiring incremental alignment. Under imbalanced con-ditions, this leads to biased gradient updates across tasks, groups, or domains (see Section 3). For example, Fig-ure 3 illustrates the progression of training across tasks, starting with ScienceQA, which focuses on structured vi-sual reasoning through diagram-text alignment. The subse-quent Grounding task redirects attention toward object-level localization, whereas OCR-VQA centers on fine-grained text extraction. These tasks exhibit distinct visual distri-butions, language prompts, and alignment objectives, ulti-mately leading to modality imbalance and a degradation of prior representation alignment. As each task may be dom-inated by a particular modality or semantic class, gradient updates often favor current majority signals, undermining prior alignment and degrading performance on earlier tasks. These imbalances undermine representation alignment and may exacerbate catastrophic forgetting. Moreover, prior continual learning studies have focused on unimodal set-tings [10, 21, 74, 91, 94], whereas LMMs introduce new complexity due to their multimodal settings. In this con-text, biased data becomes a critical issue, as the imbalance in multi-modalities or semantic classes not only exagger-ates catastrophic forgetting but also limits the adaptability of LMMs to new tasks or knowledge. While data imbalance poses critical challenges, current 
+
+> Figure 3. ScienceQA, Grounding, and OCR-VQA introduce pro-gressively shifting visual distributions and alignment objectives, creating modality imbalance across tasks.
+
+methods remain inadequate in addressing this problem. Low-rank Adaptation (LoRA) [36] is widely used in contin-ual learning for LMMs [13, 26, 116]. Although it preserves the frozen backbone, its adapters can inherit dataset bias, leading to gradient updates skewed toward majority seman-tic classes [12, 100]. Moreover, LoRA does not inherently mitigate bias propagation [12] and is prone to catastrophic forgetting, especially when adapters are shared or new ones induce representation drift [31, 114]. Meanwhile, Knowl-edge Distillation has also been widely adopted in unimodal continual learning [10, 21, 74]. However, it remains lim-ited in multimodal contexts. LMMs often encode demo-graphic and distributional biases from their large-scale pre-training, which distillation can transfer or amplify in the student model [81, 112]. Imitating biased teacher outputs could lead to suboptimal and biased predictions [112]. Un-der imbalance, majority data dominate distillation gradi-ents, lowering generalization to tail classes [91, 94]. In ad-dition, while distillation aligns output probabilities, it fails to preserve internal representations critical for maintaining prior knowledge, particularly in LMMs where knowledge spans multiple modalities and layers [3, 88]. 
+
+Contributions. This work proposes a novel Fairness Di-rect Preference Optimization (FaiDPO or ϕ-DPO) approach to Continual Learning in LMMs. Our contributions can be summarized as follows. First, we introduce a new continual learning paradigm, Direct Preference Optimization (DPO), which addresses the catastrophic forgetting problem in con-tinual learning. Second, by analyzing the limitations of tra-ditional DPO, we present a new Fairness DPO loss to ad-dress the fairness problem caused by imbalanced data. We provide a comprehensive theoretical analysis to show that our proposed approach can address both catastrophic for-getting and imbalanced data. Third, to support the DPO learning in our framework, we contribute the DPO labels for current continual learning benchmarks. Finally, our inten-sive experiments and ablation studies have illustrated the ef-fectiveness and State-of-the-Art performance (SoTA) of our approach compared to prior continual learning methods. 22. Related Work 
+
+Large Multimodal Models. Early advances in large lan-guage models (LLMs) [2, 5, 17, 58, 82] have driven rapid progress in LMMs. Recent models span across vision-language [65, 67, 95], video-language [57, 61, 102, 117], and audio-language domains [24, 39], with LMMs play-ing a central role in scaling multimodal understanding. Early work by [4] effectively bridged vision and language modalities in a few-shot learning setting, followed by [56], which enhanced inter-modality connectivity via Q-Former. This was further developed into an instruction-aware model within the vision-language instruction-tuning framework [67]. LLaVA [67] established a streamlined visual-to-language space projection using a linear layer, later re-fined by [65] with an MLP and AnyRes, a technique adept at handling high-resolution images. Subsequent studies [50, 51, 54, 66, 115] contributed further improvements, cul-minating in a robust model [52] capable of handling diverse vision tasks. These multimodal models are finding real-world use across a variety of domains. For instance, they have been adapted for biomedical analysis [53], improved through multimodal federated learning [14], and applied to 3D point cloud understanding [64, 103, 104]. Recent work [6, 78, 98] with more effective training techniques and bet-ter architectures, serve as a stepping stone for a wide range of more advanced research efforts aimed at developing gen-eralist LMMs. 
+
+Continual Learning. The topic of continual learning has evolved through several core paradigms, each approach-ing the stability-plasticity dilemma from a unique angle. The field has largely centered around rehearsal-base ap-proaches [7, 48], regularization-based methods [47, 59, 89, 90, 93], structure-based strategies [22, 71, 92, 94], and prompt-based methods [85, 101]. In parallel, continual learning for large language models has rapidly become a focal point of recent work [79]. Depending on where adap-tation occurs, current efforts can be categorized into three major stages: continual pre-training [18, 42], continual in-struction tuning [76, 99, 106, 109], and continual align-ment [86, 111]. Meanwhile, for LMMs, progress remains relatively limited [8, 13, 26, 28, 110, 116]. Chen et al . [13] introduced one of the first systematic benchmarks for con-tinual instruction tuning of LMMs. Building on this, Zeng 
+
+et al . [110] proposed a dual-modality guided prompt frame-work to improve efficiency and stability. Cao et al . [8] and Guo et al . [26] explored hierarchical and modular strate-gies to better preserve multimodal representations over se-quential updates. Chen et al . [15] and Zhao et al . [116] further attempted to mitigate forgetting and enhance con-tinual adaptability, while Lin et al . [62] proposed a novel paradigm of sparse memory fine-tuning. While prior con-tinual learning studies in unimodal learning has taken fair-ness into consideration [91, 94], there are limited studies addressing this problem in LMMs. Unlike prior methods, 
+
+we propose to address the catastrophic forgetting problem via a new continual learning paradigm and achieve fairness 
+
+under imbalanced data settings. 
+
+## 3. The Proposed ϕ-DPO Approach 
+
+Given a large multimodal model π, continual learning in-volves incrementally learning it on a sequence of datasets 
+
+D = {D 1, ..., DT }, where T is the number of learning steps. For each learning step t, Dt = {xj , y j }|D i| 
+
+> j=1
+
+con-straints |D i| instruction data, where xj = ( xj
+
+> img
+
+, x j
+
+> ins
+
+) con-sists of a pair image ( xj
+
+> img
+
+) and textual instruction ( xj
+
+> ins
+
+), and yj is the corresponding answer. Formally, learning the LMM πt at step t on dataset Dt can be formed as follows:      
+
+> π∗
+> t= argmax
+> πt
+> Ex,y ∈D tlog p(y|x) + DForget (πt∥πt−1)(1)
+
+where log p(y|x) is the supervised fine-tuning loss on the instruction data, DForget (πt∥πt−1) is the forgetting mitiga-tion that prevents the current LMM πt drifted away from the previous learned LMM πt−1, i.e ., avoid forgetting. Prior continual learning studies commonly adopt knowl-edge distillation [10, 21] to mitigate the forgetting. How-ever, as shown in Sec. 1, the traditional knowledge distil-lation may exaggerate the bias and cause catastrophic for-getting, especially in the context of multimodal learning. Several recent studies adopt contrastive clustering [91, 94] to model catastrophic forgetting. Although it has yielded promising results in unimodal problems, defining clusters in multimodal settings is infeasible. Thus, to address this problem, our approach adopts Reinforcement Learning from Human Feedback (RLHF) to model the forgetting. Formally, let r(x, y ) be the reward model to evaluate the forgetting and adaptability level of πt, i.e ., the higher 
+
+r(x, y ), the better memory retained and adaptability. Then, to model catastrophic forgetting ( DForget ), our continual learning can be reformulated under an RLHF perspective as in Eqn. (2).         
+
+> π⋆t= argmax
+> πt
+> Ex∼X tEy∼πt(·| x)
+> r(x, y )
+> s.t. DKL
+>  πt(· | x)πt−1(· | x)≤δ,
+> (2)
+
+where πt−1 is the reference (previous learning step) policy, 
+
+DKL (πt∥πt−1) is the KL divergence to measure the differ-ence of predictions between previous and current LMMs, δ
+
+is the threshold to constraint the policy update. Although learning Eqn. (2) can be achieved via Proxi-mal Policy Optimization Algorithms (PPO), it still presents two major challenges. First, learning the reward model r
+
+requires the corresponding training data. In addition, in the context of continual learning, it may require incrementally learn the reward model r at each learning step, which is not feasible. Second, learning the reward model via PPO on the imbalanced data may lead to biased predictions produced 3by the model [77]. To address these challenges, inspired by [75], we propose modeling RLHF reward in continual learning via Direct Preference Optimization. We introduce a new Fairness DPO loss to address fairness modeling. 
+
+3.1. Direct Preference Optimization to Continual Learning in LMMs 
+
+3.1.1. DPO as Continual Learning 
+
+Inspired by [75], learning the LMM at learning step t of Eqn. (2) via RLHF can be rewritten using the Lagrangian multiplier as follows:        
+
+> π⋆t= max
+> πt
+> Ex,y ∼πt[r(x, y )] −βD KL
+>  πt(· | x)πt−1(· | x)
+> (3)
+
+where β is the Lagrangian multiplier that controls the di-vergence of the LMM at the current learning step from the previous step. As shown in [75], the learning objective in Eqn. (3) achieves optimal when it takes the following forms:                    
+
+> π⋆t(y|x) =
+> πt−1(y|x) exp
+> 1
+> βr(x, y )
+> 
+> Z(x),r(x, y ) = βlog π⋆t(y|x)
+> πt−1(y|x) +βlog Z(x),
+> (4)
+
+where Z(x) = P 
+
+> y
+
+πt−1(y|x) exp 
+
+ 1 
+
+> β
+
+r(x, y )
+
+
+
+.
+
+From RLHF to Pairwise Preferences. In our continual learning setting, for each sample instruction data x, let y+
+
+be the well-retrained (good memory) and well-adapted out-put, and let y− be the forgotten output. The preference of 
+
+y+ over y−, i.e ., p(y+ ≻ y−|x) can be formed via the Bradley-Terry model as follows:        
+
+> p(y+≻y−|x) = σ β[r(x, y +)−r(x, y −)] ,(5)
+
+where σ(u) = 11+exp( −u) is the Sigmoid function. Then, maximizing the (conditional) log-likelihood over pairs to avoid catastrophic forgetting in continual learning can be reformed as the following logistic loss:      
+
+> Lpref (πt, π t−1) = E(x,y +,y −)
+> h
+> −log σ βr(x, y +)−r(x, y −) i
+> (6)
+
+Continual Learning Paradigm with DPO. Under the op-timum conditions defined in Eqn. (4), the logistic loss of the reward difference in Eqn. (6) can be written in terms of policy log-ratios as in Eqn. (7).                         
+
+> LDPO (πt, π t−1) = −Ex,y +,y −
+> "
+> log σβlog πt(y+|x)
+> πt−1(y+|x)
+> −βlog πt(y−|x)
+> πt−1(y−|x)
+> !#
+> =−Ex,y +,y −log σ
+> "
+> β
+> h
+> log πt(y+|x)−log πt(y−|x)
+> i|{z }
+> trainable policy
+> −β
+> h
+> log πt−1(y+|x)−log πt−1(y−|x)
+> i|{z }
+> fixed reference
+> #
+> (7)
+
+Interpretation. As in continual learning, each training stage aims to adapt the current policy πt to a new learning task while preserving consistency with the reference model 
+
+πt−1 to avoid catastrophic forgetting. The DPO objective encourages πt to increase the relative log-odds of well-retained (or memory-consistent) y+ over forgotten output 
+
+y− compared to πt−1, effectively favoring outputs that re-main aligned with prior knowledge. Our learning objec-tive prevents the policy from drifting away from the previ-ous learning task and implicitly regularizes updates toward the information manifold of the previous model, thereby mitigating catastrophic forgetting. Meanwhile, the hyper-parameter β controls the adaptability of the LMM, i.e ., larger values constrain πt to remain close to πt−1 (stabil-ity ). In comparison, smaller values permit more flexible adaptation to new distributions ( plasticity ). Our learning mechanism replaces the explicit reward-based RLHF objec-tive in Eqn. (2) with a preference-based contrastive loss that directly enforces policy consistency under a bounded diver-gence constraint. As a result, our DPO approach provides a principled mechanism for continual alignment, i.e ., pre-serving prior knowledge while enabling controlled updates that enhance adaptability across sequential tasks. 
+
+3.1.2. Theoretical Analysis of Direct Preference Opti-mization in Forgetting Mitigation 
+
+Prior studies [10, 21] have shown that Knowledge Distilla-tion (KD) is a common approach to mitigate catastrophic forgetting. In this section, we will provide a theoretical analysis to demonstrate that the knowledge distillation loss is bounded by the DPO loss, which offers a more effec-tive mechanism for preventing catastrophic forgetting and enhancing adaptability. In a typical knowledge distillation approach used in continual learning, the current model πt
+
+is encouraged to remain close to the previous model πt−1
+
+via the Kullback–Leibler (KL) divergence to mitigate catas-trophic forgetting:      
+
+> LKD (πt, π t−1) = DKL (πt−1∥πt) = Ex,y ∼πt−1
+> 
+> log πt−1(y|x)
+> πt(y|x)
+> 
+> (8)
+
+Lemma 1 Lower Bound of KL Divergence Governed by DPO Loss. The lower bound of the DKL (πt−1∥πt) is gov-erned by the DPO loss as follows:      
+
+> DKL (πt−1∥πt)≥1
+> Clower
+> (log 2 − L DPO (πt;πt−1)) 2(9)
+
+where Clower is a constant number. 
+
+Lemma 2 Upper Bound of KL Divergence Governed by DPO Loss. The upper bound of the DKL (πt−1∥πt) is gov-erned by the DPO loss as follows:     
+
+> DKL (πt−1∥πt)≤Cupper LDPO (πt;πt−1)(10)
+
+where Cupper is a constant number. 
+
+4Figure 4. Our Proposed Continual Learning Approach via Fairness DPO for Large Multimodal Models . Traditional re-inforcement learning with human feedback (RLHF) method opti-mize models through explicit reward maximization. Our frame-work instead reformulates RLHF as Direct Preference Optimiza-tion (DPO). The Fairness DPO loss mitigate the gradient biased under the imbalanced data. 
+
+Proof. The proof of Lemmas 1-2 is in our appendix. We show the exact form of Clower and Cupper in our proof. 
+
+Interpretation. Lemmas 1 and 2 establish a two-sided rela-tionship between the DPO loss and the KL divergence used in prior knowledge distillation methods [10, 21]. The lower bound implies that a small DPO loss ensures πt remains close to πt−1, thereby preserving prior knowledge and mit-igating catastrophic forgetting. The upper bound further constrains the KL divergence, indicating that DPO regu-larizes updates so that DKL (πt−1∥πt) grows proportionally to the DPO loss. These bounds indicate that DPO implic-itly controls catastrophic forgetting and adaptation, i.e . a small LDPO constrains the divergence, ensuring semantic consistency with πt−1 while allowing new learning task up-dates. Different from KD, which minimizes KL divergence directly, DPO introduces an adaptive, pairwise preference mechanism. Therefore, DPO can be viewed as a generalized form of distillation, i.e ., retaining the regularization effect while selectively amplifying high-reward (well-retained) re-sponses and suppressing low-reward (forgotten) ones. This makes DPO more robust to forgetting while maintaining flexibility for continual learning in LMMs. 
+
+3.2. Fairness DPO in Continual Learning 
+
+While the vanilla DPO loss can help prevent catastrophic forgetting and improve adaptability, the imbalance in data distribution can influence the behavior of DPO, leading to suboptimal performance. Indeed, let us revise the gradient produced by the DPO loss defined in Eqn. (7) as follows:                
+
+> ∇θLDPO (θ;μ) = Eμ
+> (p(z)−1) ∇θsθ(z)
+> LDPO (θ;μ) = −E(x,y +,y −)∼μ
+> log p(y+≻y−|x),(11)
+
+where θ is the parameters of LMM, z = ( x, y +, y −), and 
+
+sθ (z) = β r(x, y +) − r(x, y −), μ is the data distribution of the current learning task. Let us define p(z) = p(y+ ≻
+
+y−|x). In addition, we partition training data into K disjoint groups {Gk}Kk=1 , with mixture weights μk = μ(Gk). Then, the group gradients can be rewritten as follows:               
+
+> ∇θLDPO (θ;μ) =
+> KX
+> k=1
+> μkmk(θ)
+> mk(θ) = E(p(z)−1) ∇θsθ(z)|z∈Gk
+> 
+> (12)
+
+where mk(θ) is the group mean gradient. Let q′ =(q′
+
+> 1
+
+, . . . , q ′ 
+
+> K
+
+) be the desired (ideal) balanced mixture over groups, and q = ( q1, . . . , q K ) the observed imbalanced dis-tribution, with p̸ = q. In an ideal scenario, the LLM πt
+
+trained on the balanced data distribution q′ will perform fairly. Then, the gradient difference incurred when opti-mizing with biased distribution q instead of balanced distri-bution q′ can be defined as:            
+
+> B(θ) = ∇θLDPO (θ;q)− ∇ θLDPO (θ;q′) =
+> KX
+> k=1
+> (qk−q′
+> k)mk(θ)
+> (13)
+
+Then, suppose there exists a group j such that qj > q ′ 
+
+> j
+
+(ma-jor group), the j-th group contributes (qj − q′ 
+
+> j
+
+) mj (θ) in the gradient updates, which is a systematic overweighting of group j’s gradient. Meanwhile, if qi < q ′ 
+
+> i
+
+for a minor-ity group i, then the i-th term is underweighted. In other words, the gradient updates produced by the vanilla DPO loss will be biased towards major groups, and the gradient difference between ideal and practical data distribution will not be identical, i.e ., ∥B(θ)∦ = 0 .To address the problem caused by the imbalanced data distribution, inspired by the focal loss [63], we introduce a new Fair DPO loss to improve the fairness of the LMM. In particular, the Fair DPO loss can be defined as follows:        
+
+> Lγ
+> DPO (θ;μ) = −Ez∼μ
+> h
+> (1 −p(z)) γlog p(z)
+> i
+> (14)
+
+where γ is the focusing parameter. Then, the gradient up-dates in Eqn. (12) can be rewritten as follows:                       
+
+> ∇L γ
+> DPO (θ;μ) =
+> KX
+> k=1
+> μkwγk(θ)mk(θ)
+> where wγk(θ) = Eαγ(p(z)) |z∈Gk
+> 
+> and αγ(p) = (1 −p)γ−1h
+> (1 −p) + γp log p
+> i
+> (15)
+
+In Eqn. (15), wγk (θ) plays a role as a modulating factor to balance the gradients of each group. Then, the gradient dif-ference in Eqn. (13) with respect to the Fair DPO loss can be rewritten as:              
+
+> Bγ(θ) = ∇L γ
+> DPO (θ;q)− ∇L γ
+> DPO (θ;q′)=
+> KX
+> k=1
+> (qk−q′
+> k)wγk(θ)mk(θ)(16)
+
+Lemma 3 Balanced Gradient Update of Fair DPO Loss .Given a sufficient large value of γ, the Fair DPO loss will produce the balanced gradient update across groups regardless of the biased data distribution, i.e .
+
+lim γ→∞ ∥Bγ (θ)∥ = 0 .
+
+5Proof. The proof of Lemma 3 is included in our appendix. 
+
+Interpretation. When the focusing parameter γ becomes sufficiently large, the discrepancy between optimization over the imbalanced distribution and the idealized balanced distribution vanishes, i.e ., lim γ→∞ Bγ (θ) = 0 . This indi-cates that our proposed Fair DPO loss can yield fairer gradi-ent updates as γ increases. However, excessively large val-ues of γ can cause gradient vanishing, leading to a numer-ically flat loss landscape. As a result, this limits the adapt-ability of the LMMs in continual learning settings. Mean-while, if γ is too small, the loss behaves similarly to the standard DPO objective, potentially reinforcing the unfair-ness induced by imbalanced data. Therefore, careful tuning of γ is crucial to strike a balance between fairness and plas-ticity in the continual learning of LMMs. 
+
+Continual Learning Procedure. Figure 4 illustrates our continual learning framework. In particular, the final learn-ing objective of our proposed approach at each learning step 
+
+t can be formed as follows:       
+
+> π∗
+> t= argmin
+> πt
+> Ex,y ∈D t−log p(y|x) + Lγ
+> DPO (πt∥πt−1)(17)
+
+To avoid the overfitting on small-scale size data and in-crease the memory-efficiency during training DPO, the LMM πt at learning step t is optimized via LoRA. 
+
+3.3. DPO Data in Continual Learning Benchmark 
+
+We conduct our experiments on three benchmark suites: CoIN [13], MLLM-CL Domain [116], and MLLM-CL Ability [116]. The CoIN benchmark comprises eight di-verse learning tasks: ScienceQA [70], TextVQA [84], Im-ageNet [20], GQA [38], VizWiz [30], Grounding [44, 72], VQAv2 [25], and OCR-VQA [73]. The MLLM-CL Do-main benchmark is designed for domain-incremental learn-ing and consists of five sequential domains: Remote Sens-ing [69], Medical [33], Autonomous Driving [83], Science [11, 29, 45, 46], and Finance [116]. The MLLM-CL Abil-ity benchmark focuses on task-incremental learning and in-cludes four tasks: OCR [60, 68], Math and Logic [80, 113], Visual Perception [1, 43], and GUI Agent [35, 96, 107]. While these benchmarks provide instruction-following data suitable for training LMMs, they lack pairwise prefer-ence annotations required for DPO. To address this gap and enable continual learning via DPO, we construct pairwise preference data for each dataset within these three bench-marks. In particular, for each instruction instance, we treat the provided reference answer as the preferred output y+,which represents a well-retained (good-memory) and well-adapted response. To simulate the less preferred (forgotten) output y−, we prompt a large language model to halluci-nate an alternative response. The model is conditioned on both the textual instruction and the reference answer y+,and is instructed to generate an output y− that is plausible and coherent, yet distinct from y+ and potentially flawed in subtle ways. This design encourages the formation of chal-lenging preference pairs suitable for effective DPO training. Finally, all labels are manually verified by human annota-tors to ensure that the rejected responses accurately reflect undesirable or suboptimal behavior (Figure 5). 
+
+## 4. Experimental Results 
+
+4.1. Benchmarks, Metrics, and Implementation 
+
+Benchmark and Metrics. We evaluate on three bench-marks: CoIN, MLLM-CL Domain, and MLLM-CL Abil-ity. Following standard protocols [13, 26, 116], continual learning performance is measured using five metrics. Last Accuracy reports accuracy on all seen tasks after learning the final one. Mean Finetune Accuracy (MFT) reflects ac-curacy on each task immediately after learning, serving as an upper bound without forgetting. Mean Final Accuracy 
+
+(MFN) averages accuracy across all tasks after full train-ing. Mean Average Accuracy (MAA) captures the aver-age performance over all tasks after each step. Backward Transfer (BWT) quantifies forgetting by comparing final accuracy to post-learning accuracy for each task. Higher scores indicate better performance. 
+
+Implementation. Our framework adopts the implemen-tation of LLaVA v1.5 [65], using CLIP-ViT-L-14 ( 336 2)as the vision encoder and Vicuna 7B [17] as the language backbone. For fair comparison, we follow the training setup of [13, 26, 116], with LoRA rank 32, AdamW optimizer, a cosine learning rate schedule (base LR: 2e −5), and batch 
+
+> Figure 5. Example of Our DPO Data in the Continual Learning Benchmark. Best viewed in color.
+
+6Table 1. Results on MLLM-CL Domain (* denote the method using relay data). RS: Remote Sensing, Med: Medical, AD: Au-tonmous Driving, Sci: ScienceQA, Fin: Finance.                                                                                                                        
+
+> Method RS Med AD Sci Fin MFT ↑MFN ↑MAA ↑BWT ↑
+> Zeroshot 32.29 28.28 15.59 35.55 62.56 34.85 −−−
+> LoRA-FT* [36] 76.54 50.27 43.01 43.32 89.85 66.32 60.60 64.72 -7.15 O-LoRA* [99] 76.94 41.17 34.18 39.61 83.22 60.49 55.02 60.73 -6.83 MoELoRA* [13] 77.63 49.54 39.08 41.04 89.21 66.24 59.30 64.81 -8.68 CL-MoE* [37] 76.58 52.31 39.65 45.64 90.21 66.65 60.88 64.95 -7.22 HiDe* [26] 74.80 42.29 34.03 38.01 79.22 60.83 53.67 61.81 -8.95 SEFE* [15] 78.43 52.85 46.21 47.76 89.33 66.89 62.92 66.51 -4.97 DISCO* [27] 77.78 46.25 50.45 49.51 89.71 65.27 62.74 64.92 -3.17 LoRA-FT [36] 69.65 41.59 25.43 40.88 87.45 64.98 53.00 61.13 -14.97 O-LoRA [99] 74.64 44.42 30.02 41.47 87.15 65.16 55.54 62.12 -12.03 MoELoRA [13] 77.54 41.85 27.62 40.13 86.75 64.94 54.78 61.76 -12.70 CL-MoE [37] 71.34 46.84 26.33 41.17 88.74 66.06 54.88 61.79 -13.96 HiDe [26] 74.31 48.95 33.21 38.54 81.55 60.77 55.31 60.68 -6.82 SEFE [15] 77.26 50.37 37.21 40.87 86.82 65.01 58.51 63.63 -8.13 DISCO [27] 76.03 45.20 43.79 42.33 88.95 64.43 59.26 63.35 -6.46 MR-LoRA [116] 80.87 65.32 54.12 56.71 91.12 69.64 69.63 71.06 -0.01
+> ϕ-DPO 85.68 69.74 57.73 61.55 95.28 74.29 74.00 75.68 -0.37
+
+size 64 for one training epoch. All experiments are run on 16 NVIDIA A100 40GB GPUs. 
+
+4.2. Main Results 
+
+Results on the MLLM-CL Domain Benchmark. Table 1 shows results on the MLLM-CL Domain benchmark across five incremental domains: Remote Sensing (RS), Medical, Autonomous Driving (AD), Science, and Finance. Our ϕ-DPO achieves consistently outperforms prior methods in both individual accuracy (on last step) and continual learn-ing metrics. In particular, ϕ-DPO achieves 85.58% on RS, 95.28% on Finance, and shows similar improvements on Medical (69.74%), AD (57.75%), and Science (61.55%). The results has indicated the robustness of our ϕ-DPO under domain shifts. In terms of continual learning performance, 
+
+ϕ-DPO achieves an MFT of 74.29%, an MFN of 74.00%, and an MAA of 75.78%. The BWT is -0.37%, further con-firming the ability for ϕ-DPO in forgetting mitigation across incremental domain adaptation. Compared to prior methods that rely on LoRA ( e.g ., MR-LoRA) or Mixture-of-Expert architectures ( e.g ., CL-MoE), ϕ-DPO offers a more unified framework while gaining superior results. These findings reinforce the generalizability and stability of ϕ-DPO in con-tinual domain-incremental learning. 
+
+Results on the MLLM-CL Ability Benchmark. Table 2 shows results on the MLLM-CL Ability benchmark across four incremental tasks: OCR, Math & Logic (M&L), Visual Programming (VP), and GUI Agent (GUI), with the first four columns reporting performance after the final task. Our 
+
+ϕ-DPO achieves consistently strong results across all tasks, with 38.40% on OCR, 39.20% on M&L, 68.65% on VP, and 35.00% on GUI Agent. In addition, ϕ-DPO outperforms prior methods on all continual learning metrics. ϕ-DPO achieves a MFT of 45.55%, MFN of 45.31%, and MAA of 43.03, while gaining a BWT of -0.31%, indicating mini-mal forgetting. Compared to DISCO and MR-LoRA, which rely on LoRA and routing strategies, ϕ-DPO demonstrates improved overall performance. These results highlight the 
+
+Table 2. Results on MLLM-CL Ability (* denote the method using relay data). M&L: Math and Logic, VP: Visual Perception. 
+
+Method OCR M&L VP GUI MFT ↑ MFN ↑ MAA ↑ BWT ↑
+
+Zeroshot [36] 31.20 30.20 60.79 10.00 33.05 − − −
+
+LoRA-FT* [36] 21.80 32.70 58.38 28.75 40.32 35.41 36.32 -6.55 O-LoRA* [99] 29.60 31.30 60.79 27.50 39.96 37.30 36.34 -3.55 MoELoRA* [13] 19.80 32.20 54.19 30.00 40.35 34.05 35.39 -8.41 CL-MoE* [37] 25.40 31.80 60.91 30.00 41.22 37.03 37.28 -5.59 HiDe* [26] 24.60 28.40 30.71 23.75 36.84 26.86 33.54 -13.30 SEFE* [15] 25.60 34.80 57.61 31.39 42.25 37.35 37.93 -6.53 DISCO* [37] 34.20 35.00 61.55 27.50 40.14 39.56 37.85 -0.77 LoRA-FT [36] 23.60 33.70 55.84 32.50 41.28 36.41 36.58 -6.49 O-LoRA [99] 29.60 32.90 52.41 33.75 39.72 37.16 35.42 -3.41 MoELoRA [13] 26.70 32.80 56.85 27.22 39.45 35.89 36.07 -4.75 CL-MoE [37] 19.90 32.70 53.43 30.69 40.50 34.18 35.65 -8.43 HiDe [26] 24.60 32.10 46.32 28.75 37.98 32.94 34.60 -6.72 SEFE [15] 26.00 33.40 57.74 33.75 40.98 37.72 36.59 -4.35 DISCO [27] 32.90 33.10 60.15 30.14 39.02 39.07 36.57 0.07 MR-LoRA [116] 33.70 36.20 65.10 32.50 41.89 41.88 38.86 -0.02 
+
+ϕ-DPO 38.40 39.20 68.65 35.00 45.55 45.31 43.03 -0.31 
+
+effectiveness of ϕ-DPO in maintaining stability and gener-alization throughout the incremental learning process. 
+
+Results on the CoIN Benchmark. Table 3 shows results on the CoIN benchmark. MFT and BWT are omitted for prior methods since intermediate models were not pub-lished. The first eight columns report final-task accuracy on: ScienceQA (SciQA), ImageNet (Image), VizWiz (Viz), Grounding (Ground), TextVQA (Text), GQA, VQAv2 (VQA), and OCR. Our ϕ-DPO consistently outperforms all prior methods across these tasks. In particular, it achieves major gains on vision-centric tasks, i.e ., ImageNet (95.61%), VizWiz (54.55%), and OCR (68.69%), while also obtaining strong results on language and reasoning benchmarks, i.e ., ScienceQA (77.84%), GQA (64.32%), and VQAv2 (69.99%). Importantly, our approach maintains a high Mean Final Accuracy (MFN) of 68.86%, reflecting superior knowledge preservation across incremental tasks. 
+
+ϕ-DPO further achieves the best MAA of 74.94%, demon-strating stable performance throughout continual training. These results confirm the effectiveness of ϕ-DPO in miti-gating catastrophic forgetting and increasing adaptability. 
+
+4.3. Ablation Study 
+
+Effectiveness of Fairness DPO. Table 4 presents an ab-lation study on the impact of each component in our ap-proach. Compared to knowledge distillation (KD), vanilla DPO achieves consistently better performance across in-
+
+Table 3. Results on CoIN. SciQA: ScienceQA, Image: Ima-geNet, Viz: VizWiz, Ground: Grounding, Text: TextVQA, VQA: VQAv2.                                                              
+
+> Method SciQA Image Viz Ground Text GQA VQA OCR MFN ↑MAA ↑
+> Zeroshot 69.79 9.93 45.50 58.47 57.75 60.77 66.50 64.93 −−
+> FineTune 57.43 28.90 41.88 30.05 51.39 50.76 53.28 64.78 47.31 52.86 LwF [59] 60.71 30.58 41.49 36.01 52.80 47.07 53.43 65.12 48.40 53.22 EWC [47] 59.75 31.88 42.26 34.96 51.06 51.84 55.30 64.55 48.95 53.30 L2P [101] 70.21 23.31 44.21 43.76 56.25 58.46 62.32 64.11 52.83 53.96 O-LoRA [99] 72.56 62.84 48.43 58.97 57.66 59.14 63.21 63.31 60.77 62.60 MoELoRA [13] 62.02 37.21 43.32 33.22 52.05 53.12 57.92 65.75 50.58 55.24 HiDe [26] 73.20 69.28 50.76 59.18 56.92 61.33 67.12 64.76 62.82 64.70
+> ϕ-DPO 77.84 95.61 54.55 60.74 59.17 64.32 69.99 68.69 68.86 74.94
+
+7Table 4. Effectiveness of Our Fairness DPO.                                       
+
+> RS Med AD Sci Fin MFT ↑MFN ↑MAA ↑BWT ↑
+> Zeroshot 32.29 28.28 15.59 35.55 62.56 34.85 −−−
+> LoRA-FT 69.65 41.59 25.43 40.88 87.45 64.98 53.00 61.13 -14.97 KD 77.82 63.92 52.88 58.57 92.85 71.37 69.21 71.49 -2.71 DPO 82.26 67.12 55.79 59.58 93.94 72.80 71.74 73.68 -1.33
+> ϕ-DPO 85.68 69.74 57.73 61.55 95.28 74.29 74.00 75.68 -0.37
+
+cremental domains, i.e . RS (82.26%), Med (67.12%), AD (55.79%), Sci (59.58%), and Fin (93.94%), as well as im-proved continual learning metrics: MFT of 72.80%, MFN of 71.74%, MAA of 73.68%, and BWT of -1.33%, indi-cating reduced forgetting. Our ϕ-DPO further improves the performance, i.e . 74.29% MFT, 74.00% MFN, 75.68% MAA, and -0.37% BWT, demonstrating stronger task per-formance and greater stability. These results highlight the effectiveness of our Fair DPO loss in continual learning. 
+
+Effectiveness of Divergence Parameter β. Table 5 studies the impact of the divergence parameter β in our approach. The β parameter controls the trade-off between adaptabil-ity to new tasks and the forgetting level of previous knowl-edge. As shown in Table 5, lower values of β (i.e ., 0.01 
+
+and 0.05 ) lead to faster adaptation, reflected in higher MFT scores (75.43% and 75.27%). However, it will result in increased forgetting, as indicated by degraded BWT val-ues (-2.66% and -1.66%). Meanwhile, larger values of β
+
+(i.e ., 0.50 ) reduce forgetting with improved BWT (-0.32%), but at the cost of reduced overall performance, including lower MFT (72.11%), MFN (71.85%), and MAA (73.60%). Among our configurations, β = 0 .10 achieves the best bal-ance, with competitive MFT (74.29%), MFN (74.00%), and MAA (75.68%), while maintaining a favorable BWT of -0.37%. These results have illustrated the role of β in stabil-ity and plasticity in continual learning. 
+
+Effectiveness of Focusing Parameter γ. Table 6 presents an ablation on the focusing parameter γ, which controls the emphasis on harder preference pairs during training. When 
+
+γ = 0 .0, the loss reduces to the standard DPO formula-tion, corresponding to the vanilla DPO baseline in Table 4. Lower values of γ (i.e ., 0.50 and 1.00 ) yield moderate improvements in stability and forgetting, as reflected in re-duced BWT (-1.07% and -0.77%) while maintaining com-petitive MFT (72.79% and 73.38%) and MAA (73.87% and 74.66%). This result suggests that incorporating moderate focus on harder examples enhances knowledge preservation without compromising adaptability. Meanwhile, the high values of γ (e.g ., 5.00 ) lead to degraded performance across most metrics, with reduced MFT (73.21%), MFN (72.18%), and MAA (74.27%), indicating that overemphasizing diffi-
+
+Table 5. Effectiveness of Divergence Parameter β.                                           
+
+> βRS Med AD Sci Fin MFT ↑MFN ↑MAA ↑BWT ↑
+> 0.01 83.09 67.71 56.90 62.06 96.77 75.43 73.31 75.83 -2.66 0.05 84.91 69.30 57.16 62.21 96.12 75.27 73.94 76.27 -1.66 0.10 85.68 69.74 57.73 61.55 95.28 74.29 74.00 75.68 -0.37 0.50 83.74 67.55 55.44 59.64 92.88 72.11 71.85 73.60 -0.32
+
+Table 6. Effectiveness of Focusing Parameter γ.                                      
+
+> γRS Med AD Sci Fin MFT ↑MFN ↑MAA ↑BWT ↑
+> 0.00 82.26 67.12 55.79 59.58 93.94 72.80 71.74 73.68 -1.33 0.50 82.84 67.84 55.50 59.71 93.78 72.79 71.93 73.87 -1.07 1.00 84.01 68.44 56.56 60.74 94.06 73.38 72.76 74.66 -0.77 2.00 85.68 69.74 57.73 61.55 95.28 74.29 74.00 75.68 -0.37
+> 5.00 83.08 67.74 55.99 60.05 94.03 73.21 72.18 74.27 -1.29
+
+cult pairs can lower overall learning dynamics. In our ex-periments, γ = 2 .00 provides the best trade-off, achieving favorable MFT (74.29%), MFN (74.00%), MAA (75.68%), and BWT (-0.37%). These results have indicated the im-portance of focusing parameter γ in balancing plasticity and stability in our ϕ-DPO approach. 
+
+Effectiveness of Different LMMs. Table 7 evaluates ϕ-DPO across different LMMs: LLaVA-7B, LLaVA-13B, and InternVL-7B [16]. In all cases, ϕ-DPO outperforms stan-dard DPO, confirming the generality of our Fair DPO objec-tive. Larger models ( i.e . LLaVA-13B) show improved per-formance over LLaVA-7B in MFT (76.29% vs. 74.29%), MFN (75.81% vs. 74.00%), MAA (77.57% vs. 75.68%), and BWT (-0.59% vs. -0.37%), reflecting better knowledge preservation due to greater capacity. InternVL-7B, despite similar size to LLaVA-7B, benefits from stronger vision-language alignment and achieves competitive results. ϕ-DPO consistently enhances performance across all back-bones, demonstrating robustness and compatibility with di-verse LMM architectures. 
+
+## 5. Conclusions and Limitations 
+
+Conclusions. This paper has presented a novel Fairness DPO approach to Continual Learning in LMMs. In partic-ular, our Fair DPO learning objective has been introduced to address both catastrophic forgetting and fairness prob-lems. Our theoretical analysis has also shown the effective-ness of our proposed approach. Our SoTA results on three benchmarks have further confirmed the effectiveness of our 
+
+ϕ-DPO compared to prior methods. 
+
+Limitations. Our work adopts a set of learning hyper-parameters aligned with theoretical analysis, but this choice introduces limitations, particularly in tuning β, γ, the weighted loss in Eqn. (17), and DPO data construction. The quality of DPO data is sensitive to label stability, which may be affected by class imbalance, domain shifts, or model un-certainty, potentially leading to suboptimal distillation tar-gets and misleading pairwise correlations. These limitations highlight the need for future work on more robust and adap-tive DPO strategies for continual multimodal learning. 
+
+Table 7. Effectiveness of Different LMM Framework.                                               
+
+> LLM Method RS Med AD Sci Fin MFT ↑MFN ↑MAA ↑BWT ↑
+> LLaVA-7B DPO 82.26 67.12 55.79 59.58 93.94 72.80 71.74 73.68 -1.33
+> ϕ-DPO 85.68 69.74 57.73 61.55 95.28 74.29 74.00 75.68 -0.37
+> LLaVA-13B DPO 86.24 70.28 58.02 63.26 96.84 75.89 74.93 77.00 -1.21
+> ϕ-DPO 87.40 71.09 59.34 63.96 97.28 76.29 75.81 77.57 -0.59
+> InternVL-7B DPO 82.69 67.69 55.97 60.67 94.83 73.88 72.37 74.68 -1.89
+> ϕ-DPO 85.64 69.88 57.94 61.95 95.74 74.62 74.23 75.94 -0.49
+
+8Acknowledgment. This work is partly supported by NSF CAREER (No. 2442295), NSF SCH (No. 2501021), NSF E-RISE (No. 2445877), NSF BIO (No. 2524623) and USDA/NIFA Award. We also acknowledge the Arkansas High-Performance Computing Center (HPC) for GPU servers. 
+
+## References 
+
+[1] Manoj Acharya, Kushal Kafle, and Christopher Kanan. Tal-lyqa: Answering complex counting questions. In Proceed-ings of the AAAI conference on artificial intelligence , pages 8076–8084, 2019. 6 [2] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical report. arXiv preprint arXiv:2303.08774 , 2023. 3 [3] Gustavo Aguilar, Yuan Ling, Yu Zhang, Benjamin Yao, Xing Fan, and Chenlei Guo. Knowledge distillation from internal representations. In Proceedings of the AAAI con-ference on artificial intelligence , pages 7350–7357, 2020. 2[4] Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, An-toine Miech, Iain Barr, Yana Hasson, Karel Lenc, Arthur Mensch, Katherine Millican, Malcolm Reynolds, et al. Flamingo: a visual language model for few-shot learning. 
+
+Advances in neural information processing systems , 35: 23716–23736, 2022. 3 [5] Jinze Bai, Shuai Bai, Yunfei Chu, Zeyu Cui, Kai Dang, Xiaodong Deng, Yang Fan, Wenbin Ge, Yu Han, Fei Huang, et al. Qwen technical report. arXiv preprint arXiv:2309.16609 , 2023. 1, 3 [6] Jinze Bai, Shuai Bai, Shusheng Yang, Shijie Wang, Sinan Tan, Peng Wang, Junyang Lin, Chang Zhou, and Jingren Zhou. Qwen-vl: A versatile vision-language model for un-derstanding, localization, text reading, and beyond. arXiv preprint arXiv:2308.12966 , 1(2):3, 2023. 3 [7] Pietro Buzzega, Matteo Boschini, Angelo Porrello, Davide Abati, and Simone Calderara. Dark experience for general continual learning: a strong, simple baseline. Advances in neural information processing systems , 33:15920–15930, 2020. 3 [8] Meng Cao, Yuyang Liu, Yingfei Liu, Tiancai Wang, Ji-ahua Dong, Henghui Ding, Xiangyu Zhang, Ian Reid, and Xiaodan Liang. Continual llava: Continual instruction tuning in large vision-language models. arXiv preprint arXiv:2411.02564 , 2024. 3 [9] Patrick Cattiaux and Arnaud Guillin. A criterion for ta-lagrand’s quadratic transportation cost inequality. arXiv preprint math/0312081 , 2003. 15 [10] Fabio Cermelli, Massimiliano Mancini, Samuel Rota Bul` o, Elisa Ricci, and Barbara Caputo. Modeling the back-ground for incremental learning in semantic segmentation. In CVPR , 2020. 2, 3, 4, 5 [11] Shuaichen Chang, David Palzer, Jialin Li, Eric Fosler-Lussier, and Ningchuan Xiao. Mapqa: A dataset for question answering on choropleth maps. arXiv preprint arXiv:2211.08545 , 2022. 6 [12] Yupeng Chang, Yi Chang, and Yuan Wu. Ba-lora: Bias-alleviating low-rank adaptation to mitigate catastrophic in-heritance in large language models, 2025. 2 [13] Cheng Chen, Junchen Zhu, Xu Luo, Heng T Shen, Jingkuan Song, and Lianli Gao. Coin: A benchmark of continual instruction tuning for multimodel large language models. 
+
+Advances in Neural Information Processing Systems , 37: 57817–57840, 2024. 2, 3, 6, 7 [14] Jiayi Chen and Aidong Zhang. FedMBridge: Bridgeable multimodal federated learning. In Forty-first International Conference on Machine Learning , 2024. 3 [15] Jinpeng Chen, Runmin Cong, Yuzhi Zhao, Hongzheng Yang, Guangneng Hu, Horace Ho Shing Ip, and Sam Kwong. Sefe: Superficial and essential forgetting elimi-nator for multimodal continual instruction tuning. arXiv preprint arXiv:2505.02486 , 2025. 3, 7 [16] Zhe Chen, Jiannan Wu, Wenhai Wang, Weijie Su, Guo Chen, Sen Xing, Muyan Zhong, Qinglong Zhang, Xizhou Zhu, Lewei Lu, et al. Internvl: Scaling up vision founda-tion models and aligning for generic visual-linguistic tasks. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 24185–24198, 2024. 8[17] Wei-Lin Chiang, Zhuohan Li, Zi Lin, Ying Sheng, Zhang-hao Wu, Hao Zhang, Lianmin Zheng, Siyuan Zhuang, Yonghao Zhuang, Joseph E. Gonzalez, Ion Stoica, and Eric P. Xing. Vicuna: An open-source chatbot impressing gpt-4 with 90%* chatgpt quality, 2023. 3, 6 [18] Andrea Cossu, Antonio Carta, Lucia Passaro, Vincenzo Lomonaco, Tinne Tuytelaars, and Davide Bacciu. Contin-ual pre-training mitigates forgetting in language and vision. 
+
+Neural Networks , 179:106492, 2024. 3 [19] Matt Deitke, Christopher Clark, Sangho Lee, Rohun Tri-pathi, Yue Yang, Jae Sung Park, Mohammadreza Salehi, Niklas Muennighoff, Kyle Lo, Luca Soldaini, et al. Molmo and pixmo: Open weights and open data for state-of-the-art vision-language models. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 91–104, 2025. 1 [20] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical im-age database. In 2009 IEEE conference on computer vision and pattern recognition , pages 248–255. Ieee, 2009. 6 [21] Arthur Douillard, Yifu Chen, Arnaud Dapogny, and Matthieu Cord. Plop: Learning without forgetting for continual semantic segmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 4040–4050, 2021. 2, 3, 4, 5 [22] Arthur Douillard, Alexandre Ram´ e, Guillaume Couairon, and Matthieu Cord. Dytox: Transformers for continual learning with dynamic token expansion. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9285–9295, 2022. 3 [23] David A Edwards. On the kantorovich–rubinstein theorem. 
+
+Expositiones Mathematicae , 29(4):387–398, 2011. 14 
+
+9[24] Deepanway Ghosal, Navonil Majumder, Ambuj Mehrish, and Soujanya Poria. Text-to-audio generation using instruction-tuned llm and latent diffusion model. arXiv preprint arXiv:2304.13731 , 2023. 3 [25] Yash Goyal, Tejas Khot, Douglas Summers-Stay, Dhruv Batra, and Devi Parikh. Making the v in vqa matter: El-evating the role of image understanding in visual ques-tion answering. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 6904–6913, 2017. 6 [26] Haiyang Guo, Fanhu Zeng, Ziwei Xiang, Fei Zhu, Da-Han Wang, Xu-Yao Zhang, and Cheng-Lin Liu. Hide-llava: Hierarchical decoupling for continual instruction tun-ing of multimodal large language model. arXiv preprint arXiv:2503.12941 , 2025. 2, 3, 6, 7 [27] Haiyang Guo, Fanhu Zeng, Fei Zhu, Wenzhuo Liu, Da-Han Wang, Jian Xu, Xu-Yao Zhang, and Cheng-Lin Liu. Federated continual instruction tuning. arXiv preprint arXiv:2503.12897 , 2025. 7 [28] Haiyang Guo, Fanhu Zeng, Fei Zhu, Jiayi Wang, Xukai Wang, Jingang Zhou, Hongbo Zhao, Wenzhuo Liu, Shi-jie Ma, Xu-Yao Zhang, et al. A comprehensive survey on continual learning in generative models. arXiv preprint arXiv:2506.13045 , 2025. 3 [29] Ziyu Guo, Ray Zhang, Hao Chen, Jialin Gao, Dongzhi Jiang, Jiaze Wang, and Pheng-Ann Heng. Sciverse: Un-veiling the knowledge comprehension and visual reasoning of lmms on multi-modal scientific problems. arXiv preprint arXiv:2503.10627 , 2025. 6 [30] Danna Gurari, Qing Li, Abigale J Stangl, Anhong Guo, Chi Lin, Kristen Grauman, Jiebo Luo, and Jeffrey P Bigham. Vizwiz grand challenge: Answering visual questions from blind people. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 3608–3617, 2018. 6 [31] Jiayi Han, Liang Du, Hongwei Du, Xiangguo Zhou, Yiwen Wu, Weibo Zheng, and Donghong Han. Slim: Let llm learn more and forget less with soft lora and identity mixture. 
+
+arXiv preprint arXiv:2410.07739 , 2024. 2 [32] Ryo Hase, Md Rafi Ur Rashid, Ashley Lewis, Jing Liu, Toshiaki Koike-Akino, Kieran Parsons, and Ye Wang. Smoothed embeddings for robust language models. arXiv preprint arXiv:2501.16497 , 2025. 14 [33] Xuehai He, Yichen Zhang, Luntian Mou, Eric Xing, and Pengtao Xie. Pathvqa: 30000+ questions for medical vi-sual question answering. arXiv preprint arXiv:2003.10286 ,2020. 6 [34] Calypso Herrera, Florian Krach, and Josef Teichmann. Lo-cal lipschitz bounds of deep neural networks. arXiv preprint arXiv:2004.13135 , 2020. 14 [35] Yu-Chung Hsiao, Fedir Zubach, Gilles Baechler, Victor Carbune, Jason Lin, Maria Wang, Srinivas Sunkara, Yun Zhu, and Jindong Chen. Screenqa: Large-scale question-answer pairs over mobile app screenshots. arXiv preprint arXiv:2209.08199 , 2022. 6 [36] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen, et al. Lora: Low-rank adaptation of large language models. 
+
+ICLR , 1(2):3, 2022. 2, 7 [37] Tianyu Huai, Jie Zhou, Xingjiao Wu, Qin Chen, Qingchun Bai, Ze Zhou, and Liang He. Cl-moe: Enhancing multi-modal large language model with dual momentum mixture-of-experts for continual visual question answering. In Pro-ceedings of the Computer Vision and Pattern Recognition Conference , pages 19608–19617, 2025. 7 [38] Drew A Hudson and Christopher D Manning. Gqa: A new dataset for real-world visual reasoning and compositional question answering. In Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , pages 6700–6709, 2019. 6 [39] Atin Sakkeer Hussain, Shansong Liu, Chenshuo Sun, and Ying Shan. M2ugen: Multi-modal music understanding and generation with the power of large language models. 
+
+arXiv preprint arXiv:2311.11255 , 2023. 3 [40] Goeric Huybrechts, Srikanth Ronanki, Sai Muralidhar Jayanthi, Jack Fitzgerald, and Srinivasan Veeravanallur. Document haystack: A long context multimodal im-age/document understanding vision llm benchmark. arXiv preprint arXiv:2507.15882 , 2025. 1 [41] Amit Kumar Jaiswal, Haiming Liu, and Ingo Frommholz. Multimodal rag enhanced visual description. arXiv preprint arXiv:2508.09170 , 2025. 1 [42] Joel Jang, Seonghyeon Ye, Changho Lee, Sohee Yang, Joongbo Shin, Janghoon Han, Gyeonghun Kim, and Min-joon Seo. Temporalwiki: A lifelong benchmark for train-ing and evaluating ever-evolving language models. arXiv preprint arXiv:2204.14211 , 2022. 3 [43] Justin Johnson, Bharath Hariharan, Laurens Van Der Maaten, Li Fei-Fei, C Lawrence Zitnick, and Ross Girshick. Clevr: A diagnostic dataset for compositional language and elementary visual reasoning. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 2901–2910, 2017. 6 [44] Sahar Kazemzadeh, Vicente Ordonez, Mark Matten, and Tamara Berg. Referitgame: Referring to objects in pho-tographs of natural scenes. In Proceedings of the 2014 con-ference on empirical methods in natural language process-ing (EMNLP) , pages 787–798, 2014. 6 [45] Aniruddha Kembhavi, Mike Salvato, Eric Kolve, Minjoon Seo, Hannaneh Hajishirzi, and Ali Farhadi. A diagram is worth a dozen images, 2016. 6 [46] Aniruddha Kembhavi, Minjoon Seo, Dustin Schwenk, Jonghyun Choi, Ali Farhadi, and Hannaneh Hajishirzi. Are you smarter than a sixth grader? textbook question answer-ing for multimodal machine comprehension. In Proceed-ings of the IEEE Conference on Computer Vision and Pat-tern recognition , pages 4999–5007, 2017. 6 [47] James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national academy of sciences , 114(13):3521–3526, 2017. 3, 7 [48] Frantzeska Lavda, Jason Ramapuram, Magda Gregorova, and Alexandros Kalousis. Continual classification learning 
+
+10 using generative models. arXiv preprint arXiv:1810.10612 ,2018. 3 [49] Michel Ledoux, Ivan Nourdin, and Giovanni Peccati. Stein’s method, logarithmic sobolev and transport inequal-ities. Geometric and Functional Analysis , 25(1):256–306, 2015. 15 [50] Bo Li, Hao Zhang, Kaichen Zhang, Dong Guo, Yuanhan Zhang, Renrui Zhang, Feng Li, Ziwei Liu, and Chunyuan Li. Llava-next: What else influences visual instruction tun-ing beyond data?, 2024. 3 [51] Bo Li, Kaichen Zhang, Hao Zhang, Dong Guo, Renrui Zhang, Feng Li, Yuanhan Zhang, Ziwei Liu, and Chunyuan Li. Llava-next: Stronger llms supercharge multimodal ca-pabilities in the wild, 2024. 3 [52] Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Yanwei Li, Ziwei Liu, and Chunyuan Li. Llava-onevision: Easy visual task transfer. 
+
+arXiv preprint arXiv:2408.03326 , 2024. 3 [53] Chunyuan Li, Cliff Wong, Sheng Zhang, Naoto Usuyama, Haotian Liu, Jianwei Yang, Tristan Naumann, Hoifung Poon, and Jianfeng Gao. Llava-med: Training a large language-and-vision assistant for biomedicine in one day. 
+
+Advances in Neural Information Processing Systems , 36, 2024. 3 [54] Feng Li, Renrui Zhang, Hao Zhang, Yuanhan Zhang, Bo Li, Wei Li, Zejun Ma, and Chunyuan Li. Llava-next: Tack-ling multi-image, video, and 3d in large multimodal mod-els, 2024. 3 [55] Junnan Li, Dongxu Li, Caiming Xiong, and Steven Hoi. Blip: Bootstrapping language-image pre-training for uni-fied vision-language understanding and generation. In 
+
+International Conference on Machine Learning , pages 12888–12900. PMLR, 2022. 1 [56] Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. Blip-2: Bootstrapping language-image pre-training with frozen image encoders and large language models. In In-ternational conference on machine learning , pages 19730– 19742. PMLR, 2023. 1, 3 [57] KunChang Li, Yinan He, Yi Wang, Yizhuo Li, Wen-hai Wang, Ping Luo, Yali Wang, Limin Wang, and Yu Qiao. Videochat: Chat-centric video understanding. arXiv preprint arXiv:2305.06355 , 2023. 3 [58] Yanwei Li, Chengyao Wang, and Jiaya Jia. Llama-vid: An image is worth 2 tokens in large language models. In 
+
+European Conference on Computer Vision , pages 323–340. Springer, 2025. 3 [59] Zhizhong Li and Derek Hoiem. Learning without forget-ting. IEEE transactions on pattern analysis and machine intelligence , 40(12):2935–2947, 2017. 3, 7 [60] Zhang Li, Biao Yang, Qiang Liu, Zhiyin Ma, Shuo Zhang, Jingxu Yang, Yabo Sun, Yuliang Liu, and Xiang Bai. Mon-key: Image resolution and text label are important things for large multi-modal models. In proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pages 26763–26773, 2024. 6 [61] Bin Lin, Yang Ye, Bin Zhu, Jiaxi Cui, Munan Ning, Peng Jin, and Li Yuan. Video-llava: Learning united visual rep-resentation by alignment before projection. arXiv preprint arXiv:2311.10122 , 2023. 3 [62] Jessy Lin, Luke Zettlemoyer, Gargi Ghosh, Wen-Tau Yih, Aram Markosyan, Vincent-Pierre Berges, and Barlas O˘ guz. Continual learning via sparse memory finetuning. arXiv preprint arXiv:2510.15103 , 2025. 3 [63] Tsung-Yi Lin, Priya Goyal, Ross Girshick, Kaiming He, and Piotr Doll´ ar. Focal loss for dense object detection. In 
+
+Proceedings of the IEEE international conference on com-puter vision , pages 2980–2988, 2017. 5 [64] Dingning Liu, Xiaoshui Huang, Yuenan Hou, Zhihui Wang, Zhen fei Yin, Yongshun Gong, Peng Gao, and Wanli Ouyang. Uni3d-llm: Unifying point cloud perception, gen-eration and editing with large language models. ArXiv ,abs/2402.03327, 2024. 3 [65] Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. Improved baselines with visual instruction tuning. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 26296–26306, 2024. 1, 3, 6[66] Haotian Liu, Chunyuan Li, Yuheng Li, Bo Li, Yuanhan Zhang, Sheng Shen, and Yong Jae Lee. Llava-next: Im-proved reasoning, ocr, and world knowledge, 2024. 3 [67] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. Advances in neural infor-mation processing systems , 36, 2024. 1, 3 [68] Yuliang Liu, Zhang Li, Mingxin Huang, Biao Yang, Wen-wen Yu, Chunyuan Li, Xu-Cheng Yin, Cheng-Lin Liu, Lianwen Jin, and Xiang Bai. Ocrbench: on the hidden mys-tery of ocr in large multimodal models. Science China In-formation Sciences , 67(12):220102, 2024. 6 [69] Sylvain Lobry, Diego Marcos, Jesse Murray, and Devis Tuia. Rsvqa: Visual question answering for remote sens-ing data. IEEE Transactions on Geoscience and Remote Sensing , 58(12):8555–8566, 2020. 6 [70] Pan Lu, Swaroop Mishra, Tanglin Xia, Liang Qiu, Kai-Wei Chang, Song-Chun Zhu, Oyvind Tafjord, Peter Clark, and Ashwin Kalyan. Learn to explain: Multimodal rea-soning via thought chains for science question answering. 
+
+Advances in Neural Information Processing Systems , 35: 2507–2521, 2022. 6 [71] Arun Mallya, Dillon Davis, and Svetlana Lazebnik. Piggy-back: Adapting a single network to multiple tasks by learn-ing to mask weights. In Proceedings of the European con-ference on computer vision (ECCV) , pages 67–82, 2018. 3 [72] Junhua Mao, Jonathan Huang, Alexander Toshev, Oana Camburu, Alan L Yuille, and Kevin Murphy. Generation and comprehension of unambiguous object descriptions. In 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition , pages 11–20, 2016. 6 [73] Anand Mishra, Shashank Shekhar, Ajeet Kumar Singh, and Anirban Chakraborty. Ocr-vqa: Visual question answering by reading text in images. In 2019 international confer-ence on document analysis and recognition (ICDAR) , pages 947–952. IEEE, 2019. 6 [74] Yiqiao Qiu, Yixing Shen, Zhuohao Sun, Yanchong Zheng, Xiaobin Chang, Weishi Zheng, and Ruixuan Wang. Sats: 
+
+11 Self-attention transfer for continual semantic segmentation. 
+
+Pattern Recognition , 138:109383, 2023. 2 [75] Rafael Rafailov, Archit Sharma, Eric Mitchell, Christo-pher D Manning, Stefano Ermon, and Chelsea Finn. Direct preference optimization: Your language model is secretly a reward model. Advances in neural information processing systems , 36:53728–53741, 2023. 4 [76] Anastasia Razdaibiedina, Yuning Mao, Rui Hou, Madian Khabsa, Mike Lewis, and Amjad Almahairi. Progressive prompts: Continual learning for language models. arXiv preprint arXiv:2301.12314 , 2023. 3 [77] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Rad-ford, and Oleg Klimov. Proximal policy optimization algo-rithms. arXiv preprint arXiv:1707.06347 , 2017. 4 [78] Wei Shen, Jiangbo Pei, Yi Peng, Xuchen Song, Yang Liu, Jian Peng, Haofeng Sun, Yunzhuo Hao, Peiyu Wang, Jian-hao Zhang, and Yahui Zhou. Skywork-r1v3 technical re-port, 2025. 3 [79] Haizhou Shi, Zihao Xu, Hengyi Wang, Weiyi Qin, Wenyuan Wang, Yibin Wang, Zifeng Wang, Sayna Ebrahimi, and Hao Wang. Continual learning of large lan-guage models: A comprehensive survey. ACM Computing Surveys , 2024. 3 [80] Wenhao Shi, Zhiqiang Hu, Yi Bin, Junhua Liu, Yang Yang, See-Kiong Ng, Lidong Bing, and Roy Ka-Wei Lee. Math-llava: Bootstrapping mathematical reasoning for multimodal large language models. arXiv preprint arXiv:2406.17294 , 2024. 6 [81] Zenglin Shi, Pei Liu, Tong Su, Yunpeng Wu, Kuien Liu, Yu Song, and Meng Wang. Densely distilling cumu-lative knowledge for continual learning. arXiv preprint arXiv:2405.09820 , 2024. 2 [82] Marco Siino. Mcrock at semeval-2024 task 4: Mistral 7b for multilingual detection of persuasion techniques in memes. In Proceedings of the 18th International Work-shop on Semantic Evaluation (SemEval-2024) , pages 53– 59, 2024. 3 [83] Chonghao Sima, Katrin Renz, Kashyap Chitta, Li Chen, Hanxue Zhang, Chengen Xie, Jens Beißwenger, Ping Luo, Andreas Geiger, and Hongyang Li. Drivelm: Driving with graph visual question answering. In European conference on computer vision , pages 256–274. Springer, 2024. 6 [84] Amanpreet Singh, Vivek Natarajan, Meet Shah, Yu Jiang, Xinlei Chen, Dhruv Batra, Devi Parikh, and Marcus Rohrbach. Towards vqa models that can read. In Proceed-ings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8317–8326, 2019. 6 [85] James Seale Smith, Leonid Karlinsky, Vyshnavi Gutta, Paola Cascante-Bonilla, Donghyun Kim, Assaf Arbelle, Rameswar Panda, Rogerio Feris, and Zsolt Kira. Coda-prompt: Continual decomposed attention-based prompting for rehearsal-free continual learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 11909–11919, 2023. 3 [86] Alane Suhr and Yoav Artzi. Continual learning for instruc-tion following from realtime feedback. Advances in Neural Information Processing Systems , 36:32340–32359, 2023. 3 [87] Ryota Tanaka, Taichi Iki, Taku Hasegawa, Kyosuke Nishida, Kuniko Saito, and Jun Suzuki. Vdocrag: Retrieval-augmented generation over visually-rich docu-ments. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 24827–24837, 2025. 1 [88] Yonglong Tian, Dilip Krishnan, and Phillip Isola. Contrastive representation distillation. arXiv preprint arXiv:1910.10699 , 2019. 2 [89] Thanh-Dat Truong, Chi Nhan Duong, Ngan Le, Son Lam Phung, Chase Rainwater, and Khoa Luu. Bimal: Bijec-tive maximum likelihood approach to domain adaptation in semantic scene segmentation. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pages 8548–8557, 2021. 3 [90] Thanh-Dat Truong, Ngan Le, Bhiksha Raj, Jackson Cothren, and Khoa Luu. Fredom: Fairness domain adaptation approach to semantic scene understanding. In IEEE/CVF Computer Vision and Pattern Recognition (CVPR) , 2023. 3 [91] Thanh-Dat Truong, Hoang-Quan Nguyen, Bhiksha Raj, and Khoa Luu. Fairness continual learning approach to se-mantic scene understanding in open-world environments. 
+
+Advances in Neural Information Processing Systems , 36: 65456–65467, 2023. 2, 3 [92] Thanh-Dat Truong, Hoang-Quan Nguyen, Bhiksha Raj, and Khoa Luu. Fairness continual learning approach to se-mantic scene understanding in open-world environments. 
+
+Advances in Neural Information Processing Systems , 36, 2024. 3 [93] Thanh-Dat Truong, Utsav Prabhu, Dongyi Wang, Bhiksha Raj, Susan Gauch, Jeyamkondan Subbiah, and Khoa Luu. Eagle: Efficient adaptive geometry-based learning in cross-view understanding. Advances in Neural Information Pro-cessing Systems , 37:137309–137333, 2024. 3 [94] Thanh-Dat Truong, Utsav Prabhu, Bhiksha Raj, Jackson Cothren, and Khoa Luu. Falcon: Fairness learning via contrastive attention approach to continual semantic scene understanding. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 15065–15075, 2025. 2, 3 [95] Thanh-Dat Truong, Huu-Thien Tran, Tran Thai Son, Bhik-sha Raj, and Khoa Luu. Directed-tokens: A robust multi-modality alignment approach to large language-vision mod-els. In The Thirty-ninth Annual Conference on Neural In-formation Processing Systems , 2025. 3 [96] Bryan Wang, Gang Li, Xin Zhou, Zhourong Chen, Tovi Grossman, and Yang Li. Screen2words: Automatic mobile ui summarization with multimodal learning. In The 34th Annual ACM Symposium on User Interface Software and Technology , pages 498–510, 2021. 6 [97] Shuchan Wang, Photios A Stavrou, and Mikael Skoglund. Generalizations of talagrand inequality for sinkhorn dis-tance using entropy power inequality. Entropy , 24(2):306, 2022. 15 [98] Weiyun Wang, Zhangwei Gao, Lixin Gu, Hengjun Pu, Long Cui, Xingguang Wei, Zhaoyang Liu, Linglin Jing, Shenglong Ye, Jie Shao, et al. Internvl3.5: Advancing open-
+
+12 source multimodal models in versatility, reasoning, and ef-ficiency, 2025. 3 [99] Xiao Wang, Tianze Chen, Qiming Ge, Han Xia, Rong Bao, Rui Zheng, Qi Zhang, Tao Gui, and Xuanjing Huang. Or-thogonal subspace learning for language model continual learning. arXiv preprint arXiv:2310.14152 , 2023. 3, 7 [100] Yidong Wang, Zhuohao Yu, Jindong Wang, Qiang Heng, Hao Chen, Wei Ye, Rui Xie, Xing Xie, and Shikun Zhang. Exploring vision-language models for imbalanced learning. 
+
+International Journal of Computer Vision , 132(1):224–237, 2024. 2 [101] Zifeng Wang, Zizhao Zhang, Chen-Yu Lee, Han Zhang, Ruoxi Sun, Xiaoqi Ren, Guolong Su, Vincent Perot, Jen-nifer Dy, and Tomas Pfister. Learning to prompt for contin-ual learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 139– 149, 2022. 3, 7 [102] Yuetian Weng, Mingfei Han, Haoyu He, Xiaojun Chang, and Bohan Zhuang. Longvlm: Efficient long video un-derstanding via large language models. arXiv preprint arXiv:2404.03384 , 2024. 3 [103] Runsen Xu, Xiaolong Wang, Tai Wang, Yilun Chen, Jiang-miao Pang, and Dahua Lin. Pointllm: Empowering large language models to understand point clouds. In ECCV ,2024. 3 [104] Senqiao Yang, Jiaming Liu, Ray Zhang, Mingjie Pan, Zoey Guo, Xiaoqi Li, Zehui Chen, Peng Gao, Yandong Guo, and Shanghang Zhang. Lidar-llm: Exploring the potential of large language models for 3d lidar understanding. arXiv preprint arXiv:2312.14074 , 2023. 3 [105] Muchao Ye, Ziyi Yin, Tianrong Zhang, Tianyu Du, Jinghui Chen, Ting Wang, and Fenglong Ma. Unit: a unified look at certified robust training against text adversarial perturba-tion. Advances in Neural Information Processing Systems ,36:22351–22368, 2023. 14 [106] Wenpeng Yin, Jia Li, and Caiming Xiong. Contintin: Continual learning from task instructions. arXiv preprint arXiv:2203.08512 , 2022. 3 [107] Kaining Ying, Fanqing Meng, Jin Wang, Zhiqian Li, Han Lin, Yue Yang, Hao Zhang, Wenbo Zhang, Yuqi Lin, Shuo Liu, et al. Mmt-bench: A comprehensive multimodal benchmark for evaluating large vision-language models to-wards multitask agi. arXiv preprint arXiv:2404.16006 ,2024. 6 [108] Shi Yu, Chaoyue Tang, Bokai Xu, Junbo Cui, Junhao Ran, Yukun Yan, Zhenghao Liu, Shuo Wang, Xu Han, Zhiyuan Liu, et al. Visrag: Vision-based retrieval-augmented generation on multi-modality documents. arXiv preprint arXiv:2410.10594 , 2024. 1 [109] Daoguang Zan, Bei Chen, Dejian Yang, Zeqi Lin, Minsu Kim, Bei Guan, Yongji Wang, Weizhu Chen, and Jian-Guang Lou. Cert: continual pre-training on sketches for library-oriented code generation. arXiv preprint arXiv:2206.06888 , 2022. 3 [110] Fanhu Zeng, Fei Zhu, Haiyang Guo, Xu-Yao Zhang, and Cheng-Lin Liu. Modalprompt: Towards efficient mul-timodal continual instruction tuning with dual-modality guided prompt. arXiv preprint arXiv:2410.05849 , 2024. 3 [111] Han Zhang, Yu Lei, Lin Gui, Min Yang, Yulan He, Hui Wang, and Ruifeng Xu. Cppo: Continual learning for reinforcement learning with human feedback. In The Twelfth International Conference on Learning Representa-tions , 2024. 3 [112] Rongzhi Zhang, Jiaming Shen, Tianqi Liu, Jialu Liu, Michael Bendersky, Marc Najork, and Chao Zhang. Do not blindly imitate the teacher: Using perturbed loss for knowl-edge distillation. arXiv preprint arXiv:2305.05010 , 2023. 2[113] Renrui Zhang, Xinyu Wei, Dongzhi Jiang, Ziyu Guo, Shicheng Li, Yichi Zhang, Chengzhuo Tong, Jiaming Liu, Aojun Zhou, Bin Wei, et al. Mavis: Mathematical visual instruction tuning with an automatic data engine. arXiv preprint arXiv:2407.08739 , 2024. 6 [114] Xin Zhang, Liang Bai, Xian Yang, and Jiye Liang. C-lora: Continual low-rank adaptation for pre-trained models. 
+
+arXiv preprint arXiv:2502.17920 , 2025. 2 [115] Yuanhan Zhang, Bo Li, haotian Liu, Yong jae Lee, Liangke Gui, Di Fu, Jiashi Feng, Ziwei Liu, and Chunyuan Li. Llava-next: A strong zero-shot video understanding model, 2024. 3 [116] Hongbo Zhao, Fei Zhu, Haiyang Guo, Meng Wang, Run-dong Wang, Gaofeng Meng, and Zhaoxiang Zhang. Mllm-cl: Continual learning for multimodal large language mod-els. arXiv preprint arXiv:2506.05453 , 2025. 1, 2, 3, 6, 7 [117] Yue Zhao, Ishan Misra, Philipp Kr¨ ahenb¨ uhl, and Rohit Girdhar. Learning video representations from large lan-guage models. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , pages 6586–6597, 2023. 3 
+
+13 ϕ-DPO: Fairness Direct Preference Optimization Approach to Continual Learning in Large Multimodal Models 
+
+# Supplementary Material 
+
+## A. Proof of Lemmas 
+
+A.1. Proof of Lemma 1 
+
+The DPO loss in Eqn. (7) can be rewrite as follows:           
+
+> LDPO (πt, π t−1) = Ex,y +,y
+> "
+> ℓβ
+>  ∆t(y+, y −) #
+> ℓβ(u) = log
+> 
+> 1 + exp( βu )
+> 
+> ∆t(y+, y −) =
+> 
+> log πt(y+|x)−log πt(y−|x)
+> 
+> −
+> 
+> log πt−1(y+|x)−log πt−1(y−|x)
+> 
+> (18)
+
+Lemma 4 Pairwise Logistic Lower Bound by Margin . For any u ∈ R and β > 0,
+
+ℓβ (u) = log(1 + e−βu ) ≥ log 2 − β 
+
+> 2
+
+u. 
+
+Proof. Since log(1 + e−v ) is convex and symmetric around 
+
+v = 0 in the sense that its tangent at 0 is log 2 − 12 v,the global underestimator follows from convexity log(1 + 
+
+e−v ) ≥ log 2 − 12 v. Then, we substitute v = βu follow by taking expectation over pairs: 
+
+E[ℓβ (∆ t(y+, y −)) ≥ log 2 − β
+
+2 E[∆ t(y+, y −)] . (19) As a result, the small value of the DPO loss forces large average margin E[∆ t(y+, y −)] . In other words, the smaller value of DPO loss enforces the model’s preference for well-retained y+ responses stronger than for forgotten ones y−
+
+.
+
+Lemma 5 Average Margin Controls an Integral Proba-bility Metrics (IPM) . Let F1 be the set of all 1-Lipschitz functions, If the reward function r is L-Lipschitz, then 
+
+r/L ∈ F 1. Then, for any pair of marginals P +, P − where 
+
+y+ ∼ P +(y+) and y− ∼ P −(y−), we have                              
+
+> E[∆ t(y+, y −)] = EP+[r(x, y +)] −EP−[r(x, y −)]
+> ≤LIPM F1(P+, P −)≤LW 1(P+, P −)IPM F1(P+, P −) = sup
+> f∈F 1
+> 
+> Ey+∼P+[f(y+)] −Ey−∼P−[f(y−)]
+> 
+> (20)
+
+where W1 is the 1-Wasserstein distance. 
+
+Proof. By definition of IPM over 1-Lipschitz functions and 
+
+r/L is admissible, the above inequality is the Kantorovich-Rubinstein duality IPM over 1-Lipschitz functions equals 
+
+W1 provided in [23]. In addition, although Lemma 5 re-quires r to be an L-Lipschitz function, we have observed that a local L-Lipschitz reward function, which is satisfied in our setup, is also sufficient. Indeed, prior studies [34] rigorously derives bounds on the local Lipschitz constants of deep neural networks and shows they can be meaning-fully controlled despite huge global constants. This result indicate that the LLMs behave smoothly around their high-probability outputs. In our context, we only need the log-ratio to be Lipschitz on the region visited by preference pairs, not globally over all possible outputs. Transformer-based LLMs incorporate norm control, weight decay, and normalization layers, which implicitly bound gradient mag-nitudes and curtail abrupt jumps in logits. Empirically, small semantic perturbations rarely cause extreme changes in logits, suggesting local smoothness holds on the data manifold [32, 105] Thus, a locally valid Lipschitz constant suffices the requirement of Lemma 5. Therefore, while LLMs may not be globally Lipschitz, they plausibly satisfy the needed local Lipschitz continuity in the regions relevant to DPO, making Lemma 5 still valid in practice. In addition, it can be shown that W1(P +, P −) ≤
+
+3W1(πt, π t−1) follows naturally from the triangle in-equality of the Wasserstein distance. In particular, if the preference distributions P + and P − remain close to the current and previous policies, respectively, such that W1(P +, π t) ≤ W1(πt, π t−1) and W1(P −, π t−1) ≤
+
+W1(πt, π t−1), then we obtain          
+
+> W1(P+, P −)≤W1(P+, π t) + W1(πt, π t−1) + W1(πt−1, P −)
+> ≤3W1(πt, π t−1)
+> (21)
+
+This conditions are typically satisfied in the DPO train-ing, where preference sampling is a monotone and non-expansive process, e.g., sampling candidates from a mix-ture (please refer to Remark 1 in Section A.2). In the context of continual learning of LMMs, the inequality 
+
+W1(P +, P −) ≤ 3W1(πt, π t−1) implies that the discrep-ancy between well-retained and forgotten knowledge is bounded by the overall policy shift between two learning steps. Intuitively, both P + and P − remain anchored around their respective policies, so the overall variation between them is bounded by a constant multiple of the inter-policy shift W1(πt, π t−1). Concurrently, both P + and P − remain anchored around their respective policies— P + near the cur-rent policy πt and P − near the previous policy πt−1—so if the model update between tasks is smooth, the seman-tic drift between memory retention and forgetting remains limited. This highlights that our continual DPO training en-forces a stable adaptation process, where catastrophic for-getting is controlled by bounding the inter-policy Wasser-14 stein distance. Now, the inequality in Eqn. (20) can be further rewritten as follows: 
+
+E[∆ t(y+, y −)] = EP + [r(x, y +)] − EP − [r(x, y −)] 
+
+≤ 3LW 1(πt, π t−1) (22) 
+
+Lemma 6 A Transport–Entropy Inequality . Since the out-put probability p(y|x) produced by the LMM of previous learning step πt1 is computed based on the softmax on the logit scores of token y, we can view πt−1 as a Boltz-mann distribution over token sequences. Then, without a strict argument, we assume that πt−1 satisfies the Talagrand 
+
+T2(C0) inequality [49, 97]: 
+
+W 22 (μ, π t−1) ≤ 2C0 DKL (μ ∥ πt−1) for all μ, (23) 
+
+Then, since W1 ≤ W2, by substituting μ by πt, we have the final inequality as follows: 
+
+W1(πt, π t−1) ≤ p2C0 DKL (πt ∥ πt−1) (24) 
+
+Proof. The proof of Talagrand T2(C0) inequality has been shown in prior studies [9]. 
+
+Proof of Lemma 1. From Lemmas 4-6, we have                             
+
+> LDPO (θ;x)≥log 2 −β
+> 2E[∆ t]
+> ≥log 2 −3β
+> 2LW 1(πt, π t−1)
+> ≥log 2 −3β
+> 2Lp2C0DKL (πt∥πt−1)
+> ⇒log 2 − L DPO (θ;x)≤3βL
+> 2
+> p2C0DKL (πt∥πt−1)
+> ⇒DKL (πt∥πt−1)≥(log 2 − L DPO (πt, π t−1)) 212β232L22C0
+> DKL (πt∥πt−1)≥(log 2 − L DPO (πt, π t−1)) 2
+> β232L2C0
+> (25)
+
+Then, assume that there exists a constant M ≥ 1 such that for all (x, y ),
+
+1
+
+M ≤ πt−1(y|x)
+
+πt(y|x) ≤ M. (26) This ensures that the predicted distributions of the LMM model at the previous learning step πt−1 and the current learning step πt are mutually absolutely continuous and that their density ratio is uniformly bounded. In other words, it prevents the predictions of the LMM from collapsing across consecutive learning steps, ensuring a stable and smooth evolution of the output distribution during the continual learning procedure. Let h(x, y ) = πt−1(y|x) 
+
+> πt(y|x)
+
+denote the like-lihood ratio. The forward and reverse KL divergence can be rewritten as follows 
+
+DKL (πt−1∥πt) = E(x,y )∼πt
+
+h(x, y ) log h(x, y ), (27) 
+
+DKL (πt∥πt−1) = E(x,y )∼πt
+
+ − log h(x, y ), (28) where h(x, y ) = πt−1(y|x) 
+
+> πt(y|x)
+
+.
+
+Lower bound of DKL (πt−1∥πt). The function f (u) = 
+
+u log u is convex with f ′′ (u) = 1/u . On the interval 
+
+[1 /M, M ], the smallest curvature is 1/M . By the second-order convexity bound around u = 1 ,
+
+u log u ≥ (u − 1) + 12M (u − 1) 2. (29) Since Ex,y ∼πt(y|x)[h(x, y ) − 1] = 0 , taking the expectation under πt will result in 
+
+DKL (πt−1∥πt) ≥ 12M Eπt
+
+(h(x, y ) − 1) 2. (1) 
+
+Upper bound of DKL (πt∥πt−1). Similarly, with g(u) = 
+
+− log u, we have g′′ (u) = 1 /u 2, and on [1 /M, M ], the largest curvature is M 2. Hence, 
+
+− log u ≤ (1 − u) + M 2
+
+2 (u − 1) 2. (30) Then, taking expectation under πt will result in 
+
+DKL (πt∥πt−1) ≤ M 2
+
+2 Eπt
+
+(h(x, y ) − 1) 2. (31) From Eqn. (1) and and Eqn. (30), we can obtain 
+
+DKL (πt−1∥πt) ≥ 1
+
+M 3 DKL (πt∥πt−1). (32) Then, let us define c = M 3. Eqn. (25) can be further de-rived as follows: 
+
+DKL (πt−1∥πt) ≥ (log 2 − L DPO (θ; x)) 2
+
+cβ 232L2C0
+
+≥ 1
+
+Clower 
+
+(log 2 − L DPO (θ; x)) 2
+
+(33) where Clower = cβ 232L2C0.
+
+A.2. Proof of Lemma 2 
+
+Remark 1. Mixture Sampling and Monotone Labeling. 
+
+For each prompt x, the output candidates are sampled from 
+
+Qx = α π t−1(· | x) + (1 − α) πt(· | x) with α ∈ (0 , 1] ,
+
+(34) and the selection kernel (human or reward model) chooses the preferred/dispreferred outputs (y+, y −) monotonically 
+
+with the underlying reward, inducing pair marginals 
+
+P + 
+
+> x
+
+, P − 
+
+> x
+
+that do not expand total variation beyond what is present in Qx. Formally, we have 
+
+TV  πt−1(· | x), π t(· | x) ≤ 1
+
+α TV  P +, P −. (35) Remark 1 is both natural and theoretically justified in the context of continual learning via DPO. The candidate 15 responses of DPO are typically drawn from a mixture of the previous and current policies, Qx, to ensure balanced exposure to both past and newly adapted behaviors. The monotone labeling condition further indicates that the pref-erence signal, whether derived from humans or a reward model, preserves the true reward ordering of outputs. Then, the total-variation inequality then follows from the data-processing principle, i.e., applying a monotone labeling ker-nel cannot increase statistical divergence between distribu-tions. Intuitively, the preference selection process can only reveal discrepancies already present in the mixture Qx, not amplify them. Consequently, Remark 1 enforces a bounded relationship between the divergence of the induced pairwise marginals (P + 
+
+> x
+
+, P − 
+
+> x
+
+) and the divergence between the under-lying policies (πt−1, π t). In addition, this guarantees that updates to πt remain geometrically close to πt−1, provid-ing a stability-adaptability balance in the continual learning setting, i.e., the model can adapt to new data or tasks while preventing catastrophic forgetting. 
+
+Remark 2. Sign Consistency. The predictor πt is Bayes-consistent in sign on the support of Mx := 12 (P + 
+
+> x
+
++ P − 
+
+> x
+
+):
+
+sgn  qθ (z) − 12
+
+ = sgn  η(z) − 12
+
+ for Mx-a.e. z, 
+
+where η(z) = dP +     
+
+> x
+> d(P+
+> x+P−
+> x)
+
+(z) and qθ (z) = σ(βs θ (z)) with 
+
+σ(u) = 11+ e−u . This remark is standard in excess-risk cali-bration and holds whenever the logistic excess risk is suffi-ciently small to ensure boundary consistency. 
+
+Lemma 7 Logistic Calibration for Pairs . Given P + and 
+
+P −, the total variation of T V (P +, P −) will be bounded by the DPO loss:      
+
+> TV  P+, P −≤2√2
+> q
+> LDPO (πt, π t−1)− L ⋆
+> DPO (πt, π t−1)
+> (36)
+
+where L⋆
+
+> DPO
+
+(πt, π t−1) is the Bayes-optimal logistic pair-wise loss. 
+
+Proof. Let us abbreviate P + = P + 
+
+> x
+
+, P − = P − 
+
+> x
+
+, and 
+
+M = 12 (P + + P −). The DPO loss and its Bayes-optimal counterpart can be written as 
+
+LDPO (πt, π t−1) = EZ∼M
+
+CE( η(Z), q θ (Z)) 
+
+L⋆
+
+> DPO
+
+(πt, π t−1) = EZ∼M
+
+CE( η(Z), η (Z))  (37) where CE( ·, ·) is the binary cross-entropy function, η(·)
+
+represents the true (Bayes-optimal) preference probability between positive and negative outcomes, qθ (Z) is model-predicted probability obtained from the logit margin of the LMM model. Then, the excess DPO risk is formed as: 
+
+Rπt,π t−1 (x) = LDPO (πt, π t−1) − L ⋆
+
+> DPO
+
+(πt, π t−1)= EZ∼M
+
+h
+
+KL  Bern( η(Z)) Bern( qθ (Z)) i
+
+.
+
+(38) where Bern is the Bernoulli distribution. 
+
+Bernoulli Pinsker Inequality. For any z, Pinsker’s in-equality for Bernoulli distributions gives 
+
+KL  Bern( η(z)) ∥ Bern( qθ (z))  ≥ 2 ( η(z) − qθ (z)) 2.
+
+(39) Hence, 
+
+EM [( η − qθ )2] ≤ 12 Rπt,π t−1 (x). (40) 
+
+Sign Consistency Implies Margin Control. Under Re-mark 2, since η and qθ lie on the same side of 12 for almost every z:                        
+
+> |η(z)−12| ≤ | η(z)−qθ(z)|+|qθ(z)−12| ≤ 2|η(z)−qθ(z)|⇒ | 2η(z)−1| ≤ 4|η(z)−qθ(z)|
+> (41)
+
+By definition of total variation, we have 
+
+TV( P +, P −) = EZ∼M
+
+|2η(Z) − 1|. (42) Then, applying Eqn. (41) and Cauchy–Schwarz, we will receive 
+
+TV( P +, P −) ≤ 4 EM |η − qθ | ≤ 4 pEM (η − qθ )2.
+
+(43) Then, substitute Eqn.(40) will result in 
+
+TV( P +, P −) ≤ 4
+
+q 12 Rπt,π t−1 (x)= 2 √2
+
+q
+
+LDPO (πt, π t−1) − L ⋆
+
+> DPO
+
+(πt, π t−1) .
+
+(44) 
+
+Proof of Lemma 2 . By Pinsker’s inequality, we have 
+
+TV  πt−1, π t
+
+ ≤
+
+q 12 DKL 
+
+ πt−1 ∥ πt
+
+,
+
+⇒ DKL 
+
+ πt−1 ∥ πt
+
+ ≤ 2 TV  πt−1, π t
+
+2.
+
+(45) Then, substituting Remark 1 and Lemma 7 into Pinsker’s relation will result in             
+
+> DKL
+>  πt−1∥πt
+> ≤22√2
+> α
+> q
+> LDPO (πt, π t−1)− L ⋆
+> DPO (πt, π t−1)
+> !2
+> ≤16
+> α2(LDPO (πt, π t−1)− L ⋆
+> DPO (πt, π t−1))
+> ≤16
+> α2LDPO (πt, π t−1)=Cupper LDPO (πt, π t−1)
+> (46)
+
+where Cupper = 16  
+
+> α2
+
+.
+
+A.3. Proof of Lemma 3 
+
+Proof. Since log p ≤ 0, one has 0 ≤ αγ (p) ≤ (1 − p)γ ,and (1 − p)γ → 0 exponentially as γ → ∞ . Then, for any fixed p ∈ (0 , 1) , we have lim γ→∞ αγ (p) = 0 . As a result, 16 for each group k, if p(z) ∈ (0 , 1) a.s. and E[∥(pθ −1) ∇sθ ∥ | 
+
+Gk] < ∞, then lim γ→∞ wγk (θ) = 0 . By definition, we have 
+
+∥Bγ (θ)∥ ≤ 
+
+> K
+
+X
+
+> k=1
+
+|qk − q′
+
+> k
+
+| | wγk (θ)| ∥ mk(θ)∥. (47) Since wγk (θ) → 0 for each k as γ → ∞ , the sum tends to 0.
+
+## B. DPO Data 
+
+B.1. Data Description 
+
+We share a part of our data in the supplementary submis-sion. Due to the file size limitations of the supplementary submission, we provide only a partial subset of the dataset used in our experiments. This subset is intended to illustrate the data structure, annotation format, and representative vi-sual characteristics. The full dataset , including all images and finalized annotations, will be released publicly upon ac-ceptance of the paper. 
+
+B.2. Copyright and Usage Notice 
+
+All images included in this supplementary package remain the intellectual property of their original creators and data sources. We do not claim copyright over any raw images provided here. The images are included solely for scientific reference and reproducibility under fair-use guidelines. In the final version of the dataset, we will release the complete annotations produced in this work while preserv-ing the copyright of all images. Access to the full image collection will be provided in accordance with the licensing and usage terms of the original datasets. Users of this sup-plementary material are responsible for ensuring that any use of these images complies with the corresponding copy-right requirements. 17

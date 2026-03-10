@@ -1,0 +1,1032 @@
+Title: Towards Provably Unbiased LLM Judges via Bias-Bounded Evaluation
+
+URL Source: https://arxiv.org/pdf/2603.05485v1
+
+Published Time: Fri, 06 Mar 2026 02:29:06 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# Towards Provably Unbiased LLM Judges via Bias-Bounded Evaluation 
+
+# Benjamin Feuer 1,2 , Lucas Rosenblatt 3, and Oussama Elachqar 21Stanford University 
+
+2Oumi.AI 
+
+3New York University 
+
+Abstract 
+
+As AI models progress beyond simple chatbots into more complex workflows, we draw ever closer to the event horizon beyond which AI systems will be utilized in autonomous, self-maintaining feedback loops. Any autonomous AI system will depend on automated, verifiable rewards and feedback; in settings where ground truth is sparse or non-deterministic, one practical source of such rewards is an LLM-as-a-Judge. Although LLM judges continue to improve, the literature has yet to introduce systems capable of enforcing standards with strong guarantees, particularly when bias vectors are unknown or adversarially discovered. To remedy this issue, we propose average bias-boundedness 
+
+(A-BB), an algorithmic framework which formally guarantees reductions of harm/impact as a result of any measurable bias in an LLM judge. Evaluating on Arena-Hard-Auto with four LLM judges, we achieve ( τ = 0 .5, δ = 0 .01 )-bias-bounded guarantees while retaining 61–99% correlation with original rankings across formatting and schematic bias settings, with most judge-bias combinations exceeding 80%. The code to reproduce our findings is available at 
+
+https://github.com/penfever/bias-bounded-evaluation .
+
+Figure 1: Bias-bounded evaluation constrains the impact of harms in judge scoring. This before-and-after visualization of the score distributions from an LLM judge (Likert-scale) on the popular Arena-Hard-Auto benchmark shows how true uncertainty can be captured via a compacted score distribution. After the average bias-boundedness (A-BB) algorithm is applied, the original integer-valued score are transformed into a debiased, continuous trajectory which accurately represents the measured uncertainty of the evaluation. The plot shows a KDE density map of the score distribution before and after transformation, with a conservative τ = 0 .5, δ = 0 .03 , dim = 500 , averaged across a panel of four judges. 
+
+# 1 Introduction 
+
+Agentic workflows are an increasingly popular method of deploying large language models (LLMs) in complex, real-world settings; it appears increasingly likely that these agentic systems will soon be used in autonomous, self-1
+
+> arXiv:2603.05485v1 [cs.AI] 5 Mar 2026
+
+maintaining feedback loops [ 32 ]. This very year, for instance, the 2026 AAAI Conference added an LLM judge (AI-Powered Peer Review System) to the panel of reviewers for its scientific submissions, with mixed results [ 1 ]. In autonomous deployments, the risk of harm is greatly magnified; for instance, the well-known company Replit.AI recently suffered an incident in which a client company database (with thousands of entries) was accidentally deleted by an AI agent [36]. AI agents will not be safe to deploy autonomously in most contexts until we have verifiable rewards and feedback. In settings where ground truth is sparse or difficult to parse, the most practical source for such feedback is an LLM-as-a-Judge [ 44 ]; by instantiating a (potentially airgapped) judgment stage into the agentic feedback loop, it should, in principle, be possible to detect and mitigate failures in real time. Unfortunately, recent works show that LLM judges, in naive deployments, present a range of distinct failure modes [ 16 , 38 , 7, 31 , 25 ]. Worse still, it remains unclear to what degree these effects are cumulative when acting in concert. Last but not least, when it comes to bias, we cannot help to ”know what we don’t know” – there will always remain bias sources, including adversarially discovered sources, that we are capable of measuring , but not explaining .In order to mitigate these issues, we propose a novel framework: bias-bounded evaluation (BBE) in Section 2. At a high level, BBE measures how sensitive an LLM judge is to biases and then renders that sensitivity in the judgment scores . Biases can be very simple (e.g. varying presentation order or format) or arbitrarily complex; the only limitation in this framework is that a bias must be subject to a valid and reliable measure, in the units of judgment, in order to be targeted. BBE injects calibrated Gaussian noise to the judge’s scores to mitigate the effects of the bias, using a novel mechanism we call average bias-boundedness (A-BB) , described in detail in Section 3. An attentive reader may notice that our mechanism takes inspiration from techniques in differential privacy [ 14 ], though our analysis differs substantially, as does our goal. 
+
+Contributions Concretely, for any fixed judgment space, bias space and rubric factor, we describe a mechanism that can, with high probability, formally bound the likelihood that the average-case bias will exceed a particular quantity. In particular, we consider our contributions as follows: 1. We propose bias-bounded evaluation , an algorithmic framework which formally guarantees reductions of harm/impact as a result of any measurable biases in an LLM judge, even when the causes of those biases are complex, intersecting or unknown. 2. We demonstrate empirically that BBE can retain signal and provide guarantees in realistic settings with large amounts of bias. 3. We release our codebase with a working implementation suitable for future development. 1
+
+# 2 Bias-Bounded Evaluation 
+
+Our assumptions in this analysis are light; we assume access to some real-valued Judgment Space, and that an ideal judgment, for a particular judge, exists for that space. The ideal judgment is not necessarily correct; it simply represents the set of judgments the judge would have rendered, conditioned on the inputs, in the absence of unwanted bias. As we have discussed, bias in LLM-based evaluations can arise in many subtle ways, from formatting to presentation order to some other latent, unavoidable rubric factors. These sources of bias introduce systematic deviations from what an ideal judgment would be. Inspired by the idea of leveraging noise to bound sensitivity to perturbations of an output vector (as is standard with worst-case guarantees in differential privacy [ 14 ]), we introduce bias-bounded evaluation (BBE) .Bias-bounded evaluation measures how sensitive a judge is to contextual perturbations, and then injects calibrated Gaussian noise to mitigate the effects of the bias. We make the bias and the noise magnitude quantifiable, so that BBE surfaces and mitigates epistemic uncertainty in automated evaluation in a controlled manner. 
+
+# 2.1 Basic Definitions 
+
+We begin by establishing the mathematical framework for our analysis. 
+
+Definition 2.1 (Judgment Space) . Let J be the space of all possible judgments, where judgment j ∈ J is a vector of scores: j = ( s1, s 2, . . . , s k, s overall ) and si represents the score for factor i and soverall is the overall judgment score.  
+
+> 1Code available at https://github.com/penfever/bias-bounded-evaluation .
+
+2Definition 2.2 (Rubric Factors) . Let R = {r1, r 2, . . . , r k} be the set of explicit rubric factors, where each ri : P → R
+
+maps a prompt-response pair to a real-valued score. 
+
+Definition 2.3 (Bias Space) . Let B be the space of all possible bias functions, where each b ∈ B represents a systematic deviation from ideal judgment based on factors not captured in R.
+
+# 2.2 Judgment Context and Neighboring Contexts 
+
+Definition 2.4 (Judgment Context) . A judgment context D is a dataset that contains: (1.) A set of prompt-response pairs {(pi, r i)}ni=1 , (2.) An associated ground truth labels or reference judgments (if available), and (3.) Environmental factors that may influence judgment (presentation order, formatting, etc.) 
+
+Definition 2.5 (Neighboring Judgment Contexts) . Two judgment contexts D and D′ are neighboring (denoted D ∼ D′)if they differ in exactly one prompt-response pair, where that pair has been modified by a bias-introducing perturbation that preserves germane semantic content (i.e., content pertaining to the rubric criteria). Examples include: (i) formatting perturbations such as reformatting or stylistic paraphrasing; (ii) schematic perturbations that vary emphasis on rubric factors without changing the response; and (iii) agreeableness perturbations that introduce subtle errors to test whether the judge detects flaws. 
+
+# 3 Average Bias-Bounded Evaluation (A-BB) 
+
+We consider a mechanism that maps a fixed judgment context to a score vector. This can be a highly sensitive mapping, and even small changes in this input context can shift output scores; this “implicit bias” is what we’d like to control. 
+
+Not Worst Case Analysis 
+
+Under a worst-case style analysis (as is standard with e.g. global differential privacy and many of its variants), one tries to bound the effect of any perturbation (across any neighboring dataset) [ 13 , 9]. This is inherently too conservative in the setting of LLM judgements and contexts, as it tunes the mechanism to the worst possible change (which could be on the order of the full judgement scale), and forces one to consider any two judgement contexts (that can be adversarially chosen). Instead, we consider an average-case bias-bounded guarantee . Also, instead of considering any two judgement contexts, we allow ourselves to fix a judgement context, as we generally are assumed to control both the judge and application setting and thus do not have to be sensitive to a potentially adversarial selection of judgement context. 
+
+Defining A-BB For average case bias boundedness, we fix a judgement context D.2 Then, we instantiate a function 
+
+T to be a randomized neighbor generator . Let T : D → D . Let D′ ∼ 
+
+> T
+
+D be a neighboring dataset resulting from a random draw from the generator, D′ = T (D). The randomness here could come from any measurable source(s) of bias. Furthermore, we consider a root-mean squared error, which is convenient due to positivity (a similar choice is often made when doing ℓ2 smooth-sensitivity analysis in differential privacy 3). 
+
+Definition 3.1 (Root-mean-squared sensitivity) . For a deterministic judge f : D → Rd and fixed context D, we define, 
+
+∆∗
+
+> 2
+
+(f, D ) = 
+
+
+
+ED′∼  
+
+> TD
+
+[∥f (D) − f (D′)∥22]
+
+1/2
+
+.
+
+Definition 3.2 (Average bias boundedness (A-BB)) . For a fixed judgement context D, neighbor generator T , tolerance 
+
+τ > 0, and failure probability δ ∈ (0 , 1) , we say a randomized mechanism M : D 7 → Rd is (τ, δ )-average bias-bounded 
+
+if, 
+
+Pr[ ∥M (D) − M (D′)∥2 > τ ] ≤ δ, 
+
+where the probability is taken over both the randomness of the neighbor generator T (i.e., the draw D′ ∼ 
+
+> T
+
+D) and the internal randomness of mechanism M .      
+
+> 2This is akin to differentially private local sensitivity [29, 12].
+> 3Additionally, we note that if Ttruly sampled uniformly from the Hamming-1 token neighbors of the judgement context, then the root-mean-squared sensitivity would be exactly the average-case analogue of the local sensitivity (used by smooth sensitivity).
+
+3In other words, we will seek to control the tail probability that a random perturbation (drawn from neighbor generator T ) together with the randomness that comes from the noise mechanism M causes more than a τ change in the output. 
+
+Scope of the A-BB guarantee 
+
+We stress that the A-BB certificate stated above is local to the fixed judgment context D and the specific neighbor generator T chosen for certification (as well as any unknown generators whose biasing effects are no larger than T ); it is not a distributional generalization guarantee over unseen contexts. For example, later in our experiments, D will correspond to the batch of Arena-Hard-Auto comparisons judged by a fixed judge, and T will sample from allowed contextual perturbations within that batch (see Section 4 for exact details). We now give the mechanism and analysis, along with the noise addition stated in algorithmic form in Algorithm 1. Note that in what follows we assume f is deterministic and that the mechanism noises Z, Z ′ are independent of each other and of D′ ∼ 
+
+> T
+
+D (i.e., any base-judge randomness is either folded into f or modeled via Z). 
+
+Theorem 3.3 (Gaussian mech. for A-BB: a baseline split bound) . Consider a judgement context D and a neighbor generator T . Let ∆ := f (D) − f (D′) where D′ ∼ 
+
+> T
+
+D. Let Mσ (D) = f (D) + Z with Z ∼ N (0 , σ 2Id), and further let B := Z − Z′, where we set Z′ as an independent copy of Z, so B ∼ N (0 , 2σ2Id). Then for any δB ∈ (0 , 1) and any threshold a ∈ (0 , τ ), if 
+
+r
+
+2σ2
+
+
+
+d + 2 pd log(1 /δ B ) + 2 log(1 /δ B )
+
+
+
+≤ τ − a , 
+
+or, equivalently, for any σ in the admissible interval 0 < σ ≤ σmax where, 
+
+σmax := τ − a
+
+r
+
+2
+
+
+
+d + 2 pd log(1 /δ B ) + 2 log(1 /δ B )
+
+ ,Mσ (D) satisfies (τ, δ )-average bias boundedness (Theorem 3.2) with 
+
+δ = δB + ∆∗
+
+> 2
+
+(f, D )2
+
+a2 .
+
+We defer the proof of Theorem 3.3 to Section A. Setting a = ∆ ∗
+
+> 2
+
+(f, D )/√δ∆ yields an explicit split, which we state below in Theorem 3.4 (this is a direct application of Theorem 3.3, and again we defer the short proof to Section A). 
+
+Corollary 3.4 (Splitting the failure budget) . Fix τ > 0 and a split δ = δB + δ∆ with δB , δ ∆ ∈ (0 , 1) . Assume 
+
+τ > ∆∗
+
+> 2
+
+(f, D )/√δ∆. Then the Gaussian mechanism Mσ (D) = f (D) + Z, Z ∼ N (0 , σ 2Id), satisfies (τ, δ )-A-BB for any 0 < σ ≤ σmax where, 
+
+σmax = τ − ∆∗
+
+> 2
+
+(f, D )/√δ∆
+
+r
+
+2
+
+
+
+d + 2 pd log(1 /δ B ) + 2 log(1 /δ B )
+
+ . (1) 
+
+Corollary 3.5 (Symmetric split) . If we let δB = δ∆ = δ/ 2 in Theorem 3.4, we get, 
+
+σ ≤ τ − ∆∗
+
+> 2
+
+(f, D )p2/δ 
+
+r
+
+2
+
+
+
+d + 2 pd log(2 /δ ) + 2 log(2 /δ )
+
+ ,
+
+so long as τ > ∆∗
+
+> 2
+
+(f, D )p2/δ .
+
+In Theorem 3.6, we consider how by setting ∆ = a, the split calibration tightens the Gaussian radius relative to a no-split bound at the same τ . In Theorem 3.7, for convenience we give the standard 2-norm utility expectation result of adding d-dimensional Gaussian noise in this manner. Short proofs again deferred to Section A. 4Algorithm 1 A-BB Gaussian Mechanism 
+
+Require: Base judge f , judgment context D, neighbor generator T , params (τ, δ )
+
+Ensure: (τ, δ )-average bias-bounded judgment j′ 
+
+> 1:
+
+First compute raw judgment j = f (D) 
+
+> 2:
+
+Then, estimate root-mean-squared sensitivity, by  
+
+> 3:
+
+Sampling m neighbors D′
+
+> 1
+
+, . . . , D ′ 
+
+> m
+
+∼ 
+
+> T
+
+D 
+
+> 4:
+
+To assign ∆∗
+
+> 2
+
+(f, D ) ← ( 1
+
+> m
+
+Pmi=1 ∥f (D) − f (D′
+
+> i
+
+)∥22)1/2 
+
+> 5:
+
+Then, split failure budget as δB = δ/ 2, δ∆ = δ/ 2 
+
+> 6:
+
+Ensure that we meet requirement of τ > ∆∗
+
+> 2
+
+(f, D )p2/δ  
+
+> 7:
+
+Then, compute the maximal admissible noise parameter, or  
+
+> 8:
+
+σ ← τ −∆∗ 
+
+> 2(f,D )
+
+√2/δ 
+
+> r
+> 2
+> 
+> d+2
+
+√d log(2 /δ )+2 log(2 /δ ) 
+
+> 
+> 9:
+
+Choose any σ ∈ (0 , σ max ] (by default, σ ← σmax for a tight certificate; smaller σ strictly improves utility)  
+
+> 10:
+
+Finally, sample noise Z ∼ N (0 , σ 2Id), 
+
+> 11:
+
+And return noisy judgment j′ ← j + Z.
+
+Remark 3.6 (Why splitting helps) . Note that, for any τ > 0 and any ∆ ∈ [0 , τ ), we have that, 
+
+τ − ∆
+
+√τ 2 − ∆2 =
+
+r τ − ∆
+
+τ + ∆ < 1 .
+
+Remark 3.7 (Utility) . The following is a standard fact of adding Gaussian noise in d dimensions, 
+
+E∥Mσ (D) − f (D)∥22 = dσ 2 .
+
+Overall , in the above average case analysis, we try to shrink σ (the variance of the Gaussian noise we add) analytically as much as possible such that we can still get a meaningful guarantee on the tail probability for the A-BB statement. For convenience, we also state the procedure in Algorithm 1 below, with the correct splitting and σ parameter; this is the exact procedure we use in our experimentation. 
+
+Lipschitz shrinkage of data One algorithmic adjustment we make, which is heuristically based on the distributions of judgement scores we observe, is a deterministic Lipschitz shrinkage of the judgement score data around a center point. This shrinkage dampens how much scores can move under small contextual perturbations, so less Gaussian noise is needed to achieve the same (τ, δ ) guarantee. In general, an L-Lipschitz mapping is a standard approach to contracting all neighbor-to-neighbor score differences by at most L in a dataset [ 5 ]; here we do this to tighten the A-BB certificate with minimal impact on data point order. More formally, before adding Gaussian noise in Algorithm 1, we deterministically post-process scores via any L-Lipschitz map g : Rd → Rd (with e.g., affine shrinkage g(x) = αx + (1 − α)μ with 
+
+L = α). This targets the RMS sensitivity (Theorem 3.1): ∆∗
+
+> 2
+
+(g ◦ f, D ) ≤ L∆∗
+
+> 2
+
+(f, D ) (Theorem B.1). Calibrating 
+
+σ using the same formula as above but replacing ∆∗
+
+> 2
+
+(f, D ) by L∆∗
+
+> 2
+
+(f, D ) (or by a direct estimate of ∆∗
+
+> 2
+
+(g ◦ f, D ))preserves the (τ, δ ) A-BB certificate while trading a small amount of utility for improved certifiability. We give full formal details on this in Section B. 
+
+# 4 Experiments 
+
+Benchmark. We study Arena-Hard Auto [ 26 ], a popular LLM-judged benchmark built from 500 challenging Chatbot Arena queries, intended to approximate Arena preferences. It reports high separability and strong correlation with human rankings, making it an excellent candidate for robust meta-analysis. 
+
+Judges. We evaluate four judge models: GPT-4o-mini-0718 , QwQ-32B , DeepSeek-R1-Distill-32B , and GPT-3.5-Turbo [40, 30, 10]. 
+
+Combination Logic. Context-aware sensitivities are derived for formatting ( Sfmt ) and schematic adherence ( Ssch )by fitting their estimators and, when intrinsic jitter is available, calling context adjusted rms to fold that variance into each static estimate. Each component is lower-bounded at 10 −3 before aggregation to avoid passing zero sensitivity. We consider the following combination strategies. 51. Conservative (combined abb conservative): ˆS = max ( Sfmt , S psy , S sch )
+
+2. RMS (combined abb rms): ˆS =
+
+q
+
+(S2fmt + S2psy + S2sch )/3
+
+In our experiments, we utilize combined abb rms. 
+
+Hyperparameters. In the results shown in the main paper, we fix τ = 0 .05 and dim = 500 , the number of questions in the Arena-Hard-Auto benchmark. We explore settings for δ ranging from 0.01 to 0.05 .
+
+Inherent jitter. We run the forward judgment pass five times and compute the RMS sensitivity across runs. This is used to measure the naturally occurring variance in judgment which is not biased by any external factors we wish to control. 
+
+Formatting sensitivity. It has been observed that large language models can be extremely sensitive to prompt formatting [ 34 ]. This long-standing bias is relatively straightforward to model via a simple generative mechanism that uses LLMs to produce highly similar semantic variants of model responses. We implement such a mechanism and measure the sensitivity in our judges, and find that it is generally fairly large, with considerable variance across judges. 
+
+Schematic adherence. This measures the degree to which an LLM judge’s overall judgments can be explained as a function of its per-criteria (factor-wise) judgments [ 17 ]. We fit polynomial regression models with interaction terms and define sensitivity as Ssch = p1 − R2
+
+> schematic
+
+; see Section C for details. 
+
+# 4.1 Controlling formatting sensitivity bias. 
+
+In figure 2, we demonstrate the revised scores generated by BBE after accounting for observed formatting sensitivity in a QwQ-32B judge on Arena-Hard-Auto. The biased judge exhibits a troubling and common trend; high-performing models receive inflated scores while maintaining reasonable confidence intervals, resulting in an overall distribution which contains systematic biases. 
+
+Figure 2: Bias-bounded transformation for formatting sensitivity. The blue line in this figure corresponds to the debiased ranking generated by a QwQ-32B judge after using BBE with τ = 0 .5 to control formatting sensitivity. Even with low τ tolerance, we are able to retain 88% correlation with the original judgments in this realistic perturbation setting. After BBE, we observe substantial variance reduction in the scores, indicating that we have successfully mitigated the judgment bias. At the same time, the debiased judgments retain strong signal, with an 81% correlation to the original ranking. The apparent ”certainty” of extreme judgments (e.g., facebook/opt-125m scoring 0.12 with CI width 0.24) is revealed as bias-induced false confidence, while the compressed scores represent genuine comparative signal with guarantees against failure. 64.2 Controlling schematic bias. 
+
+Figure 3: Bias-bounded evaluation in schematic sensitivity. Even when measured bias is large, we are able to eliminate much potentially biased variance while retaining near-perfect correlation with the original judgments.( τ = 0 .5)Observed scores for schematic bias tend to be much larger than those of formatting bias, as they generally reflect structural weaknesses in the benchmark design rather than quasi-random failures of a particular judge. In Figure 3, despite using a relatively old GPT 3.5 judge, the bias-bounded mechanism successfully compresses this extreme distribution into a realistic range while maintaining the ranking correlation nearly perfectly, further illustrating the mechanism’s ability to distinguish between genuine performance differences and bias-induced score inflation. When using the more recent GPT 4o Mini as a judge, the correlation becomes nearly perfect. 
+
+# 5 Related Work 
+
+Recent work has identified several critical bias issues in LLM judges. The CALM framework [ 38 ] quantifies 12 distinct bias types in LLM-as-judge systems, while research on “preference leakage” [ 7] demonstrates that LLMs exhibit systematic bias toward their own outputs and similar models used in training data. The “Leaderboard Illusion” [ 8]provides evidence that prominent evaluation platforms like ChatBot Arena can be gamed by organizations with access to private testing. The “Limits to Scalable Evaluation at the Frontier” work [ 25 ] shows that when judge accuracy equals evaluated model accuracy, debiasing methods can only reduce ground truth requirements by half, requiring bias to be small across all evaluated models. Research on individual preferences [ 33 ] demonstrates that different user groups systematically prefer different LLM responses, supporting the need for bias-bounded evaluation that can accommodate diverse judgment patterns. Specialized benchmarks have emerged to evaluate judge quality, including JudgeBench [ 42 ] for assessing LLM-based judges, LLMBar [ 43 ] for instruction following evaluation, and JETTS [ 39 ] for evaluating judges as evaluators. SafetyAnalyst [ 28 ] represents specialized applications using LLM judgments with structured evaluation through “harm-benefit trees” and interpretable weight parameters for aggregating safety assessments. Closest to our work is the “Trust or Escalate” framework [ 31 ], which provides rigorous guarantees of human agreement using cascaded LLM judges with calibrated confidence thresholds. Trust or Escalate uses “Simulated Annotators”—ensemble agreement from multiple prompted perspectives—to estimate confidence, then abstains on low-confidence cases or escalates to stronger models. The guarantee is specifically: P (LLM agrees with human |
+
+LLM evaluates ) ≥ 1 − α. Crucially, this framework sidesteps bias by abstaining when uncertain rather than bounding 7Figure 4: Correlative strength varies by judge and by dataset. Although conservative aggregation strategies are always more difficult to debias, and simpler biases such as formatting are consistently easier to debias, other factors, such as the underlying dataset, can also have large effects. Table 1: Comparison of our Average Bias-Boundedness (A-BB) with the best known existing framework for guarantee-ing LLM judgments, Trust or Escalate (ToE).                 
+
+> Property ToE A-BB
+> Guarantees on all evaluations ✗✓
+> Handles unknown biases †✗∼
+> No human labels required ✗✓
+> General scoring (beyond pairwise) ✗✓
+> Bounds bias impact directly ✗✓
+> Human agreement guarantee ‡✓∼
+> Selective abstention ✓✗
+> †A-BB bounds unknown biases only if their RMS sensitivity is bounded by that of measured biases.
+> ‡A-BB can be combined with conformal prediction methods [41] to obtain human agreement guarantees.
+
+bias impact, requires human-labeled calibration data, and applies only to pairwise preference evaluation. In contrast, A-BB provides guarantees on all evaluations (no abstention), handles adversarially discovered biases whose magnitude is bounded by measured sensitivities, requires no human labels, and extends to general scoring beyond pairwise comparison. We summarize these differences in Table 1. 
+
+Formal guarantees and uncertainty quantification. Recent work has begun providing statistical guarantees for LLM judge outputs. Conformal prediction has emerged as a distribution-free framework for quantifying judge uncertainty; Ye et al. [41] apply split conformal prediction to construct prediction intervals with finite-sample coverage guarantees, ensuring that intervals contain the true judgment value at a user-specified rate. While conformal methods bound uncertainty in individual judgments, our A-BB framework bounds the impact of systematic biases across evaluation batches—the two approaches are complementary. On the calibration front, Huang et al. [19] propose extracting uncertainty signals from LLM internal representations via linear probes, addressing the well-documented overconfidence problem in LLM judges without requiring expensive fine-tuning or architectural modifications. 
+
+Scoring bias and agreeableness. Beyond the bias types catalogued by CALM, recent work has identified additional failure modes. Son et al. [35] define “scoring bias” as judgment shifts under superficial perturbations, identifying 8three specific variants: rubric order bias, score ID bias, and reference answer bias—all of which manifest as sensitivity to factors orthogonal to response quality. Our neighbor generator framework naturally captures such perturbations. Separately, research on agreeableness bias [ 27 ] reveals that LLM judges exhibit True Negative Rates below 25%, indicating systematic over-agreement with evaluated outputs. This tendency to validate rather than critique represents a bias pattern that A-BB can help bound, as it manifests as measurable sensitivity to the presence of errors in evaluated content. 
+
+# 6 Limitations 
+
+Our bias-bounded framework addresses measurable systematic bias patterns but makes no claims about absolute accuracy, whether scores are calibrated well across multiple judges, or whether judges are actually judging all aspects of their input. The guarantee provided by our framework also can be misinterpreted if the measures used to calibrate bias are not reliable (e.g., if they miss a bias source of greater magnitude than any that is considered). There is, however, considerable ongoing work in these areas, and we see our efforts as complementary to those. Last but not least, the preferences of an LLM judge are themselves a bias pattern (in the sense that they are systematic deviations from random noise); A-BB is not a ”magic bullet”, and will be much more effective in retaining true signal when the intrinsic jitter and systematic bias of the underlying judge is weaker. 
+
+Finite-sample estimation. Our theoretical guarantees (Theorems 3.3 and 3.4) assume access to the true root-mean-squared sensitivity ∆∗
+
+> 2
+
+(f, D ), which is defined as an expectation over the neighbor generator T . In practice, Algorithm 1 estimates this quantity empirically using m sampled neighbors. With finite m, there is a non-zero probability that the empirical estimate underestimates the true sensitivity, which could cause the actual failure probability to exceed δ.Practitioners should mitigate this by using sufficiently large m, or by adding a confidence margin (e.g., using an upper confidence bound on the sensitivity estimate). Formally incorporating this estimation uncertainty into the δ budget via concentration inequalities (e.g., Chernoff bounds) is a direction for future work. 
+
+# 7 Conclusion 
+
+We have presented a formal framework for providing bias-bounded guarantees in LLM judge mechanisms. Broadly scoped formal guarantees, wedded to the power of LLM judges, enable use cases previously considered challenging, such as conducting social sciences research with the aid of LLMs, or determining a candidate’s suitability for a loan. Rather than attempting to enumerate and eliminate every possible bias source on a case by case basis, our insight is that by guaranteeing any bias pattern of sufficient magnitude will be indistinguishable from noise, we can enable greater confidence in LLM judges. The framework is general enough to apply to various LLM evaluation scenarios while providing the mathematical rigor needed for formal bias bounds. 
+
+# Reproducibility Statement 
+
+We have, to the best of our ability, ensured that all experiments described in this paper are reproducible in principle. In order to facilitate this, we provide source code containing everything needed to reproduce our experiments at 
+
+https://github.com/penfever/bias-bounded-evaluation .
+
+# Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning, specifically in providing formal guarantees for LLM-based evaluation systems. Our framework for bias-bounded evaluation aims to make AI systems more reliable and trustworthy by quantifying and mitigating systematic biases in LLM judges. While we believe this work has positive implications for the safe deployment of autonomous AI systems, we acknowledge that any evaluation framework can potentially be misused. We encourage practitioners to use this framework as part of a broader evaluation strategy that includes human oversight. 9References 
+
+[1] AAAI. AAAI launches AI-powered peer review assessment system. https://bit.ly/4b8Z4mH , May 2025. Press release announcing pilot program for AAAI-26 conference. [2] Borja Balle and Yu-Xiang Wang. Improving the gaussian mechanism for differential privacy: Analytical calibration and optimal denoising. In ICML , 2018. [3] Heinz H. Bauschke and Patrick L. Combettes. Convex Analysis and Monotone Operator Theory in Hilbert Spaces .Springer, 2nd edition, 2017. [4] Yoav Benjamini and Yosef Hochberg. Controlling the false discovery rate: A practical and powerful approach to multiple testing. Journal of the Royal Statistical Society Series B , 57(1):289–300, 1995. [5] Stephen P Boyd and Lieven Vandenberghe. Convex optimization . Cambridge university press, 2004. [6] Kamalika Chaudhuri, Claire Monteleoni, and Anand D. Sarwate. Differentially private empirical risk minimization. 
+
+Journal of Machine Learning Research , 12:1069–1109, 2011. [7] Wei Chen, Yifei Qian, Zhengyu Li, et al. Preference leakage: A contamination problem in llm-as-a-judge. arXiv preprint , 2024. [8] Peter Clark, Sarah Thompson, and Michael Davis. The leaderboard illusion: How chatbot arena rankings can be gamed. arXiv preprint , 2024. [9] Rachel Cummings, Damien Desfontaines, David Evans, Roxana Geambasu, Yangsibo Huang, Matthew Jagielski, Peter Kairouz, Gautam Kamath, Sewoong Oh, Olga Ohrimenko, et al. Advancing differential privacy: Where we are now and future directions for real-world deployment. Harvard data science review , 6(1), 2024. [10] DeepSeek-AI, Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu, Shirong Ma, Peiyi Wang, Xiao Bi, Xiaokang Zhang, Xingkai Yu, Yu Wu, Z. F. Wu, Zhibin Gou, Zhihong Shao, Zhuoshu Li, Ziyi Gao, Aixin Liu, Bing Xue, Bingxuan Wang, Bochao Wu, Bei Feng, Chengda Lu, Chenggang Zhao, Chengqi Deng, Chenyu Zhang, Chong Ruan, Damai Dai, Deli Chen, Dongjie Ji, Erhang Li, Fangyun Lin, Fucong Dai, Fuli Luo, Guangbo Hao, Guanting Chen, Guowei Li, H. Zhang, Han Bao, Hanwei Xu, Haocheng Wang, Honghui Ding, Huajian Xin, Huazuo Gao, Hui Qu, Hui Li, Jianzhong Guo, Jiashi Li, Jiawei Wang, Jingchang Chen, Jingyang Yuan, Junjie Qiu, Junlong Li, J. L. Cai, Jiaqi Ni, Jian Liang, Jin Chen, Kai Dong, Kai Hu, Kaige Gao, Kang Guan, Kexin Huang, Kuai Yu, Lean Wang, Lecong Zhang, Liang Zhao, Litong Wang, Liyue Zhang, Lei Xu, Leyi Xia, Mingchuan Zhang, Minghua Zhang, Minghui Tang, Meng Li, Miaojun Wang, Mingming Li, Ning Tian, Panpan Huang, Peng Zhang, Qiancheng Wang, Qinyu Chen, Qiushi Du, Ruiqi Ge, Ruisong Zhang, Ruizhe Pan, Runji Wang, R. J. Chen, R. L. Jin, Ruyi Chen, Shanghao Lu, Shangyan Zhou, Shanhuang Chen, Shengfeng Ye, Shiyu Wang, Shuiping Yu, Shunfeng Zhou, Shuting Pan, S. S. Li, Shuang Zhou, Shaoqing Wu, Shengfeng Ye, Tao Yun, Tian Pei, Tianyu Sun, T. Wang, Wangding Zeng, Wanjia Zhao, Wen Liu, Wenfeng Liang, Wenjun Gao, Wenqin Yu, Wentao Zhang, W. L. Xiao, Wei An, Xiaodong Liu, Xiaohan Wang, Xiaokang Chen, Xiaotao Nie, Xin Cheng, Xin Liu, Xin Xie, Xingchao Liu, Xinyu Yang, Xinyuan Li, Xuecheng Su, Xuheng Lin, X. Q. Li, Xiangyue Jin, Xiaojin Shen, Xiaosha Chen, Xiaowen Sun, Xiaoxiang Wang, Xinnan Song, Xinyi Zhou, Xianzu Wang, Xinxia Shan, Y. K. Li, Y. Q. Wang, Y. X. Wei, Yang Zhang, Yanhong Xu, Yao Li, Yao Zhao, Yaofeng Sun, Yaohui Wang, Yi Yu, Yichao Zhang, Yifan Shi, Yiliang Xiong, Ying He, Yishi Piao, Yisong Wang, Yixuan Tan, Yiyang Ma, Yiyuan Liu, Yongqiang Guo, Yuan Ou, Yuduan Wang, Yue Gong, Yuheng Zou, Yujia He, Yunfan Xiong, Yuxiang Luo, Yuxiang You, Yuxuan Liu, Yuyang Zhou, Y. X. Zhu, Yanhong Xu, Yanping Huang, Yaohui Li, Yi Zheng, Yuchen Zhu, Yunxian Ma, Ying Tang, Yukun Zha, Yuting Yan, Z. Z. Ren, Zehui Ren, Zhangli Sha, Zhe Fu, Zhean Xu, Zhenda Xie, Zhengyan Zhang, Zhewen Hao, Zhicheng Ma, Zhigang Yan, Zhiyu Wu, Zihui Gu, Zijia Zhu, Zijun Liu, Zilin Li, Ziwei Xie, Ziyang Song, Zizheng Pan, Zhen Huang, Zhipeng Xu, Zhongyu Zhang, and Zhen Zhang. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning, 2025. URL https://arxiv.org/abs/2501.12948 .[11] Jinshuo Dong, Aaron Roth, and Weijie J. Su. Gaussian differential privacy. Journal of the Royal Statistical Society Series B , 84(1):3–37, 2022. 10 [12] Cynthia Dwork and Jing Lei. Differential privacy and robust statistics. In Proceedings of the forty-first annual ACM symposium on Theory of computing , pages 371–380, 2009. [13] Cynthia Dwork and Aaron Roth. The algorithmic foundations of differential privacy. Foundations and Trends in Theoretical Computer Science , 9(3–4):211–407, 2014. [14] Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam Smith. Calibrating noise to sensitivity in private data analysis. Theory of cryptography conference , pages 265–284, 2006. [15] Bradley Efron and Carl Morris. Stein’s estimation rule and its competitors—an empirical bayes approach. Journal of the American Statistical Association , 68(341):117–130, 1973. [16] Benjamin Feuer, Micah Goldblum, Teresa Datta, Sanjana Nambiar, Raz Besaleli, Samuel Dooley, Max Cembalest, and John P. Dickerson. Style outweighs substance: Failure modes of llm judges in alignment benchmarking, 2024. URL https://arxiv.org/abs/2409.15268 .[17] Benjamin Feuer, Chiung-Yi Tseng, Astitwa Sarthak Lathe, Oussama Elachqar, and John P Dickerson. When judgment becomes noise: How design failures in llm judge benchmarks silently undermine validity, 2025. URL 
+
+https://arxiv.org/abs/2509.20293 .[18] Elad Hazan. Introduction to Online Convex Optimization . MIT Press, 2016. [19] Shujian Huang, Wei Chen, Yifan Zhang, and Yang Liu. Calibrating LLM judges: Linear probes for fast and reliable uncertainty estimation. arXiv preprint arXiv:2512.22245 , 2025. [20] Peter J. Huber and Elvezio M. Ronchetti. Robust Statistics . Wiley, 2nd edition, 2009. [21] William James and Charles Stein. Estimation with quadratic loss. In Proceedings of the Fourth Berkeley Symposium on Mathematical Statistics and Probability , volume 1, pages 361–379, 1961. [22] Peter Kairouz, Sewoong Oh, and Pramod Viswanath. The composition theorem for differential privacy. In 
+
+International Conference on Machine Learning (ICML) , pages 1376–1385, 2015. [23] Beatrice Laurent and Pascal Massart. Adaptive estimation of a quadratic functional by model selection. Annals of statistics , pages 1302–1338, 2000. [24] Olivier Ledoit and Michael Wolf. A well-conditioned estimator for large-dimensional covariance matrices. Journal of Multivariate Analysis , 88(2):365–411, 2004. [25] Hui Li, Tianyu Zhang, Jiaqi Chen, et al. Limits to scalable evaluation at the frontier: Llm as judge for llm. arXiv preprint , 2024. [26] Tianle Li, Wei-Lin Chiang, Evan Frick, Lisa Dunlap, Tianhao Wu, Banghua Zhu, Joseph E. Gonzalez, and Ion Stoica. From crowdsourced data to high-quality benchmarks: Arena-hard and benchbuilder pipeline, 2024. URL 
+
+https://arxiv.org/abs/2406.11939 .[27] Cheng Liu, Zhenyu Tan, and Yuxuan Wang. Beyond consensus: Mitigating the agreeableness bias in LLM judge evaluations. arXiv preprint , 2025. [28] Mantas Mazeika, Long Phan, Xuwang Wang, et al. Safetyanalyst: Interpretable, transparent, and steerable llm safety evaluation. arXiv preprint , 2024. [29] Kobbi Nissim, Sofya Raskhodnikova, and Adam Smith. Smooth sensitivity and sampling in private data analysis. In Proceedings of the thirty-ninth annual ACM symposium on Theory of computing , pages 75–84, 2007. [30] OpenAI, :, Aaron Hurst, Adam Lerer, Adam P. Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Welihinda, Alan Hayes, Alec Radford, Aleksander Madry, Alex Baker-Whitcomb, Alex Beutel, Alex Borzunov, Alex Carney, Alex Chow, Alex Kirillov, Alex Nichol, Alex Paino, Alex Renzin, Alex Tachard Passos, Alexander Kirillov, Alexi Christakis, Alexis Conneau, Ali Kamali, Allan Jabri, Allison Moyer, Allison Tam, Amadou Crookes, Amin Tootoochian, Amin Tootoonchian, Ananya Kumar, Andrea Vallone, Andrej Karpathy, 11 Andrew Braunstein, Andrew Cann, Andrew Codispoti, Andrew Galu, Andrew Kondrich, Andrew Tulloch, Andrey Mishchenko, Angela Baek, Angela Jiang, Antoine Pelisse, Antonia Woodford, Anuj Gosalia, Arka Dhar, Ashley Pantuliano, Avi Nayak, Avital Oliver, Barret Zoph, Behrooz Ghorbani, Ben Leimberger, Ben Rossen, Ben Sokolowsky, Ben Wang, Benjamin Zweig, Beth Hoover, Blake Samic, Bob McGrew, Bobby Spero, Bogo Giertler, Bowen Cheng, Brad Lightcap, Brandon Walkin, Brendan Quinn, Brian Guarraci, Brian Hsu, Bright Kellogg, Brydon Eastman, Camillo Lugaresi, Carroll Wainwright, Cary Bassin, Cary Hudson, Casey Chu, Chad Nelson, Chak Li, Chan Jun Shern, Channing Conger, Charlotte Barette, Chelsea Voss, Chen Ding, Cheng Lu, Chong Zhang, Chris Beaumont, Chris Hallacy, Chris Koch, Christian Gibson, Christina Kim, Christine Choi, Christine McLeavey, Christopher Hesse, Claudia Fischer, Clemens Winter, Coley Czarnecki, Colin Jarvis, Colin Wei, Constantin Koumouzelis, Dane Sherburn, Daniel Kappler, Daniel Levin, Daniel Levy, David Carr, David Farhi, David Mely, David Robinson, David Sasaki, Denny Jin, Dev Valladares, Dimitris Tsipras, Doug Li, Duc Phong Nguyen, Duncan Findlay, Edede Oiwoh, Edmund Wong, Ehsan Asdar, Elizabeth Proehl, Elizabeth Yang, Eric Antonow, Eric Kramer, Eric Peterson, Eric Sigler, Eric Wallace, Eugene Brevdo, Evan Mays, Farzad Khorasani, Felipe Petroski Such, Filippo Raso, Francis Zhang, Fred von Lohmann, Freddie Sulit, Gabriel Goh, Gene Oden, Geoff Salmon, Giulio Starace, Greg Brockman, Hadi Salman, Haiming Bao, Haitang Hu, Hannah Wong, Haoyu Wang, Heather Schmidt, Heather Whitney, Heewoo Jun, Hendrik Kirchner, Henrique Ponde de Oliveira Pinto, Hongyu Ren, Huiwen Chang, Hyung Won Chung, Ian Kivlichan, Ian O’Connell, Ian O’Connell, Ian Osband, Ian Silber, Ian Sohl, Ibrahim Okuyucu, Ikai Lan, Ilya Kostrikov, Ilya Sutskever, Ingmar Kanitscheider, Ishaan Gulrajani, Jacob Coxon, Jacob Menick, Jakub Pachocki, James Aung, James Betker, James Crooks, James Lennon, Jamie Kiros, Jan Leike, Jane Park, Jason Kwon, Jason Phang, Jason Teplitz, Jason Wei, Jason Wolfe, Jay Chen, Jeff Harris, Jenia Varavva, Jessica Gan Lee, Jessica Shieh, Ji Lin, Jiahui Yu, Jiayi Weng, Jie Tang, Jieqi Yu, Joanne Jang, Joaquin Quinonero Candela, Joe Beutler, Joe Landers, Joel Parish, Johannes Heidecke, John Schulman, Jonathan Lachman, Jonathan McKay, Jonathan Uesato, Jonathan Ward, Jong Wook Kim, Joost Huizinga, Jordan Sitkin, Jos Kraaijeveld, Josh Gross, Josh Kaplan, Josh Snyder, Joshua Achiam, Joy Jiao, Joyce Lee, Juntang Zhuang, Justyn Harriman, Kai Fricke, Kai Hayashi, Karan Singhal, Katy Shi, Kavin Karthik, Kayla Wood, Kendra Rimbach, Kenny Hsu, Kenny Nguyen, Keren Gu-Lemberg, Kevin Button, Kevin Liu, Kiel Howe, Krithika Muthukumar, Kyle Luther, Lama Ahmad, Larry Kai, Lauren Itow, Lauren Workman, Leher Pathak, Leo Chen, Li Jing, Lia Guy, Liam Fedus, Liang Zhou, Lien Mamitsuka, Lilian Weng, Lindsay McCallum, Lindsey Held, Long Ouyang, Louis Feuvrier, Lu Zhang, Lukas Kondraciuk, Lukasz Kaiser, Luke Hewitt, Luke Metz, Lyric Doshi, Mada Aflak, Maddie Simens, Madelaine Boyd, Madeleine Thompson, Marat Dukhan, Mark Chen, Mark Gray, Mark Hudnall, Marvin Zhang, Marwan Aljubeh, Mateusz Litwin, Matthew Zeng, Max Johnson, Maya Shetty, Mayank Gupta, Meghan Shah, Mehmet Yatbaz, Meng Jia Yang, Mengchao Zhong, Mia Glaese, Mianna Chen, Michael Janner, Michael Lampe, Michael Petrov, Michael Wu, Michele Wang, Michelle Fradin, Michelle Pokrass, Miguel Castro, Miguel Oom Temudo de Castro, Mikhail Pavlov, Miles Brundage, Miles Wang, Minal Khan, Mira Murati, Mo Bavarian, Molly Lin, Murat Yesildal, Nacho Soto, Natalia Gimelshein, Natalie Cone, Natalie Staudacher, Natalie Summers, Natan LaFontaine, Neil Chowdhury, Nick Ryder, Nick Stathas, Nick Turley, Nik Tezak, Niko Felix, Nithanth Kudige, Nitish Keskar, Noah Deutsch, Noel Bundick, Nora Puckett, Ofir Nachum, Ola Okelola, Oleg Boiko, Oleg Murk, Oliver Jaffe, Olivia Watkins, Olivier Godement, Owen Campbell-Moore, Patrick Chao, Paul McMillan, Pavel Belov, Peng Su, Peter Bak, Peter Bakkum, Peter Deng, Peter Dolan, Peter Hoeschele, Peter Welinder, Phil Tillet, Philip Pronin, Philippe Tillet, Prafulla Dhariwal, Qiming Yuan, Rachel Dias, Rachel Lim, Rahul Arora, Rajan Troll, Randall Lin, Rapha Gontijo Lopes, Raul Puri, Reah Miyara, Reimar Leike, Renaud Gaubert, Reza Zamani, Ricky Wang, Rob Donnelly, Rob Honsby, Rocky Smith, Rohan Sahai, Rohit Ramchandani, Romain Huet, Rory Carmichael, Rowan Zellers, Roy Chen, Ruby Chen, Ruslan Nigmatullin, Ryan Cheu, Saachi Jain, Sam Altman, Sam Schoenholz, Sam Toizer, Samuel Miserendino, Sandhini Agarwal, Sara Culver, Scott Ethersmith, Scott Gray, Sean Grove, Sean Metzger, Shamez Hermani, Shantanu Jain, Shengjia Zhao, Sherwin Wu, Shino Jomoto, Shirong Wu, Shuaiqi, Xia, Sonia Phene, Spencer Papay, Srinivas Narayanan, Steve Coffey, Steve Lee, Stewart Hall, Suchir Balaji, Tal Broda, Tal Stramer, Tao Xu, Tarun Gogineni, Taya Christianson, Ted Sanders, Tejal Patwardhan, Thomas Cunninghman, Thomas Degry, Thomas Dimson, Thomas Raoux, Thomas Shadwell, Tianhao Zheng, Todd Underwood, Todor Markov, Toki Sherbakov, Tom Rubin, Tom Stasi, Tomer Kaftan, Tristan Heywood, Troy Peterson, Tyce Walters, Tyna Eloundou, Valerie Qi, Veit Moeller, Vinnie Monaco, Vishal Kuo, Vlad Fomenko, Wayne Chang, Weiyi Zheng, Wenda Zhou, Wesam Manassra, Will Sheu, Wojciech Zaremba, Yash Patil, Yilei Qian, Yongjik Kim, Youlong Cheng, Yu Zhang, Yuchen He, Yuchen Zhang, Yujia Jin, Yunxing Dai, and Yury Malkov. Gpt-4o system card, 2024. URL https://arxiv.org/abs/2410.21276 .12 [31] Pouya Pezeshkpour, Estelle Sarkar, Evan Kraft, et al. Trust or escalate: Llm judges with provable guarantees for human agreement. arXiv preprint , 2024. [32] Aske Plaat, Max J van Duijn, Niki van Stein, Mike Preuss, Peter van der Putten, and Kees Joost Batenburg. Agentic large language models, a survey. CoRR , 2025. [33] Shibani Santurkar, Yann Chen, Esin Durmus, et al. How individual traits and language styles shape preferences for ai-generated content. arXiv preprint , 2024. [34] Melanie Sclar, Yejin Choi, Yulia Tsvetkov, and Alane Suhr. Quantifying Language Models’ Sensitivity to Spurious Features in Prompt Design or: How I learned to start worrying about prompt formatting, October 2023. arXiv:2310.11324 [cs]. [35] Guijin Son, Hyunwoo Kim, and Sangwon Lee. Evaluating scoring bias in LLM-as-a-judge. arXiv preprint arXiv:2506.22316 , 2025. [36] Mark Tyson. Ai coding platform goes rogue during code freeze and deletes entire company database — replit ceo apologizes after ai engine says it ’made a catastrophic error in judgment’ and ’destroyed all production data’. 
+
+http://bit.ly/4swS3TQ , July 2025. Accessed July 21, 2025. [37] Roman Vershynin. High-Dimensional Probability: An Introduction with Applications in Data Science . Cambridge University Press, 2018. [38] Jiayi Wang, Bowen Li, Yiru Chen, Huachi Ma, et al. Justice or prejudice? quantifying biases in llm-as-a-judge. 
+
+arXiv preprint , 2024. [39] Jeffrey Wu, Alice Chen, Robert Zhang, et al. Jetts: Evaluating llm judges as evaluators. arXiv preprint , 2024. [40] An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jingren Zhou, Junyang Lin, Kai Dang, Keming Lu, Keqin Bao, Kexin Yang, Le Yu, Mei Li, Mingfeng Xue, Pei Zhang, Qin Zhu, Rui Men, Runji Lin, Tianhao Li, Tingyu Xia, Xingzhang Ren, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yu Wan, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zihan Qiu. Qwen2.5 technical report. arXiv preprint arXiv:2412.15115 , 2024. [41] Xiaoyu Ye, Sanjit Nair, and Mohammad Ghassemi. Analyzing uncertainty of LLM-as-a-judge: Interval evaluations with conformal prediction. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing , 2025. [42] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, et al. Judgebench: A benchmark for evaluating llm-based judges. In International Conference on Machine Learning , 2024. [43] Yizhong Zhou, Jiawei Xu, Kenton Lee, et al. Llmbar: Evaluating large language models as judges for instruction-following. arXiv preprint , 2024. [44] Mingchen Zhuge, Changsheng Zhao, Dylan R Ashley, Wenyi Wang, Dmitrii Khizbullin, Yunyang Xiong, Zechun Liu, Ernie Chang, Raghuraman Krishnamoorthi, Yuandong Tian, et al. Agent-as-a-judge: Evaluate agents with agents. In Forty-second International Conference on Machine Learning .13 A Deferred Proofs 
+
+Theorem 3.3 (Gaussian mech. for A-BB: a baseline split bound) . Consider a judgement context D and a neighbor generator T . Let ∆ := f (D) − f (D′) where D′ ∼ 
+
+> T
+
+D. Let Mσ (D) = f (D) + Z with Z ∼ N (0 , σ 2Id), and further let B := Z − Z′, where we set Z′ as an independent copy of Z, so B ∼ N (0 , 2σ2Id). Then for any δB ∈ (0 , 1) and any threshold a ∈ (0 , τ ), if 
+
+r
+
+2σ2
+
+
+
+d + 2 pd log(1 /δ B ) + 2 log(1 /δ B )
+
+
+
+≤ τ − a , 
+
+or, equivalently, for any σ in the admissible interval 0 < σ ≤ σmax where, 
+
+σmax := τ − a
+
+r
+
+2
+
+
+
+d + 2 pd log(1 /δ B ) + 2 log(1 /δ B )
+
+ ,Mσ (D) satisfies (τ, δ )-average bias boundedness (Theorem 3.2) with 
+
+δ = δB + ∆∗
+
+> 2
+
+(f, D )2
+
+a2 .
+
+Proof. Note that Mσ (D) − Mσ (D′) = ∆ + B. Thus, for any a ∈ (0 , τ ), the event split, 
+
+{∥ ∆ + B∥2 > τ } ⊆ {∥ ∆∥2 > a } ∪ {∥ B∥2 > τ − a} ,
+
+holds via the triangle inequality. So, we can take probabilities of the events and use a union bound to get, 
+
+P r [∥∆ + B∥2 > τ ] ≤ P r [∥∆∥2 > a ] + P r [∥B∥2 > τ − a] .
+
+Consider the B term. Since B ∼ N (0 , 2σ2Id), we have ∥B∥22/(2 σ2) ∼ χ2
+
+> d
+
+. We can thus apply the Laurent–Massart inequality for a chi-squared r.v. with d-degrees of freedom [23], which gives that for any x > 0,
+
+P r ∥B∥2 >
+
+r
+
+2σ2
+
+
+
+d + 2 √dx + 2 x
+
+!
+
+≤ e−x .
+
+If we set x = log(1 /δ B ), we then get, 
+
+P r 
+
+
+
+∥B∥2 >
+
+q
+
+2σ2(d + 2 pd log(1 /δ B ) + 2 log(1 /δ B )) 
+
+
+
+≤ δB .
+
+So, letting 
+
+q
+
+2σ2(d + 2 pd log(1 /δ B ) + 2 log(1 /δ B )) ≤ τ − a gives P r [∥B∥2 > τ − a] ≤ δB .Now weconsider the ∆-term. By Markov, we can consider the nonnegative random variable ∥∆∥22 (randomness here is only over D′ ∼ 
+
+> T
+
+D). We get, 
+
+P r [∥∆∥2 > a ] = P r [∥∆∥22 > a 2] ≤ E∥∆∥22
+
+a2 = ∆∗
+
+> 2
+
+(f, D )2
+
+a2 .
+
+Combining the two bounds completes the proof. 
+
+Corollary A.1 (Splitting the failure budget) . Fix τ > 0 and a split δ = δB + δ∆ with δB , δ ∆ ∈ (0 , 1) . Assume 
+
+τ > ∆∗
+
+> 2
+
+(f, D )/√δ∆. Then the Gaussian mechanism Mσ (D) = f (D) + Z, Z ∼ N (0 , σ 2Id), satisfies (τ, δ )-A-BB for any 0 < σ ≤ σmax where, 
+
+σmax = τ − ∆∗
+
+> 2
+
+(f, D )/√δ∆
+
+r
+
+2
+
+
+
+d + 2 pd log(1 /δ B ) + 2 log(1 /δ B )
+
+ . (1) 14 Proof. Apply Theorem 3.3 with a = ∆ ∗
+
+> 2
+
+(f, D )/√δ∆. Then P r [∥∆∥2 > a ] ≤ δ∆ by Markov, and choosing σ ≤ σmax 
+
+makes Pr[ ∥B∥2 > τ − a] ≤ δB by Laurent–Massart. Union bounding then yields δB + δ∆.
+
+Remark A.2 (Why splitting helps) . Note that, for any τ > 0 and any ∆ ∈ [0 , τ ), we have that, 
+
+τ − ∆
+
+√τ 2 − ∆2 =
+
+r τ − ∆
+
+τ + ∆ < 1 .
+
+Proof. This is an algebraic fact. Since ∆ ∈ [0 , τ ), both τ − ∆ and τ + ∆ are positive. Then, we expand, 
+
+pτ 2 − ∆2 = p(τ − ∆)( τ + ∆) .
+
+We divide through by √τ + ∆ , which gives 
+
+τ − ∆
+
+√τ 2 − ∆2 = τ − ∆
+
+p(τ − ∆)( τ + ∆) =
+
+r τ − ∆
+
+τ + ∆ .
+
+We know that τ + ∆ > τ − ∆ ≥ 0, thus the fraction under the square root lies in (0 , 1) and so its square root is strictly less than 1 as well. 
+
+Remark A.3 (Utility) . The following is a standard fact of adding Gaussian noise in d dimensions, 
+
+E∥Mσ (D) − f (D)∥22 = dσ 2 .
+
+Proof. This is a standard fact of Gaussian noise. By definition Mσ (D) = f (D) + Z with Z ∼ N (0 , σ 2Id). So we have, 
+
+∥Mσ (D) − f (D)∥22 = ∥Z∥22 =
+
+> d
+
+X
+
+> i=1
+
+Z2 
+
+> i
+
+,
+
+where each Zi is i.i.d. N (0 , σ 2). Therefore, 
+
+E[∥Mσ (D) − f (D)∥22] = 
+
+> d
+
+X
+
+> i=1
+
+E[Z2 
+
+> i
+
+] = 
+
+> d
+
+X
+
+> i=1
+
+V ar (Zi) = dσ 2 .
+
+# B Shrinkage Mechanism 
+
+Setup. Let f : D → Rd be a (deterministic) scoring functional and let T denote a neighbor generator that induces a distribution over neighbors D′ ∼ T (D). Recall the RMS average sensitivity 
+
+∆∗
+
+> 2
+
+(f, D ) :=  ED′∼T (D)
+
+∥f (D) − f (D′)∥22
+
+ 1/2 ,
+
+and the (τ, δ ) A-BB requirement Pr D′∼T (D) [∥M (D) − M (D′)∥2 > τ ] ≤ δ.
+
+Deterministic Lipschitz post-processing. We consider composing f with a deterministic L-Lipschitz map g : Rd →
+
+Rd (e.g., affine shrinkage g(x) = αx + (1 − α)μ with L = α ∈ (0 , 1] ). The following contraction of RMS sensitivity is immediate. 
+
+Lemma B.1 (RMS sensitivity contracts under Lipschitz maps) . For any L-Lipschitz g and any f, D ,
+
+∆∗
+
+> 2
+
+(g ◦ f, D ) ≤ L∆∗
+
+> 2
+
+(f, D ).
+
+Proof. For every realization D′ ∼ T (D), Lipschitzness gives ∥g(f (D)) − g(f (D′)) ∥2 ≤ L∥f (D) − f (D′)∥2. After squaring, we take expectations over D′, and then take square roots, to yield the result. 15 Proposition B.2 (A-BB with Lipschitz shrinkage) . Fix τ > 0 and split δ = δB + δ∆ with δB , δ ∆ ∈ (0 , 1) . Consider 
+
+Mσ (D) = g(f (D)) + Z, Z ∼ N (0 , σ 2Id),
+
+with g L -Lipschitz. If 
+
+τ > L ∆∗
+
+> 2
+
+(f, D )
+
+q 1 
+
+> δ∆
+
+,
+
+then (τ, δ )-A-BB holds for any 0 < σ ≤ σmax where 
+
+σmax = τ − L∆∗
+
+> 2
+
+(f, D )p1/δ ∆
+
+q
+
+2( d + 2 pd log(1 /δ B ) + 2 log(1 /δ B )) 
+
+.
+
+Under the symmetric split δB = δ∆ = δ/ 2 this specializes to the replacement ∆∗
+
+> 2
+
+(f, D ) 7 → L∆∗
+
+> 2
+
+(f, D ) in Theorem 3.4. Proof. Apply Theorem 3.3 to g ◦ f and use Theorem B.1 to upper bound ∆∗
+
+> 2
+
+(g ◦ f, D ) by L∆∗
+
+> 2
+
+(f, D ).The concentration bound follows from well-established theory on the tail behavior of Gaussian random vectors in high dimensions [37]. 
+
+Lipschitz contractions (shrinkage). Consider a deterministic map g : Rd → Rd that is L-Lipschitz: 
+
+∥g(x) − g(y)∥2 ≤ L ∥x − y∥2 for all x, y ∈ Rd.
+
+An important special case is affine shrinkage around a center μ ∈ Rd with coefficient α ∈ (0 , 1] :
+
+g(x) = α x + (1 − α) μ, L = α. 
+
+This form of shrinkage is closely related to classical shrinkage estimators in statistics [ 21 , 15 ] and regularization techniques in machine learning [6]. 
+
+Lemma B.3 (RMS sensitivity contracts under Lipschitz maps) . For any L-Lipschitz g and any f, D , we have ∆∗
+
+> 2
+
+(g ◦
+
+f, D ) ≤ L ∆∗
+
+> 2
+
+(f, D ).Proof. By Lipschitzness, for every realization D′ ∼ T (D),
+
+∥g(f (D)) − g(f (D′)) ∥2 ≤ L ∥f (D) − f (D′)∥2.
+
+Squaring and taking expectations over D′ ∼ T (D) yields 
+
+E ∥g(f (D)) − g(f (D′)) ∥22
+
+ ≤ L2 E ∥f (D) − f (D′)∥22
+
+.
+
+Taking square roots gives the claim. 
+
+Proposition B.4 (Shrinkage A-BB via Lipschitz contraction) . Fix τ > 0 and a split δ = δB + δ∆ with δB , δ ∆ ∈ (0 , 1) .Let g be L-Lipschitz and consider the Gaussian mechanism Mσ (D) = g(f (D)) + Z with Z ∼ N (0 , σ 2Id). If 
+
+τ > L ∆∗
+
+> 2
+
+(f, D )
+
+q 1 
+
+> δ∆
+
+,
+
+then (τ, δ )-A-BB holds for 
+
+σ = τ − L ∆∗
+
+> 2
+
+(f, D ) p1/δ ∆
+
+q
+
+2  d + 2 pd log(1 /δ B ) + 2 log(1 /δ B ) .
+
+In particular, for shrinkage g(x) = αx + (1 − α)μ with L = α, the precondition becomes τ > α ∆∗
+
+> 2
+
+(f, D ) p1/δ ∆,which is feasible for any target τ > 0 by choosing α ≤ τ / (∆ ∗
+
+> 2
+
+(f, D ) p1/δ ∆). Under the symmetric split δB = δ∆ =
+
+δ/ 2, this specializes to τ > α ∆∗
+
+> 2
+
+(f, D )p2/δ .Proof. By Lemma B.3, ∆∗
+
+> 2
+
+(g ◦ f, D ) ≤ L ∆∗
+
+> 2
+
+(f, D ). Apply the Gaussian A-BB bound (Proposition 1 in the main text; cf. [14, 2]) to g ◦ f with sensitivity upper bound L ∆∗
+
+> 2
+
+(f, D ), the same (τ, δ B , δ ∆), and obtain the stated σ.16 Remarks. 
+
+• Shrinkage trades utility for certifiability: smaller α reduces the effective sensitivity and allows certifying smaller 
+
+τ ; it also attenuates variation in outputs. • Non-expansive projections g (e.g., L2 projection onto a ball [ 3]) have L ≤ 1 and can deterministically bound output diameters; one can combine such g with small σ if randomized outputs are desired. • The same reasoning extends to other noise families provided appropriate tail bounds; the Gaussian case is convenient due to spherical symmetry and well-known concentration [11]. 
+
+Choosing the shrinkage center μ. The choice of μ affects both utility and the certified bound. If μ is fixed (data-independent), Lemma B.3 applies directly. If μ depends on the dataset, define gD (x) = αx + (1 − α)μ(D). For one-step neighbors D, D ′, we have 
+
+∥gD (f (D)) − gD′ (f (D′)) ∥2 ≤ α ∥f (D) − f (D′)∥2 + (1 − α) √d |μ(D) − μ(D′)|.
+
+Taking RMS over D′ ∼ T (D) yields an effective sensitivity bound 
+
+∆eff  
+
+> 2
+
+≤ α ∆∗
+
+> 2
+
+(f, D ) + (1 − α) Sμ, Sμ := √d · E |μ(D) − μ(D′)| .
+
+For the sample mean on [0 , 1] , |μ(D) − μ(D′)| ≤ 1/n for n samples, hence Sμ ≤ √d/n . Thus the precondition with adaptive μ becomes 
+
+τ >  α ∆∗
+
+> 2
+
+(f, D ) + (1 − α) Sμ
+
+ q 1 
+
+> δ∆
+
+.
+
+Solving for α in normalized units (letting A = ∆ ∗
+
+> 2
+
+p1/δ ∆ and B = Sμ
+
+p1/δ ∆) gives α < (τ − B)/(A − B) provided 
+
+A > B . In practice, for large n and d ≈ n, B ≈ 1/√n is small. Data-driven yet fixed-within-batch centers (e.g., holdout means, exponential moving averages frozen per batch, or profile means) recover the Sμ = 0 case since μ does not change under the neighbor in that batch. 
+
+Center strategies. Suitable choices include: (i) fixed/public centers (profile means) for Sμ = 0 , (ii) holdout means computed on a disjoint subset (unchanged by a one-item neighbor in the evaluation subset), and (iii) EMA centers updated between batches but held fixed during certification [ 18 ]. Robust centers (median/trimmed means [ 20 ]) remain admissible with the same form and a typically small Sμ. For high-dimensional covariance shrinkage, similar principles apply with appropriate modifications [24]. 
+
+Coverage of unmodeled biases and conservative calibration. Let S be a family of neighbor generators (potential biases). Suppose we calibrate a single bound 
+
+B ≥ sup 
+
+> S∈S
+
+∆∗
+
+> 2
+
+ f, D ; S.
+
+Using Proposition B.4 with ∆∗
+
+> 2
+
+(f, D ) replaced by B yields an (τ, δ )-A-BB certificate for every S ∈ S as soon as 
+
+τ > L B p1/δ ∆, with the same Gaussian calibration of σ. In particular, if we have a finite set of measured generators 
+
+{Ti}mi=1 , then choosing 
+
+B = max  
+
+> i∈[m]
+
+∆∗
+
+> 2
+
+ f, D ; Ti
+
+
+
+certifies against the worst measured bias and any S ∈ S whose RMS sensitivity is no larger than this envelope. This includes any convex mixture P 
+
+> i
+
+wiTi because 
+
+∆∗ 
+
+> 2
+
+f, D ; X
+
+> i
+
+wiTi
+
+!2
+
+= X
+
+> i
+
+wi ED′∼Ti(D)
+
+ ∥f (D) − f (D′)∥22
+
+ ≤ max  
+
+> i
+
+∆∗
+
+> 2
+
+ f, D ; Ti
+
+2.
+
+We refer to this choice B = max i ∆∗
+
+> 2
+
+(f, D ; Ti) as the conservative calibration: it trades more shrinkage/noise for coverage of all measured biases and any dominated (“no larger”) unknown bias under the same RMS metric. This approach is related to multiple testing corrections [4] and privacy composition theory [22]. 17 If the shrinkage center μ depends on the dataset, replace B by the effective bound 
+
+Beff = α B + (1 − α) Sμ,
+
+and require τ > B eff 
+
+p1/δ ∆ (cf. the discussion above). Using a center that is fixed within the certified batch (public, holdout, or frozen EMA) recovers Sμ = 0 and the simpler conservative condition. 
+
+# C Schematic Adherence 
+
+Schematic adherence measures the degree to which an LLM judge’s overall judgments can be explained as a function of its per-criteria (factor-wise) judgments [ 17 ]. Low schematic adherence indicates that the judge’s verdicts deviate from the stated rubric in ways that cannot be captured by any weighting of the explicit factors. 
+
+Measurement. Given a judge that produces factor scores fi1, . . . , f ik and an overall verdict oi for each sample i, we fit two regression models: 
+
+Linear model: 
+
+oi = β0 +
+
+> k
+
+X
+
+> j=1
+
+βj fij + εi
+
+Polynomial model (with interactions): 
+
+oi = β0 +
+
+> k
+
+X
+
+> j=1
+
+βj fij +
+
+> k
+
+X
+
+> j=1
+
+βjj f 2 
+
+> ij
+
++ X
+
+> j<ℓ
+
+βjℓ fij fiℓ + εi
+
+The schematic adherence score is defined as: 
+
+R2 
+
+> schematic
+
+= max( R2
+
+> linear
+
+, R 2
+
+> polynomial
+
+)
+
+Sensitivity metric. For bias-bounded evaluation, we convert schematic adherence into a sensitivity measure: 
+
+Ssch =
+
+q
+
+1 − R2
+
+> schematic
+
+This quantifies the fraction of judgment variance attributable to factors outside the explicit rubric—precisely the “implicit bias” that A-BB aims to bound. Empirically, R2 
+
+> schematic
+
+ranges from 0.10 (DeepSeek-R1-32B) to 0.74 (GPT-4o-mini), indicating substantial variation in how faithfully different judges follow their stated evaluation criteria [17]. 18
