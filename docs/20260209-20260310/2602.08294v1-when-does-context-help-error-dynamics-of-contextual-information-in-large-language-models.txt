@@ -1,0 +1,1499 @@
+Title: When Does Context Help? Error Dynamics of Contextual Information in Large Language Models
+
+URL Source: https://arxiv.org/pdf/2602.08294v1
+
+Published Time: Tue, 10 Feb 2026 03:04:03 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+Dingzirui Wang 1 Xuanliang Zhang 1 Keyan Xu 1 Qingfu Zhu 1 Wanxiang Che 1 Yang Deng 2
+
+## Abstract 
+
+Contextual information at inference time, such as demonstrations, retrieved knowledge, or in-teraction history, can substantially improve large language models (LLMs) without parameter up-dates, yet its theoretical role remains poorly under-stood beyond specific settings such as in-context learning (ICL). We present a unified theoreti-cal framework for analyzing the effect of arbi-trary contextual information in Transformer-based LLMs. Our analysis characterizes contextual in-fluence through output error dynamics. In a single-layer Transformer, we prove that the context-conditioned error vector decomposes additively into the baseline error vector and a contextual cor-rection vector. This yields necessary geometric conditions for error reduction: the contextual cor-rection must align with the negative baseline error and satisfy a norm constraint. We further show that the contextual correction norm admits an ex-plicit upper bound determined by context–query relevance and complementarity. These results ex-tend to multi-context and multi-layer Transform-ers. Experiments across ICL, retrieval-augmented generation, and memory evolution validate our theory and motivate a principled context selection strategy that improves performance by 0.6% .
+
+## 1. Introduction 
+
+Providing query-related contextual information in the in-put is an effective method to improve the inference per-formance of large language models (LLMs) without fine-tuning. This paradigm, broadly referred to as context engi-neering (Mei et al., 2025), now underpins a wide spectrum of methods, including In-Context Learning (ICL) via demon-strations (Dong et al., 2024), Retrieval-Augmented Genera-tion (RAG) through external knowledge injection (Li et al.,        
+
+> 1Harbin Institute of Technology 2Singapore Management University. Correspondence to: Dingzirui Wang <dzr-wang@ir.hit.edu.cn >, Wanxiang Che <car@ir.hit.edu.cn >.
+> Preprint. February 10, 2026.
+
+2025), and Memory Evolution (ME) based on historical in-teractions (Luo et al., 2026). Despite their empirical success, these methods are often developed in isolation, guided by heuristic intuitions rather than a unified understanding of how contextual information influences inference. Recent theoretical efforts have begun to probe the role of context, primarily focusing on the internal mechanisms of ICL (Huang et al., 2024; Zhang et al., 2024). These stud-ies typically analyze idealized settings where contextual demonstrations and test queries are drawn from the same distribution or share a common functional relationship. Par-allel work in RAG (Xu et al., 2025a) examines how statisti-cal properties of retrieved knowledge, such as relevance or redundancy, affect downstream performance. While valu-able, these analyzes exhibit two fundamental limitations. (i) 
+
+Existing theories are tightly coupled to specific context types , most notably ICL demonstrations, limiting their ap-plicability to the broader ecosystem of context engineering methods. (ii) Most analyzes rely on distributional align-ment assumptions between context and query that are routinely violated in practice, especially for memory-based or dynamically generated context. As a result, we currently lack a general theoretical principle that explains how arbi-trary contextual information affects LLM inference. To this end, we develop a unified theoretical framework for understanding the effect of arbitrary contextual information on Transformer-based LLMs (Vaswani et al., 2017) during inference. Rather than categorizing context by its source or semantics, we analyze its effect through the lens of output error dynamics. Our main conclusions are summarized in Table 1. We first show that, in the single-context and single-layer Transformer setting, the context-conditioned error vector decomposes additively into the baseline error vec-tor and a contextual correction vector . Based on this, we derive the geometric conditions of the context to reduce error and prove that the norm of the contextual correction vector is inherently upper-bounded by the relevance and complementarity between the context and the user query. We then extend these conclusions to multi-context and multi-layer models, where we prove that analogous conclusions about context continue to hold in these settings. We empirically validate our theory across three major con-1         
+
+> arXiv:2602.08294v1 [cs.CL] 9 Feb 2026 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models
+> Table 1. The main findings and corresponding evidence of this paper.
+> Finding Evidence Experiment
+> Additive error decomposition : context-conditioned error vector equals baseline error vector plus contextual correction vector in Transformers Theorem 2 §4.2
+> Geometric condition for error reduction : sufficient angular alignment between contextual correction and negative baseline error, relative to the ratio between their norms Theorem 3 §4.2
+> Upper bound on contextual correction norm : governed by the relevance and complementarity between the contextual information and the user query Theorem 3 §4.3
+
+text engineering paradigms (ICL, RAG, and ME) using four mainstream LLMs and seven datasets spanning three tasks. Across all settings, experimental results closely match our theoretical predictions. Analysis of failure cases reveals a unifying explanation: ineffective contexts primarily arise from poor angular alignment with the baseline error or in-sufficient correction norms. Motivated by these insights, we introduce a simple context selection strategy based on angu-lar alignment and norm upper bounds, achieving an average relative improvement of 0.6% over strong baselines, shed-ding light on future research. Together, our results provide a principled foundation for understanding and designing context engineering methods for LLMs. Our contributions are as follows: • We present a general theoretical framework that character-izes how arbitrary contextual information affects inference in Transformer models through output error dynamics. • We derive the necessary geometric conditions of contex-tual information that reduce output error (i.e., the angle and norm of contextual correction vectors) and establish an upper bound on contextual correction determined by context–query relevance and complementarity. • Through extensive experiments across ICL, RAG, and ME, four LLMs, and seven datasets, we empirically vali-date our theory and identify angular misalignment and insufficient correction norms as the dominant causes of ineffective contextual information, translating theory into practical context selection strategies. 
+
+## 2. Preliminary 
+
+In this section, we introduce some necessary mathemati-cal notation. Following prior work (Zhang et al., 2024; Lu et al., 2025), we regard the contextual information, user input, and output as single semantic vectors after encod-ing them separately. In Appendix C.1, we discuss that our conclusions continue to hold when the inputs and out-puts consist of multiple tokens. Specifically, let d ∈ N
+
+denote the embedding dimension. We consider the input matrix E = [ t, x ] ∈ Rd×2, where t ∈ Rd represents the contextual information and x ∈ Rd represents the user in-put. The prediction function f : RL×d → RL×d maps an input of arbitrary length L to an output of the same length. Given a target y ∈ Rd, we view the output at the position corresponding to x, denoted fx, as the model readout and define the context-conditioned error vector 
+
+e(t, x ) := fx(t, x ) − y ∈ Rd. As a comparison, we define the baseline error vector e(x) := fx(x) − y.Following prior work (Zhang et al., 2024; Huang et al., 2024), we primarily focus on the Transformer architecture. Specifically, the model we consider consists of one or more Transformer blocks, where each block contains an attention layer and an MLP layer with a residual connection. 
+
+Attention layer Let WQ, W K , W V , W O ∈ Rd×d be the query matrix, key matrix, value matrix, and output pro-jection matrix, respectively. For any vector z ∈ Rd, de-fine qz := WQz, k z := WK z, v z := WV z. Define the query, key, and value matrices Q = [ qt, q x ] ∈ Rd×2, K =[ kt, k x ] ∈ Rd×2, V = [ vt, v x ] ∈ Rd×2. Let the (i, j )-th entry of the score matrix S ∈ R2×2 be 
+
+Sij := q•(i), k •(j)
+
+√d (i, j ∈ { t, x }),
+
+and apply the softmax operation row-wise. Denote A := softmax( S) ∈ R2×2. Then the attention output at position 
+
+u ∈ { t, x } is defined as 
+
+AttnOut u(E) := WO
+
+  X
+
+> w∈{ t,x }
+
+Auw vw
+
+ ∈ Rd.
+
+The attention layer with a residual connection at position u
+
+is 
+
+Attn u(E) := E•(u) + AttnOut u(E) ∈ Rd.
+
+MLP layer Given weights W1, W 2 ∈ Rd×d. Let the nonlinear activation function σ : Rd → Rd be 1-Lipschitz. We define the MLP layer with the residual connection by 
+
+MLP( z) := z + W2 σ(W1z), z ∈ Rd.
+
+Finally, the output of a single block is defined as 
+
+Block u(E) := MLP  Attn u(E) ∈ Rd.
+
+In Appendix C.2, we discuss the impact of other architec-tural components of Transformers on our conclusions. 2When Does Context Help? Error Dynamics of Contextual Information in Large Language Models (a) Error Reduction (b) Mismatch Angle (c) Overfit Norm          
+
+> Figure 1. The illustration of how the contextual information af-fects the output error. The red vector denotes the baseline error vector e(x), the blue vector denotes the contextual correction vec-tor g(t, x ), and the green vector denotes the context-conditioned error vector e(t, x ).(a) the norm and direction of the contextual correction vector are appropriate, so the resulting error norm is smaller than the original error; (b) the norm of the contextual cor-rection vector is appropriate, but its direction is not aligned with the negative direction of the error, which leads to a larger error;
+> (c) the angle of the contextual correction vector is appropriate, but its norm is much larger than that of the original error, which also leads to a larger error. We present a case study in Appendix C.3.
+
+## 3. Error Dynamics of Contextual Information 
+
+In this section, we study how contextual information affects the output error. We first show that for a single context on a single-layer Transformer, the context-conditioned error vector e(t, x ) equals the sum of the baseline error vector 
+
+e(x) and the contextual correction vector g(t, x ). Then we prove that, for multiple contexts and multi-layer models, the gain has a similar effect on the error. The proofs related to this section are deferred to Appendix A. 
+
+3.1. Single Layer, Single Information 
+
+In this part, we discuss how a single piece of contextual information affects the output error in a single-layer Trans-former. We first provide the definition of contextual cor-rection vector . Then, we derive the condition under which contextual information helps reduce the output error, and we provide an upper bound for the norm of the vector. We denote the attention weights at position x by αx←t := 
+
+Axt , α x←x := Axx . Let δattn (t, x ) = Attn x([ t, x ]) −
+
+Attn x([ x]) denote the change in the attention output. Let the Jacobian matrix of the MLP be: 
+
+JMLP (z) := I + W2 Jσ (W1z) W1, (1) where ∥Jσ (·)∥ ≤ 1 holds almost everywhere 1. We then   
+
+> 1In this paper, ∥ · ∥ denotes the Euclidean norm for vectors and the operator norm induced by the Euclidean norm for matrices
+
+define the vector of the context information as follows: 
+
+Definition 1 (Contextual Correction Vector) .
+
+g(t, x ) := R 10 JMLP 
+
+ Attn x([ x]) + s δ attn (t, x ) δattn (t, x ) d s
+
+Definition 1 can be viewed as the change in the output caused by the context information after it sequentially passes through the attention and MLP layers, relative to the original input. Based on Definition 1, we have: 
+
+Theorem 2. e(t, x ) = e(x) + g(t, x )
+
+Theorem 2 shows that the context-conditioned error is the vector sum of the baseline error and the contextual correc-tion. Considering that all three terms in Theorem 2 are vectors in Rd, achieving |e(t, x )| < |e(x)| requires more than directional alignment alone: the contextual correction must not only point sufficiently toward the negative baseline error but also have a controlled magnitude, as illustrated in Figure 1. We formalize these geometric requirements of the contextual information as the following theorem. 
+
+Theorem 3. For a single-layer Transformer with a single context, the contextual correction vector satisfies the follow-ing norm and direction conditions. Vector Norm . Let LMLP := 1 + ∥W1∥ ∥ W2∥, we have 
+
+∥g(t, x )∥ ≤ LMLP αx←t ∥WO ∥∥ vt − vx∥
+
+Vector Direction. If g(t, x )̸ = 0 and e(x)̸ = 0 , define 
+
+ρ(t, x ) := ⟨− e(x), g (t, x )⟩∥e(x)∥ ∥ g(t, x )∥ ∈ [−1, 1] 
+
+Then, if introducing the new information reduces the error, i.e., if ∥e(t, x )∥ < ∥e(x)∥, we must have 
+
+ρ(t, x ) > ∥g(t, x )∥
+
+2 ∥e(x)∥
+
+ρ(t, x ) of Theorem 3 is the cosine value of the angle between the contextual correction vector and the negative baseline error. We refer to ρ(t, x ) as the context-error angle . In-tuitively, Theorem 3 requires that the context-error angle not be too small, i.e, the contextual correction vector should align as closely as possible with the negative direction of the baseline error vector. Simultaneously, the norm of the con-textual correction vector must not be excessively large, as this would cause the model to over-attend to the contextual correction vector and ignore the user query. Besides the condition required for contextual information to reduce error, Theorem 3 also provides an upper bound on the norm of the contextual correction vector. For a fixed model, this upper bound is mainly determined by two factors: (i) relevance αx←t: the attention weight that the context re-ceives from the user input; (ii) complementarity ∥vt − vx∥:the complementarity between the context and the user query in the projection space induced by WV .3When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+3.2. Single Layer, Multiple Context 
+
+Considering that a single context could not fully cover the content needed for the user query, most approaches include multiple pieces of context in the input. Therefore, in this part, we discuss the effect of introducing a new piece of context on the error when some context already exists. Let the existing context set be T = {t1, . . . , t n} and the new context be tn+1 . We can derive that: 
+
+Corollary 4. Let 
+
+¯vT := 
+
+> n
+
+X
+
+> i=1
+
+αx←ti vti + αx←x vx.
+
+Then the conclusion of Theorem 3 still holds after replacing 
+
+vx with ¯vT and t with tn+1 .
+
+Compared with Theorem 3, Corollary 4 shows that the multi-context case can be viewed as treating the existing context and the user query as a whole, using it as the effective user input. Each existing piece of context is weighted by its attention coefficient to the user query. 
+
+3.3. Multi Layer, Single Context 
+
+In this part, we discuss how context functions in a multi-layer Transformer. Consider a Transformer with L layers. Denote the hidden states at layer ℓ by 
+
+H(ℓ)(t, x ) = [ h(ℓ) 
+
+> u
+
+(t, x )] u∈{ t,x }, ℓ = 0 , 1, . . . , L, 
+
+where H(0) (t, x ) is the input embedding. The update of layer ℓ at position x is given by 
+
+˜h(ℓ) 
+
+> x
+
+(t, x ) := h(ℓ−1)  
+
+> x
+
+(t, x ) + Attn (ℓ)
+
+> x
+
+ H(ℓ−1) (t, x ),h(ℓ) 
+
+> x
+
+(t, x ) := ˜h(ℓ) 
+
+> x
+
+(t, x ) + MLP (ℓ) ˜h(ℓ) 
+
+> x
+
+(t, x ).
+
+The overall model output at position x is denoted by 
+
+f (L) 
+
+> x
+
+(t, x ) := h(L) 
+
+> x
+
+(t, x ), and we define e(L)(t, x ) := 
+
+f (L) 
+
+> x
+
+(t, x ) − y and e(L)(x) := f (L) 
+
+> x
+
+(x) − y.For layer ℓ, the layer of the attention output at position x is 
+
+δ(ℓ)attn (t, x ) := Attn (ℓ) 
+
+> x
+
+([ t, x ]) − Attn (ℓ) 
+
+> x
+
+([ x]) = α(ℓ) 
+
+> x←t
+
+W (ℓ) 
+
+> O
+
+∆v(ℓ),
+
+where ∆v(ℓ) := v(ℓ) 
+
+> t
+
+−v(ℓ) 
+
+> x
+
+, and α(ℓ) 
+
+> x←t
+
+is the attention weight of position x on t at layer ℓ.In analogy to Definition 1, we define the contextual correc-tion vector at layer ℓ as g(ℓ)(t, x ) by 
+
+Z 10
+
+JMLP (ℓ)
+
+ Attn (ℓ) 
+
+> x
+
+([ x]) + s δ (ℓ)attn (t, x ) δ(ℓ)attn (t, x ) d s
+
+Let the mapping composed of layers ℓ + 1 to L be 
+
+Φ(ℓ+1: L)(z) := f (L) ◦ · · · ◦ f (ℓ+1) (z).
+
+Following Definition 1, the local vector g(ℓ)(t, x ) at layer ℓ,after being propagated through the upper layers, yields an amplified vector in the output space: 
+
+˜g(ℓ)(t, x ) := R 10 JΦ(ℓ+1: L)
+
+ h(ℓ) 
+
+> x
+
+(x) + s g (ℓ)(t, x ) g(ℓ)(t, x ) d s
+
+Due to the residual connections, we define the overall con-textual correction vector as g(L)(t, x ) := PLℓ=1 ˜g(ℓ)(t, x ).It can be derived that 
+
+e(L)(t, x ) = e(L)(x) + g(L)(t, x ),
+
+and hence, we obtain: 
+
+Corollary 5. In a multi-layer Transformer, the contextual correction vector satisfies the following norm and direction conditions. Vector Norm. Let L(ℓ)MLP := 1 + ∥W (ℓ)1 ∥ ∥ W (ℓ)2 ∥, we have 
+
+∥g(L)(t, x )∥ ≤ 
+
+> L
+
+X
+
+> ℓ=1
+
+ LY
+
+> j=ℓ+1
+
+L(j)blk 
+
+
+
+L(ℓ)MLP α(ℓ) 
+
+> x←t
+
+∥W (ℓ) 
+
+> O
+
+∥ ∥ v(ℓ) 
+
+> t
+
+− v(ℓ) 
+
+> x
+
+∥.
+
+Vector Direction. If ∥g(L)(t, x )∥ > 0 and e(L)(x)̸ = 0 , de-fine 
+
+ρ(L)(t, x ) := −e(L)(x), g (L)(t, x )
+
+∥e(L)(x)∥ ∥ g(L)(t, x )∥ ∈ [−1, 1] 
+
+Then, if introducing the new information reduces the error, i.e., if ∥e(L)(t, x )∥ < ∥e(L)(x)∥, we must have 
+
+ρ(L)(t, x ) > ∥g(L)(t, x )
+
+2 ∥e(L)(x)∥
+
+The definitions of W (ℓ)1 and W (ℓ)2 are the same as Equa-tion 1. From Corollary 5, we can see that for the upper bound of the vector norm, each layer produces a local vector 
+
+g(ℓ), whose norm is still jointly determined by the relevance (α(ℓ)
+
+> x←t
+
+) and the complementarity ( ∥v(ℓ) 
+
+> t
+
+− v(ℓ) 
+
+> x
+
+∥) of the cor-responding layer. The upper layers scale or amplify the vector from the lower layers through their Lipschitz con-stants QLj=ℓ+1 L(j)blk . If the Lipschitz constants are smaller than 1, i.e., the model is stable to input perturbations, then increasing the number of layers shrinks the vector brought by the contextual information, and vise versa. 
+
+## 4. Experiment 
+
+In this section, we empirically validate the three conclusions about contextual information: (i) how the contextual correc-tion vector affects the error (§4.2); (ii) how relevance and complementarity affect the norm of the contextual correc-tion vector (§4.3); (iii) how multi-context and multi-layer affect the above conclusion (§4.4). 4When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+4.1. Experiment Setup Dataset We mainly conduct experiments on three types of mainstream tasks to validate our theoretical conclu-sions, which include: (i) Math: MATH (Hendrycks et al., 2021), CHAMP (Mao et al., 2024); (ii) Reason: Theo-remQA (Chen et al., 2023), MMLU-Redux (Gema et al., 2025), GPQA (Rein et al., 2024); (iii) QA: NaturalQues-tions (Kwiatkowski et al., 2019), FinQA (Chen et al., 2021). We introduce these datasets in detail in Appendix B.1. 
+
+Model We conduct experiments on four mainstream LLMs, including Llama-3.1-8B-Instruct (Llama-3.1-8B) (Grattafiori et al., 2024), DeepSeek-R1-Distill-Llama-8B (Llama-R1-8B) (DeepSeek-AI et al., 2025), Qwen3-8B (Yang et al., 2025), and Ministral-8B-Instruct-2410 (Ministral-8B) (Mistral AI team, 2024). Given that these LLMs cover different families, we believe they can ade-quately validate our theoretical conclusions. 
+
+Setup We first filter the bad cases under the no-context set-ting, ensuring that the experimental data consist of queries that the models cannot solve on their own. To reflect main-stream ways of leveraging context, we construct contextual information as follows: (i) ICL: we use demonstrations from the training set as context; (ii) RAG: we use the knowledge provided in the dataset as context; (iii) ME: at test time, we use historical test instances as context. The detailed methodological design and experimental configurations are provided in Appendix B.2, and the computation of various parameters is detailed in Appendix B.3. We merge the data from all datasets, models, and methods as our ex-perimental data . To uniformly reflect the relationship, we normalize the results of all settings. All our experiments are running on two H100-80G and are based on Transform-ers (Wolf et al., 2020) and vLLM (Kwon et al., 2023). 
+
+4.2. Effect of Contextual Correction Vector on Error 
+
+In this part, we validate the conclusion in Theorem 3 that the error reduction achieved by introducing contextual in-formation depends on the contextual correction vector. We first analyze how the norm and direction of the contextual correction vector affect the error reduction, where the exper-imental results are shown in Figure 2, from which we can observe that: (i) Almost all data points with decreased er-ror are concentrated in the region where ∥g(t,x )∥ 
+
+> 2∥e(x)∥
+
+< ρ (t, x ),which empirically validates our findings on error reduction in Theorem 3. (ii) There are many points with increased error around ρ(t, x ) = 1 , ∥g(t,x )∥ 
+
+> 2∥e(x)∥
+
+= 1 , indicating that for data whose direction is well aligned with the negative error direction, an excessively large norm causes the model to over-emphasize the contextual information while neglecting the user query, leading to significant increases in error. 0°     
+
+> 30°
+> 60°
+> 90°
+> 120°
+> 150°
+> 180° 0.0 1.0 10.0 100.0
+> = 0
+
+Figure 2. The variation of error change ∥e(t, x )∥ − ∥ e(x)∥ with re-spect to the contextual correction vector g(t, x ), where each point represents one data instance. The length of the vector from the axis origin to each point represents ∥g(t,x )∥ 
+
+> 2∥e(x)∥
+
+, and the angle with the positive x-axis represents arccos ρ(t, x ) (i.e., the angle between the contextual correction vector and the negative baseline error vector). Blue and red indicate that the error change is smaller or larger than 0, respectively, and darker colors indicate larger abso-lute values. The gray region corresponds to ∥g(t,x )∥ 
+
+> 2∥e(x)∥
+
+< ρ (t, x ).0.2 0.4 0.6 0.8 1.0 
+
+> ‖g(t, x )‖
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> ‖e(t, x ) − e(x)‖
+
+Figure 3. The variation of error change norm ∥e(t, x )−e(x)∥ with respect to the contextual correction vector norm ∥g(t, x )∥, where each point represents one data instance. The curves at the top and to the right show the distributions of the data points along the 
+
+x-axis and y-axis, respectively. The Pearson correlation coefficient for the fitted points is 0.903 .
+
+In addition, we analyze how error change varies with the contextual correction vector, which is shown in Figure 3. From the figure, we can see that the error change exhibits an overall positive correlation with the norm of the contextual correction vector, which corroborates the quantitative rela-tionship between them in Theorem 3. Also, we can observe a slight kink around |g(t, x )| ≈ 0.9 on the plot. Judging from the point density, this is likely due to the smaller num-ber of samples in this region. 
+
+4.3. Effect of Contextual Complementarity and Relevance on Contextual Correction Vector 
+
+In this part, we validate the conclusion in Theorem 3 re-garding how different factors affect the upper bound of the contextual correction vector. We compute how the con-textual correction vector varies with relevance ( αx←t) and complementarity ( ∥vt − vx∥). The experimental results are 5When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 0.2 0.4 0.6 0.8 1.0     
+
+> ‖αt←x‖‖ vt−vx‖
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> ‖g(t, x )‖
+
+Figure 4. The variation of contextual correction vector norm 
+
+∥g(t, x )∥ with respect to the relevance and complementarity 
+
+αx←t∥vt − vx∥, where each point represents one data instance. The curves at the top and to the right show the distributions of the data points along the x-axis and y-axis, respectively. The Pearson correlation coefficient for the fitted points is 0.770 .
+
+shown in Figure 4. From the figure, we can see that: (i) 
+
+The norm of the contextual correction vector is overall pos-itively correlated with αx←t∥vt − vx∥, which verifies the quantitative relationship of the vector with relevance and complementarity in Theorem 3. (ii) Overall, the relation-ship between relevance, complementarity, and the vector norm is not strictly linear since Theorem 3 only provides an upper bound for the vector norm that depends on rele-vance and complementarity. In practice, the vector norm in our experiments is often smaller than this upper bound, so the overall relationship is not strictly linear. (iii) From the data distribution, most samples have their relevance and complementarity concentrated in the top 50% , whereas the vector norm is mostly below 0.1. This suggests that even for contexts with relatively strong relevance, the model does not fully exploit them, which limits its performance. 
+
+4.4. Effect of Contextual Correction Vector under the Multi-Context and Multi-Layer setting 
+
+In this part, we validate the conclusions stated in Corollary 4 and Corollary 5 under the multi-context and multi-layer set-tings. For the multi-context setting, we increase the number of input contexts from 1 to 5. For the multi-layer setting, we collect the computed results from different layers of the model. Due to space limitations, we report only the overall trend of the data, where we partition the points along the x-axis into ten equal bins based on the number of points and plot the median value within each bin. We also discuss the change of g(t, x ) across different context numbers in Appendix D.4 and different layers in Appendix D.3. The results are shown in Figure 5 and Figure 6. We provide the complete experimental results in Appendix D.1. From the results, we observe that: (i) Across all settings, the plots show an overall increasing trend, which supports the conclusions in Corollary 4 and Corollary 5. (ii) Overall, the values under multi-context are larger than those under multi-
+
+0 0.2 0.4 0.6 0.8 1
+
+0
+
+0.2
+
+0.4
+
+∥g(t, x )∥
+
+> ∥∆e∥
+> Multi-Context
+> Multi-Layer
+
+Figure 5. The variation of error change norm with respect to the contextual correction vector norm ∥g(t, x )∥ under the multi-context and multi-layer settings, where ∆e denotes e(T, x |tn+1 )−
+
+e(T, x ) (multi-context) or e(L)(t, x ) − e(L)(x) (multi-layer), and each point represents one data instance. The curves at the top and to the right show the distributions of the data points along the 
+
+x-axis and y-axis, respectively. 
+
+0 0.2 0.4 0.6 0.8 1
+
+0
+
+0.5
+
+1
+
+αx←t∥vt − vx∥
+
+> ∥g(t, x )∥
+> Multi-Context
+> Multi-Layer
+
+Figure 6. The variation of contextual correction vector norm 
+
+∥g(t, x )∥ with respect to the relevance αx←t and complemen-tarity ∥vt − vx∥ under the multi-context and multi-layer settings, where each point represents one data instance. The curves at the top and to the right show the distributions of the data points along the x-axis and y-axis, respectively. 
+
+layer. This is because, due to the residual stream, the effect of ∥g(t, x )∥ at the current layer is diluted by information from previous layers under the multi-layer setting, thereby reducing its impact on the output error. 
+
+## 5. Theory-Guided Context Selection 
+
+In this section, we examine how the theoretical insights developed in this work can be leveraged to improve context selection in practical LLM inference. Our objective is not to introduce new state-of-the-art methods but to validate the predictive power of our theoretical analysis and demonstrate how it can inform principled design choices in real-world settings. Accordingly, we focus on lightweight, theory-guided enhancements on Llama-3.1-8B and Qwen3-8B that incur minimal additional computational overhead. 6When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+ICL RAG ME 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 88 .0% 87 .8% 89 .5%  
+
+> 12 .0%12 .2%10 .5%
+> Ratio
+
+Angle Norm 
+
+Figure 7. Distribution of error types of example where the context-conditioned error vector is greater than the baseline error vector. Angle indicates that the direction of the vector is misaligned and Norm indicates that the norm of the vector is too large. 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0               
+
+> 0
+> 250
+> 500
+> 750
+> 1000
+> 1250
+> 1500
+> 1750
+> 2000
+> Frequency
+> Histogram of g(t,x) /2 e(x)and (t,x)
+> g(t,x) /2 e(x)(line)
+> (t,x) (line)
+> g(t,x) /2 e(x)(bar)
+> (t,x) (bar)
+
+Figure 8. Distribution of the vector norm ∥g(t, x )∥/2∥e(t, x )∥ and the vector angle ρ(t, x ) on examples where the error decreases. 
+
+5.1. Error Type Distribution 
+
+To investigate the main causes of errors, we divide the cur-rent bad cases into two categories: (i) ∥g(t,x )∥ 
+
+> 2∥e(x)∥
+
+> ρ (t, x ):the model over-attends to the contextual information; (ii) 
+
+ρ(t, x ) < 0: the contextual information is irrelevant to the original error. The experimental results are shown in Fig-ure 7, from which we can see that the dominant error type is still caused by the misalignment between the directions of the vector and the error. We also compute the distributions of ∥g(t, x )∥/2∥e(t, x )∥ and ρ(t, x ) on examples where the error decreases, as shown in Figure 8. From the figure, we observe that ρ(t, x ) is overall skewed toward 1, indicating that contextual vector is already well aligned with the neg-ative direction of the original error. However, most values of ∥g(t, x )∥/2∥e(t, x )∥ lie around 0.1 to 0.5, which sug-gests that even for these examples, the vector norm is still insufficient to completely eliminate the error. Based on the above analysis, we argue that improvements in context usage should proceed from two aspects: (i) en-suring that the direction of the context vector is aligned 
+
+Table 2. Performance of ICL with top-1 selection. Zero denotes inference without contextual information. The best performance under each setting is marked in bold .
+
+Model Method MATH GPQA FinQA 
+
+> Llama-3.1-8B
+
+Zero 46 .0 31 .3 48 .6
+
+BM25 46 .8 42 .4 49 .2
+
+DICL (Kapuriya et al., 2025) 47 .4 43 .0 51 .3
+
+GenICL (Zhang et al., 2025) 47 .6 43 .0 51.6 
+
+TopicK (Kweon et al., 2025) 47 .0 42 .9 49 .8
+
+Ours 48.0 43.4 51 .1
+
+> Qwen3-8B
+
+Zero 87 .0 64 .6 60 .1
+
+BM25 88 .0 63 .6 64 .2
+
+DICL (Kapuriya et al., 2025) 88 .0 64 .6 67 .1
+
+GenICL (Zhang et al., 2025) 88 .4 65 .2 67.3 
+
+TopicK (Kweon et al., 2025) 86 .2 64 .1 64 .2
+
+Ours 89.2 65.7 66 .7
+
+Table 3. Performance of RAG with top-1 selection. Zero denotes inference without contextual information. TQA denotes Theo-remQA and NQ denotes NaturalQuestions. InstructRAG refers to the InstructRAG-ICL (Wei et al., 2025b). 
+
+Model Method CHAMP TQA NQ 
+
+> Llama-3.1-8B
+
+Zero 14 .1 26 .8 38 .5
+
+BM25 22 .2 37 .6 74 .7
+
+DPR (Karpukhin et al., 2020) 23 .0 38 .4 75 .6
+
+InstructRAG (Wei et al., 2025b) 24 .1 39 .2 76 .3
+
+ReFeedL (Yun et al., 2025) 24 .8 40 .0 77.1 Ours 25.2 40.8 76 .8
+
+> Qwen3-8B
+
+Zero 39 .6 54 .6 44 .2
+
+BM25 42 .6 62 .8 73 .8
+
+DPR (Karpukhin et al., 2020) 43 .7 63 .6 74 .5
+
+InstructRAG (Wei et al., 2025b) 44 .8 64 .4 75 .1
+
+ReFeedL (Yun et al., 2025) 45.2 65 .1 75 .6
+
+Ours 45.2 66.3 76.9 
+
+with the negative direction of the error so that the provided information can indeed reduce the error; (ii) increasing the contextual correction vector norm by enhancing relevance and complementarity, thereby further reducing the error. 
+
+5.2. Context Selection Strategies 
+
+We introduce two strategies to improve context selection: aligning vector direction and increasing vector norm. 
+
+Vector Direction Since computing the angle ρ(t, x ) in Theorem 3 depends on the ground-truth answer, we cannot estimate this angle directly. Following prior works (Xie et al., 2023; Liu et al., 2025), we use a smaller model to predict this angle. Specifically, we take ELECTRA-Large-Discriminator (Clark et al., 2020) as the predictor and merge the training splits of each dataset as the training data. The inputs consist of the user query, the context, and the pre-diction of the LLM without context, while the output is the corresponding ρ(t, x ). We report the relative error of the trained predictor in Appendix D.5. 7When Does Context Help? Error Dynamics of Contextual Information in Large Language Models                                                                                               
+
+> Table 4. Performance of ME with top-1selection. Zero denotes inference without contextual information. TQA denotes TheoremQA, MMLU denotes MMLU-Redux, and NQ denotes NaturalQuestions.
+> Model Method MATH CHAMP TQA MMLU GPQA NQ FinQA
+> Llama-3.1-8B Zero 46 .014 .126 .863 .831 .338 .548 .6
+> BM25 46 .414 .427 .064 .131 .838 .949 .0
+> DC (Suzgun et al., 2025) 47 .014 .827 .664 .632 .339 .349 .5
+> ExpRAG (Wei et al., 2025a) 47 .014 .827 .664 .731 .839 .449 .7
+> ReMem (Wei et al., 2025a) 47 .215 .227 .764 .932 .339 .849 .6
+> Ours 47 .415 .228 .065 .032 .839 .750 .0
+> Qwen3-8B Zero 87 .039 .654 .665 .864 .644 .260 .1
+> BM25 87 .240 .054 .866 .065 .244 .660 .4
+> DC (Suzgun et al., 2025) 88 .040 .455 .466 .565 .245 .060 .9
+> ExpRAG (Wei et al., 2025a) 88 .040 .755 .666 .665 .745 .161 .1
+> ReMem (Wei et al., 2025a) 88 .240 .755 .666 .865 .245 .361 .5
+> Ours 88 .441 .156 .066 .965 .745 .561 .4
+
+Vector Norm According to Theorem 3, the upper bound of ∥g(t, x )∥ is determined by αx←t∥vt − vx∥. Since 
+
+αx←t, v t, v x can be directly extracted, we feed the user query and the context into the LLM and directly extract the corresponding quantities from the model as ∥g(t, x )∥.To reduce computational costs, for each user input, we first use the method described in Appendix B.2 to coarsely select 
+
+32 candidate context passages. We then compute ρ(t, x ) and 
+
+αx←t∥vt − vx∥ for these candidates, select all contexts with 
+
+ρ(t, x ) < 1, and finally choose the context with the largest 
+
+αx←t∥vt − vx∥ to guide LLM inference. To verify the effec-tiveness of the above strategy, we conduct experiments under different settings in Table 2, Table 3 and Table 4, where all settings employ the top-1 context during inference. From the tables, we can observe that compared with the baselines under each setting, our method achieves comparable or even better performance, leading to 0.6% relative improvement on average. Such results demonstrate the effectiveness of the proposed approach, thereby supporting the correctness and practical applicability of our conclusions. 
+
+## 6. Related Works 
+
+LLMs can benefit from contextual information at inference time (Mei et al., 2025). To understand how LLMs interpret context and to guide future improvements, many studies investigate context related mechanisms (Zhou et al., 2024). For ICL, many works take a bottom up approach. They start from theory and, under the assumption that the provided con-text and the user query are drawn from the same distribution, they prove convergence results showing that ICL can solve arbitrary tasks (Zhang et al., 2024; Mahankali et al., 2024; Li et al., 2024; Yang et al., 2024). Many other works take a top down approach. They analyze the origins of ICL capa-bility and how context guides inference by examining the dynamics during training and inference (Park et al., 2025; Nguyen & Reddy, 2025; Smart et al., 2025). For RAG, instead of analyzing based on a mathematical foundation, existing studies mainly focus on inference. They partition contexts by their effectiveness and observe RAG behavior under different effectiveness conditions to understand its mechanism (Ghosh et al., 2024; Joren et al., 2025; Xu et al., 2025a). For ME, mechanistic research is relatively limited. Current studies primarily focus on improving performance by managing and selecting effective memory (Suzgun et al., 2025; Wei et al., 2025a; Xu et al., 2025b). These existing works suggest that most context related mech-anistic studies are task specific and lack a unified explana-tory theory. This limits our understanding of context and also makes it difficult to generalize to new context engineer-ing methods in the future. To address this issue, we propose a unified framework for analyzing context. We introduce the contextual correction vector to measure context effec-tiveness, and we derive the geometric conditions that must hold when the context is effective. 
+
+## 7. Conclusion 
+
+In this paper, we propose a unified theory to explain how context works. We introduce the contextual correction vec-tor to model the effectiveness of context and prove that the context-conditioned error vector equals the vector sum of the contextual correction vector and the baseline error vec-tor. Building on this, we derive the geometric conditions under which context leads to error reduction and provide an upper bound on the norm of the contextual correction vec-tor. We then show that similar conclusions continue to hold under multi-context and multi-layer settings. We conduct experiments across three methods (ICL, RAG, and ME), four LLMs, and seven datasets spanning three mainstream tasks, and the results are consistent with our theoretical pre-dictions. Finally, we further analyze the current bad cases and find that the primary causes are angle misalignment and small vector norms, which can guide future improvements. 8When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+## References 
+
+Chen, W., Yin, M., Ku, M., Lu, P., Wan, Y., Ma, X., Xu, J., Wang, X., and Xia, T. TheoremQA: A theorem-driven question answering dataset. In Bouamor, H., Pino, J., and Bali, K. (eds.), Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing ,pp. 7889–7901, Singapore, December 2023. Association for Computational Linguistics. doi: 10.18653/v1/2023. emnlp-main.489. URL https://aclanthology. org/2023.emnlp-main.489/ .Chen, Z., Chen, W., Smiley, C., Shah, S., Borova, I., Lang-don, D., Moussa, R., Beane, M., Huang, T.-H., Routledge, B., and Wang, W. Y. FinQA: A dataset of numerical reasoning over financial data. In Moens, M.-F., Huang, X., Specia, L., and Yih, S. W.-t. (eds.), Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing , pp. 3697–3711, Online and Punta Cana, Dominican Republic, November 2021. Association for Computational Linguistics. doi: 10.18653/v1/2021. emnlp-main.300. URL https://aclanthology. org/2021.emnlp-main.300/ .Clark, K., Luong, M.-T., Le, Q. V., and Manning, C. D. Elec-tra: Pre-training text encoders as discriminators rather than generators. In International Conference on Learning Representations , 2020. URL https://openreview. net/forum?id=r1xMH1BtvB .DeepSeek-AI, Guo, D., Yang, D., Zhang, H., Song, J., Zhang, R., Xu, R., Zhu, Q., Ma, S., Wang, P., Bi, X., Zhang, X., Yu, X., Wu, Y., Wu, Z. F., Gou, Z., Shao, Z., Li, Z., Gao, Z., Liu, A., Xue, B., Wang, B., Wu, B., Feng, B., Lu, C., Zhao, C., Deng, C., Zhang, C., Ruan, C., Dai, D., Chen, D., Ji, D., Li, E., Lin, F., Dai, F., Luo, F., Hao, G., Chen, G., Li, G., Zhang, H., Bao, H., Xu, H., Wang, H., Ding, H., Xin, H., Gao, H., Qu, H., Li, H., Guo, J., Li, J., Wang, J., Chen, J., Yuan, J., Qiu, J., Li, J., Cai, J. L., Ni, J., Liang, J., Chen, J., Dong, K., Hu, K., Gao, K., Guan, K., Huang, K., Yu, K., Wang, L., Zhang, L., Zhao, L., Wang, L., Zhang, L., Xu, L., Xia, L., Zhang, M., Zhang, M., Tang, M., Li, M., Wang, M., Li, M., Tian, N., Huang, P., Zhang, P., Wang, Q., Chen, Q., Du, Q., Ge, R., Zhang, R., Pan, R., Wang, R., Chen, R. J., Jin, R. L., Chen, R., Lu, S., Zhou, S., Chen, S., Ye, S., Wang, S., Yu, S., Zhou, S., Pan, S., Li, S. S., Zhou, S., Wu, S., Ye, S., Yun, T., Pei, T., Sun, T., Wang, T., Zeng, W., Zhao, W., Liu, W., Liang, W., Gao, W., Yu, W., Zhang, W., Xiao, W. L., An, W., Liu, X., Wang, X., Chen, X., Nie, X., Cheng, X., Liu, X., Xie, X., Liu, X., Yang, X., Li, X., Su, X., Lin, X., Li, X. Q., Jin, X., Shen, X., Chen, X., Sun, X., Wang, X., Song, X., Zhou, X., Wang, X., Shan, X., Li, Y. K., Wang, Y. Q., Wei, Y. X., Zhang, Y., Xu, Y., Li, Y., Zhao, Y., Sun, Y., Wang, Y., Yu, Y., Zhang, Y., Shi, Y., Xiong, Y., He, Y., Piao, Y., Wang, Y., Tan, Y., Ma, Y., Liu, Y., Guo, Y., Ou, Y., Wang, Y., Gong, Y., Zou, Y., He, Y., Xiong, Y., Luo, Y., You, Y., Liu, Y., Zhou, Y., Zhu, Y. X., Xu, Y., Huang, Y., Li, Y., Zheng, Y., Zhu, Y., Ma, Y., Tang, Y., Zha, Y., Yan, Y., Ren, Z. Z., Ren, Z., Sha, Z., Fu, Z., Xu, Z., Xie, Z., Zhang, Z., Hao, Z., Ma, Z., Yan, Z., Wu, Z., Gu, Z., Zhu, Z., Liu, Z., Li, Z., Xie, Z., Song, Z., Pan, Z., Huang, Z., Xu, Z., Zhang, Z., and Zhang, Z. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning, 2025. URL 
+
+https://arxiv.org/abs/2501.12948 .Dong, Q., Li, L., Dai, D., Zheng, C., Ma, J., Li, R., Xia, H., Xu, J., Wu, Z., Chang, B., Sun, X., Li, L., and Sui, Z. A survey on in-context learning. In Al-Onaizan, Y., Bansal, M., and Chen, Y.-N. (eds.), Proceedings of the 2024 Con-ference on Empirical Methods in Natural Language Pro-cessing , pp. 1107–1128, Miami, Florida, USA, November 2024. Association for Computational Linguistics. doi: 10.18653/v1/2024.emnlp-main.64. URL https:// aclanthology.org/2024.emnlp-main.64/ .Gema, A. P., Leang, J. O. J., Hong, G., Devoto, A., Man-cino, A. C. M., Saxena, R., He, X., Zhao, Y., Du, X., Ghasemi Madani, M. R., Barale, C., McHardy, R., Harris, J., Kaddour, J., Van Krieken, E., and Min-ervini, P. Are we done with MMLU? In Chiruzzo, L., Ritter, A., and Wang, L. (eds.), Proceedings of the 2025 Conference of the Nations of the Americas Chap-ter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Pa-pers) , pp. 5069–5096, Albuquerque, New Mexico, April 2025. Association for Computational Linguistics. ISBN 979-8-89176-189-6. doi: 10.18653/v1/2025.naacl-long. 262. URL https://aclanthology.org/2025. naacl-long.262/ .Ghosh, R., Seetharaman, R., Wadhwa, H., Aggarwal, S., Basu, S., Srinivasan, S., Zhao, W., Chaudhari, S., and Aghazadeh, E. Quantifying reliance on external infor-mation over parametric knowledge during retrieval aug-mented generation (RAG) using mechanistic analysis. In 
+
+The 7th BlackboxNLP Workshop , 2024. URL https: //openreview.net/forum?id=PCi5h5PJNw .Grattafiori, A., Dubey, A., Jauhri, A., Pandey, A., Kadian, A., Al-Dahle, A., Letman, A., Mathur, A., Schelten, A., Vaughan, A., Yang, A., Fan, A., Goyal, A., Hartshorn, A., Yang, A., Mitra, A., Sravankumar, A., Korenev, A., Hinsvark, A., Rao, A., Zhang, A., Rodriguez, A., Gregerson, A., Spataru, A., Roziere, B., Biron, B., Tang, B., Chern, B., Caucheteux, C., Nayak, C., Bi, C., Marra, C., McConnell, C., Keller, C., Touret, C., Wu, C., Wong, C., Ferrer, C. C., Nikolaidis, C., Allonsius, D., Song, D., Pintz, D., Livshits, D., Wyatt, D., Esiobu, D., Choudhary, D., Mahajan, D., Garcia-Olano, D., Perino, D., Hupkes, D., Lakomkin, E., AlBadawy, E., Lobanova, E., Dinan, 9When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+E., Smith, E. M., Radenovic, F., Guzm ´an, F., Zhang, F., Synnaeve, G., Lee, G., Anderson, G. L., Thattai, G., Nail, G., Mialon, G., Pang, G., Cucurell, G., Nguyen, H., Ko-revaar, H., Xu, H., Touvron, H., Zarov, I., Ibarra, I. A., Kloumann, I., Misra, I., Evtimov, I., Zhang, J., Copet, J., Lee, J., Geffert, J., Vranes, J., Park, J., Mahadeokar, J., Shah, J., van der Linde, J., Billock, J., Hong, J., Lee, J., Fu, J., Chi, J., Huang, J., Liu, J., Wang, J., Yu, J., Bitton, J., Spisak, J., Park, J., Rocca, J., Johnstun, J., Saxe, J., Jia, J., Alwala, K. V., Prasad, K., Upasani, K., Plawiak, K., Li, K., Heafield, K., Stone, K., El-Arini, K., Iyer, K., Malik, K., Chiu, K., Bhalla, K., Lakhotia, K., Rantala-Yeary, L., van der Maaten, L., Chen, L., Tan, L., Jenkins, L., Martin, L., Madaan, L., Malo, L., Blecher, L., Landzaat, L., de Oliveira, L., Muzzi, M., Pasupuleti, M., Singh, M., Paluri, M., Kardas, M., Tsimpoukelli, M., Oldham, M., Rita, M., Pavlova, M., Kambadur, M., Lewis, M., Si, M., Singh, M. K., Hassan, M., Goyal, N., Torabi, N., Bashlykov, N., Bogoychev, N., Chatterji, N., Zhang, N., Duchenne, O., C¸ elebi, O., Alrassy, P., Zhang, P., Li, P., Vasic, P., Weng, P., Bhargava, P., Dubal, P., Krishnan, P., Koura, P. S., Xu, P., He, Q., Dong, Q., Srinivasan, R., Ganapathy, R., Calderer, R., Cabral, R. S., Stojnic, R., Raileanu, R., Maheswari, R., Girdhar, R., Patel, R., Sauvestre, R., Polidoro, R., Sumbaly, R., Taylor, R., Silva, R., Hou, R., Wang, R., Hosseini, S., Chennabasappa, S., Singh, S., Bell, S., Kim, S. S., Edunov, S., Nie, S., Narang, S., Raparthy, S., Shen, S., Wan, S., Bhosale, S., Zhang, S., Vandenhende, S., Batra, S., Whitman, S., Sootla, S., Collot, S., Gururangan, S., Borodinsky, S., Herman, T., Fowler, T., Sheasha, T., Georgiou, T., Scialom, T., Speck-bacher, T., Mihaylov, T., Xiao, T., Karn, U., Goswami, V., Gupta, V., Ramanathan, V., Kerkez, V., Gonguet, V., Do, V., Vogeti, V., Albiero, V., Petrovic, V., Chu, W., Xiong, W., Fu, W., Meers, W., Martinet, X., Wang, X., Wang, X., Tan, X. E., Xia, X., Xie, X., Jia, X., Wang, X., Gold-schlag, Y., Gaur, Y., Babaei, Y., Wen, Y., Song, Y., Zhang, Y., Li, Y., Mao, Y., Coudert, Z. D., Yan, Z., Chen, Z., Papakipos, Z., Singh, A., Srivastava, A., Jain, A., Kelsey, A., Shajnfeld, A., Gangidi, A., Victoria, A., Goldstand, A., Menon, A., Sharma, A., Boesenberg, A., Baevski, A., Feinstein, A., Kallet, A., Sangani, A., Teo, A., Yunus, A., Lupu, A., Alvarado, A., Caples, A., Gu, A., Ho, A., Poul-ton, A., Ryan, A., Ramchandani, A., Dong, A., Franco, A., Goyal, A., Saraf, A., Chowdhury, A., Gabriel, A., Bharambe, A., Eisenman, A., Yazdan, A., James, B., Maurer, B., Leonhardi, B., Huang, B., Loyd, B., Paola, B. D., Paranjape, B., Liu, B., Wu, B., Ni, B., Hancock, B., Wasti, B., Spence, B., Stojkovic, B., Gamido, B., Montalvo, B., Parker, C., Burton, C., Mejia, C., Liu, C., Wang, C., Kim, C., Zhou, C., Hu, C., Chu, C.-H., Cai, C., Tindal, C., Feichtenhofer, C., Gao, C., Civin, D., Beaty, D., Kreymer, D., Li, D., Adkins, D., Xu, D., Testuggine, D., David, D., Parikh, D., Liskovich, D., Foss, D., Wang, D., Le, D., Holland, D., Dowling, E., Jamil, E., Mont-gomery, E., Presani, E., Hahn, E., Wood, E., Le, E.-T., Brinkman, E., Arcaute, E., Dunbar, E., Smothers, E., Sun, F., Kreuk, F., Tian, F., Kokkinos, F., Ozgenel, F., Cag-gioni, F., Kanayet, F., Seide, F., Florez, G. M., Schwarz, G., Badeer, G., Swee, G., Halpern, G., Herman, G., Sizov, G., Guangyi, Zhang, Lakshminarayanan, G., Inan, H., Shojanazeri, H., Zou, H., Wang, H., Zha, H., Habeeb, H., Rudolph, H., Suk, H., Aspegren, H., Goldman, H., Zhan, H., Damlaj, I., Molybog, I., Tufanov, I., Leontiadis, I., Veliche, I.-E., Gat, I., Weissman, J., Geboski, J., Kohli, J., Lam, J., Asher, J., Gaya, J.-B., Marcus, J., Tang, J., Chan, J., Zhen, J., Reizenstein, J., Teboul, J., Zhong, J., Jin, J., Yang, J., Cummings, J., Carvill, J., Shepard, J., McPhie, J., Torres, J., Ginsburg, J., Wang, J., Wu, K., U, K. H., Saxena, K., Khandelwal, K., Zand, K., Matosich, K., Veeraraghavan, K., Michelena, K., Li, K., Jagadeesh, K., Huang, K., Chawla, K., Huang, K., Chen, L., Garg, L., A, L., Silva, L., Bell, L., Zhang, L., Guo, L., Yu, L., Moshkovich, L., Wehrstedt, L., Khabsa, M., Avalani, M., Bhatt, M., Mankus, M., Hasson, M., Lennie, M., Reso, M., Groshev, M., Naumov, M., Lathi, M., Keneally, M., Liu, M., Seltzer, M. L., Valko, M., Restrepo, M., Patel, M., Vyatskov, M., Samvelyan, M., Clark, M., Macey, M., Wang, M., Hermoso, M. J., Metanat, M., Rastegari, M., Bansal, M., Santhanam, N., Parks, N., White, N., Bawa, N., Singhal, N., Egebo, N., Usunier, N., Mehta, N., Laptev, N. P., Dong, N., Cheng, N., Chernoguz, O., Hart, O., Salpekar, O., Kalinli, O., Kent, P., Parekh, P., Saab, P., Balaji, P., Rittner, P., Bontrager, P., Roux, P., Dollar, P., Zvyagina, P., Ratanchandani, P., Yuvraj, P., Liang, Q., Alao, R., Rodriguez, R., Ayub, R., Murthy, R., Nayani, R., Mitra, R., Parthasarathy, R., Li, R., Hogan, R., Battey, R., Wang, R., Howes, R., Rinott, R., Mehta, S., Siby, S., Bondu, S. J., Datta, S., Chugh, S., Hunt, S., Dhillon, S., Sidorov, S., Pan, S., Mahajan, S., Verma, S., Yamamoto, S., Ramaswamy, S., Lindsay, S., Lindsay, S., Feng, S., Lin, S., Zha, S. C., Patil, S., Shankar, S., Zhang, S., Zhang, S., Wang, S., Agarwal, S., Sajuyigbe, S., Chintala, S., Max, S., Chen, S., Kehoe, S., Satter-field, S., Govindaprasad, S., Gupta, S., Deng, S., Cho, S., Virk, S., Subramanian, S., Choudhury, S., Goldman, S., Remez, T., Glaser, T., Best, T., Koehler, T., Robinson, T., Li, T., Zhang, T., Matthews, T., Chou, T., Shaked, T., Vontimitta, V., Ajayi, V., Montanez, V., Mohan, V., Kumar, V. S., Mangla, V., Ionescu, V., Poenaru, V., Mi-hailescu, V. T., Ivanov, V., Li, W., Wang, W., Jiang, W., Bouaziz, W., Constable, W., Tang, X., Wu, X., Wang, X., Wu, X., Gao, X., Kleinman, Y., Chen, Y., Hu, Y., Jia, Y., Qi, Y., Li, Y., Zhang, Y., Zhang, Y., Adi, Y., Nam, Y., Yu, Wang, Zhao, Y., Hao, Y., Qian, Y., Li, Y., He, Y., Rait, Z., DeVito, Z., Rosnbrick, Z., Wen, Z., Yang, Z., Zhao, Z., and Ma, Z. The llama 3 herd of models, 2024. URL 
+
+https://arxiv.org/abs/2407.21783 .10 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+Hendrycks, D., Burns, C., Kadavath, S., Arora, A., Basart, S., Tang, E., Song, D., and Steinhardt, J. Measuring mathematical problem solving with the MATH dataset. In Thirty-fifth Conference on Neural Information Process-ing Systems Datasets and Benchmarks Track (Round 2) ,2021. URL https://openreview.net/forum? id=7Bywt2mQsCe .Huang, Y., Cheng, Y., and Liang, Y. In-context convergence of transformers. In Salakhutdinov, R., Kolter, Z., Heller, K., Weller, A., Oliver, N., Scarlett, J., and Berkenkamp, F. (eds.), Proceedings of the 41st International Conference on Machine Learning , volume 235 of Proceedings of Ma-chine Learning Research , pp. 19660–19722. PMLR, 21– 27 Jul 2024. URL https://proceedings.mlr. press/v235/huang24d.html .Joren, H., Zhang, J., Ferng, C.-S., Juan, D.-C., Taly, A., and Rashtchian, C. Sufficient context: A new lens on re-trieval augmented generation systems. In The Thirteenth International Conference on Learning Representations ,2025. URL https://openreview.net/forum? id=Jjr2Odj8DJ .Kapuriya, J., Kaushik, M., Ganguly, D., and Bhatia, S. Exploring the role of diversity in example selection for in-context learning. In Proceedings of the 48th In-ternational ACM SIGIR Conference on Research and Development in Information Retrieval , SIGIR ’25, pp. 2962–2966, New York, NY, USA, 2025. Association for Computing Machinery. ISBN 9798400715921. doi: 10. 1145/3726302.3730194. URL https://doi.org/ 10.1145/3726302.3730194 .Karpukhin, V., Oguz, B., Min, S., Lewis, P., Wu, L., Edunov, S., Chen, D., and Yih, W.-t. Dense passage retrieval for open-domain question answering. In Web-ber, B., Cohn, T., He, Y., and Liu, Y. (eds.), Proceed-ings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP) , pp. 6769– 6781, Online, November 2020. Association for Computa-tional Linguistics. doi: 10.18653/v1/2020.emnlp-main. 550. URL https://aclanthology.org/2020. emnlp-main.550/ .Kweon, W., Kang, S., Tian, R., Jiang, P., Han, J., and Yu, H. Topic coverage-based demonstration retrieval for in-context learning. In Christodoulopoulos, C., Chakraborty, T., Rose, C., and Peng, V. (eds.), Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing , pp. 19911–19923, Suzhou, China, November 2025. Association for Computational Linguistics. ISBN 979-8-89176-332-6. doi: 10.18653/v1/2025.emnlp-main. 1007. URL https://aclanthology.org/2025. emnlp-main.1007/ .Kwiatkowski, T., Palomaki, J., Redfield, O., Collins, M., Parikh, A., Alberti, C., Epstein, D., Polosukhin, I., De-vlin, J., Lee, K., Toutanova, K., Jones, L., Kelcey, M., Chang, M.-W., Dai, A. M., Uszkoreit, J., Le, Q., and Petrov, S. Natural questions: A benchmark for question answering research. Transactions of the Association for Computational Linguistics , 7:452–466, 2019. doi: 10. 1162/tacl a 00276. URL https://aclanthology. org/Q19-1026/ .Kwon, W., Li, Z., Zhuang, S., Sheng, Y., Zheng, L., Yu, C. H., Gonzalez, J. E., Zhang, H., and Stoica, I. Efficient memory management for large language model serving with pagedattention. In Proceedings of the ACM SIGOPS 29th Symposium on Operating Systems Principles , 2023. Li, H., Wang, M., Lu, S., Cui, X., and Chen, P.-Y. How do nonlinear transformers learn and generalize in in-context learning? In Forty-first International Conference on Ma-chine Learning , 2024. URL https://openreview. net/forum?id=I4HTPws9P6 .Li, Y., Zhang, W., Yang, Y., Huang, W.-C., Wu, Y., Luo, J., Bei, Y., Zou, H. P., Luo, X., Zhao, Y., Chan, C., Chen, Y., Deng, Z., Li, Y., Zheng, H.-T., Li, D., Jiang, R., Zhang, M., Song, Y., and Yu, P. S. Asurvey of RAG-reasoning systems in large language models. In Christodoulopoulos, C., Chakraborty, T., Rose, C., and Peng, V. (eds.), Findings of the Asso-ciation for Computational Linguistics: EMNLP 2025 ,pp. 12120–12145, Suzhou, China, November 2025. As-sociation for Computational Linguistics. ISBN 979-8-89176-335-7. doi: 10.18653/v1/2025.findings-emnlp. 648. URL https://aclanthology.org/2025. findings-emnlp.648/ .Lightman, H., Kosaraju, V., Burda, Y., Edwards, H., Baker, B., Lee, T., Leike, J., Schulman, J., Sutskever, I., and Cobbe, K. Let’s verify step by step. In The Twelfth International Conference on Learning Representations ,2024. URL https://openreview.net/forum? id=v8L0pN6EOi .Liu, Z., Zhang, R., Wang, Z., Yan, M., Yang, Z., Hovland, P. D., Nicolae, B., Cappello, F., Tang, S., and Zhang, Z. CoLA: Compute-efficient pre-training of LLMs via low-rank activation. In Christodoulopoulos, C., Chakraborty, T., Rose, C., and Peng, V. (eds.), Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing , pp. 4627–4645, Suzhou, China, November 2025. Association for Computational Linguistics. ISBN 979-8-89176-332-6. doi: 10.18653/v1/2025.emnlp-main. 230. URL https://aclanthology.org/2025. emnlp-main.230/ .Lu, Y. M., Letey, M., Zavatone-Veth, J. A., Maiti, A., and Pehlevan, C. Asymptotic theory of in-context learning by 11 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+linear attention. Proceedings of the National Academy of Sciences , 122(28), July 2025. ISSN 1091-6490. doi: 10. 1073/pnas.2502599122. URL http://dx.doi.org/ 10.1073/pnas.2502599122 .Luo, J., Tian, Y., Cao, C., Luo, Z., Lin, H., Li, K., Kong, C., Yang, R., and Ma, J. From storage to experi-ence: A survey on the evolution of llm agent memory mechanisms. Preprints , January 2026. doi: 10.20944/ preprints202601.0618.v2. URL https://doi.org/ 10.20944/preprints202601.0618.v2 .Mahankali, A. V., Hashimoto, T., and Ma, T. One step of gradient descent is provably the optimal in-context learner with one layer of linear self-attention. In The Twelfth International Conference on Learning Representations ,2024. URL https://openreview.net/forum? id=8p3fu56lKc .Mao, Y., Kim, Y., and Zhou, Y. CHAMP: A competition-level dataset for fine-grained analyses of LLMs’ math-ematical reasoning capabilities. In Ku, L.-W., Martins, A., and Srikumar, V. (eds.), Findings of the Association for Computational Linguistics: ACL 2024 , pp. 13256– 13274, Bangkok, Thailand, August 2024. Association for Computational Linguistics. doi: 10.18653/v1/2024. findings-acl.785. URL https://aclanthology. org/2024.findings-acl.785/ .Mei, L., Yao, J., Ge, Y., Wang, Y., Bi, B., Cai, Y., Liu, J., Li, M., Li, Z.-Z., Zhang, D., Zhou, C., Mao, J., Xia, T., Guo, J., and Liu, S. A survey of context engineering for large language models, 2025. URL https://arxiv. org/abs/2507.13334 .Mistral AI team. Un ministral, des ministraux. https: //mistral.ai/news/ministraux , oct 2024. Ac-cessed: 2025-11-18. Nguyen, A. and Reddy, G. Differential learning kinet-ics govern the transition from memorization to gener-alization during in-context learning. In The Thirteenth International Conference on Learning Representations ,2025. URL https://openreview.net/forum? id=INyi7qUdjZ .Park, C. F., Lubana, E. S., and Tanaka, H. Competition dynamics shape algorithmic phases of in-context learning. In The Thirteenth International Conference on Learning Representations , 2025. URL https://openreview. net/forum?id=XgH1wfHSX8 .Rein, D., Hou, B. L., Stickland, A. C., Petty, J., Pang, R. Y., Dirani, J., Michael, J., and Bowman, S. R. GPQA: A graduate-level google-proof q&a benchmark. In First Conference on Language Modeling , 2024. URL https: //openreview.net/forum?id=Ti67584b98 .Smart, M., Bietti, A., and Sengupta, A. M. In-context denois-ing with one-layer transformers: Connections between attention and associative memory retrieval. In Forty-second International Conference on Machine Learning ,2025. URL https://openreview.net/forum? id=F08lzoBgad .Suzgun, M., Yuksekgonul, M., Bianchi, F., Jurafsky, D., and Zou, J. Dynamic cheatsheet: Test-time learning with adaptive memory, 2025. URL https://arxiv.org/ abs/2504.07952 .Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L. u., and Polosukhin, I. Attention is all you need. In Guyon, I., Luxburg, U. V., Bengio, S., Wallach, H., Fergus, R., Vishwanathan, S., and Garnett, R. (eds.), Advances in Neural Information Processing Systems , volume 30. Curran Associates, Inc., 2017. URL https://proceedings.neurips. cc/paper_files/paper/2017/file/ 3f5ee243547dee91fbd053c1c4a845aa-Paper. pdf .Wei, T., Sachdeva, N., Coleman, B., He, Z., Bei, Y., Ning, X., Ai, M., Li, Y., He, J., Chi, E. H., Wang, C., Chen, S., Pereira, F., Kang, W.-C., and Cheng, D. Z. Evo-memory: Benchmarking llm agent test-time learning with self-evolving memory, 2025a. URL https://arxiv. org/abs/2511.20857 .Wei, Z., Chen, W.-L., and Meng, Y. InstructRAG: Instruct-ing retrieval-augmented generation via self-synthesized rationales. In The Thirteenth International Conference on Learning Representations , 2025b. URL https: //openreview.net/forum?id=P1qhkp8gQT .Wolf, T., Debut, L., Sanh, V., Chaumond, J., Delangue, C., Moi, A., Cistac, P., Rault, T., Louf, R., Funtow-icz, M., Davison, J., Shleifer, S., von Platen, P., Ma, C., Jernite, Y., Plu, J., Xu, C., Le Scao, T., Gugger, S., Drame, M., Lhoest, Q., and Rush, A. Transformers: State-of-the-art natural language processing. In Liu, Q. and Schlangen, D. (eds.), Proceedings of the 2020 Confer-ence on Empirical Methods in Natural Language Process-ing: System Demonstrations , pp. 38–45, Online, October 2020. Association for Computational Linguistics. doi: 10.18653/v1/2020.emnlp-demos.6. URL https:// aclanthology.org/2020.emnlp-demos.6/ .Xie, S. M., Pham, H., Dong, X., Du, N., Liu, H., Lu, Y., Liang, P., Le, Q. V., Ma, T., and Yu, A. W. Doremi: opti-mizing data mixtures speeds up language model pretrain-ing. In Proceedings of the 37th International Conference on Neural Information Processing Systems , NIPS ’23, Red Hook, NY, USA, 2023. Curran Associates Inc. 12 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+Xu, S., Pang, L., Shen, H., and Cheng, X. A theory for token-level harmonization in retrieval-augmented gen-eration. In The Thirteenth International Conference on Learning Representations , 2025a. URL https: //openreview.net/forum?id=tbx3u2oZAu .Xu, W., Liang, Z., Mei, K., Gao, H., Tan, J., and Zhang, Y. A-mem: Agentic memory for llm agents, 2025b. URL 
+
+https://arxiv.org/abs/2502.12110 .Yang, A., Li, A., Yang, B., Zhang, B., Hui, B., Zheng, B., Yu, B., Gao, C., Huang, C., Lv, C., Zheng, C., Liu, D., Zhou, F., Huang, F., Hu, F., Ge, H., Wei, H., Lin, H., Tang, J., Yang, J., Tu, J., Zhang, J., Yang, J., Yang, J., Zhou, J., Zhou, J., Lin, J., Dang, K., Bao, K., Yang, K., Yu, L., Deng, L., Li, M., Xue, M., Li, M., Zhang, P., Wang, P., Zhu, Q., Men, R., Gao, R., Liu, S., Luo, S., Li, T., Tang, T., Yin, W., Ren, X., Wang, X., Zhang, X., Ren, X., Fan, Y., Su, Y., Zhang, Y., Zhang, Y., Wan, Y., Liu, Y., Wang, Z., Cui, Z., Zhang, Z., Zhou, Z., and Qiu, Z. Qwen3 technical report, 2025. URL https: //arxiv.org/abs/2505.09388 .Yang, T., Huang, Y., Liang, Y., and Chi, Y. In-context learning with representations: Contextual generalization of trained transformers. In The Thirty-eighth Annual Conference on Neural Information Processing Systems ,2024. URL https://openreview.net/forum? id=ik37kKxKBm .Yun, T., Oh, J., Min, H., Lee, Y., Bang, J., Cai, J., and Song, H. Refeed: Multi-dimensional summarization refinement with reflective reasoning on feedback. In Second Con-ference on Language Modeling , 2025. URL https: //openreview.net/forum?id=6BGDGKZN7q .Zhang, R., Frei, S., and Bartlett, P. L. Trained transformers learn linear models in-context. J. Mach. Learn. Res. , 25 (1), January 2024. ISSN 1532-4435. Zhang, Z., Lan, S., Song, L., Bian, J., Li, Y., and Ren, K. Learning to select in-context demonstration pre-ferred by large language model. In Che, W., Nabende, J., Shutova, E., and Pilehvar, M. T. (eds.), Findings of the Association for Computational Linguistics: ACL 2025 , pp. 11345–11360, Vienna, Austria, July 2025. As-sociation for Computational Linguistics. ISBN 979-8-89176-256-5. doi: 10.18653/v1/2025.findings-acl. 592. URL https://aclanthology.org/2025. findings-acl.592/ .Zhao, A., Huang, D., Xu, Q., Lin, M., Liu, Y.-J., and Huang, G. Expel: Llm agents are experiential learners. In Proceedings of the Thirty-Eighth AAAI Conference on Artificial Intelligence and Thirty-Sixth Conference on Innovative Applications of Artificial Intelligence and Fourteenth Symposium on Educational Advances in Arti-ficial Intelligence , AAAI’24/IAAI’24/EAAI’24. AAAI Press, 2024. ISBN 978-1-57735-887-9. doi: 10.1609/aaai. v38i17.29936. URL https://doi.org/10.1609/ aaai.v38i17.29936 .Zhou, Y., Li, J., Xiang, Y., Yan, H., Gui, L., and He, Y. The mystery of in-context learning: A comprehensive survey on interpretation and analysis. In Al-Onaizan, Y., Bansal, M., and Chen, Y.-N. (eds.), Proceedings of the 2024 Conference on Empirical Methods in Nat-ural Language Processing , pp. 14365–14378, Miami, Florida, USA, November 2024. Association for Compu-tational Linguistics. doi: 10.18653/v1/2024.emnlp-main. 795. URL https://aclanthology.org/2024. emnlp-main.795/ .13 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+## A. Proof 
+
+A.1. Supporting Lemma 
+
+We first present two lemmas about the Lipschitz constants of the attention mechanism and the MLP. 
+
+Lemma 6. 
+
+δattn (t, x ) = αx←t WO (vt − vx) = αx←t WO ∆v. 
+
+Proof of Lemma 6. The attention contribution at position x
+
+is 
+
+AttnOut x([ t, x ]) = WO
+
+ αx←tvt + αx←xvx
+
+.
+
+In the case without context knowledge, the row-wise soft-max has a single weight equal to 1, so 
+
+AttnOut x([ x]) = WO vx.
+
+The attention layer includes a residual connection +x,which is the same under both inputs. Hence the difference between the two outputs comes entirely from the attention term, which is 
+
+AttnOut x([ t, x ]) − AttnOut x([ x]) = WO
+
+ αx←tvt + αx←xvx − vx
+
+
+
+= αx←tWO (vt − vx).
+
+Lemma 7. For any z, z ′ ∈ Rd,
+
+∥MLP( z) − MLP( z′)∥ ≤ LMLP ∥z − z′∥,LMLP = 1 + ∥W2∥ ∥ W1∥.
+
+Proof of Lemma 7. Let g(z) := W2σ(W1z). Since σ is 
+
+1-Lipschitz, we have 
+
+∥g(z) − g(z′)∥ ≤ ∥ W2∥ ∥ σ(W1z) − σ(W1z′)∥≤ ∥ W2∥ ∥ W1∥ ∥ z − z′∥.
+
+Therefore, 
+
+∥MLP( z) − MLP( z′)∥
+
+= ∥z − z′ + g(z) − g(z′)∥≤ ∥ z − z′∥ + ∥g(z) − g(z′)∥≤ (1 + ∥W2∥∥ W1∥)∥z − z′∥.
+
+A.2. Proof of Theorem 2 
+
+Proof of Theorem 2. Let z0 = Attn x([ x]) and z1 =Attn x([ t, x ]) denote the outputs of the attention layer when attending only to x and when attending to both t and x,respectively. By Lemma 6, the difference between these two inputs is 
+
+z1 − z0 = δattn (t, x ).
+
+We construct a linear path between z0 and z1, parameterized as z(s) = z0 + s(z1 − z0) for s ∈ [0 , 1] , i.e., 
+
+z(s) = Attn x([ x]) + s δ attn (t, x ).
+
+By the fundamental theorem of calculus, the difference of a vector-valued function along this path equals the integral of its derivative: 
+
+e(t, x ) − e(x) = MLP( z1) − MLP( z0)=
+
+Z 10
+
+dds MLP( z(s)) d s. 
+
+Applying the chain rule and using the Jacobian of the MLP, 
+
+JMLP (z) = ∂MLP( z) 
+
+> ∂z
+
+, we obtain 
+
+dds MLP( z(s)) = JMLP (z(s)) · dz(s)ds
+
+= JMLP (z(s)) · δattn (t, x ).
+
+Substituting this into the integral formula gives 
+
+e(t, x ) − e(x) = 
+
+Z 10
+
+JMLP 
+
+ Attn x([ x]) + s δ attn (t, x ) δattn (t, x ) d s. 
+
+Comparing with the definition of g(t, x ) in Definition 1, we see that the right-hand side is exactly g(t, x ). Hence 
+
+e(t, x ) = e(x) + g(t, x ).
+
+A.3. Proof of Theorem 3 
+
+Proof of Theorem 3. Recall the contextual vector (Defini-tion 1) 
+
+g(t, x ) = 
+
+Z 10
+
+JMLP 
+
+ Attn x([ x])+ s δ attn (t, x ) δattn (t, x ) d s. 
+
+Vector Norm. Using the submultiplicativity of the operator norm and the triangle inequality, 
+
+∥g(t, x )∥ ≤ 
+
+Z 10
+
+JMLP 
+
+ Attn x([ x]) + s δ attn (t, x ) ∥δattn (t, x )∥ ds. 
+
+14 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+By the Jacobian form of the MLP, 
+
+JMLP (z) := I + W2 Jσ (W1z) W1, ∥Jσ (·)∥ ≤ 1 a.e. ,
+
+we have, for almost every z,
+
+∥JMLP (z)∥ ≤ ∥ I∥ + ∥W2∥ ∥ Jσ (W1z)∥ ∥ W1∥≤ 1 + ∥W2∥ ∥ W1∥
+
+= LMLP .
+
+Therefore, 
+
+∥g(t, x )∥ ≤ 
+
+Z 10
+
+LMLP ∥δattn (t, x )∥ ds
+
+= LMLP ∥δattn (t, x )∥.
+
+Finally, by Lemma 6, δattn (t, x ) = αx←t WO (vt − vx),hence 
+
+∥δattn (t, x )∥ ≤ αx←t ∥WO ∥ ∥ vt − vx∥,
+
+which yields 
+
+∥g(t, x )∥ ≤ LMLP ∥δattn (t, x )∥≤ LMLP αx←t ∥WO ∥ ∥ vt − vx∥.
+
+Vector Direction. By Theorem 2, e(t, x ) = e(x) + g(t, x ).If ∥e(t, x )∥ < ∥e(x)∥, then 
+
+∥e(x) + g(t, x )∥2 < ∥e(x)∥2.
+
+Expanding the left-hand side gives 
+
+∥e(x)∥2 + 2 ⟨e(x), g (t, x )⟩ + ∥g(t, x )∥2 < ∥e(x)∥2,
+
+so 
+
+2⟨e(x), g (t, x )⟩ + ∥g(t, x )∥2 < 0 ⇐⇒ ⟨− e(x), g (t, x )⟩ > ∥g(t, x )∥2
+
+2 .
+
+Dividing both sides by ∥e(x)∥ ∥ g(t, x )∥ yields 
+
+⟨− e(x), g (t, x )⟩∥e(x)∥ ∥ g(t, x )∥ > ∥g(t, x )∥
+
+2∥e(x)∥ .
+
+Recalling the definition of 
+
+ρ(t, x ) := ⟨− e(x), g (t, x )⟩∥e(x)∥ ∥ g(t, x )∥ ∈ [−1, 1] ,
+
+we obtain the desired necessary condition 
+
+ρ(t, x ) > ∥g(t, x )∥
+
+2 ∥e(x)∥ .
+
+A.4. Proof of Corollary 4 
+
+Proof of Corollary 4. Let αx←tn+1 := Ax t n+1 . Analo-gously to Lemma 6, the increment in the attention output at position x is 
+
+δattn (tn+1 | T, x ):= AttnOut x([ T ∪ { tn+1 }, x ]) − AttnOut x([ T, x ]) = WO αx←tn+1 
+
+ vtn+1 − ¯vT
+
+.
+
+Following Definition 1, we define the incremental informa-tion vector contributed by the new token as 
+
+g(tn+1 | T, x ) := 
+
+Z 10
+
+JMLP 
+
+ Attn x([ T, x ]) + s δ attn (tn+1 | T, x )
+
+δattn (tn+1 | T, x ) d s. 
+
+Then we have e(T ∪ { tn+1 }, x ) = e(T, x ) + g(tn+1 |
+
+T, x ). By following the same proof strategy as in Theorem 2 and Theorem 3, we obtain the corresponding statements in Theorem 3. 
+
+A.5. Proof of Corollary 5 
+
+Proof of Corollary 5. We prove the stated norm bound and direction condition for the overall vector 
+
+g(L)(t, x ) := 
+
+> L
+
+X
+
+> ℓ=1
+
+˜g(ℓ)(t, x ),e(L)(t, x ) = e(L)(x) + g(L)(t, x ).
+
+Vector Norm. Fix a layer ℓ. By definition, 
+
+g(ℓ)(t, x ) = 
+
+Z 10
+
+JMLP (ℓ)
+
+ Attn (ℓ) 
+
+> x
+
+([ x]) + s δ (ℓ)attn (t, x ) δ(ℓ)attn (t, x ) d s. 
+
+As in the single-layer case, using ∥JMLP (ℓ) (·)∥ ≤ L(ℓ)MLP 
+
+(a.e.) gives 
+
+∥g(ℓ)(t, x )∥ ≤ L(ℓ)MLP ∥δ(ℓ)attn (t, x )∥.
+
+Moreover, from 
+
+δ(ℓ)attn (t, x ) = α(ℓ) 
+
+> x←t
+
+W (ℓ) 
+
+> O
+
+∆v(ℓ),
+
+∆v(ℓ) := v(ℓ) 
+
+> t
+
+− v(ℓ) 
+
+> x
+
+,
+
+we have 
+
+∥δ(ℓ)attn (t, x )∥ ≤ α(ℓ) 
+
+> x←t
+
+∥W (ℓ) 
+
+> O
+
+∥ ∥ v(ℓ) 
+
+> t
+
+− v(ℓ) 
+
+> x
+
+∥.
+
+Hence 
+
+∥g(ℓ)(t, x )∥ ≤ L(ℓ)MLP α(ℓ) 
+
+> x←t
+
+∥W (ℓ) 
+
+> O
+
+∥ ∥ v(ℓ) 
+
+> t
+
+− v(ℓ) 
+
+> x
+
+∥.
+
+15 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+Next, consider the propagation through the upper layers. Recall 
+
+˜g(ℓ)(t, x ) = 
+
+Z 10
+
+JΦ(ℓ+1: L)
+
+ h(ℓ) 
+
+> x
+
+(x)+ s g (ℓ)(t, x ) g(ℓ)(t, x ) d s, 
+
+where Φ(ℓ+1: L) = B(L) 
+
+> x
+
+◦ · · · ◦ B(ℓ+1)  
+
+> x
+
+. If each residual block B(j) 
+
+> x
+
+is L(j)blk -Lipschitz, then the composition Φ(ℓ+1: L)
+
+is 
+
+ LY
+
+> j=ℓ+1
+
+L(j)blk 
+
+
+
+-Lipschitz .
+
+Consequently, the Jacobian norm is bounded almost every-where by the same constant, i.e., 
+
+JΦ(ℓ+1: L) (z) ≤
+
+> L
+
+Y
+
+> j=ℓ+1
+
+L(j)blk for a.e. z. 
+
+Therefore, 
+
+∥˜g(ℓ)(t, x )∥ ≤ 
+
+Z 10
+
+ LY
+
+> j=ℓ+1
+
+L(j)blk 
+
+
+
+∥g(ℓ)(t, x )∥ ds
+
+=
+
+ LY
+
+> j=ℓ+1
+
+L(j)blk 
+
+
+
+∥g(ℓ)(t, x )∥.
+
+Combining the above bounds and summing over ℓ yields 
+
+∥g(L)(t, x )∥
+
+=
+
+> L
+
+X
+
+> ℓ=1
+
+˜g(ℓ)(t, x ) ≤
+
+> L
+
+X
+
+> ℓ=1
+
+∥˜g(ℓ)(t, x )∥≤
+
+> L
+
+X
+
+> ℓ=1
+
+ LY
+
+> j=ℓ+1
+
+L(j)blk 
+
+
+
+L(ℓ)MLP α(ℓ) 
+
+> x←t
+
+∥W (ℓ) 
+
+> O
+
+∥ ∥ v(ℓ) 
+
+> t
+
+− v(ℓ) 
+
+> x
+
+∥,
+
+which is exactly the stated bound. 
+
+Vector Direction. Using the error decomposition 
+
+e(L)(t, x ) = e(L)(x) + g(L)(t, x ), similar with the proof of Theorem 3, we can derive that 
+
+⟨− e(L)(x), g (L)(t, x )⟩ > ∥g(L)(t, x )∥2
+
+2 .
+
+If ∥g(L)(t, x )∥ > 0, dividing both sides by 
+
+∥e(L)(x)∥ ∥ g(L)(t, x )∥ yields 
+
+ρ(L)(t, x ) := ⟨− e(L)(x), g (L)(t, x )⟩∥e(L)(x)∥ ∥ g(L)(t, x )∥ > ∥g(L)(t, x )∥
+
+2 ∥e(L)(x)∥ ,
+
+which proves the stated condition. 
+
+## B. Additional Information 
+
+B.1. Experimental Datasets MATH MATH is a competition-style mathematics bench-mark designed to measure advanced symbolic and multi-step problem solving. It contains 12.5k problems drawn from high-school math contests and textbooks, spanning multiple subjects (e.g., algebra, geometry, number theory, counting & probability, etc.) and difficulty levels. Each example provides a problem statement together with a full, human-written step-by-step solution and a final boxed an-swer, which supports evaluating both final-answer correct-ness and intermediate reasoning. In LLM evaluation, MATH is typically scored by exact match on the final answer (often after normalization). We employ the MATH500 (Lightman et al., 2024) version for our experiments. 
+
+CHAMP CHAMP (Concept and Hint-Annotated Math Problems) is a competition-level math dataset built for fine-grained analysis of how models use contextual information. Beyond the original problem and gold solution/answer, each instance is annotated with (1) concepts—general mathe-matical facts or principles that may be relevant—and (2) hints—problem-specific tricks or guidance that can mate-rially help solve the problem. This structure enables con-trolled experiments such as adding helpful hints, injecting misleading concepts, or testing whether models can benefit from the “right” side information. CHAMP is also used to study solution faithfulness and verification, not just final-answer accuracy. 
+
+TheoremQA TheoremQA is a theorem-driven question answering benchmark that tests whether models can apply domain knowledge (i.e., specific theorems) to solve chal-lenging problems. It consists of expert-curated questions covering hundreds of theorems across multiple disciplines, including mathematics, physics, EE/CS, and finance. Prob-lems are designed so that solving them requires identifying and correctly using an appropriate theorem rather than rely-ing on surface patterns. The dataset emphasizes reasoning and knowledge application: models must connect the ques-tion to relevant formal principles and carry out multi-step derivations to reach the final answer. Evaluation commonly focuses on final-answer accuracy (often exact match), with optional analysis of reasoning quality. 
+
+MMLU-Redux MMLU-Redux is a cleaned, manually re-annotated variant of the widely used MMLU benchmark, aiming to correct ambiguities and label errors that can distort model comparisons. It preserves the broad subject cover-age of MMLU (spanning dozens of academic and profes-sional domains) while providing revised gold answers and improved quality control. The benchmark is intended for more reliable measurement of factual recall and reasoning 16 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+in a multiple-choice setting, and it is particularly useful for checking whether model rankings are robust to dataset noise. In practice, evaluation remains standard multiple-choice accuracy, but conclusions are less sensitive to flawed items. 
+
+GPQA GPQA is a graduate-level, “Google-proof” multiple-choice QA benchmark written by domain experts to be exceptionally difficult even with unrestricted web ac-cess. It focuses on deep scientific reasoning in three core areas: biology, chemistry, and physics. The questions are designed to resist shallow retrieval and require substantial conceptual understanding and careful elimination of distrac-tors. Because humans without specialized expertise struggle on the dataset, GPQA is often used to stress-test frontier models and to study oversight and evaluation reliability on hard scientific questions. Performance is typically reported as multiple-choice accuracy, sometimes with analysis by domain and difficulty. 
+
+NaturalQuestions NaturalQuestions (NQ) is a large-scale QA dataset built from real, anonymized Google search queries paired with Wikipedia pages from top search re-sults. For each question-page pair, human annotators label a long answer (usually a paragraph or section) and a short answer (one or more spans/entities), or mark the question as unanswerable from the page. This design supports both reading comprehension and retrieval-style evaluation, since the system must identify evidence within long documents. NQ includes diverse information-seeking questions and nat-urally occurring ambiguity, making it a strong benchmark for open-domain QA pipelines. Common metrics include exact match and token-level F1 for short answers, plus long-answer accuracy. 
+
+FinQA FinQA is a financial question answering dataset targeting numerical reasoning over real corporate reports. Each instance pairs a question with evidence drawn from heterogeneous sources such as tables and accompanying textual context. Solving typically requires multi-step arith-metic, aggregation, and logical operations (e.g., computing growth rates, margins, or differences across periods). A key feature of FinQA is the availability of gold “reason-ing programs” (structured operation sequences) that make the computation process explicit, enabling explainable eval-uation and program-based training or analysis. Systems are commonly evaluated by final numeric answer accuracy (often exact match after normalization), and sometimes by program correctness or execution validity. 
+
+B.2. Experimental Setup 
+
+In this paper, for all three types of contextual information, we use BM25 to retrieve context relevant to the user query.                   
+
+> Table 5. The prompt of inference during our experiments.
+> {information }can be replaced with demonstrations, retrieved knowledge, and memory. Prompt of Inference
+> {task definition }
+> ---Here are some information to help you solve the given task: ‘‘‘
+> {information }
+> ‘‘‘ ---Based on the above information, solve the following question:
+> {question }
+
+We do not adopt more advanced retrieval methods because our primary goal is to analyze the relationship between the context error and various factors, rather than to optimize performance. To reduce experimental overhead, we em-ploy the relatively simple BM25 method in our analytical experiments. The inference prompt we used is shown in Table B.2. Specif-ically, our method designs for different types of information are as follows: 
+
+In-Context Learning We use a sample ICL approach, where the input consists of the task definition, demonstra-tions, and the user query, and the output is the answer to the query. The demonstration pool is the training set of each dataset. 
+
+Retrieval-Augmented Generation We directly use the retrieval corpus provided by each dataset and simply con-catenate the retrieved results into the input. 
+
+Memory Evolution Following Zhao et al. (2024), we im-plement evolution with a simple agent system consisting of two components: a Thinker and a Reasoner. The Thinker learns from historical interactions and summarizes experi-ence, while the Reasoner answers user queries based on the summarized experience. The Thinker prompt we used is shown in Table 6. 
+
+B.3. Calculation of Main Parameters 
+
+In this section, we introduce how to compute each analysis parameter in §4. To reduce the experimental cost, we cal-culate the following parameters with the first layer of the model, as we consider the first layer as one single Trans-former block. (i) e(x) and e(t, x ): We directly compute the 17 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+error as the difference between the pooling of the encoding vectors of each output token and the corresponding token in the ground-truth answer, under the inputs x and [t, x ],respectively. (ii) g(t, x ): Our computation follows Defini-tion 1, where Attn x([ x]) and δattn (t, x ) can be obtained directly from the model parameters. For Jσ in JMLP , we derive the Jacobian matrices of the activation functions for each LLM accordingly. (iii) ρ(t, x ): Based on the definition in Theorem 3, we can compute it directly from e(x) and 
+
+g(t, x ). (iv) αt←x: We directly extract the attention weights from x to t when feeding [t, x ] into the model. 
+
+## C. Additional Discussion 
+
+C.1. Analysis with Multiple Tokens 
+
+Let T = ( t1, . . . , t n) be the context sequence and X =(x1, . . . , x m) be the query sequence. We focus on a fixed position p in X whose representation is used to form the output. For a single-layer Transformer, denote the attention output at position p by Attn p(·) and define 
+
+δattn ,p (T, X ) := Attn p([ T, X ]) − Attn p([ X]) ∈ Rd.
+
+Define the contextual correction vector at position p as 
+
+gp(T, X ) := 
+
+Z 10
+
+JMLP 
+
+
+
+Attn p([ X]) + s δ attn ,p (T, X )
+
+
+
+δattn ,p (T, X ) d s. 
+
+By the fundamental theorem of calculus applied to the mapping MLP( ·) along the line segment Attn p([ X]) 7 →
+
+Attn p([ T, X ]) , we have 
+
+yp([ T, X ]) − yp([ X]) = gp(T, X ),
+
+which implies the same error decomposition as Theorem 2 at position pep([ T, X ]) = ep([ X]) + gp(T, X ).
+
+If we define the sequence-level error by concatenation 
+
+e([ X]) := [ e1([ X]); . . . ; em([ X])] ∈ Rmd and similarly 
+
+g(T, X ) := [ g1(T, X ); . . . ; gm(T, X )] , then the decompo-sition also holds at the sequence level 
+
+e([ T, X ]) = e([ X]) + g(T, X ).
+
+Therefore, all geometric implications remain unchanged. In particular, the vector direction defined by the cosine 
+
+ρp(T, X ) := ⟨− ep([ X]) , g p(T, X )⟩∥ep([ X]) ∥ ∥ gp(T, X )∥ ∈ [−1, 1] 
+
+yields the same necessary condition for error reduction 
+
+∥ep([ T, X ]) ∥ < ∥ep([ X]) ∥ ⇒ ρp(T, X ) > ∥gp(T, X )∥
+
+2∥ep([ X]) ∥ .
+
+C.2. Effect of Other Structure of Transformer 
+
+In this section, we analyze how different factors not dis-cussed in §3 affect the conclusion of this paper. 
+
+Multi-Head Attention. Multi head attention keeps the same decomposition view because the model still produces an attention output at position x, and the contextual vector is simply the composition of the per head contributions through the output projection. Overall, MHA does not change our main conclusion. Attention Variants. Sharing keys and values across heads mainly redistributes where relevance and complementarity live across heads, while the contextual vector is still gov-erned by how much attention is assigned to the context and how informative the context values are in the projected space. In short, these variants preserve the key conclu-sion. Feed Forward Network Variants. Gating and alternative nonlinearities may alter the local amplification or attenua-tion of an update, but error reduction still hinges on whether the induced vector aligns with the negative original error and whether its magnitude is not excessively large. Thus, the main conclusion remains unchanged. Positional Encoding and Attention Bias. These mecha-nisms mostly reshape attention weights and therefore affect relevance, yet the same relationship between vector direc-tion, vector norm, and the possibility of error reduction continues to apply. Consequently, our central conclusion still holds. Masking and Long Context Visibility Constraints. Vis-ibility constraints decide whether contextual tokens can contribute at all, but whenever they are visible their impact on the error can still be interpreted through the same vector based lens. So they do not overturn the main conclusion either. C.3. Case Study 
+
+We present a case study of our analysis in Table 7. 
+
+## D. Additional Experiment 
+
+D.1. Analysis of Multi Information and Multi Layers 
+
+In this part, we present how the error change varies with the contextual vector in the multi-context and multi-layer setting, and how the vector varies with the relevance and complementarity of the context, as illustrated in Figures 9 to 12. We can observe that the empirical trends are consistent with the predictions in Corollary 4 and Corollary 5, which 18 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 0.2 0.4 0.6 0.8 1.0   
+
+> ‖g(tn+ 1 ,¯vT)‖
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> ‖e(T ∪ {tn + 1
+> }, ¯vT) − e(T,  ¯vT)‖
+
+Figure 9. Relationship between error change with new context 
+
+∥e(T ∪ { tn+1 }, x ) − e(T, x )∥ and vector norm ∥g(tn+1 | T, x )∥.Each point corresponds to one data sample. The curves at the top and on the right show the marginal distributions of the data points along the x- and y-axes, respectively. The fitted Pearson correlation coefficient of the scatter points is 0.751 .0.0 0.2 0.4 0.6 0.8 1.0         
+
+> ‖αx←tn+ 1 ‖‖ ¯vT−vtn+ 1 ‖
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> ‖g(tn + 1 |T,  ¯vT)‖
+
+Figure 10. Relationship between the vector norm ∥g(tn+1 | T, x )∥
+
+and ∥αx←tn+1 ∥∥ vtn+1 − ¯vT ∥. Each point corresponds to one data sample. The curves at the top and on the right show the marginal distributions of the data points along the x- and y-axes, respectively. The fitted Pearson correlation coefficient of the scatter points is 
+
+0.838 .
+
+validate our theoretical derivations. 
+
+D.2. Output Error with Contextual Information cross Different Methods 
+
+In this section, we present the analysis of different meth-ods using a single context and a single layer model from Figure 13 to Figure 21. 
+
+D.3. Variation of Contextual Correction Vector with Model Layer 
+
+To verify the effect of model depth on the vector as stated in Corollary 5, we compute the context information vector at each layer and plot its variation with respect to the layer index. Because the models have different numbers of layers, we report results on Qwen3-8B and Ministral-8B. Since the first layer mainly reads the input and the last layer mainly produces the final answer, their attention magnitudes are significantly larger than those of intermediate layers, which in turn makes their vectors much larger. To better isolate the effect of depth on the vector, we therefore show the vector from the second to the penultimate layer in Figure 23. For 0.2 0.4 0.6 0.8 1.0 
+
+> ‖g(t, x )‖
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> ‖e(t, x ) − e(x)‖
+
+Figure 11. Relationship between multi-layer error change 
+
+∥e(L)(t, x ) − e(L)(x)∥ and the vector norm ∥g(L)(t, x )∥. Each point corresponds to one data sample. The curves at the top and on the right show the marginal distributions of the data points along the x- and y-axes, respectively. The fitted Pearson correlation coefficient of the scatter points is 0.655 .0.2 0.4 0.6 0.8 1.0         
+
+> ‖αx←tn+ 1 ‖‖ ¯vT−vtn+ 1 ‖
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> ‖g(tn + 1 |T,  ¯vT)‖
+
+Figure 12. Relationship between the vector norm ∥g(L)(t, x )∥ and 
+
+∥α(L)
+
+> x←t
+
+∥∥ t − x∥. Each point corresponds to one data sample. The curves at the top and on the right show the marginal distributions of the data points along the x- and y-axes, respectively. The fitted Pearson correlation coefficient of the scatter points is 0.717 .
+
+completeness, Figure 22 also presents the vector across all layers. From these figures, we observe that: (i) overall, in multi-layer models, the empirical relationships between the con-text information vector, error change, and the corresponding quantities are consistent with the predictions of Corollary 5, which supports the correctness of our conclusions; and (ii) 
+
+as the model depth increases, the context information vec-tor tends to increase overall, suggesting that the Lipschitz constants of the layers are collectively smaller than 1, i.e., the model is relatively stable with respect to perturbations. 
+
+D.4. Variation of Contextual Correction Vector with Context Number 
+
+To analyze how the number of contexts affects the contextual correction vector, we examine how the contextual correc-tion vector changes under different numbers of contexts. The results are shown in Figure 24, from which we can ob-serve that: (i) Overall, the contextual correction vector does not vary substantially with the number of contexts, which suggests that the model attention to the newly provided con-19 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 0°     
+
+> 30°
+> 60°
+> 90°
+> 120°
+> 150°
+> 180° 0.0 1.0 10.0 100.0
+> = 0
+
+Figure 13. The variation of ∥e(t, x )∥ − ∥ e(x)∥ with respect to 
+
+g(t, x ) of ICL, where each point represents one data instance. 0.2 0.4 0.6 0.8 1.0 
+
+> ‖g(t, x )‖
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> ‖e(t, x ) − e(x)‖
+
+Figure 14. The variation of ∥e(t, x ) − e(x)∥ with respect to 
+
+∥g(t, x )∥ of ICL, where each point represents one data instance. The Pearson correlation coefficient for the fitted points is 0.876 .
+
+text is not significantly constrained by the existing contexts, allowing the new context to still influence the reasoning out-come. (ii) In contrast, the norm of the contextual correction vector exhibits a decreasing trend, which indicates that the existing contexts can partially help resolve the query and thus reduce the model reliance on the new context. 
+
+D.5. Performance of Trained Predictor 
+
+The relative error of the trained predictor is shown in Ta-ble 8. 0.2 0.4 0.6 0.8 1.0     
+
+> ‖αt←x‖‖ x−t‖
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> ‖g(t, x )‖
+
+Figure 15. The variation of ∥g(t, x )∥ with respect to αx←t∥vt −
+
+vx∥ of ICL, where each point represents one data instance. The Pearson correlation coefficient for the fitted points is 0.817 .0°     
+
+> 30°
+> 60°
+> 90°
+> 120°
+> 150°
+> 180° 0.0 1.0 10.0 100.0
+> = 0
+
+Figure 16. The variation of ∥e(t, x )∥ − ∥ e(x)∥ with respect to 
+
+g(t, x ) of RAG, where each point represents one data instance. 0.2 0.4 0.6 0.8 1.0 
+
+> ‖g(t, x )‖
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> ‖e(t, x ) − e(x)‖
+
+Figure 17. The variation of ∥e(t, x ) − e(x)∥ with respect to 
+
+∥g(t, x )∥ of RAG, where each point represents one data instance. The Pearson correlation coefficient for the fitted points is 0.903 .0.2 0.4 0.6 0.8 1.0     
+
+> ‖αt←x‖‖ x−t‖
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> ‖g(t, x )‖
+
+Figure 18. The variation of ∥g(t, x )∥ with respect to αx←t∥vt −
+
+vx∥ of RAG, where each point represents one data instance. The Pearson correlation coefficient for the fitted points is 0.814 .
+
+20 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 0°     
+
+> 30°
+> 60°
+> 90°
+> 120°
+> 150°
+> 180° 0.0 1.0 10.0 100.0
+> = 0
+
+Figure 19. The variation of ∥e(t, x )∥ − ∥ e(x)∥ with respect to 
+
+g(t, x ) of memory evolution, where each point represents one data instance. 0.2 0.4 0.6 0.8 1.0 
+
+‖g(t, x )‖
+
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> ‖e(t, x ) − e(x)‖
+
+Figure 20. The variation of ∥e(t, x ) − e(x)∥ with respect to 
+
+∥g(t, x )∥ of ICL, where each point represents one data instance of memory evolution. The Pearson correlation coefficient for the fitted points is 0.903 .0.2 0.4 0.6 0.8 1.0 
+
+‖αt ← x‖‖ x − t‖
+
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> ‖g(t, x )‖
+
+Figure 21. The variation of ∥g(t, x )∥ with respect to αx←t∥vt −
+
+vx∥ of memory evolution, where each point represents one data instance. The Pearson correlation coefficient for the fitted points is 
+
+0.617 .0 5 10 15 20 25 30 35 
+
+> Layer
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> g( ) (t, x)
+> Gain per Layer
+
+Figure 22. Variation of ∥˜g(ℓ)(t, x )∥ across all layers with respect to the layer index. To capture the trends across different models, we normalize the results separately for each setting. 0 5 10 15 20 25 30 35 
+
+> Layer
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> 0.12
+> g( ) (t, x)
+> Gain per Layer
+
+Figure 23. Variation of ∥˜g(ℓ)(t, x )∥ with respect to the layer index. The fitted Pearson correlation coefficient of the scatter points is 
+
+0.322 . To capture the trends across different models, we normalize the results separately for each setting. 0 1 2 3 4
+
+> Context Number
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> g(tn + 1 |T, vT)
+
+Figure 24. The norm of contextual correction vectors with different context numbers. 
+
+21 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+Table 6. The prompt of Thinker during memory evolution. Prompt of Thinker using Memory Evolution 
+
+You are an expert meta-reasoning coach for AI agents. You will receive a SINGLE data sample from an agent’s past experience. This sample may include: a task description, the agent’s thoughts/actions/observations, and whether the attempt succeeded or failed. Your job is to distill this ONE example into ONE HIGH-LEVEL INSIGHT: a general rule or strategy that would be useful for similar future tasks. ================ INPUT SAMPLE ================ [Task description] 
+
+{TASK DESCRIPTION }
+
+[Episode log / trajectory] 
+
+{EPISODE LOG }
+
+============================================= Please now produce exactly ONE INSIGHT that: - Is HIGH-LEVEL and GENERAL. - It should be a reusable principle that could help on future, similar tasks. - It should focus on better thinking and acting (e.g., how to search, plan, verify, explore). - Is NOT tied to superficial details of this specific sample. - Do NOT mention specific names, URLs, IDs, or exact numbers from the log unless they are essential to the principle. - Do NOT describe the episode step-by-step. - Do NOT say \In this trial..." or \In this example...". Instead, phrase it as \When solving tasks like this, you should...". - Captures what the agent should DO DIFFERENTLY or KEEP DOING. - If the attempt failed: focus on what change of strategy would most likely prevent this failure. - If the attempt succeeded: focus on what strategy made it robust and should be repeated. Output format (VERY IMPORTANT): INSIGHT: - <one single sentence (or two short sentences) stating the general rule> Do NOT output anything else. No explanations, no justification, no bullet list of multiple rules. Just the single \INSIGHT:" line as specified above. 
+
+22 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+Table 7. The case study of different relations between context vector and error. Cases are from MATH dataset using Llama-3.1-8B with ICL. Considering the space, we have removed information that is irrelevant to the reasoning process. Type Problem Demonstration Reasoning process Error Reduction Solve 4x = 8 and express 
+
+x as a common fraction. Solve 28 = 4 x for x.I’ll mirror the demonstration’s strategy: rewrite both sides using the same base so I can compare exponents directly. Since 4 = 2 2 and 8 = 2 3, we get 4x = (2 2)x = 2 2x. Then 22x = 2 3, so the exponents must match: 2x = 3 . Therefore 
+
+x = 32 . Final answer: 32 .Mismatch Angle You have 5 shirts, 6 pairs of pants, and 8 hats. How many outfits are possible if you choose one of each. Solve 23 · 3x = 72 for x.The demonstration looks like a template: rewrite numbers in prime powers and solve by matching exponents. I follow that template and start solving the demonstration-style equation 
+
+23 · 3x = 72 : factor 72 = 2 3 · 32, so x = 2 . I got pulled into the exponent-matching task from the demonstration and effectively answered the demonstration again, even though the question is actually about counting outfit combinations. Final answer: 2. Overfit Norm The sum of the first N
+
+positive odd integers is 121. Find N .Find the smallest positive perfect cube that can be written as the sum of three consecutive integers. In the demonstration, the move is to model a sum using three consecutive integers: 
+
+(n − 1) + n + ( n + 1) = 3 n. I reuse that pattern here and try to force 121 into the same shape: 
+
+121 ≈ 3n. Since 121 /3 isn’t an integer, I “fix” it by switching to the nearest multiple of 3: 
+
+120 = 39 + 40 + 41 , so I take n = 40 . I over-focus on the demonstration’s “three consecutive integers” structure and ignore the key phrase “first N odd integers,” which should drive a different solution. Final answer: 40. 
+
+23 When Does Context Help? Error Dynamics of Contextual Information in Large Language Models 
+
+Table 8. The relative error ( |gold value - pred value | 
+
+> gold value
+
+) of the trained predictor under different settings. 
+
+Dataset Method Llama-3.1-8B Qwen3-8B 
+
+MATH ICL 33 .8% 39 .4% 
+
+ME 38 .3% 25 .5% 
+
+CHAMP RAG 27 .0% 23 .9% 
+
+ME 34 .4% 36 .7% 
+
+TheoremQA RAG 26 .6% 26 .0% 
+
+ME 28 .8% 29 .5% 
+
+MMLU-Redux ME 31 .4% 33 .4% 
+
+GPQA ICL 34 .4% 21 .1% 
+
+ME 37 .4% 25 .5% 
+
+NQ ME 39 .3% 33 .5% 
+
+FinQA ICL 25 .2% 38 .1% 
+
+ME 38 .1% 27 .1% 
+
+24

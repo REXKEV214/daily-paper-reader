@@ -1,0 +1,241 @@
+Title: RBCorr: Response Bias Correction in Language Models
+
+URL Source: https://arxiv.org/pdf/2602.12445v1
+
+Published Time: Mon, 16 Feb 2026 01:14:45 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# RBCorr: Response Bias Correction in Language Models 
+
+## Om Bhatt 
+
+## Cognitive Sciences University of California, Irvine 
+
+## om.bhatt@uci.edu 
+
+## Anna A. Ivanova 
+
+## School of Psychology Georgia Institute of Technology 
+
+## a.ivanova@gatech.edu 
+
+## Abstract 
+
+Language models (LMs) are known to be prone to response biases, which present as option pref-erence biases in fixed-response questions. It is therefore imperative to develop low-cost and effective response bias correction methods to improve LM performance and enable more ac-curate evaluations of model abilities. Here, we propose a simple response bias correction strat-egy ( RBCorr ) and test it on 12 open-weight language models using yes-no, entailment, and multiple choice questions. We show that re-sponse bias is prevalent in LMs pre-correction and that RBCorr effectively eliminates bias and boosts model performance. We also explore the generalizability of bias behavior across mod-els, datasets, and prompt formats, showing that LogProbs-based correction is highly dependent on all three of these aspects. Overall, RBCorr 
+
+is an easy-to-use method that can boost the per-formance of smaller LMs and ensure that LM performance on closed-response benchmarks aligns more closely with their true capabili-ties. Code: https://github.com/ombbhatt/ rbcorr_bias_correction 
+
+## 1 Introduction 
+
+In fixed-response evaluation settings, language models (LMs) have been reported to suffer from response bias (e.g., Pezeshkpour and Hruschka, 2023; Tjuatja et al., 2024; Zhao et al., 2021), which reduces their performance and viability as real-world reasoners. Recent mitigation efforts have looked towards LogProbs manipulations as a gen-eral strategy for its ease of accessibility and low cost, but we believe that further advancement also requires a systematic exploration of the experi-mental setup (i.e. the model, dataset, and prompt scheme being used), as well as tracking bias sepa-rately from accuracy to gain more nuanced insights on the effects of applying correction, and finally, new manipulation strategies themselves to try and improve upon existing methods. This paper investigates and corrects response bi-ases in open-weight LMs for fixed-response ques-tions. We test LMs across a variety of reasoning tasks and prompt formats, track both bias and accu-racy, and propose a simple LogProbs-based correc-tion method that can be applied to multiple question types, effectively mitigating bias and increasing or maintaining accuracy. Additionally, we compare our method to existing correction methods, charac-terize models’ baseline label preferences, and per-form further analysis to reveal that LogProbs values are highly context-specific to the model, dataset, and prompt formats being used. Our results show that a straightforward calibration-based bias correc-tion strategy, akin to approaches in traditional ma-chine learning (e.g., Saerens et al., 2002; Zadrozny and Elkan, 2002), can be effectively applied to to-day’s LMs to improve their performance and enable more faithful evaluations of their capabilities. 
+
+## 2 Approach 
+
+Our approach is based on extracting token log prob-abilities (LogProbs) from the last layer of an LM, prior to softmax transformation and final token sam-pling. In a bias-free model, the average LogProbs for different response options should be equal (as long as the dataset is class-balanced). Our goal is to measure the deviation between this uniform distribution and empirically observed model Log-Probs scores (i.e., response bias) and to correct it by applying a correction term to an LM’s LogProbs values prior to response generation. 
+
+2.1 Extracting Model Response 
+
+For each type of question, we define single-token response formats in the prompts. We then ex-tract the log-probability values for the appropriate set of response tokens for each dataset item de-pending on the question type (we test on 2-choice 
+
+‘Yes’/‘No’ multi-domain questions, 3-choice 1
+
+> arXiv:2602.12445v1 [cs.CL] 12 Feb 2026
+
+‘0’/‘1’/‘2’ (neutrality/entailment/contradiction) NLI questions, and 4-choice ‘A’/‘B’/‘C’/‘D’ 
+
+multi-domain questions). The token with the high-est log-probability value is recorded as the model’s response. To account for response variation, we consider the whitespace-prepended version of each token as well (we log-sum-exp the LogProbs val-ues for ‘␣Yes’ and ‘ Yes ’ when evaluating 2-choice questions, for example.) 
+
+2.2 Measuring Response Bias 
+
+We use the Total Variation Distance (TVD) value between the ground-truth label distribution in the test dataset and the model response distribution to measure model bias. TVD yields a value between 0 and 1, where 0 indicates identical distributions. Our test datasets are class-balanced, which means that the ground-truth label distribution is a uniform distribution, and we can anchor it as the point of comparison of what an ideal unbiased model output distribution should be. We can then calculate the TVD between the uniform distribution and the actual model response distribution, both before and after applying a corrective LogProbs manipulation, and finally compare the resulting TVD values. We can infer whether biased behavior was reduced by checking for a lower TVD value yielded using the corrected response distribution. For a ground-truth dataset label distribution G
+
+(uniform) and model response label distribution M ,we measure model bias as the TVD between them: TVD (G, M ) = 12
+
+X
+
+> x∈X
+
+|G(x) − M (x)| (1) Where X denotes the relevant option label space. This way of measuring bias is a simplified ver-sion of the method described by Reif and Schwartz (2024), where they use an unbalanced input dataset, but sample a uniform distribution of model output probabilities before calculating the TVD. 
+
+2.3 Applying RBCorr Correction 
+
+Our correction method, RBCorr , applies a mean-normalization to individual item LogProbs values by using a small held-out class-balanced calibration set for mean LogProbs estimation for each response option. To perform this correction, we first extract model responses and the options’ LogProbs values for each item in a dataset. We then sample a small calibration set of questions from the entire dataset, and calculate the mean of the LogProbs value for each of the option tokens in that set. Importantly, we enforce class-balance when sampling the cal-ibration set, to ensure that the means estimation is not skewed by over- or under-representation of any class of questions. We finally subtract these means from the corresponding tokens’ LogProbs for every item in the evaluation set, i.e., all ques-tions that were not part of the calibration set. We extract model responses from this corrected set of LogProbs to record our ‘correction-applied’ results. This correction requires no overhead computation to perform since it only requires the baseline Log-Probs values for adjustment. 
+
+How big does the calibration set need to be? 
+
+This question is especially relevant in real-world deployment, where datasets may be only partially labeled or accessible during online inference. To explore this, we perform our correction method using a range of fixed calibration set sizes: 20, 50, 100, 500, and 1000 questions. For each size, we run 100 iterations of this correction procedure using different randomly-sampled calibration sets every time to get a robust idea of how reliably the values are adjusted with random calibration set se-lection, and plot the mean accuracy gain across all runs along with the interquartile range (see Figure 2). We find that the accuracy gains only increase marginally with with bigger set sizes — using 100 calibration questions generally provides stable cor-rection effects, which also highlights the low-data requirement to use our method. Later experiments consequently discuss our method’s efficacy using a calibration set size of 100. 
+
+## 3 Experimental Setup 
+
+Here we describe the datasets, models, and prompt formats used to test our correction method and per-form subsequent experiments for further analysis. 
+
+3.1 Datasets 
+
+We test LMs on datasets with two, three and four answer options, with the aim of covering a variety of question types and knowledge domains. 
+
+2-Choice: We use subsets of four existing datasets converted into Yes-No format, totaling to 6600 questions: (1) ARITH , a collection of 1200 addition and subtraction problems, sampled from the Arithmetic subset of the BIGBench dataset (bench authors, 2023) (e.g., "Is 2 plus 4 equal to {4 / 6}?" ); (2) bAbI , a collection of 1200 2Figure 1: Baseline model response label distribution for all models on all datasets, using the fewshot prompt format. Red dotted lines indicate uniform distribution intervals (i.e. the dataset’s ground-truth label distribution.) 
+
+questions testing 12 reading comprehension tasks, derived from the bAbI dataset (Weston et al., 2015) (e.g., "Julie travelled to the park. Is Julie in the {bedroom / park}?" tests basic coreference); (3) COMPS , a collection of 2100 questions testing basic property inheritance in min-imal pairs (e.g., "Does {an iguana / a trolley} bask in the sun?" ), derived from the COMPS dataset (Misra et al., 2023); and (4) EWoK , a col-lection of 2136 questions testing contextual knowl-edge across 11 domains with a nested minimal pair construction (e.g., "Chao is making Yan’s job {easier / harder}. Is Chao {helping / hindering} Yan?" tests social interaction), de-rived from the EWoK dataset (Ivanova et al., 2025). 
+
+3-Choice: We use the SNLI (Bowman et al., 2015) and MultiNLI (Williams et al., 2018) datasets. Both datasets consist of Recognizing Tex-tual Entailment (RTE) questions, where a premise and a hypothesis sentence are provided, and the task is to classify whether the hypothesis entails, contradicts, or is neutral to the premise (e.g., 
+
+"Premise: A woman is reading a book in the library. Hypothesis: A woman is swimming." would be classified as a contradic-tion.) We sample 2000 questions with each of the three conditions as the ground truth, totaling to 12000 RTE questions across both datasets. 
+
+4-Choice: We sample from the MMLU 
+
+(Hendrycks et al., 2021) collection of datasets. 3Figure 2: Accuracy achieved by applying RBCorr at multiple calibration set sizes, averaged across all models. Shading shows the interquartile range of accuracies achieved after performing 100 separate iterations of the correction process on each dataset. Horizontal dashed line shows average baseline accuracy across all models. We discuss our method’s results achieved using a set size of 100 (marked with vertical line) as a realistic setup. 
+
+MMLU consists of 57 datasets spanning various topics, which can broadly grouped into four subject domains: (1) STEM (n=2400), (2) Social Science 
+
+(n=2400), (3) Humanities (n=4400), and (4) Oth-ers (n=2800), totaling 12000 questions. 
+
+3.2 Models 
+
+We test 12 LMs across 3 model families: Fal-con3, Gemma3, and Llama3.1. Each family con-tains four LMs — two pairs of smaller and larger models (e.g. 3B/10B for Falcon3 or 8B/70B for Llama3.1). Each such pair represents a base and an instruction-tuned version of an LM. For in-stance, the two pairs that comprise the Gemma3 family are {(Gemma3-12B, Gemma3-12B-IT), (Gemma3-27B, Gemma3-27B-IT)} . This model test set construction allows us to observe how bias may change with model size and instruction tuning while keeping the model architecture constant. 
+
+3.3 Prompt Complexity 
+
+We record model responses across three prompt formats varying in level of complexity: 1. ‘Zeroshot’ : Only test question is presented, 2. ‘Instruction-only’ : One-line task instruction precedes the test question, 3. ‘Fewshot’ : One-line task instruction and two example question-answers precede the test question. Since the 3-choice datasets (SNLI and MNLI) in-herently require instructions to define the objective and response format, we only test those datasets using the Instruction-only and Fewshot prompts. See Appendix A for the full prompts. 
+
+## 4 Experiment 1: Models Are Biased 
+
+Figure 1 shows the label proportions for all models tested on all question-types, grouped by dataset, us-ing the fewshot prompt format. The figure reveals that baseline model results (i.e. without applying correction) show varying degrees of inherent label bias. We can characterize some response behav-iors across question-types and models. For yes-no datasets, we see a moderate bias towards answer-ing ‘No’ across all models. In NLI datasets, we see a general strong bias towards option ‘1’, with the Gemma3-27B model showing the strongest pref-erence for option ‘1’ and the Llama3.1-8B model completely abstaining from responding with option ‘2’. In 4-choice datasets, we see relatively more uniform option preference across all models. 4Figure 3: Scatterplots showing per-model bias (TVD; ↓ is better) and accuracy (%; ↑ is better) before [ •] vs. after [×] applying RBCorr correction. We show results on one dataset per each question-type; the bottom-right plot shows results averaged across all ten datasets. 
+
+Across all models, we see that the bigger-size versions of models usually yield more uniform la-bel distributions relative to their smaller counter-part. We see the same trend with the instruction-tuned version compared to the base version of the model. This supports the claim that using both big-ger and instruction-tuned versions of models can inherently help reduce response bias. 
+
+## 5 Experiment 2: Correction Improves Performance 
+
+Figure 3 shows the accuracy and bias changes for all models after applying our correction (we plot the median corrected accuracy and bias across 100 correction iterations using different calibration sets, each of size 100, using the fewshot prompt format). We pick one representative dataset from each ques-tion type for three plots, and the fourth plot shows the average changes across all ten datasets. We consistently see a reduction in bias value with either a higher or maintained accuracy across all models on all datasets. Models show the biggest accuracy increase in the 3-choice SNLI dataset compared to EWOK and MMLU-STEM. The fi-nal average scatterplot shows that the smaller-sized model pairs from the Gemma3 and Llama3.1 fam-ilies had the biggest overall accuracy gains from applying the correction. This indicates that our bias correction can recover actual task performance that was lost due to learned response bias, and that it is especially effective for smaller-sized models. 
+
+Significance of bias correction beyond accu-racy improvement: While the individual-dataset plots show low accuracy gains, we believe that the correction method is still worth applying for 5Dataset Model (Llama3.1) Baseline (Acc | Bias) CC                                                                                                                                                                 
+
+> ∆(Acc | Bias) BC
+> ∆(Acc | Bias) RBCorr (ours)
+> ∆(Acc | Bias) ARITH (2-Choice) 8B 74.2 0.203 +11.8 -0.182 +12.1 -0.086 +12.4 -0.194
+> 8B-Instruct 78.8 0.159 +3.2 -0.058 +5.2 -0.090 +5.8 -0.151
+> BABI (2-Choice) 8B 59.0 0.410 +11.8 -0.123 +26.5 -0.307 +28.9 -0.401
+> 8B-Instruct 86.6 0.131 +2.8 -0.040 +2.1 -0.114 +2.1 -0.120
+> COMPS (2-Choice) 8B 79.0 0.185 +6.9 -0.098 +8.5 -0.173 +8.0 -0.174
+> 8B-Instruct 86.3 0.036 -0.1 -0.016 0.0 -0.003 0.0 -0.025
+> EWOK (2-Choice) 8B 65.9 0.305 +6.6 -0.280 +6.0 -0.221 +6.6 -0.287
+> 8B-Instruct 75.0 0.122 +0.7 -0.087 -0.7 -0.037 +0.5 -0.104
+> SNLI (3-Choice) 8B 49.0 0.333 +11.7 -0.029 +4.3 -0.143 +5.4 -0.222
+> 8B-Instruct 53.4 0.305 +1.2 -0.095 +2.2 -0.082 +3.7 -0.204
+> MNLI (3-Choice) 8B 49.2 0.331 +8.7 +0.001 +8.8 -0.140 +9.9 -0.214
+> 8B-Instruct 59.7 0.221 +4.4 -0.017 +3.6 -0.076 +4.7 -0.104
+> HUMANITIES (4-Choice) 8B 52.5 0.125 -10.0 +0.409 -0.4 +0.018 -0.7 -0.061
+> 8B-Instruct 57.6 0.086 -0.3 +0.068 0.0 -0.047 -0.2 -0.031 OTHERS (4-Choice) 8B 68.3 0.081 -9.5 +0.259 -0.7 +0.007 -0.3 -0.009
+> 8B-Instruct 71.5 0.025 -0.7 +0.073 0.0 +0.004 0.0 +0.013 SOCIAL SCI. (4-Choice) 8B 69.7 0.038 -14.0 +0.348 0.0 +0.037 -0.3 +0.040 8B-Instruct 72.6 0.021 -1.0 +0.090 +0.5 -0.006 +0.3 +0.004 STEM (4-Choice) 8B 52.1 0.146 -10.5 +0.370 +0.3 -0.033 +0.2 -0.108
+> 8B-Instruct 56.5 0.068 -1.7 +0.111 -0.2 -0.033 -0.4 -0.020
+
+Table 1: Comparison between Contextual Calibration (CC), Batch Calibration (BC) and our method (RBCorr), on all datasets using the small Llama3.1 model pair and fewshot prompt format. Best accuracy change (highest ↑ /lowest ↓) is shown in bold and best TVD change (highest ↓ / lowest ↑) is italicized in each row. 
+
+model evaluation purposes, because it allows for a fairer comparison of reasoning capabilities after removing the model’s inherent label response bias. Removing the label bias and observing change in accuracy gives us important diagnostic information about label bias being a potential factor affecting the model’s output performance. If model perfor-mance is in fact influenced by label bias, then re-moving the bias may uncover latent performance that was hidden as a result of the label priors. Con-versely, if label bias is not a substantial driving factor for model performance, then removing label bias will not do much for improving accuracy, but it does still remove label bias as a potential confound to performance, allowing an evaluator to test for other biases or non-bias related problems affecting model performance. 
+
+## 6 Experiment 3: Comparison With Existing Methods 
+
+Here we describe two existing LogProbs-based bias mitigation methods and perform them in our exper-imental setup for comparison with RBCorr .
+
+(1) Contextual Calibration (CC) (Zhao et al., 2021): This method is based on the idea that the model’s bias towards certain answers can be esti-mated by feeding in a content-free input, such as "N/A". For example, in a 2-shot prompt for a yes-no question where one example is a ‘Yes’ and the other is a ‘No’, we can append a third example with ‘N/A’ as the question content, and extract the yes-no probabilities. The content-free nature of the third example is meant to reveal the model’s contextual bias, which may change as the content or order of the preceding examples changes. The correction in-volves collecting and averaging model output prob-abilities using a few "content-free" input prompts (using "N/A", "[MASK]", and the empty string), and then using them to adjust test item probabilities via an affine matrix operation; this is equivalent to dividing the test item output probability with the mean content-free output probability. 
+
+(2) Batch Calibration (BC) (Zhou et al., 2024): 6Modality Total Pairs Succ. Transfers Avg ∆Acc (success) Avg ∆TVD (success) Avg ∆Acc (all pairs) Avg ∆TVD (all pairs) Cross-Dataset 912 200 (21.93%) 0.0379 0.1175 0.0130 0.0247 Cross-Model 1008 105 (10.42%) 0.0619 0.0647 -0.0006 -0.0295 Cross-Prompt 624 65 (10.42%) 0.0174 0.0612 -0.0002 -0.0136   
+
+> Table 2: Quantifying successful transfer of RBCorr ’s bias correction term across all three modalities for all valid pairs of source and target in our complete experimental setup. Successful transfer correction is defined as ≥80% preservation of bias reduction and accuracy increase compared to same-condition correction.
+
+This method also focuses on mitigating the model’s contextual bias, but instead of using content-free tokens, proposes to use a batch of items sampled from the dataset itself. The method first calcu-lates a contextual prior over a batch, which is ef-fectively a class-wise mean of the LogProbs, and subtracts it from the individual item LogProbs in that batch. This method of obtaining the correction term is meant to overcome CC’s (and other meth-ods’) failure cases in multi-sentence classification. The batch mean calculated from the first processed batch is continuously refined using the items of incoming batches and applied to those items. Table 1 shows the bias and accuracy changes using the Llama3.1-8B and Llama3.1-8B-Instruct models on all datasets. Based on the results, no single method presents wins out across all datasets. Our method generally achieves the biggest accu-racy gains for the 2-choice and 3-choice datasets, while Batch Calibration achieves the best gains for 4-choice datasets. Both BC and RBCorr show accuracy and bias changes in similar ranges and generally yield higher accuracy improvements com-pared to CC. The biggest improvement results in nearly 29% of recovered accuracy (for the BABI dataset using RBCorr ). In nearly all observed cases, 
+
+RBCorr yields the biggest bias (TVD value) reduc-tion of all three correction methods. 
+
+## 7 Experiment 4: Correction Is Not Transferrable 
+
+A unique aspect of RBCorr is that we calculate a single static set of mean LogProbs values for an-swer options in a dataset, which serve as ‘correction terms.’ Once LogProbs values for any configura-tion (model, dataset, prompt format) are generated, the resulting bias correction terms can be applied to other LogProbs sets. This enables testing the 
+
+transferability of correction terms across models ,
+
+datasets , and prompts , effectively examining bias consistency across these modalities. We test transfer efficacy by transferring correc-tion terms across each modality independently (e.g., a cross-model correction will only source the term from other same-prompt, same-dataset runs). We conduct 100 correction runs with random calibra-tion set sampling at a fixed size of 500 questions. Evidence of reliable correction in these transfer ex-periments should tell us whether response bias is most dependent on the model, dataset, or prompt being used for evaluation. Table 2 shows correction terms fail to transfer successfully across varying configurations, despite changing only one modality at a time and enforcing systematic constraints (only within-family trans-fer for cross-model, and only within-question-type transfer for cross-dataset). We define a "success-ful" transfer correction as one that achieves ≥80% of both the TVD value reduction and accuracy gain that was yielded on applying the same-condition (i.e. non-transfer) correction on the tested target configuration. Based on this success criteria, all three trans-fer modalities perform poorly, with cross-model and cross-prompt achieving success rates of only 10.42%. Notably, Cross-dataset transfer shows marginally higher success (21.93%), indicating bias behavior generalizes better by model and prompt configuration than by dataset. However, low success rates across all modalities demonstrate that condition-specific calibration is essential for reliable bias mitigation. As an auxiliary analysis, Appendix B presents transfer results for three individual configurations. While not supporting general inference, it reveals transfer asymmetry: transferring from configura-tion A → B yields different effects than B → A. 78 Related Works 
+
+Several bias evaluation papers provide behav-ior characterizations across models and datasets. Pezeshkpour and Hruschka (2023) demonstrate that the order in which options are presented can dras-tically impact model performance in ICL settings. Salecha et al. (2024) demonstrates that LMs shift their responses to be more socially desirable when they are provided with enough questions to self-infer that they are being socially evaluated. Tjuatja et al. (2024) develop a human-survey like dataset to test various LMs on five types of biases and show that models in general fail to reflect known human-like response patterns, highlighting the risk of using them as human proxy reasoners. Our work falls more specifically into a smaller family of recent works that aim to mitigate bias using theoretically-motivated LogProbs manipu-lation methods. Two of these methods – Zhao et al. (2021) Contextual Calibration and Zhou et al. (2024) Batch Calibration – are used for comparison with our method, but there are other proposed meth-ods as well, such as Contextual Calibration (DC) (Fei et al., 2023) and Prototypical Calibration (PC) (Han et al., 2022). The DC method estimates a correction term by randomly sampling a sequence of tokens at average sentence length from an in-domain text set and averaging the model scores (i.e. probabilities for options) on that sequence multiple times, and finally dividing that mean score from the test-item probabilities during inference. The PC method is more sophisticated; it calibrates clusters of model output scores that are initially estimated using a Gaussian mixture model (GMM) and then refined using Expectation Maximization (EM)-based tuning. We decide to exclude comparison to them be-cause the (Zhou et al., 2024) work shows that BC performs better in general compared to PC and DC, making BC sufficient for performance comparison. We perform one additional auxiliary comparison between our method and the PriDe method intro-duced by (Zheng et al., 2024) — this method is not similar in principle to the other methods in this family, since it scales overhead compute cost with correction efficacy, but still aims to correct label bias using prior estimation. PriDe compari-son results and additional details are provided in Appendix C. 
+
+## 9 Conclusion & Future Work 
+
+In this paper, we quantify LLM response bias in three kinds of closed-response questions using a experimental setup consisting of various datasets, models, and prompt schemes. We then propose a LogProbs-based bias correction method, RBCorr ,that effectively reduces measured bias and im-proves accuracy, and compare it to similar existing methods to demonstrate its efficacy. Finally, we conduct an analysis to show that LogProbs values are highly specific to model, dataset, and prompt configurations, and bias estimations cannot reliably generalize over any of the three settings. 
+
+RBCorr provides value both as a performance improver and an evaluation diagnostic technique. For performance improvement, a system can store a set of pre-computed calibration value for a given prompt and question type and apply them dynami-cally in online inference settings. The performance improvement we observe is particularly relevant to small and medium-sized LMs, offering an op-portunity to use these lightweight cheap models for large-scale but relatively straightforward tasks (e.g., closed-form text labeling). For evaluation, our method helps uncover latent model perfor-mance and determine whether response bias ham-pers its performance on a task it could otherwise solve. In the age of skepticism of LM evaluations (Banerjee et al., 2024; Cao et al., 2025), we posit that benchmark-based evaluations might still have value, as long as they are designed to measure gen-eral capabilities rather than specific task perfor-mance, maintain genuine train/test set separability, and are coupled with debiasing techniques that help uncover latent model performance. Future work could explore using corrected prob-abilities as a tuning set to inherently debias the model’s outputs, i.e., training a model to adjust its label token probabilities to align with previously-extracted and corrected probabilities, leading to bet-ter performance without having to apply post-hoc correction to the LogProbs results. We also point toward mechanistic interpretability approaches for measuring bias across model layers (e.g., Gupta et al., 2025), tracing the origin of the bias in model weights, and correcting the bias at its source rather than at the last layer. Finally, we consider response bias to be a valuable test case for bias exploration and correction, which can then be extended to open-form responses and reasoning traces. 8Limitations 
+
+Our method is only applicable to open-source meth-ods, for which LogProbs values of tokens are acces-sible. For closed models, one may try to estimate the bias by sampling responses with high temper-ature, but that method may be less precise. Addi-tionally, we test transformer-only models up to 70B parameters in size; we do not report on the response behavior and correction efficacy on larger models or models based on other architectures, although we expect similar trends to hold. 
+
+## Acknowledgments 
+
+We thank members of the LIT lab who provided feedback on earlier stages of this work. We also thank Han Zhou (Zhou et al., 2024) for clarify-ing high-level details for implementing the Batch Calibration correction in our experiments. This research was supported in part through the comput-ing resources provided by the Partnership for an Advanced Computing Environment (PACE) at the Georgia Institute of Technology. 
+
+## References 
+
+Sourav Banerjee, Ayushi Agarwal, and Eishkaran Singh. 2024. The vulnerability of language model bench-marks: Do they accurately reflect true LLM perfor-mance? arXiv preprint arXiv:2412.03597 .BIG bench authors. 2023. Beyond the imitation game: Quantifying and extrapolating the capabilities of lan-guage models. Transactions on Machine Learning Research .Samuel R. Bowman, Gabor Angeli, Christopher Potts, and Christopher D. Manning. 2015. A large anno-tated corpus for learning natural language inference. 
+
+Preprint , arXiv:1508.05326. Yixin Cao, Shibo Hong, Xinze Li, Jiahao Ying, Yubo Ma, Haiyuan Liang, Yantao Liu, Zijun Yao, Xiaozhi Wang, Dan Huang, and 1 others. 2025. Toward gener-alizable evaluation in the LLM era: A survey beyond benchmarks. arXiv preprint arXiv:2504.18838 .Yu Fei, Yifan Hou, Zeming Chen, and Antoine Bosselut. 2023. Mitigating label biases for in-context learning. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 14014–14031, Toronto, Canada. Association for Computational Linguistics. Akshat Gupta, Jay Yeung, Gopala Anumanchipalli, and Anna Ivanova. 2025. How do LLMs use their depth? 
+
+arXiv preprint arXiv:2510.18871 .Zhixiong Han, Yaru Hao, Li Dong, Yutao Sun, and Furu Wei. 2022. Prototypical calibration for few-shot learning of language models. Preprint ,arXiv:2205.10183. Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Steinhardt. 2021. Measuring massive multitask language under-standing. Preprint , arXiv:2009.03300. Anna A. Ivanova, Aalok Sathe, Benjamin Lipkin, Un-nathi U. Kumar, Setayesh Radkani, Thomas H. Clark, Carina Kauf, Jennifer Hu, R. T. Pramod, Gabriel Grand, Vivian C. Paulun, Maria Ryskina, Ekin Akyürek, Ethan G. Wilcox, Nafisa Rashid, Leshem Choshen, Roger Levy, Evelina Fedorenko, Joshua Tenenbaum, and Jacob Andreas. 2025. Elements of world knowledge (ewok): A cognition-inspired framework for evaluating basic world knowledge in language models. Transactions of the Association for Computational Linguistics , 13:1245–1270. Kanishka Misra, Julia Taylor Rayz, and Allyson Et-tinger. 2023. Comps: Conceptual minimal pair sen-tences for testing robust property knowledge and its inheritance in pre-trained language models. Preprint ,arXiv:2210.01963. Pouya Pezeshkpour and Estevam Hruschka. 2023. Large language models sensitivity to the order of options in multiple-choice questions. Preprint ,arXiv:2308.11483. Yuval Reif and Roy Schwartz. 2024. Beyond perfor-mance: Quantifying and mitigating label bias in LLMs. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Tech-nologies (Volume 1: Long Papers) , pages 6784–6798, Mexico City, Mexico. Association for Computational Linguistics. Marco Saerens, Patrice Latinne, and Christine De-caestecker. 2002. Adjusting the outputs of a classi-fier to new a priori probabilities: a simple procedure. 
+
+Neural computation , 14(1):21–41. Aadesh Salecha, Molly E. Ireland, Shashanka Subrah-manya, João Sedoc, Lyle H. Ungar, and Johannes C. Eichstaedt. 2024. Large language models show human-like social desirability biases in survey re-sponses. Preprint , arXiv:2405.06058. Lindia Tjuatja, Valerie Chen, Tongshuang Wu, Ameet Talwalkwar, and Graham Neubig. 2024. Do LLMs exhibit human-like response biases? a case study in survey design. Transactions of the Association for Computational Linguistics , 12:1011–1026. Jason Weston, Antoine Bordes, Sumit Chopra, Alexan-der M. Rush, Bart van Merriënboer, Armand Joulin, and Tomas Mikolov. 2015. Towards ai-complete question answering: A set of prerequisite toy tasks. 
+
+Preprint , arXiv:1502.05698. Adina Williams, Nikita Nangia, and Samuel R. Bow-man. 2018. A broad-coverage challenge corpus for sentence understanding through inference. Preprint ,arXiv:1704.05426. 
+
+9Bianca Zadrozny and Charles Elkan. 2002. Transform-ing classifier scores into accurate multiclass proba-bility estimates. In Proceedings of the eighth ACM SIGKDD international conference on Knowledge dis-covery and data mining , pages 694–699. Tony Z. Zhao, Eric Wallace, Shi Feng, Dan Klein, and Sameer Singh. 2021. Calibrate before use: Im-proving few-shot performance of language models.     
+
+> Preprint , arXiv:2102.09690. Chujie Zheng, Hao Zhou, Fandong Meng, Jie Zhou, and Minlie Huang. 2024. Large language models are not robust multiple choice selectors. Preprint ,arXiv:2309.03882. Han Zhou, Xingchen Wan, Lev Proleev, Diana Mincu, Jilin Chen, Katherine Heller, and Subhrajit Roy. 2024. Batch calibration: Rethinking calibration for in-context learning and prompt engineering. Preprint ,arXiv:2309.17249.
+
+## A All Input Prompts 
+
+Below are all the fewshot prompts used for all datasets. The instruction-only prompt format uses the same prompt scheme, simply without the exam-ples, while the zeroshot prompt format has no text scaffolding and simply feeds in the test item from the dataset to the LM. 
+
+A.1 ARITH 
+
+#INSTRUCTIONS Answer the following yes-no questions: #EXAMPLE Question: Is 7 minus 9 equal to 4? Response: No #EXAMPLE Question: Is 17 plus 15 equal to 32? Response: Yes #EXAMPLE Question: 
+
+A.2 BABI 
+
+#INSTRUCTIONS Answer the following yes-no questions: #EXAMPLE Question: Marshall is in the car. Is Marshall in the building? Response: No #EXAMPLE Question: Nathan is a pianist. Pianists like oranges. Does Nathan like oranges? Response: Yes #EXAMPLE Question: 
+
+A.3 COMPS 
+
+#INSTRUCTIONS Answer the following yes-no questions: #EXAMPLE Question: Does a blueberry fire bullets? Response: No #EXAMPLE Question: Does a turtle have a hard shell? Response: Yes #EXAMPLE Question: 
+
+A.4 EWOK 
+
+#INSTRUCTIONS Answer the following yes-no questions: #EXAMPLE Question: Claire sees something that is fabric. Can Claire pour it? Response: No #EXAMPLE Question: Sally pays salary to Harry. Is Sally Harry’s boss? Response: Yes #EXAMPLE Question: 
+
+A.5 SNLI and MNLI 
+
+#INSTRUCTIONS Answer the following Recognizing Textual Entail-ment questions using a single digit. Entailment (0) implies the hypothesis is true given the premise. Neutral (1) implies the premise doesn’t provide enough information to determine the hypothesis. Contradiction (2) implies the hypothesis is false given the premise. #EXAMPLE Premise: A man is playing a guitar. Hypothesis: A person is making music. Response: 0 10 Figure 4: Heatmaps showing transfer correction performance for all three transfer modalities using three specific model-dataset-prompt setups. Gradient indicates accuracy change after applying correction relative to baseline model accuracy. 
+
+#EXAMPLE Premise: A woman is reading a book in the library. Hypothesis: A woman is swimming. Response: 2 #EXAMPLE: 
+
+A.6 MMLU (All Domains) 
+
+#INSTRUCTIONS Answer the following multiple choice questions: #EXAMPLE Question: What is the shape of the Earth? Options: (A) Cone, (B) Cube, (C) Sphere, (D) Cylinder Response: C #EXAMPLE Question: What is the color of the sky? Options: (A) Red, (B) Blue, (C) Green, (D) Yellow Response: B #EXAMPLE Question: 
+
+## B RBCorr Transfer Correction – Individual Configuration Heatmaps 
+
+We pick one specific configuration to illustrate the effects of RBCorr transfer correction in more gran-ular detail. The configurations for each transfer modality are described below: 1. Cross-dataset : Transfer among the 2-choice Yes-No datasets, using Llama3.1-8B as the model and zeroshot as the prompt level, 2. Cross-model : Transfer among the Llama3.1 family of models, using EWOK as the dataset and zeroshot as the prompt level, 3. Cross-prompt : Transfer among all three prompt levels, using EWOK as the dataset and Llama3.1-8B as the model. Figure 4 show the results of applying transfer correction in these setups. In general, transfer cor-rection performs poorly and transfer efficacy is asymmetric. These specific transfer instances also allow us to make some generalizable hypotheses; for example, the cross-model results show that both the instruction-tuned Llama3.1 models are consis-tently good targets for cross-model correction, in-dicating that bias patterns for those models are especially invariant to the model and consequently more dependent on the dataset and prompt configu-rations. Such transfer analysis over other individual configuration setups may reveal other potential hy-potheses to inform us of unknown model behavior traits. 
+
+## C Comparing RBCorr with PriDe 
+
+We compare our method’s efficacy to the PriDe method from (Zheng et al., 2024). Since their pa-per provides comprehensive debiasing results, in-cluding results from the Llama2 model family on the MMLU datasets, we run our correction method 11 Model ∆RStd % (MMLU) ∆Acc. % (MMLU) Ours                 
+
+> 1×
+> PriDe
+> 1.15 ×
+> Ours
+> 1×
+> PriDe
+> 1.15 ×
+> llama-2-7B −77.55 −76 .09 +12.44 +12 .29
+> llama-2-chat-7B −53.43 −41 .48 +2 .52 +9 .58
+> llama-2-13B −58 .63 −69 .33 +3.46 +1 .97
+> llama-2-chat-13B −34 .78 −42 .66 +2.97 +2 .68
+
+Table 3: Percentage changes in RStd (bias) and accu-racy before and after applying LogProbs bias correction (ours) vs. PriDe. Higher percent decreases for RStd imply greater debiasing effect. Cases where our method results in larger improvement are highlighted. 
+
+on the same models and datasets in order to di-rectly use their provided results for comparison. Since their method scales efficacy with compute cost, while our method requires zero extra com-pute, we compare our method’s results to the PriDe variation with the lowest cost, which carries a 15% (i.e. 1.15 ×) overhead compute. We also quantify our method’s efficacy using the same bias metric (Zheng et al., 2024) uses, i.e., RSTD or standard deviation over recalls. Table 3 shows the accuracy and bias value changes achieved by performing RBCorr and PriDe on the same models and datasets. We observe that our method achieves comparable effects for both bias reduction and accuracy improvement while having zero overhead compute. These results are not strongly generalizable since we compare only a single model family, but show promise for simple LogProbs-based manipulations as a competent way to mitigate model bias. 12

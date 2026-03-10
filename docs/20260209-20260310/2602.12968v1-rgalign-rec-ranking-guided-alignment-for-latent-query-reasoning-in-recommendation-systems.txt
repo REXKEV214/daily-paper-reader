@@ -1,0 +1,402 @@
+Title: RGAlign-Rec: Ranking-Guided Alignment for Latent Query Reasoning in Recommendation Systems
+
+URL Source: https://arxiv.org/pdf/2602.12968v1
+
+Published Time: Mon, 16 Feb 2026 02:06:22 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# RGAlign-Rec: Ranking-Guided Alignment for Latent Query Reasoning in Recommendation Systems 
+
+# Junhua Liu ∗
+
+j@forth.ai Forth AI Singapore 
+
+# Jihao Yang ∗
+
+jihao.yang@shopee.com Shopee Singapore 
+
+# Cheng Chang 
+
+cheng.chang@shopee.com Shopee Singapore 
+
+# Kunrong Li 
+
+kunrong.li@forth.ai Forth AI Singapore 
+
+# Bin Fu †
+
+bin.fu@shopee.com Shopee Singapore 
+
+# Kwan Hui Lim 
+
+kwanhui@acm.org Singapore Uni. of Tech. and Design Singapore 
+
+## Abstract 
+
+Proactive intent prediction is a critical capability in modern e-commerce chatbots, enabling "zero-query" recommendations by anticipating user needs from behavioral and contextual signals. However, existing industrial systems face two fundamental chal-lenges: (1) the semantic gap between discrete user features and the semantic intents within the chatbot’s Knowledge Base, and (2) the objective misalignment between general-purpose LLM outputs and task-specific ranking utilities. To address these issues, we propose RGAlign-Rec, a closed-loop alignment framework that integrates an LLM-based semantic reasoner with a Query-Enhanced (QE) rank-ing model. We also introduce Ranking-Guided Alignment (RGA), a multi-stage training paradigm that utilizes downstream ranking signals as feedback to refine the LLM’s latent reasoning. Extensive experiments on a large-scale industrial dataset from Shopee demon-strate that RGAlign-Rec achieves a 0.12% gain in GAUC, leading to a significant 3.52% relative reduction in error rate, and a 0.56% improvement in Recall@3. Online A/B testing further validates the cumulative effectiveness of our framework: the Query-Enhanced model (QE-Rec) initially yields a 0.98% improvement in CTR, while the subsequent Ranking-Guided Alignment stage contributes an additional 0.13% gain. These results indicate that ranking-aware alignment effectively synchronizes semantic reasoning with rank-ing objectives, significantly enhancing both prediction accuracy and service quality in real-world proactive recommendation systems. 
+
+## CCS Concepts 
+
+• Information systems → Recommender systems ; • Comput-ing methodologies → Natural language processing . 
+
+> ∗Co-first authors who contributed equally to this work.
+> †Corresponding author. Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org.
+> Conference’17, Washington, DC, USA
+> ©2026 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 978-1-4503-XXXX-X/2026/07 https://doi.org/XXXXXXX.XXXXXXX
+
+## Keywords 
+
+Recommendation Systems, Large Language Models, Ranking-Guided Alignment, Proactive Intent Prediction, E-commerce Chatbots, Zero-Query Recommendation 
+
+ACM Reference Format: 
+
+Junhua Liu, Jihao Yang, Cheng Chang, Kunrong Li, Bin Fu, and Kwan Hui Lim. 2026. RGAlign-Rec: Ranking-Guided Alignment for Latent Query Rea-soning in Recommendation Systems. In . ACM, New York, NY, USA, 10 pages. https://doi.org/XXXXXXX.XXXXXXX 
+
+## 1 Introduction 
+
+In the rapidly evolving e-commerce landscape, AI-powered chatbots have progressed from simple intent classification systems [ 18 ] to LLM-based dialogue platforms. In industrial settings, these chatbots act as the primary customer service interface, handling millions of interactions daily. Beyond response generation, a key opportunity for improving user experience lies in proactive intent prediction. Unlike recent work that emphasises dialogue management or agent-like response generation, this paper focuses on predicting a user’s underlying service bottleneck (e.g., delivery delay or payment fail-ure) upon entry into the chatbot interface. By recommending rele-vant intents from a Knowledge Base (KB) in a Zero-Query setting, the system can reduce user friction and improve both click-through rate (CTR) and customer satisfaction (CSAT). While proactive intent prediction shares surface similarities with traditional recommendation systems [ 6], it introduces distinct chal-lenges. Sequential recommendation models [ 46 ] aim to capture long-term user preferences from interaction sequences to optimize Hit Rate (HR@N) or Gross Merchandise Volume (GMV). In con-trast, chatbot users are driven by short-term, context-dependent service issues rather than stable interests. The task is therefore to infer a user’s latent semantic intent within a KB under Zero-Query scenarios [ 19 ]. This requires synthesizing heterogeneous signals, including order status, user profiles, and historical dialogue logs, to surface the top-𝐾 candidate intents before users explicitly articulate their problems. Despite the success of Deep Learning Recommendation Models (DLRMs) in industrial ranking systems, two fundamental challenges limit their effectiveness for proactive intent prediction, as illustrated in Figure 1.  
+
+> arXiv:2602.12968v1 [cs.IR] 13 Feb 2026 Conference’17, July 2017, Washington, DC, USA Junhua Liu, Jihao Yang, Cheng Chang, Kunrong Li, Bin Fu, and Kwan Hui Lim
+
+Figure 1: Challenges of Semantic Gap and Objective Misalign-ment Challenge 1: Semantic Gap and Modality Mismatch. Exist-ing DLRMs primarily rely on collaborative signals from discrete identifiers such as user IDs or intent IDs to optimize CTR. How-ever, chatbot intents are text-rich and semantically fine-grained. Standard recommendation architectures often struggle to align a user’s latent service issue with textual intent descriptions in the KB, particularly in Zero-Query settings without explicit queries. Bridg-ing the gap between sparse behavioral features and continuous semantic representations remains a central challenge. 
+
+Challenge 2: Objective Misalignment between Human Pref-erence and Ranking Performance. Recent systems increasingly incorporate Large Language Models (LLMs) as semantic feature ex-tractors or reasoning modules [ 2]. Common alignment techniques, such as supervised fine-tuning (SFT) or direct preference optimiza-tion (DPO) [ 24 ], are optimized for human-centric linguistic prefer-ences, including fluency and perceived helpfulness [ 43 , 44 ]. These objectives do not directly correspond to downstream ranking goals. Consequently, LLM-derived representations may be interpretable to humans but sub-optimal for improving ranking metrics such as CTR. Effective proactive services therefore require alignment mechanisms that are explicitly guided by ranking-aware feedback. To address these challenges, we propose RGAlign-Rec , a frame-work that aligns LLM-based semantic reasoning with a query-enhanced recommendation architecture for proactive intent pre-diction. The framework follows a multi-stage alignment process. First, an LLM reasoner infers a latent query representation from sequential and not-sequential features, which is consumed by a Query-Enhanced ranking model (QE-Rec). Second, the trained QE-Rec model is used as a Reward Model (RM) to provide ranking-aware feedback for LLM reasoner alignment. We proposed a Rank-ing Guided Alignment(RGA) framework to select the best-of-𝑁 
+
+query candidates generated by teacher models (GPT, Gemini, and CompassMax) for RG-supervised fine-tuning (RG-SFT) and apply in-batch contrastive learning as RG-CL over last-token-pooling em-beddings to align semantic and ranking representations. Finally, the refined LLM reasoner is used to retrain the ranking model, forming a closed-loop system that consistently aligns semantic reasoning with ranking objectives. Our main contributions are summarised as follows: 
+
+• RGAlign-Rec Architecture: We introduce RGAlign-Rec, which integrates an LLM-based semantic query reasoner into a query-enhanced three-tower recommendation framework to bridge the semantic gap in Zero-Query intent prediction. 
+
+• Closed-Loop Ranking-Guided Alignment: We propose a Ranking-Guided Alignment(RGA) that uses the ranking model as a Reward Model for the LLM reasoner alignment, ensuring semantic representations are aligned with down-stream ranking objectives. 
+
+• Industrial Impact: We validate RGAlign-Rec through of-fline experiments on a self-built benchmark and large-scale online A/B tests at Shopee, demonstrating consistent im-provements in CTR and Customer Satisfaction (CSAT) in a production chatbot system. 
+
+## 2 Related Work 2.1 Generative Model for RecSys 
+
+Recent research in recommender systems has shifted from mod-elling discrete feature interactions [ 16 , 31 ] and item sequences [23, 45] toward leveraging LLMs as feature extractors [32] and Se-mantic ID (SID)-based [ 28 ] generative recommendation (GR) frame-works [ 25 ]. Prior work in this area falls into two categories. (1) LLM as feature reasoner: models such as HLLM [ 2 ], NoteLLM [ 40 , 41 ], and RecGPT [ 36 , 37 ] use LLMs to distil user interests or semantic knowledge into latent representations that serve as aux-iliary features for downstream recommendation models. While effective at enriching sparse behavioral signals, semantic reasoning in these approaches is typically optimized independently of rank-ing objectives. (2) GR with SID: another line of work converts item identifiers into LLM-readable semantic IDs [ 14 ], reformulating recommendation as a unified generative task [ 9]. Methods such as [ 8, 10 , 25 , 39 ] employ attention and masking mechanisms to aggregate SID-based sequential information and user profiles for next-item prediction. Follow-up studies improve feature context engineering [ 7 , 42 ] and attention efficiency to support industrial scalability [ 47 ]. In contrast to these one-way pipelines, RGAlign-Rec introduces a ranking-guided alignment strategy that directly aligns latent user query representations with ranking objectives. 
+
+## 2.2 Task-Specific Alignment via model feedback 
+
+Large Language Models (LLMs) [ 21 ] are commonly aligned with human preferences using reinforcement learning from human feed-back (RLHF) [ 22 ] or direct preference optimization (DPO) [ 24 ]. While effective for natural language processing tasks, applying these approaches to recommendation systems is challenging due to the high cost of human annotation and the sparsity of user-item interactions. Reinforcement Learning from AI Feedback (RLAIF) [15 , 17 ] mitigates annotation cost by using automated critics, as ex-plored in DPO-Rec [ 30 ], but in industrial recommendation settings, direct DPO often suffers from gradient instability and noisy su-pervision because discrete preference signals inadequately capture fine-grained relevance differences. Recent work such as RLMRec [ 26 ] therefore shifts toward representation-level alignment, bridg-ing collaborative signals with semantic knowledge encoded in LLMs [34 , 35 ]. Rather than optimizing choice probabilities, these methods align hidden representations with dense semantic embeddings. In RGAlign-Rec: Ranking-Guided Alignment for Latent Query Reasoning in Recommendation Systems Conference’17, July 2017, Washington, DC, USA 
+
+parallel, contrastive learning (CL) [ 4 ] has emerged as a more sta-ble alternative to DPO, providing continuous optimization signals that are more robust to distribution shifts and interaction noise [ 5]. Unlike generic RLAIF-based approaches, RGAlign-Rec introduces a mutual refinement mechanism that reintegrates aligned seman-tic embeddings into a query-enhanced ranking model, forming a closed feedback loop that jointly supports semantic reasoning and high-performance production-scale ranking. 
+
+## 3 Preliminary 3.1 Problem Formulation 
+
+Our intent prediction, like a ranking system in a cascade ranking paradigm(recall-rank), leverages heterogeneous user features and intent to recommend the top-K intents with which the user is most likely to engage. We define 𝑧 𝑢 ∈ R𝑑 , 𝑧 𝑖 ∈ R𝑑 , and 𝑧 𝑞 ∈ R𝑑 as the latent vector representations for the user, intent, and LLM-generated semantic query, respectively. The goal of our proactive intent prediction task is to learn a query-enhanced scoring function 
+
+𝐹 (𝑧 𝑢 , 𝑧 𝑖 , 𝑧 𝑞 ; 𝛿 ) that ranks a set of candidate intents I𝑐 to maximize the probability of user interaction. Specifically, the top-K intents are selected as: 
+
+𝑖 ∗ = arg max  
+
+> 𝑖 ∈ I 𝑐
+
+𝐹 (𝑧 𝑢 , 𝑧 𝑖 , 𝑧 𝑞 ; 𝛿 ) (1) where 𝐹 (·) denotes a query-enhanced scoring function parameter-ized by 𝛿 . This formulation allows the model to jointly leverage collaborative user-intent signals and semantic relevance between the query embedding and candidate intents. The system then generates a top-K ranked list I𝑟 = sort (I 𝑐 , 𝐹 𝛿 )
+
+by sorting candidate intents in descending order based on these scores and recommending top-K intents that a user is most likely to interact with upon entering the chatbot interface. 
+
+## 3.2 LLM-Based User Query Reasoner 𝜋 
+
+To bridge the gap between user’s discrete features and semantic in-tents, We adopt Qwen3-4B[ 33 ] as User Query Reasoner to transform discrete user features into natural language descriptions, leveraging the reasoning capabilities of LLM to "synthesize" a latent query rep-resentation. The reasoning framework follows a two-stage pipeline: Feature Verbalisation and LLM semantic reasoning. 
+
+Table 1: Examples of Feature Verbalization Mapping.                         
+
+> Category Feature ID →String Prompt Fragment Profile Gender 2→Female "User Gender: Female"
+> Behavior Intent Seq. [2184 , . . . ] → [...] "Clicked Intents In 24 Hours: (’When will I re-ceive...’, ...)"
+> Context Entry Point 3→Shipping Page "Entry Point: Shipping Page" Order Stat. 8→TO_RECEIVE "Current Order Status: TO_RECEIVE"
+
+Feature Verbalization Instead of complex architectures to han-dle heterogeneous features (non-sequential and sequential)[ 3 , 12 ], we transform feature values into a unified natural language stream. As illustrated in Table 1, discrete feature IDs are first mapped to their corresponding categorical strings via a predefined metadata dictionary. These strings are then encapsulated into structured nat-ural language fragments based on their logical dimensions: User Profile, Behavioral Sequence, and Interaction Context. Unlike traditional one-hot or hash-based encoding, this verbaliza-tion preserves the inherent semantic relationships between features (e.g., the temporal urgency implied by TO_RECEIVE for 7 days). These fragments are concatenated into a "Chain-of-Thought" (CoT) inspired user context prompt which serves as the input for the User Query Reasoner to synthesize the latent user query. 
+
+##System Prompt You are a helpful AI assistant. You first think about the reasoning process in the mind and then provide the user with the answer. ##User Prompt You are an intelligent assistant supporting an e-commerce Chatbot. When the user enters the Chatbot via different entry points, proactively suggest one "hot question" (common intent) that the user is most likely to ask right now, based on the user related information. Below is User Context Information, User Profile, Order Status and User Historical Behaviour information: User Gender: Female, ... Order_Status: TO_RECEIVE Based on the above information, generate one question that users may encounter. Please describe in one sentence the question that the user may want to ask. Requirements: Keep the question between 10-20 words. The user question is: <Output> 
+
+LLM Reasoning Representation Learning We employ Qwen3-4B as semantic reasoner, taking result of feature verbalization 𝐶 as user context, leveraging its inherent common sense and pre-trained e-commerce knowledge to reason latent query/doubts by consider-ing user’s features into a continuous semantic representation. A critical design choice in LLM-based recommendation systems is how to extract semantic representation from LLM outputs. Com-mon approaches include mean pooling over all token representa-tions [ 27 ], appending an explicit end-of-sequence (EOS) token and use its hidden state [ 40 ] and using off-the-shelf sentence embedding models (e.g., BGE) on generated query. However, these methods are not explicitly optimized for recommendation objectives and may dilute task-relevant semantic signals. We adopt Last Token Pooling (LTP) embeddings[ 20 ], which utilise the hidden state of the final token from a user context prompt to represent the user’s latent query. Given feature verbalization result 𝐶 , it is first processed by the LLM’s tokenizer to produce a token sequence 𝑠 𝑖 = {𝑡 𝑖 1, . . . , 𝑡 𝑖𝑙 }, where 𝑙 denotes the sequence length. We then extract the final-layer hidden states via the LLM reasoner 𝜋 (𝑠 𝑖 ), represented as 
+
+𝐻 = [ℎ(𝑡 ) 
+
+> 𝑖 1
+
+, . . . , ℎ (𝑡 ) 
+
+> 𝑖𝑙
+
+] ∈ R𝑑 ×𝑙 , (2) where each ℎ(𝑡 ) 
+
+> 𝑖 𝑗
+
+∈ R𝑑 ×1 is a 𝑑 -dimensional vector. Finally, the hidden state of the last token from 𝐻 to derive the LTP embedding 
+
+𝑒 𝐿𝑇 𝑃 = 𝐻 [− 1]. (3) Conference’17, July 2017, Washington, DC, USA Junhua Liu, Jihao Yang, Cheng Chang, Kunrong Li, Bin Fu, and Kwan Hui Lim 
+
+To illustrate the reasoning process, we present a representative workflow in the Figure 2. The LLM reasoner ingests discrete User Context like "an order remaining in the ’To Receive’ status for 7 days" and reasoner it into a coherent Latent User Query: ’The status not updating, and can we expedite the process?’ This transforma-tion bridges the semantic gap by converting raw interaction logs into a natural language representation of the user’s underlying con-cern. This last token embedding 𝑒 𝐿𝑇 𝑃 then serves as a high-fidelity semantic representation, which is fed into the QE-Rec model to accurately predict the corresponding Chatbot Intent ’Speed up par-cel delivery’ from the Knowledge Base. This mechanism allows the system to proactively address user needs even in Zero-Query scenarios where no explicit input is provided. 
+
+## 3.3 Query-Enhance Recommendation (QE-Rec) 
+
+To mitigate the semantic gap within our ranking model and utilise the semantic embedding from the LLM reasoner, we extend the classical two-tower recommendation architecture [ 11 ] with an addi-tional query tower that explicitly models user latent queries, named Query-Enhanced Recommendation (QE-Rec). Specifically, the proposed architecture consists of the following three towers: 
+
+User Tower 𝑍 𝑢 : The User Tower employs a hierarchical encod-ing architecture tailored for heterogeneous features. Numerical and categorical features are encoded and concatenated into a non-sequence vector( v𝑛𝑜𝑛 −𝑠𝑒𝑞 ). User historical sequences are processed via a Self-Attention mechanism in order as ( v𝑠𝑒𝑞 ). For coupled fea-ture groups (e.g., items and timestamps), we apply Intra-group Cross-Attention to model fine-grained correlations before fusing them into group-level representations v𝑔𝑟𝑜𝑢𝑝𝑒𝑑 . The final user repre-sentation is derived by aggregating these multi-view embeddings: 
+
+zu = 𝜎 (MLP ([ v𝑛𝑜𝑛 −𝑠𝑒𝑞 ; v𝑠𝑒𝑞 ; v𝑔𝑟𝑜𝑢𝑝𝑒𝑑 ])) 
+
+This hierarchical design ensures that the model effectively differen-tiates between static preferences and evolving behavioral intents. 
+
+Intent Tower 𝑍 𝑖 : We adopt a hybrid intent representation to balance identity specificity and semantic representation. For each intent, an ID Embedding z𝑖𝑑 captures historical interaction patterns via learnable lookup tables, while a semantic embedding z𝑠𝑒𝑚 is extracted from textual descriptions using a pretrained HLLM [ 2]intent encoder. These embeddings are fed into a feature cross layer to produce a unified vector z𝑖 . To ensure production-level efficiency, all z𝑖 are pre-computed and cached in an Offline Index. During inference, the system performs a constant-time embedding lookup instead of real-time encoding, significantly boosting throughput and reducing latency. 
+
+Query Tower 𝑍 𝑞 : A single-layer MLP projects the semantic embedding 𝑒 𝐿𝑇 𝑃 from LLM to ranking-aware embedding z𝑞 . This approach offers high computational efficiency and is particularly effective for large-scale industrial datasets. Given context embedding from three towers, we define the rank-ing score as a weighted combination of user–intent and query–intent similarities: 
+
+𝑠 = 𝜔 · 𝑠𝑖𝑚 (z𝑢 , z𝑖 ) + ( 1 − 𝜔 ) · 𝑠𝑖𝑚 (z𝑖 , z𝑞 ) (4) where 𝜔 controls the relative contribution of collaborative signals and semantic matching. 𝑠𝑖𝑚 represent cosine similarity function. In this formulation, the interaction between (𝑧 𝑖 , 𝑧 𝑞 ) primarily models semantic relevance, while (𝑧 𝑢 , 𝑧 𝑖 ) captures collaborative signals derived from user features. Following the ListNet framework[ 1], we optimize the model by minimizing the weighted Kullback-Leibler (KL) divergence over samples of size 𝐵 . To mitigate the impact of noisy samples and in-herent data bias, we introduce a confidence predictor that assigns a reliability weight 𝑤 𝑗 to 𝑗 th sample, enabling end-to-end automated debiasing: 
+
+Lintent (s, y) =
+
+> 𝐵
+
+∑︁ 
+
+> 𝑗 =1
+
+𝑤 𝑗 · KL 
+
+
+
+𝑃 ( 𝑗 ) 
+
+> click
+
+∥ 𝑃 ( 𝑗 )
+
+> pred
+
+
+
+(5) Both 𝑃 pred and 𝑃 click are derived via a Softmax operation: 
+
+𝑃 pred ( 𝑗 ) = exp (𝑠 𝑗 )
+
+Í𝐵 𝑘 =1 exp (𝑠 𝑘 ) , 𝑃 click ( 𝑗 ) = exp (𝑦 𝑗 )
+
+Í𝐵 𝑘 =1 exp (𝑦 𝑘 ) (6) 
+
+## 4 RGAlign-Rec: Ranking Guide Alignment 
+
+We propose an iterative refinement mechanism where the recom-mendation model and LLM mutually enhance each other through iterative optimization. Unlike prior work that treats LLM integra-tion as a one-way optimization, our framework enables continuous improvement through closed-loop semantic feedback. The framework consists of three stages shown in Figure 3: 
+
+## 4.1 Stage 1: Initial QE-Rec Training. 
+
+To establish a robust evaluation mechanism for semantic alignment, we first train a QE-Rec model to serve as a stable Reward Model. This decoupled preliminary stage is essential because direct seman-tic alignment of the LLM is unattainable without a reliable reward signal; furthermore, simultaneous joint training with a pre-trained LLM frequently induces significant model instability. Central to this phase is the use of a frozen semantic reasoner ( 𝜋 ), which trans-forms raw user features into latent semantic embeddings. These embeddings are then fed into the query tower and integrated with the intent and user tower to facilitate model training with loss function detailed in section 3.3. This process ensures a consistent and grounded foundation for the subsequent semantic alignment of the primary LLM. Train the Query-Enhanced recommendation model with LTP embeddings from a frozen LLM: 
+
+𝛿 ∗ 
+
+> RCMD
+
+= arg min  
+
+> 𝜃
+
+Lrank (𝜃 ; eLTP ) (7) While the initial QE-Rec training successfully bridges the seman-tic gap inherent in traditional two-tower ranking models in our zero-query recommendation scenario, the semantic embeddings remain anchored in the general LLM’s latent space. To ensure these representations are effective for recommendations, the subsequent stage focuses on ranking-guided alignment. This involves mapping general-purpose embeddings into the ranking-specific manifold and injecting specialised e-commerce domain knowledge. 
+
+## 4.2 Stage 2: Ranking-Guided Alignment 
+
+In this stage, we discuss alignment methods to enhance the latent query reasoning capabilities of general LLM and detail how to RGAlign-Rec: Ranking-Guided Alignment for Latent Query Reasoning in Recommendation Systems Conference’17, July 2017, Washington, DC, USA 
+
+Figure 2: RGAlign-Rec Framework and Online Inference Solution 
+
+utilize QE-Rec as a reward model to better align the ranking and semantic spaces. 
+
+Multi-LLM Sample Generation To bolster latent query rea-soning, we adopt a multi-LLM distillation strategy to distil reason-ing knowledge from the teacher model. First, leverage 3 industry-leading LLMs (Gemini-2.5-Pro/GPT-5/CompassMax [ 38 ]) plus LLM reasoner (qwen3-4B) to generate users’ latent queries. Given that the internal "last token" embeddings of these proprietary models are inaccessible, we employ the qwen3-4b embedding model to map these queries into a unified semantic embedding set. This en-sures consistency with the QE-Rec Query Tower’s input format and facilitates direct comparison within the same semantic space. Subsequently, we pair these semantic embeddings with the origi-nal user data, effectively quadrupling the user-intent-query samples. We then employ the QE-Rec model from Stage 1 as a reward model to evaluate these query-enhanced embedding sets, generating rank-ing scores for each candidate produced by the 4 LLMs. 
+
+Best-of-N Sampling Strategy To quantify the quality of each candidate query, we adopt NDCG [ 13 ] as the primary metric, as it effectively captures both the relevance of the recommendation results and the precision of their ranking positions. We designed four progressive sampling strategies to balance query quality, model diversity, and data scale. (1) Full Retention (V1): For each sample, the query with the highest NDCG score is selected. In the event of a tie in NDCG scores, selection follows a predefined Priority: CompassMax > Gemini > GPT-5 > Qwen3 (2) Non-Qwen3 Filtering (V2): Follows the same selection rules as V1 with an additional constraint: if the optimal query from the baseline Qwen3-4B model, the sample is discarded. (3) Intersection Filtering (V3): We select candidates that max-imize Edit Distance from the Qwen3-4B generated query (for diversity) and exhibit the highest Cosine Similarity to the golden intent (for accuracy). Only candidates satisfying both criteria are retained. (4) Union Filtering (V4): Similar to Strategy 3, but employs a union operation to retain samples satisfying either criterion, thereby increasing data diversity and coverage. Finally, by implementing various Best-of-N sampling strategies, we identify the optimal queries Qw and others as negative samples Ql
+
+to serve as the ground truth for the post-training phase. 
+
+Ranking-Guided Alignment (RGA): To effectively transfer the feedback signals from QE-Rec into the LLM, we design a two-stage ranking guided alignment protocol. The first stage estab-lishes foundational query generation capabilities through Rank-ing Guided SFT (RG-SFT) , followed by a second stage of Ranking Guided Refinement to further refine generation quality for ranking model. The goal of RG-SFT is to train the LLM to generate queries guiding the ranking model achieve better CTR prediction. Given the user features and context 𝐶 and the optimal query selected via QE-Rec feedback 𝑞 𝑤 ∈ 𝑄 𝑤 as ground truth, the RG-SFT optimization objective is defined as: 
+
+𝐿 𝑅𝐺 −𝑆𝐹𝑇 = −E(𝐶,𝑞 𝑤 )∼ 𝐷 
+
+ 
+
+> |𝑞 𝑤 |
+
+∑︁  
+
+> 𝑡 =1
+
+log 𝜋 𝜃 (𝑞 𝑤 𝑡 | 𝑐, 𝑞 𝑤  
+
+> <𝑡
+
+)
+
+
+
+(8) where 𝜋 𝜃 denotes the parameterized Semantic Reasoner and 
+
+𝜃 represents the its parameters. In our RGA framework, RG-SFT serves as a distillation mechanism that injects downstream rank-ing signals—captured by the QE-Rec reward model—directly into the LLM’s generative policy. By fine-tuning the optimal queries identified through Best-of-N ranking results, the model learns to bridge the gap between general semantic representation and rank-ing performance, ultimately internalizing a strategy that optimizes for both linguistic diversity and recommendation accuracy. Building upon the model trained on RG-SFT, we employ two advanced ranking guide refinement strategies: pregerence-based (RG-DPO) and representation-level (RG-CL) alignment to optimize model performance separately. Conference’17, July 2017, Washington, DC, USA Junhua Liu, Jihao Yang, Cheng Chang, Kunrong Li, Bin Fu, and Kwan Hui Lim 
+
+RG-DPO: Formulating a preference-based learning objective to maximize the margin between optimal 𝑞 𝑤 and suboptimal queries 
+
+𝑞 𝑙 ∈ 𝑄 𝑙 .The preference pairs are constructed as: 
+
+Dpref = {(C 𝑖 , 𝑞 𝑤 𝑖 , 𝑞 𝑙 𝑖 ) | NDCG (𝑞 𝑤 𝑖 ) > NDCG (𝑞 𝑙 𝑖 )} (9) The optimization objective is formulated as: 
+
+LDPO (𝜃 ) = −E( C ,𝑞 𝑤 ,𝑞 𝑙 )∼D pref 
+
+"
+
+log 𝜎 𝛽 log 𝜋 𝜃 (𝑞 𝑤 | C) 
+
+𝜋 ref (𝑞 𝑤 | C) − 𝛽 log 𝜋 𝜃 (𝑞 𝑙 | C) 
+
+𝜋 ref (𝑞 𝑙 | C) 
+
+!# (10) where 𝜋 𝜃 is the policy model that is being optimized, 𝜋 ref is the frozen version of the SFT checkpoint, which serves as a constraint to prevent the model from drifting away from the distribution of the learned instruction follow-up during the refinement phase. 𝛽 is a temperature parameter controlling the strength of the optimization and 𝜎 is the Sigmoid function. RG-DPO enhances the model’s discriminative power by explic-itly maximising the reward margin between ranking-optimal and suboptimal queries, transitioning from simple behavioural cloning to ranking-aware decision-making. By utilizing the SFT model as a reference, it stabilizes the alignment of the LLM’s output distri-bution with the expert preferences of QE-Rec while preserving foundational linguistic capabilities. However, its effectiveness de-pends entirely on the diversity of the Best-of-N candidate pool, as insufficient (only 3 in our scenario) or low-quality negatives can lead to noisy gradients or trivial learning. Furthermore, DPO focuses on optimizing token-level probabilities rather than latent geometric alignment, which may result in reward hacking where the model finds surface-level shortcuts rather than achieving deep semantic synchronization with the ranking space. 
+
+RG-CL addresses the latent geometric gap of DPO by directly synchronizing the LLM’s internal hidden states with the ranking-optimized semantic space of the expert queries. By enforcing feature-level consistency, it ensures that the model’s last-token embeddings are inherently calibrated to the downstream ranking preferences, facilitating more robust intent representation. To bridge the gap between the generative hidden space and the ranking-optimized semantic space, we employ an InfoNCE-based contrastive objective. For a given batch of size 𝑁 , let h𝑖 be the last-token hidden state of the LLM for the 𝑖 -th user sample, and let e+
+
+> 𝑖
+
+be the semantic embedding of the optimal query (highest NDCG from QE-Rec) as golden label. The loss function is formulated as: 
+
+𝐿 𝐶𝐿 = − 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+log exp (cos (h𝑖 , e+ 
+
+> 𝑖
+
+)/ 𝜏 )
+
+Í𝑁 𝑗 =1 exp (cos (h𝑖 , e+ 
+
+> 𝑗
+
+)/ 𝜏 ) (11) where 𝜏 is the temperature hyperparameter that scales the sharp-ness of the similarity distribution. 
+
+## 4.3 Stage 3: Closed-Loop Calibration 
+
+To finalize the alignment, we implement a Closed-Loop Calibra-tion stage that updates the QE-Rec model using the refined query distribution from the aligned LLM 𝜋 𝑎𝑙𝑖𝑔𝑛 . This iterative process mitigates potential semantic drift and ensures that the recommen-dation model is perfectly synchronized with the LLM’s enhanced reasoning capabilities. Once the mutual alignment between the gen-erative and ranking spaces is achieved, the integrated RGAlign-Rec framework is deployed for production serving, delivering robust and ranking-optimized recommendations. 
+
+Figure 3: RGAlign-Rec Training Pipeline 
+
+## 5 Experiments 
+
+To validate the effectiveness of RGAlign-Rec, we first conduct ex-tensive offline experiments based on 5-week user interaction logs and user clicking feedback within Shopee Chatbot, an e-commerce customer service platform serving billion-scale users across South-east Asia and Latin America. Furthermore, we conduct extensive experiments to answer the following research questions: 
+
+• RQ1: How does RGAlign-Rec perform compared to produc-tion baselines? 
+
+• RQ2: What is the contribution of LTP embeddings vs. tradi-tional embeddings? 
+
+• RQ3: How does the reward sampling strategy affect model performance? Finally, we deploy our method online and reveal its benefit in online A/B tests. 
+
+## 5.1 Experimental Setup 
+
+Dataset. The datasets were constructed from online interaction logs and user feedback across eight different regions. They consist of 89 features, covering millions of users and thousands of intents. The data span a five-week period, totalling around 7.53M samples, with the first four weeks used for training and the final week reserved for validation. Click signals are directly adopted as training labels. For the evaluation set, totalling around 46K, human annotators are involved to refine the labels into users’ true intents as click signals, aiming to mitigate the noise inherent in implicit feedback. 
+
+Metrics. We employ four popular metrics for offline evaluation: GAUC, Recall@K, NDCG@K, and MRR, for 𝐾 ∈ { 3, 5}. For online metrics, we use top-K CTR (CTR@K) and Intent Hit Rate(IHR) for model evaluation and CSAT as business metrics. Specifically, we define Intent Hit Rate (IHR) using an LLM-as-a-judge approach to measure real-world effectiveness. An offline LLM (GPT-5) analyses full session transcripts—including both chatbot and agent interac-tions—to identify the user’s True Intent. A "hit" is recorded if this RGAlign-Rec: Ranking-Guided Alignment for Latent Query Reasoning in Recommendation Systems Conference’17, July 2017, Washington, DC, USA 
+
+identified intent appears within the model’s Top-3 recommenda-tions. The metric is calculated as: 
+
+𝐼𝐻𝑅 = 1
+
+𝑁 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+⊮(True Intent 𝑖 ∈ Top-3 Intent 𝑖 )
+
+where 𝑁 is the total number of sessions and ⊮(·) is the indicator function that equals 1 if the condition is met, and 0 otherwise. CSAT is defined as a good ratings of users divided by all good and bad ratings to evaluate Chatbot servide quality. 
+
+Base Model Our baseline utilises a two-tower architecture inte-grating AutoInt [ 29 ] with a Multi-Gate Mixture-of-Experts (MoE) framework, representing a mature SOTA paradigm in industrial recommendation. This model explicitly captures high-order feature interactions via AutoInt’s self-attention mechanism, employing a 4-expert dense MoE structure to navigate the heterogeneous intent distributions found in intelligent customer service. By separately modeling user and intent representations before joint label predic-tion, this design maintains high predictive accuracy while efficiently scaling to diverse production scenarios. 
+
+Implementation. Our system is optimized for production us-ing 8-bit quantization on a single NVIDIA B200 GPU, supporting 50 peak QPS. The LLM reasoner and overall RGAlign-Rec service exhibit latencies of 120ms and 1.5s, which are well within the ac-ceptable response threshold for Chatbot services. For the QE-Rec component, we utilize a weighted fusion strategy that assigns a 0.7
+
+weight to the user-intent collaborative logits. The model is trained for 10 –20 epochs with a dropout rate of 0.2, weight decay of 0.01 ,and gradient norms clipped at 1.0. The SFT-CL phase utilizes a joint multi-objective loss, combining contrastive learning ( 𝜆 CL = 1.0)and supervised causal language modeling ( 𝜆 causal = 0.01 ), with a temperature 𝜏 = 0.05 to sharpen similarity distributions. To man-age memory constraints during long-context training, we utilize gradient accumulation to achieve an effective batch size of 24 and implement DeepSpeed ZeRO Stage-3 for efficient model state par-titioning. The learning rate is set to 5 × 10 −5 with a linear decay schedule and a 3% warm-up phase over 10 epochs. Finally, we apply NEFTune-based noise regularisation to the embedding layer ( 𝛼 = 5)to enhance training robustness and mitigate overfitting. 
+
+## 5.2 Offline Performance Comparison (RQ1) 
+
+To evaluate the effectiveness of the proposed RGAlign-Rec frame-work, Table 2 presents the main experimental results on Shopee dataset comparing RGAlign-Rec model variants against the produc-tion baseline. Overall, RGAlign-Rec (Full) consistently outperforms the pro-duction baseline across all key metrics. Specifically, it achieves a +0.12% absolute gain in GAUC, representing a significant 3.52% error reduction, and substantial improvements in ranking accuracy with +0.56% in R@3 and +0.35% in N@3. These results demonstrate the framework’s effectiveness in leveraging LLM as a semantic reasoner to enhance recommendation utility in a large-scale indus-trial setting. The evaluation results in various training stage reveal several interesting observations, as outlined below: 
+
+• The Query-Enhanced recommendation (QE-Rec) yields an immediate performance lift both on all metrics. This validates that the rich semantic knowledge within general LLMs can provide valuable latent query signals that traditional ranking models lack, and our query-enhanced model can integrate the semantic info for ranking effectively. However, the gains from Raw LLM integration alone are limited, as the LLM’s general-purpose output is not yet aligned for the specific ranking objectives of a recommendation system. 
+
+• In Stage 2, compared with the Stage 1 QE-Rec, RGAlign-Rec (SFT+CL) further increases the MRR from 58.79% to 58.84% and improves Recall@3 by 0.07%, even without iter-ative refinement. These results demonstrate that in-batch contrastive learning effectively synchronises the LLM’s la-tent space with the ranking-optimised semantic space by enforcing geometric consistency. 
+
+• Finally, representation-level alignment (SFT+CL) exhibits greater robustness and scalability during iterative refinement compared to preference-based methods(SFT+DPO). While the DPO-based calibration provides competitive NDCG scores, the RGAlign-Rec (Full) model—which utilises SFT+CL fol-lowed by calibration—achieves the best overall results in GAUC (96.43) and Recall (68.11 R@3, 77.21 R@5). This indi-cates that representation-level alignment is more receptive to iterative updates, allowing the model to more robustly resolve objective misalignment between the reasoner and the ranker. Consequently, we select the RGAlign-Rec(Full) framework for final production deployment, as it demonstrates the most consistent performance gains and structural adaptability in the closed-loop refinement process. 
+
+## 5.3 Ablation Study 
+
+5.3.1 Pooling Strategy (RQ2). We conducted an ablation study to evaluate the performance of the Last Token Pooling (LTP) embed-ding compared to BGE embedding mapping(BGE). As shown in the Table 3, LTP consistently outperforms BGE across all stages and metrics. At stage 3, LTP achieves a significant improvement over BGE, with relative gains of +0.81% in Recall@3 and +0.77% in MRR. These results demonstrate that the last token serves as a superior semantic bottleneck, effectively capturing the global context of the sequence in a decoder-only architecture. The inferior performance of BGE is attributed to its two-stage process, where the LLM first generates a query that is subsequently mapped by a frozen BGE model. This introduces a static external variable that remains un-optimized during Stage 2 alignment, creating a discrepancy that degrades objective alignment. Conversely, LPT directly leverages the LLM’s internal hidden states, facilitating seamless end-to-end optimisation of the ranking objective. This allows the LLM reasoner to focus on ranking-aware semantic signals within the latent space, without the representation bottleneck of a frozen encoder. 
+
+5.3.2 Best-of-N Sampling Strategy (RQ3). The sampling strategy serves as our unified mechanism for semantic representation across all training stages. As shown in Table 4, Strategy V1 (Full Reten-tion) performs optimally when the backbone is frozen (QE-Rec). In this static setting, including all candidates—including those from the LLM reasoner (Qwen3-4B)—provides the most comprehensive feature set for the ranker to evaluate. Conference’17, July 2017, Washington, DC, USA Junhua Liu, Jihao Yang, Cheng Chang, Kunrong Li, Bin Fu, and Kwan Hui Lim 
+
+Table 2: Main results on Shopee dataset. All improvements are relative to the production baseline. Best results in bold. R@K=Recall@K, N@K=NDCG@K. 
+
+Model Stage1(QE) Stage2(RGA) Stage3 GAUC R@3 R@5 N@3 N@5 MRR Baseline - - - 96.31 67.73 76.81 70.84 74.96 58.52 QE-Rec Raw LLM - No 96.42 67.99 77.09 71.04 75.07 58.79 RGAlign-Rec Tuned SFT&CL No 96.42 68.07 77.13 71.07 75.11 58.84 
+
+RGAlign-Rec Tuned SFT&DPO Yes 96.42 68.06 77.13 71.09 75.14 58.82 RGAlign-Rec(Full) Tuned SFT&CL Yes 96.43 68.11 77.21 71.09 75.14 58.81 
+
+Rel. Improv. (Best) +0.12% +0.56% +0.52% +0.35% +0.24% +0.50% 
+
+Error Reduction (Best) +3.52% +1.18% +1.72% +0.86% +0.72% +0.70% 
+
+Table 3: Ablation study on embedding methods. LTP signifi-cantly outperforms traditional embeddings.                                          
+
+> Model Pooling Strategy GAUC R@3 R@5 N@3 N@5 MRR QE-Rec BGE 96.39 67.93 77.04 70.94 75.01 58.67 QE-Rec LTP 96.42 67.99 77.09 71.04 75.07 58.79 RGAlign-Rec(Full) BGE 96.31 67.56 76.69 70.69 74.80 58.36 RGAlign-Rec(Full) LTP 96.43 68.11 77.21 71.09 75.14 58.81
+> LTP vs BGE (Rel.) +0.12% +0.81% +0.68% +0.57% +0.45% +0.77%
+
+However, during stages 2-3, when the LLM reasoner is updated, V1’s performance saturates early. This is primarily due to self-fitting bias: by training on its own generated queries, the model tends to over-optimise toward its internal distribution rather than the ground truth ranking objective. To mitigate this, Strategy V2 (Non-Qwen3) explicitly excludes queries from the LLM reasoner, forcing the system to align with diverse, high-quality ranking-aware signals from external teacher LLMs to improve the reasoner’s performance. This approach acts as a robust form of cross-model regularization, preventing the feedback loop inherent in V1. Consequently, V2 facil-itates superior objective alignment, achieving the highest Recall@3 (68.11%) and Recall@5 (77.21%) in the final iterative refinement stage. Based on these findings, we adopt V2 to ensure long-term scalability and generalizability. 
+
+Table 4: Ablation on Best-of-N sampling strategies at Stage 2.                                                  
+
+> Model Strategy GAUC R@3 R@5 N@3 N@5 MRR QE-Rec V1 (Full Retention) 96.44 68.08 77.19 71.11 75.17 58.84
+> QE-Rec V2 (Non-Qwen3) 96.42 68.07 77.13 71.07 75.11 58.84
+> QE-Rec V3 (Intersection) 96.41 68.05 77.13 71.04 75.08 58.79 QE-Rec V4 (Union) 96.42 68.05 77.18 71.08 75.12 58.81 RGAlign-Rec(Full) V1 96.42 68.05 77.16 71.06 75.11 58.83 RGAlign-Rec(Full) V2 96.43 68.11 77.21 71.09 75.14 58.81
+
+## 5.4 Online Deployment and A/B Test 
+
+To meet the stringent throughput and latency requirements of an industrial production environment, we deploy our model on a B200 GPU using the vLLM serving framework, together with 8-bit quantisation to reduce memory footprint and inference latency while maintaining ranking accuracy. The online A/B test results in Table 5 demonstrate the cumulative benefits of the proposed multi-stage framework under real-world traffic. QE-Rec achieves significant gains over the production base-line, most notably a +0.98% increase in CTR@3, illustrating its effectiveness in mitigating the semantic gap between latent user needs and intent representations in Zero-Query settings. Building upon this foundation, RGAlign-Rec(Full) further contributes an additional +0.13% gain in CTR@3 compared to QE-Rec, indicat-ing that ranking-guided semantic alignment enhances the model’s ability to surface the correct intent at top positions. We observe a marginal -0.21% decline in CSAT after alignment. As CSAT reflects downstream resolution quality beyond the intent ranking stage, this divergence suggests that while the model becomes more accurate at identifying the user’s true intent, the quality of response content associated with clicked intents may remain a limiting factor that is orthogonal to ranking. Overall, the monotonic gains in ranking-oriented metrics across stages confirm the framework’s ability to capture real user intent under production constraints. 
+
+Table 5: Online AB Test Performance for QE-Rec and RGAlign-Rec 
+
+ABTest Setting CSAT CTR@3 IHR QE-Rec vs Baseline +0.17% +0.98% +1.43% RGAlign-Rec(Full) vs QE-Rec -0.21% +0.13% +0.30% 
+
+## 6 Conclusion 
+
+This study addresses the semantic gap in modern recommendation systems by integrating an LLM-based semantic reasoner with a query-enhanced (QE) ranking model for proactive intent prediction. To resolve the misalignment between general-purpose LLM genera-tion and task-specific ranking objectives, we introduce the Ranking-Guided Alignment (RGA) framework, which leverages downstream ranking signals as feedback to guide semantic alignment. Through representation-level alignment and iterative refinement, RGA effec-tively synchronizes the latent semantic space of the LLM with the operational requirements of the ranker. Extensive offline evaluation and online deployment demonstrate that the resulting RGAlign-Rec system delivers consistent improvements in both CTR and Intent Hit Rate (IHR) in a large-scale production environment. Overall, this work presents a practical and scalable pipeline for distilling ranking-aware intelligence into generative models, enabling reli-able semantic reasoning under real-world industrial constraints. RGAlign-Rec: Ranking-Guided Alignment for Latent Query Reasoning in Recommendation Systems Conference’17, July 2017, Washington, DC, USA 
+
+## References 
+
+[1] Zhe Cao, Tao Qin, Tie-Yan Liu, Ming-Feng Tsai, and Hang Li. 2007. Learning to rank: from pairwise approach to listwise approach. In International Conference on Machine Learning . https://api.semanticscholar.org/CorpusID:207163577 [2] Junyi Chen, Lu Chi, Bingyue Peng, and Zehuan Yuan. 2024. Hllm: Enhancing sequential recommendations via hierarchical large language models for item and user modeling. arXiv preprint arXiv:2409.12740 (2024). [3] Shuwei Chen, Jiajun Cui, Zhengqi Xu, Fan Zhang, Jiangke Fan, Teng Zhang, and Xingxing Wang. 2025. HoMer: Addressing Heterogeneities by Modeling Sequen-tial and Set-wise Contexts for CTR Prediction. arXiv preprint arXiv:2510.11100 
+
+(2025). [4] Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey E. Hinton. 2020. A Simple Framework for Contrastive Learning of Visual Representations. ArXiv 
+
+abs/2002.05709 (2020). https://api.semanticscholar.org/CorpusID:211096730 [5] Yuxin Chen, Junfei Tan, An Zhang, Zhengyi Yang, Leheng Sheng, Enzhi Zhang, Xi-ang Wang, and Tat-Seng Chua. 2024. On Softmax Direct Preference Optimization for Recommendation. ArXiv abs/2406.09215 (2024). https://api.semanticscholar. org/CorpusID:270440827 [6] Heng-Tze Cheng, Levent Koc, Jeremiah Harmsen, Tal Shaked, Tushar Chandra, Hrishi Aradhye, Glen Anderson, Greg Corrado, Wei Chai, Mustafa Ispir, et al .2016. Wide & deep learning for recommender systems. In Proceedings of the 1st workshop on deep learning for recommender systems . 7–10. [7] Sunhao Dai, Jiakai Tang, Jiahua Wu, Kun Wang, Yuxuan Zhu, Bingjun Chen, Bangyang Hong, Yu Zhao, Cong Fu, Kangle Wu, Yabo Ni, Anxiang Zeng, Wenjie Wang, Xu Chen, Jun Xu, and See-Kiong Ng. 2025. OnePiece: Bringing Con-text Engineering and Reasoning to Industrial Cascade Ranking System. ArXiv 
+
+abs/2509.18091 (2025). https://api.semanticscholar.org/CorpusID:281421368 [8] Jiaxin Deng, Shiyao Wang, Kuo Cai, Lejian Ren, Qigen Hu, Weifeng Ding, Qiang Luo, and Guorui Zhou. 2025. Onerec: Unifying retrieve and rank with generative recommender and iterative preference alignment. arXiv preprint arXiv:2502.18965 
+
+(2025). [9] Shijie Geng, Shuchang Liu, Zuohui Fu, Yingqiang Ge, and Yongfeng Zhang. 2022. Recommendation as Language Processing (RLP): A Unified Pretrain, Personalized Prompt & Predict Paradigm (P5). In Proceedings of the 16th ACM Conference on Recommender Systems . 299–315. [10] Ruidong Han, Bin Yin, Shangyu Chen, He Jiang, Fei Jiang, Xiang Li, Chi Ma, Mincong Huang, Xiaoguang Li, Chunzhen Jing, et al . 2025. Mtgr: Industrial-scale generative recommendation framework in meituan. In Proceedings of the 34th ACM International Conference on Information and Knowledge Management .5731–5738. [11] Po-Sen Huang, Xiaodong He, Jianfeng Gao, Li Deng, Alex Acero, and Larry Heck. 2013. Learning deep structured semantic models for web search using clickthrough data. In Proceedings of the 22nd ACM International Conference on Information & Knowledge Management . 2333–2338. [12] Yunwen Huang, Shiyong Hong, Xijun Xiao, Jinqiu Jin, Xuanyuan Luo, Zhe Wang, Zheng Chai, Shikang Wu, Yuchao Zheng, and Jingjian Lin. 2026. HyFormer: Revis-iting the Roles of Sequence Modeling and Feature Interaction in CTR Prediction. 
+
+arXiv preprint arXiv:2601.12681 (2026). [13] Kalervo Järvelin and Jaana Kekäläinen. 2002. Cumulated gain-based evalu-ation of IR techniques. ACM Trans. Inf. Syst. 20 (2002), 422–446. https: //api.semanticscholar.org/CorpusID:1981391 [14] Doyup Lee, Chiheon Kim, Saehoon Kim, Minsu Cho, and Wook-Shin Han. 2022. Autoregressive image generation using residual quantization. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 11523–11532. [15] Harrison Lee, Samrat Phatale, Hassan Mansoor, Kellie Lu, Thomas Mesnard, Colton Bishop, Victor Carbune, and Abhinav Rastogi. 2023. RLAIF vs. RLHF: Scaling Reinforcement Learning from Human Feedback with AI Feedback. In 
+
+International Conference on Machine Learning . https://api.semanticscholar.org/ CorpusID:261493811 [16] Jianxun Lian, Xiaohuan Zhou, Fuzheng Zhang, Zhongxia Chen, Xing Xie, and Guangzhong Sun. 2018. xdeepfm: Combining explicit and implicit feature in-teractions for recommender systems. In Proceedings of the 24th ACM SIGKDD international conference on knowledge discovery & data mining . 1754–1763. [17] Jiacheng Lin, Tian Wang, and Kun Qian. 2025. Rec-R1: Bridging Generative Large Language Models and User-Centric Recommendation Systems via Rein-forcement Learning. ArXiv abs/2503.24289 (2025). https://api.semanticscholar. org/CorpusID:277468006 [18] Junhua Liu, Tan Yong Keat, Bin Fu, and Kwan Hui Lim. 2024. LARA: Linguistic-adaptive retrieval-augmentation for multi-turn intent classification. In Proceed-ings of the 2024 Conference on Empirical Methods in Natural Language Processing: Industry Track . 1096–1106. [19] Junhua Liu, Yong Keat Tan, Bin Fu, and Kwan Hui Lim. 2025. From Intents to Con-versations: Generating Intent-Driven Dialogues with Contrastive Learning for Multi-Turn Classification. In Proceedings of the 34th ACM International Conference on Information and Knowledge Management . 1861–1871. [20] Zhijie Nie, Richong Zhang, and Zhanyu Wu. 2024. A Text is Worth Several Tokens: Text Embedding from LLMs Secretly Aligns Well with The Key Tokens. ArXiv 
+
+abs/2406.17378 (2024). https://api.semanticscholar.org/CorpusID:270711441 [21] OpenAI. 2023. GPT-4 Technical Report. https://api.semanticscholar.org/ CorpusID:257532815 [22] Long Ouyang. 2022. Training language models to follow instructions with human feedback. ArXiv abs/2203.02155 (2022). https://api.semanticscholar.org/CorpusID: 246426909 [23] Qi Pi, Guorui Zhou, Yujing Zhang, Zhe Wang, Lejian Ren, Ying Fan, Xiaoqiang Zhu, and Kun Gai. 2020. Search-based user interest modeling with lifelong sequential behavior data for click-through rate prediction. In Proceedings of the 29th ACM International Conference on Information & Knowledge Management .2685–2692. [24] Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea Finn. 2023. Direct preference optimization: Your language model is secretly a reward model. Advances in neural information processing systems 36 (2023), 53728–53741. [25] Shashank Rajput, Nikhil Mehta, Anima Singh, Raghunandan Hulikal Keshavan, Trung Vu, Lukasz Heldt, Lichan Hong, Yi Tay, Vinh Tran, Jonah Samost, et al .2023. Recommender systems with generative retrieval. Advances in Neural Information Processing Systems 36 (2023), 10299–10315. [26] Xubin Ren, Wei Wei, Lianghao Xia, Lixin Su, Suqi Cheng, Junfeng Wang, Dawei Yin, and Chao Huang. 2023. Representation Learning with Large Language Models for Recommendation. Proceedings of the ACM Web Conference 2024 (2023). https://api.semanticscholar.org/CorpusID:264439548 [27] Benedikt Roth, Stephan Rappensperger, Tianming Qiu, Hamza Imamovi’c, Julian Wörmann, and Hao Shen. 2025. Resource-Efficient Adaptation of Large Language Models for Text Embeddings via Prompt Engineering and Contrastive Fine-tuning. ArXiv abs/2507.22729 (2025). https://api.semanticscholar.org/CorpusID: 280391561 [28] Anima Singh, Trung Vu, Nikhil Mehta, Raghunandan Keshavan, Maheswaran Sathiamoorthy, Yilin Zheng, Lichan Hong, Lukasz Heldt, Li Wei, Devansh Tandon, et al . 2024. Better generalization with semantic ids: A case study in ranking for recommendations. In Proceedings of the 18th ACM Conference on Recommender Systems . 1039–1044. [29] Weiping Song, Chence Shi, Zhiping Xiao, Zhijian Duan, Yewen Xu, Ming Zhang, and Jian Tang. 2018. AutoInt: Automatic Feature Interaction Learning via Self-Attentive Neural Networks. Proceedings of the 28th ACM International Conference on Information and Knowledge Management (2018). https://api.semanticscholar. org/CorpusID:53100214 [30] Chao Sun, Yaobo Liang, Yaming Yang, Shilin Xu, Tianmeng Yang, and Yunhai Tong. 2024. Direct Preference Optimization for LLM-Enhanced Recommendation Systems. 2025 IEEE International Conference on Multimedia and Expo (ICME) 
+
+(2024), 1–6. https://api.semanticscholar.org/CorpusID:273229142 [31] Ruoxi Wang, Rakesh Shivanna, Derek Cheng, Sagar Jain, Dong Lin, Lichan Hong, and Ed Chi. 2021. Dcn v2: Improved deep & cross network and practical lessons for web-scale learning to rank systems. In Proceedings of the web conference 2021 .1785–1797. [32] Likang Wu, Zhi Zheng, Zhaopeng Qiu, Hao Wang, Hongchao Gu, Tingjia Shen, Chuan Qin, Chen Zhu, Hengshu Zhu, Qi Liu, et al . 2024. A survey on large language models for recommendation. World Wide Web 27, 5 (2024), 60. [33] An Yang, Junyang Ba, Xiao Bi, Guanyi Chen, Kai Chen, Liang Chen, Shuaibin Chen, Wenbin Chen, Zejun Chen, Bin Cheng, et al . 2025. Qwen3 Technical Report. 
+
+arXiv preprint arXiv:2505.09388 (2025). [34] Wencai Ye, Mingjie Sun, Shuhang Chen, Wenjin Wu, and Peng Jiang. 2025. Align3GR: Unified Multi-Level Alignment for LLM-based Generative Recommen-dation. ArXiv abs/2511.11255 (2025). https://api.semanticscholar.org/CorpusID: 283055056 [35] Wencai Ye, Mingjie Sun, Shaoyun Shi, Peng Wang, Wenjin Wu, and Peng Jiang. 2025. DAS: Dual-Aligned Semantic IDs Empowered Industrial Recommender System. Proceedings of the 34th ACM International Conference on Information and Knowledge Management (2025). https://api.semanticscholar.org/CorpusID: 280650134 [36] Chao Yi, Dian Chen, Gaoyang Guo, Jiakai Tang, Jian Wu, Jing Yu, Mao Zhang, Wen Chen, Wenjun Yang, Yujie Luo, et al . 2025. RecGPT-V2 Technical Report. 
+
+arXiv preprint arXiv:2512.14503 (2025). [37] Chao Yi, Dian Chen, Gaoyang Guo, Jiakai Tang, Jian Wu, Jing Yu, Mao Zhang, Sunhao Dai, Wen Chen, Wenjun Yang, et al . 2025. Recgpt technical report. arXiv preprint arXiv:2507.22879 (2025). [38] Anxiang Zeng, Haibo Zhang, Hailing Zhang, Kaixiang Mo, Liang Yao, Ling Hu, Long Zhang, Shuman Liu, Shuyi Xie, Yanshi Li, Yizhang Chen, Yuepeng Sheng, Yuwei Huang, Zhaochen Xu, Zhiqiang Zhou, and Ziqin Liew. 2025. Each Prompt Matters: Scaling Reinforcement Learning Without Wasting Rollouts on Hundred-Billion-Scale MoE. ArXiv abs/2512.07710 (2025). https://api.semanticscholar.org/ CorpusID:283693064 [39] Jiaqi Zhai, Lucy Liao, Xing Liu, Yueming Wang, Rui Li, Xuan Cao, Leon Gao, Zhao-jie Gong, Fangda Gu, Michael He, et al . 2024. Actions speak louder than words: Trillion-parameter sequential transducers for generative recommendations. arXiv preprint arXiv:2402.17152 (2024). Conference’17, July 2017, Washington, DC, USA Junhua Liu, Jihao Yang, Cheng Chang, Kunrong Li, Bin Fu, and Kwan Hui Lim 
+
+[40] Chao Zhang, Shiwei Wu, Haoxin Zhang, Tong Xu, Yan Gao, Yao Hu, and Enhong Chen. 2024. Notellm: A retrievable large language model for note recommenda-tion. In Companion Proceedings of the ACM Web Conference 2024 . 170–179. [41] Chao Zhang, Haoxin Zhang, Shiwei Wu, Di Wu, Tong Xu, Xiangyu Zhao, Yan Gao, Yao Hu, and Enhong Chen. 2025. Notellm-2: Multimodal large representation models for recommendation. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 1 . 2815–2826. [42] Zhaoqi Zhang, Haolei Pei, Jun Guo, Tianyu Wang, Yufei Feng, Hui Sun, Shaowei Liu, and Aixin Sun. 2025. OneTrans: Unified Feature Interaction and Se-quence Modeling with One Transformer in Industrial Recommender. ArXiv 
+
+abs/2510.26104 (2025). https://api.semanticscholar.org/CorpusID:282592024 [43] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric Xing, et al . 2023. Judging llm-as-a-judge with mt-bench and chatbot arena. Advances in neural information processing systems 36 (2023), 46595–46623. [44] Rui Zheng, Wei Shen, Yuan Hua, Wenbin Lai, Shihan Dou, Yuhao Zhou, Zhiheng Xi, Xiao Wang, Haoran Huang, Tao Gui, et al . 2023. Improving generalization of alignment with human preferences through group invariant learning. arXiv preprint arXiv:2310.11971 (2023). [45] Guorui Zhou, Na Mou, Ying Fan, Qi Pi, Weijie Bian, Chang Zhou, Xiaoqiang Zhu, and Kun Gai. 2019. Deep interest evolution network for click-through rate prediction. In Proceedings of the AAAI conference on artificial intelligence , Vol. 33. 5941–5948. [46] Guorui Zhou, Xiaoqiang Zhu, Chenru Song, Ying Fan, Han Zhu, Xiao Ma, Yanghui Yan, Junqi Jin, Han Li, and Kun Gai. 2018. Deep interest network for click-through rate prediction. In Proceedings of the 24th ACM SIGKDD international conference on knowledge discovery & data mining . 1059–1068. [47] Jie Zhu, Zhifang Fan, Xiaoxie Zhu, Yuchen Jiang, Hangyu Wang, Xintian Han, Haoran Ding, Xinmin Wang, Wenlin Zhao, Zhen Gong, Huizhi Yang, Zheng Chai, Zhe Chen, Yuchao Zheng, Qiwei Chen, Feng Zhang, Xun Zhou, Peng Xu, Xiao Yang, Di Wu, and Zuotao Liu. 2025. RankMixer: Scaling Up Ranking Models in Industrial Recommenders. In Proceedings of the 34th ACM International Conference on Information and Knowledge Management (Seoul, Republic of Korea) (CIKM ’25) . Association for Computing Machinery, 6309–6316.

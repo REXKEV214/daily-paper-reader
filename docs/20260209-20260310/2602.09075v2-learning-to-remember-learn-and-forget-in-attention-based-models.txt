@@ -1,0 +1,1381 @@
+Title: Learning to Remember, Learn, and Forget in Attention-Based Models
+
+URL Source: https://arxiv.org/pdf/2602.09075v2
+
+Published Time: Thu, 12 Feb 2026 01:52:14 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+Djohan Bonnet 1 Jamie Lohoff 1 2 Jan Finkbeiner 1 2 Elidona Skhikerujah 2 Emre Neftci 1 2 
+
+## Abstract 
+
+In-Context Learning (ICL) in transformers acts as an online associative memory and is believed to underpin their high performance on complex se-quence processing tasks. However, in gated linear attention models, this memory has a fixed capac-ity and is prone to interference, especially for long sequences. We propose Palimpsa, a self-attention model that views ICL as a continual learning problem that must address a stability-plasticity dilemma. Palimpsa uses Bayesian metaplastic-ity, where the plasticity of each attention state is tied to an importance state grounded by a prior distribution that captures accumulated knowledge. We demonstrate that various gated linear attention models emerge as specific architecture choices and posterior approximations, and that Mamba2 is a special case of Palimpsa where forgetting dominates. This theoretical link enables the trans-formation of any non-metaplastic model into a metaplastic one, significantly expanding its mem-ory capacity. Our experiments show that Palimpsa consistently outperforms baselines on the Multi-Query Associative Recall (MQAR) benchmark and on Commonsense Reasoning tasks. 
+
+## 1. Introduction 
+
+Transformers are the workhorse of generative AI, under-pinning breakthroughs in large language modeling (Brown et al., 2020; Chowdhery et al., 2023), computer vi-sion (Dosovitskiy et al., 2020), robotics (Brohan et al., 2022), and scientific domains like chemistry (Schwaller et al., 2019) and biology (Jumper et al., 2021). Central to this success is the self-attention mechanism (Vaswani et al., 2017), which allows a model to capture interactions among all tokens in a sequence in a highly parallelizable manner. However, this mechanism requires caching key-value (KV) pairs for each input token, causing memory       
+
+> 1Forschungszentrum J ¨ulich , Germany 2RWTH Aachen, Ger-many. Correspondence to: Djohan Bonnet <d.bonnet@fz-juelich.de >, Emre Neftci <e.neftci@fz-juelich.de >.
+> Preprint. February 12, 2026.
+
+and computational costs to grow linearly and quadratically, respectively, with sequence length. Consequently, long-context data scenarios pose strong technical challenges for classical Transformer architectures, especially at the edge (Kim et al., 2023). A promising direction to simultaneously address the compu-tational and memory bottlenecks is to adopt fixed-size atten-tion memories, such as in linear transformers (Schlag et al., 2021) and state space models (Gu & Dao, 2023). These trade the dynamically growing KV cache with a fixed-size memory state that is updated at each token. A key insight is their ability to perform in-context learning (ICL) (Brown et al., 2020), whereby the model effectively “learns” at test time by processing contextual examples within the in-put. ICL essentially tackles a continual and online learning problem, not unlike how the brain dynamically adjusts its weights through neural and synaptic plasticity. In this view, learning with fixed-size memory without revisiting past states and inputs ( i.e. replay) can lead to catastrophic inter-ference (McCloskey & Cohen, 1989) and further deteriorate with sequence length. This interference contributes to the limited capacity of linear transformers (Schlag et al., 2021). The concept of metaplasticity from neuroscience (Abraham & Bear, 1996) posits that the degree of plasticity is itself adaptive to preserve prior knowledge. This inspired practical algorithms to solve catastrophic forgetting by dynamically adjusting plasticity (Zenke et al., 2017b; Kirkpatrick et al., 2017b; Benna & Fusi, 2016). In this work, we pose ICL as a continual learning problem that can be solved through metaplasticity, building on prior work that associated ICL and gradient descent (Aky ¨urek et al., 2022; von Oswald et al., 2023b). However, existing metaplasticity methods are unsuitable for transformers because they rely either on clearly demarcated tasks and associated labels, growing memory, or lack differentiability (Kudithipudi et al., 2023). As we aim to introduce metaplastic methods embedded in transformer architectures, differentiability is necessary for training. One natural solution to these challenges is to for-mulate memory updates as a process of Bayesian Gradient Descent (BGD) , ensuring that each update balances prior knowledge with new evidence (Zeno et al., 2021). BGD ad-justs parameters according to their uncertainty in an online fashion. However, BGD and related metaplasticity meth-ods suffer from catastrophic remembering (Kaushik et al., 1
+
+> arXiv:2602.09075v2 [cs.LG] 11 Feb 2026 Learning to Remember, Learn, and Forget in Attention-Based Models
+
+# ×××
+
+Palimpsa Layer L2 Linear Linear Linear Norm Norm Linear Conv Linear Conv Linear Linear 
+
+> 12
+
+Naive Update (State forgotten) 
+
+Metaplastic Update (State remembered) Catastrophic forgetting Thomas Bayes was Joshua's son Forgotten Remembered Never learnt Metaplasticity w/ Forgetting Metaplasticity Thomas Bayes was Joshua's son Thomas Bayes was Joshua's son 
+
+# ××      
+
+> Linear
+> Figure 1. Bayesian Metaplasticity Attention. Self-attention in autoregressive transformers is inherently a continual learning problem, and as such can suffer from catastrophic forgetting. Metaplasticity dynamically modifies the learning rate to preserve important prior information. (Bottom-left) Illustration of Bayesian metalearning: qθtis the (variational) distribution over memory states Sat time step t.(Right) We derive Palimpsa, a new attention block based on an online Bayesian posterior, preventing both catastrophic forgetting and remembering using metaplasticity.
+
+2021), induced by a loss of plasticity that suppresses the ability to learn new knowledge to preserve old ones. For ICL, this would imply that the model becomes unable to incorporate new information past a critical sequence length, which is often cited as a key limitation of state space mod-els (Behrouz et al., 2024). The recent Metaplasticity from Synaptic Uncertainty (MESU) solves this problem by lever-aging a Bayesian framework to also enable forgetting by discarding stale or unused information (Bonnet et al., 2025). The degree of this palimpsest property 1 can be adjusted through a Bayesian prior, which effectively controls the time horizon of the memory. Building on MESU, we introduce Palimpsa , a dual-state at-tention block that performs metaplastic Bayesian updates to a fixed-size attention memory. Palimpsa mitigates in-context catastrophic forgetting by adjusting per-state update magni-tude based on memory uncertainty, preserving critical past information. By releasing information predicted as stale, it also prevents in-context catastrophic remembering. The key to deriving Palimpsa is the formulation of self-attention as an optimization of an inner variational free energy at test-time, for which the variational posterior updates can be analytically computed. With our custom-developed kernels, Palimpsa scales efficiently on GPUs with speeds comparable 
+
+> 1A palimpsest is a writing surface where the original text is scraped or washed off to be reused, especially used in ancient works when parchment was of limited supply – similarly to the fixed-size memory in Palimpsa
+
+to Mamba1 (Gu & Dao, 2023). Furthermore, we show that existing gated linear models can be derived from specific assumptions on the variational posterior, unifying several prior works within a common mathematical framework. Specifically, we demonstrate a continuum between Mamba2 and Palimpsa, suggesting a hybrid pipeline: large-scale pre-training for efficiency, fol-lowed by metaplastic fine-tuning with Palimpsa to expand its memory capacity. We validate our approach on syn-thetic and Commonsense Reasoning benchmarks using two backbones: Palimpsa-D (Deltanet-based) and Palimpsa-M (Mamba2-based). Our results demonstrate that metaplastic-ity consistently improves performance over non-metaplastic baselines across various memory sizes. Our specific contributions are: • The introduction of the concept of metaplasticity in ICL to mitigate in-context catastrophic forgetting. • Palimpsa, a model that prevents in-context catastrophic remembering by gradually releasing outdated knowl-edge, with scalable custom kernels. • A mathematical framework that casts several gated linear attention and state space models as special cases of a common Bayesian framework. • Methods to transform non-metaplastic models into metaplastic ones. 2Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+1.1. Related work Continual Learning Methods in Neural Sequence Mod-els Continual Learning (CL) methods can be broadly cat-egorized into complementary mechanisms for CL systems (McClelland et al., 1995) namely replay-based ((Buzzega et al., 2020), (Lopez-Paz & Ranzato, 2017)), dynamic net-work expansion ((Rusu et al., 2016), (Wang et al., 2024)), and regularization-based methods ((Zenke et al., 2017a), (Kirkpatrick et al., 2017a)). CL has been previously con-sidered in State Space Models (SSM) (Cheng et al., 2024; Zhang et al., 2024), but did not study the ICL aspects of this problem. Other work applied modern transformer and SSM models to improve on CL benchmarks (Thengane et al., 2022). To provide a local and efficient method to solve the stability-plasticity dilemma using finite size memory in ICL, we focus specifically on regularization-based CL methods. This allows us to tackle general language modeling tasks without an explicitly constructed CL structure, namely lan-guage. A significant body of related work interprets In-Context Learning (ICL) as Bayesian inference (Xie et al., 2021; Wies et al., 2023; Arora et al., 2024a; Hahn & Goyal, 2023; Zhang et al., 2023; Falck et al., 2024). These studies generally posit that the Transformer architecture implicitly approximates a Bayesian learner in context at the system level, effectively performing inference over latent tasks or concepts. Our ap-proach differs fundamentally, as we explicitly derive a new gated linear attention mechanism directly from Bayesian principles. Bayesian learning and metaplasticity are closely linked in the hypothesis that synapses maintain uncertainty estimates (Aitchison et al., 2021) to dynamically adjust their plastic-ity. This perspective inspired metaplastic CL methods like MESU (Bonnet et al., 2025). This type of metaplasticity can be written in a local and linear fashion. In Palimpsa, we take advantage of these properties to allow scalable training on GPUs using the techniques employed for gated state-space models (Gu & Dao, 2023). 
+
+Gated Linear Recurrence Models and Metaplasticity 
+
+This type of metaplasticity is strikingly related to existing gated linear attention models and ICL. (Aky ¨urek et al., 2022; von Oswald et al., 2023a) demonstrated that the forward pass through the linear attention mechanism can be framed as an iterative gradient descent on a local regression loss function, thus enabling test-time adaptation of the model underpinning ICL. This showed how the choice of the loss function directly influenced the resulting gating and for-getting mechanisms (Yang et al., 2023). The perspective of gradient descent local loss functions was further elabo-rated in Mesa-optimization and Mesanet (von Oswald et al., 2023b; 2025), Test-Time Training (Sun et al., 2023), Gated Deltanets (Yang et al., 2024), Longhorn (Liu et al., 2024) and Titans (Behrouz et al., 2024). Palimpsa shares similarity with Longhorn (Liu et al., 2024) and Mesanet (von Oswald et al., 2025). Longhorn (Liu et al., 2024) explicitly leverages this online learning relationship to derive its gating mechanisms. While input gating enables the model to control which information is compressed into the memory matrix achieving a form of suboptimal stability-plasticity trade off, it lacks an efficient mechanism to protect important information. Specifically, Longhorn introduces a trainable, input-dependent importance factor that weights the loss function (which we later refer to as βt) and dictates the stability-plasticity ratio for each row of the fixed-size memory matrix, effectively freezing a row for a given in-put when a value is zero. In Longhorn, the plasticity rate remains constant for every memory state within a sequence, meaning there is no in-context metaplasticity. In contrast, our Bayesian metaplasticity perspective dictates a plasticity rate that changes in-context .This is achieved using a second state, as in the Mesanet. Mesanet (von Oswald et al., 2025) seeks the optimal so-lution of an in-context regression objective, leading to an update that is strikingly similar to Palimpsa. This is be-cause Bayesian and frequentist solutions to linear regression problems lead to identical estimates of the mean. However, Mesanet addresses a simplified objective where the stability-plasticity ratio is fixed for each memory row. Consequently, every state in a row shares the same learnable plasticity. This prevents true metaplasticity, which requires dynami-cally adapting the learning rate of every individual state. This structural simplification enables Mesanet to focus on capturing synaptic correlations by computing the inverse covariance matrix using a parallelized, iterative gradient descent. However, this numerical approximation comes at the computational cost of iterative inner-loop updates. To maintain throughput and the spirit of metaplasticity, where synaptic learning rates are independent, Palimpsa relies on a diagonal approximation of the covariance matrix. By using the resulting variance as a learning rate, Palimpsa closely aligns with the neuroscience model proposed by (Aitchison et al., 2021). Finally, because Palimpsa is inherently Bayesian, the atten-tion head provides output uncertainty that could be lever-aged in future work to improve overall model performance. 
+
+## 2. Background and Methods 
+
+2.1. Background: Self-Attention Heads and Metaplastic Memory 
+
+The decoder self-attention (Vaswani et al., 2017) autoregres-sively maps the sequence {xt}Lt=1 into {yt}Lt=1 . Each token 
+
+xt is projected into key, query, and value vectors kt, qt ∈
+
+Rdk , vt ∈ Rdv . Self-attention computes a weighted combi-nation of the values Vt = [ Vt−1, vt] based on the similarity 3Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+between each query qt and the keys Kt = [ Kt−1, kt].Concretely, this can be expressed as: 
+
+yt = Vt Softmax  K⊤ 
+
+> t
+
+qt
+
+.
+
+The similarity between queries and keys (the “look-up” step) determines the extent to which each value contributes to the output. Linear Transformers (Schlag et al., 2021) omit the softmax, in which case the KV cache can be replaced by a fixed-size attention matrix, updated in-place for every new incoming token with a “Hebbian” update: 
+
+St = St−1+vt⊗kt, and yt = St qt, where St ∈ Rdv ×dk .
+
+However, if the new key kt is not orthogonal to previously stored keys, the update will partially overwrite older mem-ories. Schlag et al. demonstrated the limited capacity of linear transformers and implemented an error-correcting delta rule to mitigate this issue. This idea has been later ex-panded to improve performance and trainability (Sun et al., 2024; Liu et al., 2024; Yang et al., 2024). Given this interference, should the model prioritize learning to map new key–value pairs, or preserve the relationships from earlier pairs? Recently, Bonnet et al. proposed MESU, a mathematically grounded approach to solve such dilemma from a Bayesian framework. MESU formalizes forgetting to prevent a vanishing learning rate thus avoiding catastrophic remembering (Kaushik et al., 2021). Building on this idea, we treat the self-attention memory update as a Bayesian inference problem that includes formalized forgetting. 
+
+2.2. Derivation of Palimpsa Bayesian Formulation of the Attention Objective For a given time step, the attention head can be defined as 
+
+p(v|k, β, S). Given the inputs k ∈ Rdk and importance factor β ∈ Rdv , the attention head models the distribution of values v ∈ Rdv conditioned on the state S ∈ Rdv ×dk .Using Gaussian assumptions, the objective function (linear regression) of the attention head is defined as the negative log-likelihood: 
+
+− log p(v | k, β, S) = 12 ∥S k − v∥2
+
+> diag (β)
+
+.
+
+Given t tokens {xj }tj=1 with xj ∈ Rd×1, we obtain t data points {dj }tj=1 = {(kj , βj ), vj }tj=1 to minimize the above loss “in-context”. Applying Bayes’ rule gives the posterior distribution on S, which can be expressed in the recursive form: 
+
+p(S|d1: t) = p(dt|S) · p(S|d1: t−1)
+
+p(dt) . (1) Since qt is independent of S, the output yt can be defined as: 
+
+yt = Ep(S|d1: t) [Sq t] = Ep(S|d1: t) [S] qt = μtqt. (2) Catastrophic remembering occurs when the prior 
+
+p(S|d1: t−1) becomes overly concentrated as t increases, causing the likelihood p(dt|S) to have a negligible impact on the posterior, inhibiting the integration of new information. This can be prevented by truncating the posterior to the last N tokens: 
+
+p(S|dt−N +1: t) ∝ p(dt|S)p(S|dt−N :t−1)
+
+| {z }
+
+> Learning
+
+· 1
+
+p(dt−N |S)
+
+| {z }
+
+> Forgetting
+
+where N now acts as a memory window size (Bonnet et al., 2025). In an online scenario, p(dt−N |S) is unavailable at time t. Thus, we approximate this truncation by the weighted posterior (See Appendix A.2): 
+
+pw(S|d1: t) ∝ p(dt|S)pw(S|d1: t−1) · pw(S|d1: t−1)
+
+p(S) 
+
+> −1
+> N
+
+.
+
+We refer to pw as the weighted posterior because the influ-ence of historical data decays over time. This suggests a simple interpretation: at each time step, we discard a frac-tion 1 
+
+> N
+
+of the accumulated prior weight. Effectively, the weighted posterior never carries more weight than that of a truncated posterior with a memory window of size N . Thus, with a context window N that reflects the maximum mem-ory capacity of the attention head, catastrophic remembering is avoided. Inspired by common practice in state space mod-els, we introduce input-dependence to this memory window, denoting it Nt. Our Bayesian formulation naturally defines the forgetting gate as αt := (1 − 1 
+
+> Nt
+
+). To align with the pa-rameterization of current state-of-the-art architectures (Gu & Dao, 2023), we express this gate as αt = exp( −Ad t),where dt ∈ R+ represents the input-dependent step size and 
+
+A ∈ R+ is a learnable parameter, ensuring αt ∈ (0 , 1] . This explicit mapping provides a Bayesian interpretation of the effective dependency range of the attention head. 
+
+Bayesian Attention as an Optimization Problem While the weighted posterior pw(S|d1: t) is analytically tractable in our setting, we deliberately employ Variational Inference (VI) to cast the update as an optimization problem (Blundell et al., 2015). Crucially, in this conjugate setting, VI recovers the exact solution. We adopt this formulation to demonstrate that various gated linear attention models emerge as spe-cific choices of architecture and posterior approximations. For each time step t, we define qθt,i (Si), i = 1 , . . . , d v , a variational distribution over Si parameterized by θt,i . We minimize the Kullback–Leibler (KL) divergence between 
+
+qθt and the true posterior by optimizing θt,i :
+
+θt,i = argmin 
+
+> θ
+
+DKL [ qθ (Si) ∥ pw(Si|d1: t)] , i = 1 , . . . , d v .
+
+Here, qθt,i is modeled as a multivariate Gaussian of dimen-sion dk:
+
+qθt,i (S) ∼ N (μt,i , Σt,i ), where θt,i = {μt,i , Σt,i },
+
+μt,i ∈ Rdk , Σt,i ∈ Rdk ×dk , i = 1 , . . . , d v .
+
+4Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+Using Bayes’ theorem and the definition of KL divergence, finding the optimal θt,i is equivalent to minimizing the free energy: 
+
+Ft,i = DKL 
+
+qθt,i (Si) ∥ p(Si)−Eqθt,i (Si)[
+
+> t
+
+X
+
+> s=1
+
+log p(ds|Si)] .
+
+With Gaussian assumptions, Ft,i decomposes into three components, and a term CΣ that depends solely on the covariance: 
+
+Ft,i (μi) = βt,i  
+
+> 2
+
+∥μikt − vt,i ∥2
+
+| {z }
+
+> plasticity
+
++ (1 − αt) μ2
+
+> i
+
+σ2
+
+> prior
+
+| {z }
+
+> forgetting
+
++ αt(μt−1,i − μi)T Σ−1
+
+> t−1,i
+
+(μt−1,i − μi)
+
+| {z }
+
+> stability
+
++CΣ.
+
+(3) where αt := (1 − 1 
+
+> Nt
+
+). The first term contributes to adding new knowledge and is similar to other fixed-term memories. The second introduces the learning window. Through its dependence on N , it determines how far in the past the mem-ories are stored, and then forgotten. The third determines the plasticity rate based on the importance of the synapse. 
+
+Ft,i is analytically tractable, and its minimum with respect to μt,i and Σt,i can be computed in closed form by setting its gradient to zero without requiring any approximation (see Appendix A.3). 
+
+Palimpsa Layer and Architecture To derive Palimpsa we use the reparameterization trick: Si = μi + Aiϵi, with 
+
+AiA⊤ 
+
+> i
+
+= Σt,i , where ϵi ∼ N (0 , I). We find the opti-mal parameters μt,i and Σt,i , by setting the corresponding gradients to zero: 
+
+∂Ft,i 
+
+∂μt,i 
+
+=⃗ 0, and ∂Ft,i 
+
+∂At,i 
+
+= 0. (4) For computational tractability, Palimpsa only keeps the di-agonal term of the covariance matrices ( Σt,i = diag (σ2
+
+> t,i
+
+)) .Under these conditions, the solution to Eqs. (4) results in the following Palimpsa update equation: 
+
+It = αtIt−1 + (1 − αt)Iprior + βt ⊗k2
+
+> t
+
+μt = αt
+
+It−1
+
+It
+
+⊙ μt−1 + 1
+
+It
+
+⊙   βt ⊙ vt
+
+⊗kt
+
+ , (5) where It := 1
+
+> σ2
+> t
+
+a precision matrix representing the impor-tance of each state, and Iprior is the importance prior. The full derivation can be found in Appendices A.3–A.5. This update rule is scalably computed chunk-wise using an asso-ciative scan (see Appendix A.7). Our experiments utilize two Palimpsa variants. The first, Palimpsa-D, serves as a drop-in replacement for the Gated Delta Rule (Yang et al., 2024), differing only by an additional projection for βt
+
+and an intra-layer residual term. The second, Palimpsa-M, builds on Mamba2 (Dao & Gu, 2024), where the difference lies in the definition of βt. Consequently, the metaplasticity ablation Palimpsa-M (w/o Meta) is equivalent to Mamba2 (see also next section). A crucial distinction in Palimpsa-M is that the term dt, used to define the forgetting gate 
+
+αt = e−Ad t , also functions as an input gate; this implies that new information cannot be integrated without forget-ting. Further architectural details are provided in Appendix A.1. 
+
+2.3. Bayesian Inference at Test-Time as a General Framework of Gated Models 
+
+Here, we revisit prior gated models in the light of the Bayesian view of ICL. A major challenge in minimizing Ft,i 
+
+is calculating the inverse of the matrix Σ−1 
+
+> t−1,i
+
+∈ Rdk ×dk .von Oswald et al. use the Sherman-Morrison formula to iteratively compute it, but this approach doesn’t scale well. Another approach used in Mesanet is to use conjugate gra-dients (von Oswald et al., 2025). However, both methods require βt ∈ R (a scalar) constant for all i for tractability, since a vector βt would require the inversion for every row of the state matrix. While using a scalar βt simplifies inver-sion, it forces the stability term in Eq. 3 to be the same for every i, preventing per-parameter plasticity. Longhorn, Deltanets and Palimpsa use at least one approx-imation for tractability. A common simplification is to as-sume the matrix Σ−1 
+
+> t−1,i
+
+is diagonal (meaning it only has values on its main diagonal). Both Longhorn and Palimpsa leverage this diagonal simplification to support a vector-valued βt. In contrast, Deltanets solve their objective by assuming the loss is linear around the current states. In Palimpsa, we designate this diagonal It−1,i ∈ Rdk as the “importance” of a given synapse because its inverse provides its optimal learning rate. Tab. 1 summarizes the resulting update rules derived from these specific architecture choices and posterior approximations. For all gated models but Palimpsa and MesaNet in Tab. 1, the importance is fixed, so 
+
+It−1,i =⃗ 1. In other words, their stability term is constant, meaning they have no metaplasticity. This analysis also reveals that Mamba2 is a special case of Palimpsa. In the Palimpsa update (Eq. 5), when the forget-ting rate is high, the posterior uncertainty remains close to the initial prior, and It ∼= Iprior is constant. The update rule then simplifies to: 
+
+μt = αtμt−1 + β ⊙ vt
+
+Iprior 
+
+⊗ kt,
+
+which takes the same form as Mamba2’s update rule. While Mamba2 was described as solving a negative inner-product loss (Yang et al., 2024), our Bayesian framework reveals Mamba2 as an asymptotic special case of Palimpsa, where forgetting is so strong that the importance matrix is negligi-ble. 5Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+Table 1. Comparison of gated attention models from the metaplasticity perspective 
+
+Layer Stability Matrix Input Gating Forgetting Objective resolution Longhorn 
+
+Idk βt ∈ Rdv None Diagonal approximation 
+
+Update Rule: μt = ( 1dv ×dk − βt⊗k2  
+
+> t
+> 1+ βtk⊤
+> tkt
+
+) ⊙ μt−1 + βt⊙vt  
+
+> 1+ βtk⊤
+> tkt
+
+⊗ kt
+
+Deltanet 
+
+Idk βt ∈ R None First order approximation 
+
+Update Rule: μt = μt−1(Idk − βtktk⊤ 
+
+> t
+
+) + βtvtk⊤
+
+> t
+
+Gated Deltanet 
+
+Idk βt ∈ R αt ∈ R First order approximation 
+
+Update Rule: μt = μt−1(αt(Idk − βtktk⊤ 
+
+> t
+
+)) + βtvtk⊤
+
+> t
+
+Mesa 
+
+Σ−1 
+
+> t
+
+βt ∈ R αt ∈ R Conjugate grad. approx. 
+
+Update Rule: Σ−1 
+
+> t
+
+= αtΣ−1 
+
+> t−1
+
++ (1 − αt)Iprior + βtktk⊤
+
+> t
+
+μt = Σt
+
+αtΣ−1
+
+> t−1
+
+μt−1 + βtvtk⊤
+
+> t
+
+
+
+Palimpsa 
+
+diag (It−1,i ) βt ∈ Rdv αt ∈ R Diagonal approximation 
+
+Update Rule: It = αtIt−1 + (1 − αt)Iprior + βt ⊗k2 
+
+> t
+
+,
+
+μt = αt It−1 
+
+> It
+
+⊙ μt−1 + 1 
+
+> It
+
+⊙   βt ⊙ vt
+
+ ⊗ kt
+
+
+
+Palimpsa | It−Iprior  
+
+> Iprior
+
+| ≪ 1 Update Rule: μt = αtμt−1 + β⊙vt 
+
+> Iprior
+
+⊗ kt (∼= Mamba2, see text) 
+
+2.4. Fine-tuning Mamba2 with Metaplasticity 
+
+We exploit the above-described continuum between Mamba2 and Palimpsa to introduce the ability to upgrade any pre-trained Mamba2 model into a metaplastic Palimpsa model via fine-tuning. For 760M models Mamba2 is > 3×
+
+faster than Palimpsa. While this slowness hinders the train-ing of large Palimpsa models from scratch, the fine-tuning ability mitigates this cost and makes full training unneces-sary. Palimpsa matches Mamba2 when It ∼= Iprior . We achieve this condition using the reparameterization v∗ 
+
+> t
+
+= βt ⊙ vt =
+
+SiLU (θv xt). By defining the Palimpsa Kernel input as v∗,the βt multiplication in the kernel becomes unnecessary. This allows us to fix βt arbitrarily close to zero, ensuring 
+
+It ∼= Iprior , without forcing μt ≈ 0. To do so we introduce a per-head learnable (but fixed in-context) parameter that scales the amplitudes of βt. Intuitively: when tokens are of arbitrarily low importance but carry arbitrarily large values, Palimpsa becomes Mamba2. Thanks to this reparameteriza-tion, training can continuously deviate from Mamba2 model towards Palimpsa, as it starts learning that βt should grow to exploit metaplasticity. 
+
+## 3. Experiments 
+
+3.1. Synthetic Experiments: MQAR 
+
+To evaluate Palimpsa’s ability to manage and recall states in challenging memorization tasks prone to overwriting, we conduct experiments using the synthetic Multi Query As-sociative Recall (MQAR) benchmark (Arora et al., 2024b). In this task, the model is presented with pairs of key-value symbols and must retrieve the correct value associated with a specific key at test time. To evaluate the memory capacity of the model rather than its ability to select for important tokens, we selected a configuration that utilizes the max-imum number of KV pairs ( L/ 4 which is the upper limit imposed by MQAR with sequence length L). Similarly to (Beck et al., 2024), training follows a curriculum: it begins on sequences of length 128 and every 20 epochs progresses to lengths of 256, 512, and 1024. Following prior MQAR benchmarks, the trained models consisted of two gated lin-ear attention layers with a hidden dimension of 128 and a value dimension expansion factor of 2. To make the task more challenging, we reduce the available state size by uti-lizing 8 heads. We isolate the effect of metaplasticity by evaluating Palimpsa-D and Palimpsa-M and their ablations without their metaplasticity (noting that Palimpsa-M with-out metaplasticity is equivalent to Mamba-2, as previously 6Learning to Remember, Learn, and Forget in Attention-Based Models      
+
+> Figure 2. Curriculum MQAR experiments. Accuracy averaged over 8 seeds for the best learning rate per model. Individual run ac-curacies are shown as black dots; error bars represent ±1standard deviation. Task difficulty increases with sequence length L. “w/o Meta” indicates that metaplasticity was disabled for those models.
+
+explained). We include Gated Deltanet as a baseline for comparison. Results are reported over 8 runs per model using different seeds for both initialization and data genera-tion. We explored several learning rates distributed in log space from 10 −3 to 10 −2, and selected the optimal learn-ing rate for each model across seeds and sequence sizes. Results shown in Fig. 2 indicate that metaplasticity consis-tently improves average performance for both Palimpsa-D and Palimpsa-M. The performance gap between metaplastic and non-metaplastic variants increases with sequence length, particularly for Palimpsa-D. This suggests that increasing task complexity induces the model to leverage metaplastic-ity to mitigate overwriting. Overall, Palimpsa-D is the best performing model, followed by Gated Deltanet. 
+
+3.2. Palimpsa’s Learning Dynamics on MQAR 
+
+As derived in the methods section, the forgetting gate im-plies an effective memory window Nt via the relation 
+
+αt = (1 − 1 
+
+> Nt
+
+) = e−Ad t . In Fig. 3, we track the evolution of 
+
+Nt and the metaplasticity ratio during MQAR training, de-fined as (Imax −Imin )/I min (noting that Imin > I prior > 0     
+
+> Figure 3. Palimpsa’s Learning Dynamics: Memory window Nt
+> (blue), averaged over the context length, and the metaplasticity ratio (orange), defined on the final state importance as (Imax −
+> Imin )/I min , and the training loss (pink). A higher ratio indicates stronger differentiation between plastic and consolidated synapses. Shaded regions represent the standard deviation over 8 seeds.
+
+holds). The exponential growth of Nt in early epochs demonstrates that the meta-learner correctly identifies that solving MQAR requires slow forgetting (large Nt). When 
+
+Nt becomes large enough for the task, the training loss starts to decrease. This metaplasticity ratio rises to ≈ 40 , meaning highly consolidated synapses become 40 -fold more stable than plastic ones. Notably, during the first 200 steps, the ratio remains low because Nt is small: high forgetting pre-vents the accumulation of importance, keeping the model in a regime equivalent to Mamba2. Future large-scale metaplastic models could optimize ef-ficiency by selectively using metaplastic heads when the average log Nt exceeds a learned threshold. 
+
+3.3. Language Tasks: Fineweb-Edu and Commonsense Reasoning 
+
+We pre-train Palimpsa variants, Gated Deltanets, and a Transformer on the Fineweb-edu dataset at academic scales for two different sizes, 170M and 760M parameters, and for 15B and 30B tokens, respectively. We did not include Mesanet in our benchmarks as, at the time of writing, their public code intended for GPU led to numerical instabili-ties and their reported results based on SlimPajama. We evaluate each pre-trained model on language modeling and Commonsense Reasoning. Following prior work (von Os-wald et al., 2023b; Liu et al., 2024; Yang et al., 2024), we test Wikitext perplexity and zero shot performance on a range of tasks such as LAMBADA (Paperno et al., 2016), PIQA (Bisk et al., 2020), HellaSwag (Zellers et al., 2019), WinoGrande (Sakaguchi et al., 2021), ARC (Clark et al., 2018), and SIQA (Sap et al., 2019). We used the Flame framework to train models from scratch (Zhang & Yang, 2025). We also fine-tuned the non-metaplastic Palimpsa variants into metaplastic ones, starting 7Learning to Remember, Learn, and Forget in Attention-Based Models                                                                                                                                                                          
+
+> Table 2. Performance of Palimpsa variants and baselines on language modeling and Commonsense Reasoning tasks. The best results are in bold. The best results within a subgroup are underlined. ppl:perplexity, acc: accuracy, acc n: normalized accuracy.
+> Model Wiki. LMB. LMB. PIQA Hella. Wino. ARC-e ARC-c SIQA Avg.
+> ppl ↓ppl ↓acc ↑acc n ↑acc n ↑acc ↑acc ↑acc n ↑acc ↑acc ↑
+> 170M Model Variants
+> Transformer++ 29.51 44.90 32.12 65.18 37.64 52.17 55.56 26.19 37.77 43.80 Gated Deltanet 29.16 41.87 30.91 64.91 38.18 48.86 56.73 26.37 39.20 43.59 Palimpsa-D (w/o Meta) 30.80 46.83 27.89 65.02 37.97 52.72 57.95 26.79 39.00 43.91 Palimpsa-D (Fine-tuned 1BT) 29.73 40.26 29.26 65.45 38.41 51.62 58.04 26.02 38.89 43.96
+> Palimpsa-D (Fully Trained) 30.81 42.27 29.46 65.13 38.02 50.91 55.85 25.77 39.00 43.45 Palimpsa-M (w/o Meta) 31.64 48.42 28.08 65.40 37.25 50.04 55.47 26.02 38.02 42.90 Palimpsa-M (Fine-tuned 1BT) 30.58 42.01 29.83 65.02 37.81 51.38 56.10 25.68 38.54 43.41 Palimpsa-M (Fully Trained) 31.40 43.02 30.62 64.91 38.00 50.28 56.48 26.71 38.02 43.57
+> 760M Model Variants
+> Transformer++ 18.91 18.84 42.03 70.40 51.14 54.93 66.58 33.70 40.17 51.28 Gated Deltanet 19.06 17.06 41.74 71.33 51.74 55.41 67.30 32.17 40.84 51.50 Palimpsa-D (w/o Meta) 19.33 16.54 41.98 70.40 51.46 55.64 67.93 34.47 40.89 51.82 Palimpsa-D (Fine-tuned 2BT) 19.02 14.86 43.55 71.06 51.63 56.12 67.68 34.64 41.20 52.27
+> Palimpsa-M (w/o Meta) 19.96 16.34 42.15 70.73 50.61 57.06 67.47 32.76 39.92 51.53 Palimpsa-M (Fine-tuned 2BT) 19.60 16.35 42.17 71.06 50.91 56.99 67.97 34.39 41.61 52.16
+
+from 14BT, thereby ensuring the same token budget. At this scale, Palimpsa-D (fine-tuned) emerges as the overall winner. Interestingly, metaplastic models demonstrate supe-rior performance on LAMBADA perplexity. LAMBADA requires predicting the final word based on broad context. This improvement is consistent with the better memory retention expected from the metaplastic model. While fine-tuning benefits both architectures, the performance gain is more pronounced for Palimpsa-M. This was expected as Palimpsa-M does not have a gated MLP, and therefore in-corporates more Palimpsa-M layers for the same parameter budget across all models we evaluated. For the 760M parameter scale, all models were trained for a total of 30B tokens. Metaplastic variants were fine-tuned for 2B tokens starting from the 28B token checkpoint of their non metaplastic counterparts to maintain training budget parity. Since the fine-tuned model emerged as the winner for the smaller model, we concentrated our computing re-sources on the fine-tuning of larger metaplastic models. The results at 760M confirm the impact of metaplastic state at scale: Palimpsa-D and Palimpsa-M take the top two spots. The fine-tuned metaplastic models improve upon their re-spective baselines by approximately 0.6 points in average ac-curacy, with Palimpsa-D outperforming the Gated Deltanet baseline by nearly 0.8 points ( 52 .27 vs 51 .50 ). 
+
+## 4. Conclusion 
+
+We introduced Palimpsa, a Bayesian attention mechanism that reframes In-Context Learning as a continual learning problem within fixed-size memories derived from a vari-ational free energy objective. Palimpsa implements meta-plasticity: the plasticity of each of its memory states is dynamically adjusted according to a tracked importance. This approach resolves the stability-plasticity dilemma by protecting critical prior knowledge while allowing the model to forget stale information, effectively preventing both catas-trophic forgetting and remembering in-context .Empirically, Palimpsa enables better management of state memory in constrained settings, which we show using sys-tematic ablations of the metaplasticity. On the synthetic MQAR benchmark, Palimpsa consistently outperforms base-lines, with performance gaps widening as sequence length increases. These gains translate to large-scale language mod-eling settings: on Commonsense Reasoning benchmarks at the 760M parameter scale, Palimpsa-D achieves an average accuracy of 52 .27% , surpassing the Gated Deltanet baseline by nearly 0.8 points. Gains are particularly notable on tasks requiring broad context, such as LAMBADA, validating the model’s superior capacity to retain long-range dependen-cies. Theoretically, our framework unifies disjoint architectures, revealing that Mamba2 is a special case of Palimpsa where forgetting dominates. This insight yields a practical, scal-able training pipeline: we exploit the computational speed of non-metaplastic kernels for large-scale pre-training, fol-lowed by a metaplastic fine-tuning phase, thereby enabling the use of metaplastic gated linear attention models at any scale. 8Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+## Impact Statement 
+
+Gated linear recurrent models offer a memory-efficient al-ternative to standard Transformers, making them inherently suitable for edge deployment due to their fixed-size infer-ence state. However, this finite capacity often leads to in-formation loss in long contexts. Palimpsa addresses this limitation by introducing Bayesian metaplasticity, which optimizes how information is learned, remembered, and forgotten within these strict memory bounds. By enhancing the capabilities of fixed-size memory models, this work supports the deployment of performant sequence modeling on resource-constrained systems. Furthermore, Palimpsa’s local update rules align well with emerging effi-cient hardware architectures, effectively contributing to the development of low-latency, energy-efficient intelligence at the edge. 
+
+## Acknowledgements 
+
+This work was supported by the Horizon Europe program (EIC Pathfinder METASPIN, grant number 101098651). 
+
+## References 
+
+Abraham, W. C. and Bear, M. F. Metaplasticity: the plastic-ity of synaptic plasticity. Trends in neurosciences , 19(4): 126130, 1996. Aitchison, L., Jegminat, J., Menendez, J. A., Pfister, J.-P., Pouget, A., and Latham, P. E. Synaptic plasticity as bayesian inference. Nature neuroscience , 24(4):565–571, 2021. Aky ¨urek, E., Schuurmans, D., Andreas, J., Ma, T., and Zhou, D. What learning algorithm is incontext learn-ing? investigations with linear models. arXiv preprint arXiv:2211.15661 , 2022. Arora, A., Jurafsky, D., Potts, C., and Goodman, N. D. Bayesian scaling laws for in-context learning, 2024a. URL https://arxiv.org/abs/2410.16531 .Arora, S., Eyuboglu, S., Timalsina, A., Johnson, I., Poli, M., Zou, J., Rudra, A., and Re, C. Zoology: Measuring and improving recall in efficient language models. In The Twelfth International Conference on Learning Represen-tations , 2024b. URL https://openreview.net/ forum?id=LY3ukUANko .Beck, M., P ¨oppel, K., Spanring, M., Auer, A., Prudnikova, O., Kopp, M., Klambauer, G., Brandstetter, J., and Hochreiter, S. xlstm: Extended long shortterm memory. 
+
+arXiv preprint arXiv:2405.04517 , 2024. Behrouz, A., Zhong, P., and Mirrokni, V. Titans: Learning to memorize at test time. arXiv preprint arXiv:2501.00663 ,2024. Benna, M. K. and Fusi, S. Computational principles of synaptic memory consolidation. Nature neuroscience , 19 (12):16971706, 2016. Bisk, Y., Zellers, R., Gao, J., Choi, Y., et al. Piqa: Reasoning about physical commonsense in natural language. In Pro-ceedings of the AAAI conference on artificial intelligence ,volume 34, pp. 7432–7439, 2020. Blundell, C., Cornebise, J., Kavukcuoglu, K., and Wierstra, D. Weight uncertainty in neural network. In International conference on machine learning , pp. 1613–1622. PMLR, 2015. Bonnet, D., Cottart, K., Hirtzlin, T., Januel, T., Dalgaty, T., Vianello, E., and Querlioz, D. Bayesian continual learning and forgetting in neural networks. Nature Com-munications , 16(1):9614, 2025. Brohan, A., Brown, N., Carbajal, J., Chebotar, Y., Dabis, J., Finn, C., Gopalakrishnan, K., Hausman, K., Herzog, A., Hsu, J., et al. Rt-1: Robotics transformer for real-world control at scale. arXiv preprint arXiv:2212.06817 , 2022. Brown, T., Mann, B., Ryder, N., Subbiah, M., Kaplan, J. D., Dhariwal, P., Neelakantan, A., Shyam, P., Sastry, G., Askell, A., et al. Language models are fewshot learners. 
+
+Advances in neural information processing systems , 33: 18771901, 2020. Buzzega, P., Boschini, M., Porrello, A., Abati, D., and Calderara, S. Dark experience for general continual learn-ing: a strong, simple baseline. Advances in neural infor-mation processing systems , 33:15920–15930, 2020. Cheng, D., Lu, Y., He, L., Zhang, S., Yang, X., Wang, N., and Gao, X. Mambacl: Optimizing selective state space model in null space for continual learning. arXiv preprint arXiv:2411.15469 , 2024. Chowdhery, A., Narang, S., Devlin, J., Bosma, M., Mishra, G., Roberts, A., Barham, P., Chung, H. W., Sutton, C., Gehrmann, S., et al. Palm: Scaling language modeling with pathways. Journal of Machine Learning Research ,24(240):1–113, 2023. Clark, P., Cowhey, I., Etzioni, O., Khot, T., Sabharwal, A., Schoenick, C., and Tafjord, O. Think you have solved question answering? try arc, the ai2 reasoning challenge. 
+
+arXiv preprint arXiv:1803.05457 , 2018. Dao, T. and Gu, A. Transformers are ssms: Generalized models and efficient algorithms through structured state space duality. arXiv preprint arXiv:2405.21060 , 2024. 9Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S., et al. An image is worth 16x16 words: Transformers for image recognition at scale. arXiv preprint arXiv:2010.11929 , 2020. Falck, F., Wang, Z., and Holmes, C. Is in-context learn-ing in large language models bayesian? a martingale perspective. arXiv preprint arXiv:2406.00793 , 2024. Gu, A. and Dao, T. Mamba: Lineartime sequence modeling with selective state spaces. arXiv preprint arXiv:2312.00752 , 2023. Hahn, M. and Goyal, N. A theory of emergent in-context learning as implicit structure induction. arXiv preprint arXiv:2303.07971 , 2023. Jumper, J., Evans, R., Pritzel, A., Green, T., Figurnov, M., Ronneberger, O., Tunyasuvunakool, K., Bates, R., ˇZ´ıdek, A., Potapenko, A., et al. Highly accurate protein structure prediction with alphafold. nature , 596(7873):583–589, 2021. Kaushik, P., Gain, A., Kortylewski, A., and Yuille, A. Under-standing catastrophic forgetting and remembering in con-tinual learning with optimal relevance mapping. NeurIPS 2021 Workshop MetaLearn Poster. Available on arXiv preprint arXiv:2102.11343 , 2021. Kim, S., Hooper, C., Wattanawong, T., Kang, M., Yan, R., Genc, H., Dinh, G., Huang, Q., Keutzer, K., Mahoney, M. W., et al. Full stack optimization of transformer infer-ence: a survey. arXiv preprint arXiv:2302.14017 , 2023. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Des-jardins, G., Rusu, A. A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national academy of sciences , 114(13):3521–3526, 2017a. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Des-jardins, G., Rusu, A. A., Milan, K., Quan, J., Ramalho, T., GrabskaBarwinska, A., et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national academy of sciences , pp. 201611835, 2017b. Kudithipudi, D., Daram, A., Zyarah, A. M., Zohora, F. T., Aimone, J. B., YanguasGil, A., Soures, N., Neftci, E., Mattina, M., Lomonaco, V., et al. Design principles for lifelong learning ai accelerators. Nature Electronics , pp. 116, 2023. Liu, B., Wang, R., Wu, L., Feng, Y., Stone, P., and Liu, Q. Longhorn: State space models are amortized online learners. arXiv preprint arXiv:2407.14207 , 2024. Lopez-Paz, D. and Ranzato, M. Gradient episodic memory for continual learning. Advances in neural information processing systems , 30, 2017. McClelland, J. L., McNaughton, B. L., and O’Reilly, R. C. Why there are complementary learning systems in the hip-pocampus and neocortex: insights from the successes and failures of connectionist models of learning and memory. 
+
+Psychological review , 102(3):419, 1995. McCloskey, M. and Cohen, N. J. Catastrophic interfer-ence in connectionist networks: The sequential learning problem. In Psychology of learning and motivation , vol-ume 24, pp. 109165. Elsevier, 1989. Paperno, D., Kruszewski, G., Lazaridou, A., Pham, Q. N., Bernardi, R., Pezzelle, S., Baroni, M., Boleda, G., and Fern ´andez, R. The lambada dataset: Word prediction requiring a broad discourse context. arXiv preprint arXiv:1606.06031 , 2016. Rusu, A. A., Rabinowitz, N. C., Desjardins, G., Soyer, H., Kirkpatrick, J., Kavukcuoglu, K., Pascanu, R., and Had-sell, R. Progressive neural networks. arXiv preprint arXiv:1606.04671 , 2016. Sakaguchi, K., Bras, R. L., Bhagavatula, C., and Choi, Y. Winogrande: An adversarial winograd schema challenge at scale. Communications of the ACM , 64(9):99–106, 2021. Sap, M., Rashkin, H., Chen, D., LeBras, R., and Choi, Y. Socialiqa: Commonsense reasoning about social interac-tions. arXiv preprint arXiv:1904.09728 , 2019. Schlag, I., Irie, K., and Schmidhuber, J. Linear transformers are secretly fast weight programmers. In International Conference on Machine Learning , pp. 93559366. PMLR, 2021. Schwaller, P., Laino, T., Gaudin, T., Bolgar, P., Hunter, C. A., Bekas, C., and Lee, A. A. Molecular transformer: a model for uncertainty-calibrated chemical reaction prediction. 
+
+ACS central science , 5(9):1572–1583, 2019. Sun, Y., Li, X., Dalal, K., Hsu, C., Koyejo, S., Guestrin, C., Wang, X., Hashimoto, T., and Chen, X. Learning to (learn at test time). arXiv preprint arXiv:2310.13807 ,2023. Sun, Y., Fujisawa, I., Juliani, A., Sakuma, J., and Kanai, R. Remembering transformer for continual learning. arXiv preprint arXiv:2404.07518 , 2024. Thengane, V., Khan, S., Hayat, M., and Khan, F. Clip model is an efficient continual learner, 2022. 10 Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., and Polosukhin, I. Atten-tion is all you need. In Advances in neural information processing systems , pp. 59986008, 2017. von Oswald, J., Henning, C., Sacramento, J., and Grewe, B. F. Continual learning with hypernetworks. arXiv preprint arXiv:1906.00695 , 2019. von Oswald, J., Niklasson, E., Randazzo, E., Sacramento, J., Mordvintsev, A., Zhmoginov, A., and Vladymyrov, M. Transformers learn incontext by gradient descent. In International Conference on Machine Learning , pp. 3515135174. PMLR, 2023a. von Oswald, J., Niklasson, E., Schlegel, M., Kobayashi, S., Zucchet, N., Scherrer, N., Miller, N., Sandler, M., Vladymyrov, M., Pascanu, R., et al. Uncovering mesaop-timization algorithms in transformers. arXiv preprint arXiv:2309.05858 , 2023b. von Oswald, J., Scherrer, N., Kobayashi, S., Versari, L., Yang, S., Schlegel, M., Maile, K., Schimpf, Y., Sieber-ling, O., Meulemans, A., et al. Mesanet: Sequence mod-eling by locally optimal test-time training. arXiv preprint arXiv:2506.05233 , 2025. Wang, H., Lu, H., Yao, L., and Gong, D. Self-expansion of pre-trained models with mixture of adapters for continual learning. arXiv preprint arXiv:2403.18886 , 2024. Wies, N., Levine, Y., and Shashua, A. The learnability of in-context learning. Advances in Neural Information Processing Systems , 36:36637–36651, 2023. Xie, S. M., Raghunathan, A., Liang, P., and Ma, T. An explanation of in-context learning as implicit bayesian inference. arXiv preprint arXiv:2111.02080 , 2021. Yang, S. and Zhang, Y. Fla: A triton-based library for hardware-efficient implementations of linear attention mechanism, January 2024. URL https://github. com/fla-org/flash-linear-attention .Yang, S., Wang, B., Shen, Y., Panda, R., and Kim, Y. Gated linear attention transformers with hardwareefficient train-ing. arXiv preprint arXiv:2312.06635 , 2023. Yang, S., Kautz, J., and Hatamizadeh, A. Gated delta net-works: Improving mamba2 with delta rule. arXiv preprint arXiv:2412.06464 , 2024. Zellers, R., Holtzman, A., Bisk, Y., Farhadi, A., and Choi, Y. Hellaswag: Can a machine really finish your sentence? 
+
+arXiv preprint arXiv:1905.07830 , 2019. Zenke, F., Poole, B., and Ganguli, S. Continual learning through synaptic intelligence. In Precup, D. and Teh, Y. W. (eds.), Proceedings of the 34th International Con-ference on Machine Learning , volume 70 of Proceedings of Machine Learning Research , pp. 39873995. PMLR, 0611 Aug 2017a. URL https://proceedings. mlr.press/v70/zenke17a.html .Zenke, F., Poole, B., and Ganguli, S. Improved multitask learning through synaptic intelligence. arXiv preprint arXiv:1703.04200 , 2017b. Zeno, C., Golan, I., Hoffer, E., and Soudry, D. Task-agnostic continual learning using online variational bayes with fixed-point updates. Neural Computation , 33(11):3139– 3177, 2021. Zhang, Y. and Yang, S. Flame: Flash language modeling made easy, January 2025. URL https://github. com/fla-org/flame .Zhang, Y., Zhang, F., Yang, Z., and Wang, Z. What and how does in-context learning learn? bayesian model averag-ing, parameterization, and generalization. arXiv preprint arXiv:2305.19420 , 2023. Zhang, Y., Lin, Z., Sun, Y., Yin, F., and Fritsche, C. Regularization-based efficient continual learning in deep state-space models. In 2024 27th International Confer-ence on Information Fusion (FUSION) , pp. 1–8. IEEE, 2024. 11 Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+## A. Appendices 
+
+As described in the main text, Palimpsa-M builds upon Mamba-2, while Palimpsa-D is based on Deltanets. These two models utilize distinct gated linear attention layers and separate backbones, allowing our metaplasticity ablation studies to evaluate two highly different points in the architectural design space. The most striking difference is that Palimpsa-M lacks a gated MLP and relies solely on its gated linear attention layer projections for channel mixing, which is the standard configuration for Mamba-2. In contrast, Palimpsa-D follows Deltanet principles by incorporating a gated MLP after the linear attention stage. Furthermore, the models handle input gating differently: Palimpsa-M utilizes dt (a term already present in the forgetting mechanism) for input gating, whereas Palimpsa-D employs a dedicated parameter bt. This allows Palimpsa-D to decorrelate forgetting and input integration. Additional distinctions include the order of the output gating and normalization at the end of the layer, and the fact that Palimpsa-M does not normalize the queries ( qt) and keys ( kt). 
+
+A.1. Palimpsa Model Variants ×××××
+
+# Palimpsa-D L2 Linear Linear Linear Norm Norm Norm Linear Conv Linear Conv Linear 
+
+×
+
+> Gated MLP
+
+××××
+
+# Palimpsa-M Linear Linear Linear Norm Norm Linear Conv Linear Conv Linear 
+
+× 
+
+> Linear Linear
+
+Palimpsa Layer Linear Palimpsa Layer 
+
+Figure 4. Illustration of the Palimpsa-M and Palimpsa-D architectures. While Palimpsa-M adopts the Mamba-2 configuration by relying on the attention layer for channel mixing, Palimpsa-D incorporates an explicit gated MLP. Additionally, Palimpsa-D introduces a dedicated 
+
+bt parameter to decorrelate input integration from the forgetting dynamics dictated by dt.
+
+A.2. Bayesian Forgetting 
+
+Following the work of (Bonnet et al., 2025), we introduce a forgetting mechanism by considering a truncated posterior, which contains the last N data points. The posterior over parameters S given data dt−N :t is: 
+
+p(S|dt−N :t) = p(dt−N :t|S)p(S)
+
+p(dt−N :t) = p(dt|S)p(S|dt−N :t−1)
+
+p(dt|dt−N :t−1) . (6) This can be expressed as a recursive update for a sliding window of size N . To move from the posterior over dt−N :t−1 to the one over dt−N +1: t, we incorporate the new data point dt and remove the oldest one, dt−N :12 Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+p(S|dt−N +1: t) ∝ p(dt|S)p(S|dt−N :t−1)
+
+| {z }
+
+> Learning
+
+· 1
+
+p(dt−N |S)
+
+| {z }
+
+> Forgetting
+
+. (7) In principle, one may not have access at time t to the likelihood of the oldest data point, p(dt−N |S). As a proxy, one can use the geometric mean of the likelihoods over the previous window, dt−N :t−1:
+
+p(dt−N , . . . , dt−1|S) 1 
+
+> N
+
+∝
+
+ p(S|dt−N :t−1)
+
+p(S)
+
+ 1
+
+> N
+
+. (8) This is made possible by approximating p(S|dt−N :t−1), by the current variational truncated posterior qθt−1 (S).In simple terms, instead of completely discarding a single data point, this approach suggests we can discard a fraction of the joint likelihood of past data. This leads to a ’weighted’ posterior where older data points have been discounted more heavily over time, keeping the total ’weight’ of the posterior roughly constant (when t ≫ N ). For Palimpsa, the forgetting needs to be input-dependent, similar to other gated recurrent models. Therefore, at each time step t, we discount the influence of all previous data by a factor 1 
+
+> Nt
+
+∈ [0 , 1] . The resulting weighted posterior at time t,denoted pw(S|d1: t), is defined recursively as: 
+
+pw(S|d1: t) ∝ p(dt|S)pw(S|d1: t−1)
+
+| {z }
+
+> Learning
+
+·
+
+ pw(S|d1: t−1)
+
+p(S)
+
+− 1
+
+> Nt
+
+| {z }
+
+> Forgetting
+
+. (9) This is the target probability distribution that the variational distribution in Palimpsa approximates. Notably, this form of weighted posterior is the starting point for the general Bayesian framework for gated recurrent models. 
+
+A.3. Variational Free Energy of the Weighted Posterior 
+
+We minimize the Kullback–Leibler (KL) divergence between the variational distribution qθ (Si) and the weighted posterior 
+
+pw(Si|d1: t) by finding the optimal parameters θt,i :
+
+θt,i = argmin 
+
+> θ
+
+DKL [ qθ (Si) ∥ pw(Si|d1: t)] , i = 1 , . . . , d v .
+
+Using the definition of the KL divergence, the recursive update from the previous section (Equation 9), and assuming that the previous posterior is well-approximated by our variational distribution, pw(Si|d1: t−1) ≈ qθt−1,i (Si), we can show that this is equivalent to minimizing the variational free energy Ft,i :
+
+Ft,i = DKL 
+
+qθt,i (Si) ∥ qθt−1,i (Si) − Eqθt,i (Si)
+
+
+
+log p(dt|Si) − 1
+
+Nt
+
+log qθt−1,i (Si)
+
+p(Si)
+
+
+
+.
+
+Now, using the standard formulas for Gaussian distributions (see A.7 for a refresher) and considering only the terms that depend on the variational mean μi, we obtain the free energy expression discussed in the main text: 
+
+Ft,i (μi) = 12 ∥μikt − vt,i ∥2(βt,i )
+
+| {z }
+
+> plasticity
+
++ 1
+
+Nt
+
+μ2
+
+> i
+
+σprior 
+
+| {z }
+
+> forgetting
+
++
+
+
+
+1 − 1
+
+Nt
+
+
+
+(μt−1,i − μi)T Σ−1
+
+> t−1,i
+
+(μt−1,i − μi)
+
+| {z }
+
+> stability
+
+.
+
+For Palimpsa we are also interested in the terms that depend on Σt,i . First, let’s derive the gradient with respect to all variational parameters. 
+
+Calculating the Gradient of Ft,i : For readability, we first define the cost term Ct,i as the expected negative log-likelihood: 
+
+Ct,i := −Eqθi (Si) [log p(vt,i |kt, β t,i , Si)] , (10) To compute the partial derivatives of Ct,i , we use the reparameterization trick: Si = μi + Aiϵi, and AiA⊤ 
+
+> i
+
+= Σt,i , where 13 Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+ϵi ∼ N (0 , I). The cost function can now be written as follows: 
+
+Ct,i = Eϵi [Li(Si)] (11) 
+
+∂Ci
+
+∂μi
+
+= Eϵi
+
+ ∂Li(Si)
+
+∂Si
+
+ ∂Ci
+
+∂Ai
+
+= Eϵi
+
+ ∂Li(Si)
+
+∂Si
+
+ϵ⊤
+
+> i
+
+
+
+. (12) Generally, these gradients would be estimated using Monte Carlo sampling. However, in Palimpsa, ICL amounts to a linear regression problem so the gradients can be calculated analytically. Substituting the derivative of the linear regression log-likelihood gives: 
+
+∂Ci
+
+∂μi
+
+= Eϵi
+
+βt,i 
+
+ (μi + Aiϵi)⊤kt − vt,i 
+
+ kt
+
+ ∂Ci
+
+∂Ai
+
+= Eϵi
+
+βt,i 
+
+ (μi + Aiϵi)⊤kt − vt,i 
+
+ ktϵ⊤
+
+> i
+
+ . (13) Knowing that Eϵi [ϵi] = ⃗ 0 and Eϵi [ϵiϵ⊤ 
+
+> i
+
+] = I (the identity matrix), we can resolve the expectations to get the final analytical gradients of the cost term: 
+
+∂Ci
+
+∂μi
+
+= βt,i 
+
+ ktk⊤ 
+
+> t
+
+μi − vt,i kt
+
+ ∂Ci
+
+∂Ai
+
+= βt,i ktk⊤ 
+
+> t
+
+Ai. (14) Finally, we add the gradients from the other terms in the free energy objective (the KL-divergence and forgetting terms) to obtain the full gradients of Ft,i :
+
+∂Ft,i 
+
+∂μi
+
+=
+
+
+
+1 − 1
+
+Nt
+
+
+
+Σ−1
+
+> t−1,i
+
+(μi − μt−1,i ) + 1
+
+Nt
+
+μi + βt,i 
+
+ ktk⊤ 
+
+> t
+
+μi − vt,i kt
+
+ , (15) 
+
+∂Ft,i 
+
+∂Ai
+
+=
+
+ 
+
+1 − 1
+
+Nt
+
+
+
+Σ−1 
+
+> t−1,i
+
++ 1
+
+Nt
+
+Iprior 
+
+
+
+Ai − (A−1 
+
+> i
+
+)⊤ + βt,i ktk⊤ 
+
+> t
+
+Ai. (16) 
+
+Closed-Form Solution of Ft,i : To find the optimal variational parameters, we set the gradients of the free energy Ft,i to zero and solve. First, to find the optimal covariance matrix Σt,i , we solve for At,i in the equation: 
+
+∂Ft,i 
+
+∂At,i 
+
+= 0. (17) Setting the gradient expression from the previous section to zero gives: 
+
+ 
+
+1 − 1
+
+Nt
+
+
+
+Σ−1 
+
+> t−1,i
+
++ 1
+
+Nt
+
+Iprior + βt,i ktk⊤
+
+> t
+
+
+
+At,i − (A−1 
+
+> t,i
+
+)⊤ = 0. (18) To solve for the full covariance matrix Σt,i = At,i A⊤
+
+> t,i
+
+, we can multiply on the right by A⊤
+
+> t,i
+
+:
+
+ 
+
+1 − 1
+
+Nt
+
+
+
+Σ−1 
+
+> t−1,i
+
++ 1
+
+Nt
+
+Iprior + βt,i ktk⊤
+
+> t
+
+
+
+Σt,i − I = 0. (19) Rearranging the terms, we find that the new precision matrix (the inverse covariance) is a sum of the discounted old precision, the prior precision, and the new data term: 
+
+Σ−1 
+
+> t,i
+
+=
+
+
+
+1 − 1
+
+Nt
+
+
+
+Σ−1 
+
+> t−1,i
+
++ 1
+
+Nt
+
+Iprior + βt,i ktk⊤ 
+
+> t
+
+. (20) The closed-form update for the covariance is the inverse of this expression: 
+
+Σt,i =
+
+ 
+
+1 − 1
+
+Nt
+
+
+
+Σ−1 
+
+> t−1,i
+
++ 1
+
+Nt
+
+Iprior + βt,i ktk⊤
+
+> t
+
+−1
+
+(21) As discussed in the main text, the major challenge in this analytical approach is to compute the dk × dk matrix inverse at each time step. 14 Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+A.4. Derivation of Mesanet 
+
+In the case without forgetting ( N → ∞ ), (von Oswald et al., 2019) use the Sherman-Morrison formula to compute it recursively, but this scaled poorly. Another approach is to use a parallel conjugate gradient method to solve the associated linear systems, as done in MesaNet (von Oswald et al., 2023b). To connect this with the notation in MesaNet (von Oswald et al., 2023b), our precision matrix Σ−1 
+
+> t
+
+corresponds to their Ht + Λ, and our precision-weighted mean Σ−1 
+
+> t
+
+μt corresponds to their Gt. In their work, the precision matrix is identical for all rows i (i.e., Σ−1 
+
+> t,i
+
+= Σ−1 
+
+> t
+
+) because their βt is a scalar. Similarly, we find the optimal mean μt,i by setting its corresponding gradient to zero: 
+
+∂Ft,i 
+
+∂μt,i 
+
+=⃗ 0. (22) 
+
+
+
+1 − 1
+
+Nt
+
+
+
+Σ−1
+
+> t−1,i
+
+(μt,i − μt−1,i ) + 1
+
+Nt
+
+Iprior μt,i + βt,i 
+
+ ktk⊤ 
+
+> t
+
+μt,i − vt,i kt
+
+ =⃗ 0. (23) Grouping the terms with μt,i yields: 
+
+ 
+
+1 − 1
+
+Nt
+
+
+
+Σ−1 
+
+> t−1,i
+
++ 1
+
+Nt
+
+Iprior + βt,i ktk⊤
+
+> t
+
+
+
+μt,i =
+
+
+
+1 − 1
+
+Nt
+
+
+
+Σ−1
+
+> t−1,i
+
+μt−1,i + βt,i vt,i kt. (24) Recognizing the term in brackets as the new precision Σ−1 
+
+> t,i
+
+, we arrive at the solution for the mean: 
+
+μt,i = Σt,i 
+
+ 
+
+1 − 1
+
+Nt
+
+
+
+Σ−1
+
+> t−1,i
+
+μt−1,i + βt,i vt,i kt
+
+
+
+(25) 
+
+A.5. Derivation of Palimpsa 
+
+In Palimpsa, we aim to solve the update equations with a vector input gating βt ∈ Rdv , where each row of states has its own rate. This change prevents a simple closed-form solution for the matrix inverse. To make the problem tractable and computationally efficient, we introduce a diagonal approximation for the precision matrix. By assuming the precision matrices are diagonal, Σ−1 
+
+> t,i
+
+= diag (It,i ), we can apply this approximation to the closed-form solutions from the previous section. This yields element-wise update rules for the diagonal precision vector It,i and the mean vector μt,i for each row i:
+
+It,i =
+
+
+
+1 − 1
+
+Nt
+
+
+
+It−1,i + 1
+
+Nt
+
+Iprior + βt,i k2 
+
+> t
+
+(26) 
+
+μt,i =
+
+
+
+1 − 1
+
+Nt
+
+ It−1,i 
+
+It,i 
+
+⊙ μt−1,i + 1
+
+It,i 
+
+⊙ (βt,i vt,i kt) (27) where k2 
+
+> t
+
+denotes the element-wise square of kt, and all divisions are element-wise. Note that this is a stronger approximation than a standard mean-field (diagonal covariance) assumption because we derived the fully-coupled solution first and only then discarded the off-diagonal terms. This approach is similar to the “diagonal approximation” used in Longhorn (Liu et al., 2024) and is equivalent to treating each parameter (or ”synapse”) as an independent Gaussian distribution. From here, by defining the forgetting factor αt = (1 − 1 
+
+> Nt
+
+) and stacking the row vectors into matrices, we can write the final updates for Palimpsa in matrix form: 
+
+It = αtIt−1 + (1 − αt)Iprior + βt ⊗k2 
+
+> t
+
+(28) 
+
+μt = αt
+
+It−1
+
+It
+
+⊙ μt−1 + 1
+
+It
+
+⊙   βt ⊙ vt
+
+ ⊗ kt
+
+ (29) 15 Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+A.6. Derivation of Deltanet and Gated Deltanet 
+
+Gated Deltanet can be derived similarly by suppressing the forgetting for the standard Deltanet. Starting from the free energy equation and taking βt ∈ R:
+
+Ft,i (μi) = 12 ∥μ⊤ 
+
+> i
+
+kt − vt,i ∥2
+
+> βt
+
+| {z }
+
+> plasticity
+
++ 12
+
+1
+
+Nt
+
+∥μi∥2
+
+Iprior 
+
+| {z }
+
+> forgetting
+
++ 12
+
+
+
+1 − 1
+
+Nt
+
+
+
+(μt−1,i − μi)⊤Σ−1
+
+> t−1,i
+
+(μt−1,i − μi)
+
+| {z }
+
+> stability
+
+,
+
+with the simplifications Σ−1 
+
+> t−1,i
+
+= Idk and Iprior = 1 . If we consider the gradient of the plasticity term to be linear around 
+
+μt−1,i (a first-order approximation), we assume that: 
+
+βt
+
+ ktk⊤ 
+
+> t
+
+μi − vt,i kt
+
+ ≈ βt
+
+ ktk⊤ 
+
+> t
+
+μt−1,i − vt,i kt
+
+ .
+
+Then, setting the full gradient to zero, ∂Ft,i  
+
+> ∂μi
+
+=⃗ 0, is given by: 
+
+
+
+1 − 1
+
+Nt
+
+
+
+Idk (μi − μt−1,i ) + 1
+
+Nt
+
+μi + βt
+
+ ktk⊤ 
+
+> t
+
+μt−1,i − vt,i kt
+
+ =⃗ 0. (30) Solving for μi yields: 
+
+μi =
+
+
+
+1 − 1
+
+Nt
+
+
+
+μt−1,i − βt
+
+ ktk⊤ 
+
+> t
+
+μt−1,i − vt,i kt
+
+ . (31) From there, by defining αt = (1 − 1 
+
+> Nt
+
+), we can write the final solution in matrix form as: 
+
+μt = μt−1
+
+ αtIdk − βtktk⊤
+
+> t
+
+ + βtvtk⊤ 
+
+> t
+
+. (32) This is equivalent to Gated Deltanet with the right reparametrization, and the same as the standard Deltanet when N → ∞ ,i.e., αt → 1.
+
+A.7. Gaussian Cheat Sheet Entropy The entropy of a multivariate Gaussian distribution qθ1 (Si) = N (μ1, Σ1) of dimension dk is given by: 
+
+H(qθ1 ) = −Eqθ1 (Si) [log qθ1 (Si)] 
+
+H(qθ1 ) = dk
+
+2 log(2 πe ) + 12 log det( Σ1)
+
+KL Divergence The KL divergence between two multivariate Gaussian distributions qθ1 (Si) = N (μ1, Σ1) and 
+
+qθ2 (Si) = N (μ2, Σ2) is given by: 
+
+DKL [qθ1 (Si) || qθ2 (Si)] = Eqθ1 (Si)
+
+
+
+log qθ1 (Si)
+
+qθ2 (Si)
+
+
+
+DKL [qθ1 (Si) || qθ2 (Si)] = 12
+
+
+
+tr (Σ−12 Σ1) + ( μ2 − μ1)T Σ−12 (μ2 − μ1) − dk + log det Σ2
+
+det Σ1
+
+
+
+Cross-Entropy The cross-entropy between two multivariate Gaussian distributions qθ1 (Si) = N (μ1, Σ1) and qθ2 (Si) = 
+
+N (μ2, Σ2) is given by: 
+
+H(qθ1 , q θ2 ) = −Eqθ1 (Si) [log qθ2 (Si)] 
+
+It can be found using the relation: 
+
+H(qθ1 , q θ2 ) = H(qθ1 ) + DKL [qθ1 (Si) || qθ2 (Si)] 
+
+The final expression is: 
+
+H(qθ1 , q θ2 ) = 12
+
+tr (Σ−12 Σ1) + ( μ2 − μ1)T Σ−12 (μ2 − μ1) + dk log(2 π) + log det Σ2
+
+
+
+16 Learning to Remember, Learn, and Forget in Attention-Based Models 
+
+MQAR Experiments 
+
+For the Multi-Query Associative Recall (MQAR) task, we employ a progressive curriculum learning strategy across four stages of increasing complexity. Models are trained sequentially on sequence lengths L ∈ { 128 , 256 , 512 , 1024 } with a corresponding number of key-value pairs Nkv ∈ { 32 , 64 , 128 , 256 }. We perform a grid search over learning rates and execute each configuration across 8 independent random seeds to ensure statistical robustness. The recurrence dynamics are initialized to favor long-term memory retention. Specifically, the decay parameters A are initialized using a linear ramp U(0 .01 , 0.16) across heads. The dt bias is initialized via a linear ramp in log-space between 
+
+0.001 and 0.1. Full hyperparameters are detailed in Table 3.      
+
+> Table 3. Hyperparameters for the MQAR curriculum experiments. Initializations for Aand dtare configured to favor long-term memory retention.
+
+Hyperparameter Value / Search Space 
+
+Vocabulary size 8,192 Embedding dimension ( dmodel ) 128 Number of layers 2Number of heads ( nheads ) 8State dimension ( dstate ) 16 Value expansion ( Ev ) 2Key expansion ( Ek) 1
+
+β step rank dmodel /16 = 8 
+
+A initialization linspace (0 .01 , 0.16) ∆t initialization logspace (10 −3, 10 −1)
+
+Curriculum stages (L, N kv ) (128, 32), (256, 64), (512, 128), (1024, 256) Epochs per stage 20 Batch size 128 (for L ≤ 512 ), 64 (for L = 1024 )Optimizer AdamW Learning rate [1e-3, 2.15 e-3, 4.64 e-3, 1e-2]Random seeds {1, 2, 3, 4, 5, 6, 7, 8 }
+
+Language Modelling Experiments 
+
+We evaluate Palimpsa across two primary model scales: 170M and 760M parameters. For all models, word embeddings are tied with the language modeling head. The decay parameters A are initialized by sampling from a uniform distribution 
+
+U(0 , 16) . For discretization, the ∆ bias is initialized via a log-space ramp between 0.001 and 0.1. Convolutional and linear layers are initialized with a Gaussian distribution ( σ = 0 .02 ). We utilize a cosine learning rate scheduler with a 2,000-step warmup for the initial training phase. The peak learning rates are set to 3 × 10 −3 for the 170M models and 1.25 × 10 −3 for the 760M models. Training is performed on the FineWeb-Edu dataset using the Flame framework (Zhang & Yang, 2025). We distinguish the initialisation between standard training ( bscale = 1 ) and a fine-tuning regime ( bscale ∈ [0 .1, 1.0] ). In the fine-tuning stage, models resume from intermediate checkpoints with a shortened 200-step warmup. To ensure stability during this phase, the peak learning rate is reduced to 1/10 of the original value for both model scales. Models are trained for the final 1B (15B total budget) or 2B (30B total budget) tokens, maintaining a fixed computational budget across all experiments. 17 Learning to Remember, Learn, and Forget in Attention-Based Models  
+
+> Table 4. Architectural and training details for language modeling experiments. Palimpsa-D and Palimpsa-M utilize consistent initialization schemes. Fine-tuning runs start from the corresponding pre-trained checkpoint.
+
+Size Model Layers Dim Heads Ek Ev Peak LR 170M Transformer++ 20 768 16 – –
+
+3.0e-3
+
+Gated Deltanet 19 768 16 1.0 2.0 Palimpsa-D 19 768 16 1.0 2.0 Palimpsa-M 30 768 16 1.0 2.0 760M Transformer++ 25 1536 16 – –
+
+1.25 e-3
+
+Gated Deltanet 19 1536 16 1.0 1.0 Palimpsa-D 19 1536 16 1.0 2.0 Palimpsa-M 38 1536 16 1.0 2.0 PALIMPSA IMPLEMENTATION AND PARALLELIZATION 
+
+Our parallel training algorithm is implemented as a fused Triton kernel utilizing a chunk-wise associative scan. The core logic is structured as follows: • Chunk-wise Processing: The input sequence is partitioned into chunks of size BT .• Intra-Chunk Parallel Scan: Within each chunk, the recursive state updates for the first moment Mt and importance 
+
+It are computed in parallel using an associative scan. • Inter-Chunk Sequential Update: The final state of one chunk is carried over as the initial state for the subsequent chunk to ensure global temporal consistency. This approach maximizes GPU utilization by transforming the sequential recurrence into a parallelizable prefix-sum operation. The kernel also performs state checkpointing to maintain numerical stability during the backward pass. To implement the parallel scan, we define the state as a tuple (Mt, ¯It, A t), where ¯It = It − Iprior represents the centered importance. Let t ∈ [1 , B T ] be the index within a chunk, and let M0 and I0 be the final states from the previous chunk. The states are computed via the associative operator ⊕:
+
+(Mb, ¯Ib, A b) ⊕ (Ma, ¯Ia, A a) = ( Mb + AbMa, ¯Ib + Ab ¯Ia, A aAb) (33) The posterior mean is recovered as μt = Mt/It, followed by an einsum with the query qt to produce the output. A primary limitation of Palimpsa is the necessity to explicitly store all Intra-Chunk states Mt and It in registers to perform the output computation. This requirement imposes a heavy register memory footprint, creating a significant bottleneck. To mitigate this register pressure, we are constrained to use smaller chunk dimensions BT , which negatively impacts training throughput. Furthermore, all Inter-Chunk states must be materialized in HBM, which can restrict the maximum batch size during training as the state size and sequence length scale. This creates a fundamental trade-off: a larger BT reduces HBM traffic but significantly increases register pressure. In practice, the performance overhead is size-dependent: for a 170M parameter model, the training time is approximately 
+
+1.5× that of an optimized Simple GLA from the FLA (Yang & Zhang, 2024) kernel, while for a 760M model, this ratio increases to approximately 3×.
+
+A.8. Inference Efficiency 
+
+While Palimpsa’s training throughput is constrained by register pressure from the parallel associative scan, these bottlenecks vanish at inference time. During generation, the model operates in its native recurrent mode, processing tokens sequentially. This eliminates the need to materialize intermediate states across large chunks, reducing the memory footprint to a constant state size per step. 18 Learning to Remember, Learn, and Forget in Attention-Based Models     
+
+> Figure 5. Inference Speed Benchmark. Throughput (thousands of tokens/s) comparison between Palimpsa and Simple GLA on an NVIDIA GeForce RTX 3090. Palimpsa matches the baseline’s scaling behavior while maintaining a consistent 4×factor due to the dual-state update overhead.
+
+We benchmarked the fused recurrent kernel on a single NVIDIA GeForce RTX 3090 GPU ( B = 1 , L = 32 , H = 1 ), varying the model dimension D ∈ { 512 , 1024 , 2048 }. As shown in Figure 5, Palimpsa demonstrates robust throughput, peaking at roughly 770 kt/s for D = 512 and maintaining a consistent factor of ≈ 4× slowdown compared to Simple GLA as the dimension scales to 2048 (∼ 50 kt/s vs ∼ 200 kt/s). It is important to note that this benchmark isolates the attention mechanism. In the context of a full model inference pass, the relative performance gap would narrow significantly, as a substantial portion of the compute budget is consumed by the Gated MLP, embeddings, and layer normalization, which are identical across both architectures. 19

@@ -1,0 +1,1019 @@
+Title: Give Users the Wheel: Towards Promptable Recommendation Paradigm
+
+URL Source: https://arxiv.org/pdf/2602.18929v1
+
+Published Time: Tue, 24 Feb 2026 01:45:11 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# Give Users the Wheel: Towards Promptable Recommendation Paradigm 
+
+# Fuyuan Lyu ∗
+
+fuyuan.lyu@mail.mcgill.ca McGill & Mila - Quebec AI Institute Montreal, Canada 
+
+# Chenglin Luo ∗
+
+chenglinluoo@gmail.com Shenzhen Technological University Shenzhen, China 
+
+# Qiyuan Zhang 
+
+qzhang732-c@my.cityu.edu.hk City Univerisity of Hong Kong Hong Kong, China 
+
+# Yupeng Hou 
+
+yupenghou97@gmail.com University of California San Diego San Diego, US 
+
+# Haolun Wu 
+
+haolun.wu@mail.mcgill.ca McGill & Mila - Quebec AI Institute Montreal, Canada 
+
+# Xing Tang 
+
+xing.tang@hotmail.com Shenzhen Technological University Shenzhen, China 
+
+# Xue Liu 
+
+xue.liu@cs.mcgill.ca McGill & MBZUAI Abu Dhabi, UAE 
+
+# Jin L.C. Guo 
+
+jguo@cs.mcgill.ca McGill University Montreal, Canada 
+
+# Xiuqiang He 
+
+he.xiuqiang@gmail.com Shenzhen Technological University Shenzhen, China 
+
+## Abstract 
+
+Conventional sequential recommendation models have achieved re-markable success in mining implicit behavioral patterns. However, these architectures remain structurally blind to explicit user intent: they struggle to adapt when a user’s immediate goal (e.g., expressed via a natural language prompt) deviates from their historical habits. While Large Language Models (LLMs) offer the semantic reason-ing to interpret such intent, existing integration paradigms force a dilemma: LLM-as-a-recommender paradigm sacrifices the efficiency and collaborative precision of ID-based retrieval, while Reranking methods are inherently bottlenecked by the recall capabilities of the underlying model. In this paper, we propose Decoupled Promptable Sequential Recommendation (DPR), a model-agnostic framework that empowers conventional sequential backbones to natively sup-port Promptable Recommendation, the ability to dynamically steer the retrieval process using natural language without abandoning collaborative signals. DPR modulates the latent user representation directly within the retrieval space. To achieve this, we introduce a Fusion module to align the collaborative and semantic signals, a Mixture-of-Experts (MoE) architecture that disentangles the con-flicting gradients from positive and negative steering, and a three-stage training strategy that progressively aligns the semantic space of prompts with the collaborative space. Extensive experiments on real-world datasets demonstrate that DPR significantly outperforms state-of-the-art baselines in prompt-guided tasks while maintaining  
+
+> ∗Both authors contributed equally to this research. Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org.
+> Conference acronym ’XX, Woodstock, NY
+> ©2018 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 978-1-4503-XXXX-X/2018/06 https://doi.org/XXXXXXX.XXXXXXX
+
+competitive performance in standard sequential recommendation scenarios. We will open-source all artifacts after acceptance. 
+
+## CCS Concepts 
+
+• Information systems → Information retrieval .
+
+## Keywords 
+
+Natural Language Control, Promptable Recommendation, Sequen-tial Recommendation 
+
+ACM Reference Format: 
+
+Fuyuan Lyu, Chenglin Luo, Qiyuan Zhang, Yupeng Hou, Haolun Wu, Xing Tang, Xue Liu, Jin L.C. Guo, and Xiuqiang He. 2018. Give Users the Wheel: Towards Promptable Recommendation Paradigm. In Proceedings of Make sure to enter the correct conference title from your rights confirmation email (Conference acronym ’XX). ACM, New York, NY, USA, 16 pages. https://doi. org/XXXXXXX.XXXXXXX 
+
+## 1 Introduction 
+
+Recommendation systems (RS) serve as the fundamental engine of modern online platforms, designed to anticipate user needs via mining historical behavior. Conventional architectures, such as SASRec [ 10 ] and GRU4Rec [ 9], primarily rely on users’ behaviour sequences to capture complex temporal patterns and collabora-tive signals. However, a critical disconnect exists in this paradigm: while these models achieve superior precision in exploiting latent historical patterns, they remain fundamentally oblivious to the intrinsic dynamism of real-time user intent. Consider a straight-forward example: an action movie fan explicitly requests some children’s movies for an evening with kids. A conventional model, bound by the inertia of historical data, would rigidly continue push-ing thrillers, ignoring the user’s immediate request. Crucially, the majority of recommendation systems lack the capability to accom-modate users’ direct instructions, leaving the most accurate signal of intent completely underutilized. Large Language Models (LLMs) have emerged as a promising tool for interpreting such nuanced preferences due to their strong semantic reasoning capabilities [ 24 ]. However, existing approaches  
+
+> arXiv:2602.18929v1 [cs.IR] 21 Feb 2026 Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Fuyuan Lyu et al.
+
+to integrating LLMs into recommendations typically follow two main paradigms, each with its own limitations: First, the LLM-as-recommender paradigm directly replaces a conventional rec-ommender with a LLM [ 3, 33 ]. While semantically powerful, this approach discards the very essence of collaborative filtering, the large-scale, rich, fine-grained item-item and user-user signals. Al-though certain works aim to mitigate such drawbacks by finetun-ing collaborative signals into LLMs, they inevitably suffer from inference latency, rendering them impractical for high-throughput systems. Second, the Reranking paradigm tends to use LLMs as a plug-in re-ranker rather than making the final recommendation directly. However, these works [ 5 , 31 ] are fundamentally shackled by the initial ranking stage. If the conventional model fails to recall relevant items due to a shift in user intent (e.g., a sudden demand for "comedy"), the LLM re-ranker has no valid candidates to optimize. Ultimately, current research forces a dilemma: one must choose between the collaborative precision of ID-based models and the instruction-following capability of LLMs. Their illustrations are shown in Figure 1. 
+
+Figure 1: Illustration Figure on How to follow the user’s instruction while considering historical interests In this paper, we challenge this enforced trade-off by asking a pivotal question: Is it possible to "prompt" a conventional recommendation model directly through natural language? 
+
+We argue that the ideal recommendation system should not replace the efficient conventional backbone, nor should it merely patch it with a re-ranker. Instead, it should intrinsically modulate the retrieval mechanism itself. We formalize this vision as Promptable Recommendation: 
+
+Definition 1.1 (Promptable Recommendation). A Promptable Rec-ommendation system is a recommender that natively integrates natural language prompts into the collaborative retrieval process. It retains the efficiency of vector-based retrieval and uses explicit user intent to dynamically steer the entire search space, ensuring that the retrieved candidates align with both the users’ real-time instructions and their historical habits. To effectively initiate a prompt recommender, we identify three technical challenges to be addressed. The first issue is the semantic-collaborative alignment problem of mapping discrete, open-ended natural language prompts into the continuous, high-dimensional latent space of existing recommendation models without disrupt-ing the manifold of collaborative signals. The second issue lies in the complexity of user requests. Users’ requests may range from positive steering (e.g., "show me comedy") to negative constraints (e.g., "no horror"). A promptable model must be capable of simul-taneously amplifying desired features and unlearning restricted attributes within the representation space. Finally, the framework must exhibit robustness across modalities. The system is required to function seamlessly whether a prompt is present or absent. Explicit instructions, namely the user prompt, should act as an additive signal that enhances specific queries without disrupting the foun-dational collaborative filtering performance during passive usage. To address the aforementioned challenges, we propose the De-coupled Promptable Sequential Recommendation (DPR) frame-work. DPR introduces a model-agnostic architecture that seamlessly equips existing sequential backbones (e.g., SASRec, BERT4Rec) with promptability. To effectively align the semantic and collaborative signals, we propose a fusion module that uses multi-head attention to seamlessly integrate them. To master the complexity of user intent, we design a Mixture-of-Experts (MoE) Tower architecture that disentangles the distinct optimization dynamics of positive steering and negative unlearning, enabling the system to effec-tively amplify desired features and suppress restricted attributes by routing requests to specialized experts. Furthermore, to ensure robustness across diverse modalities, we implement a Three-Stage Training Strategy. This progressive curriculum aligns latent user representations with textual semantics, ensuring the model func-tions reliably whether prompts are present or absent. Extensive experiments across real-world datasets and various experimental setups demonstrate that DPR significantly outperforms existing methods, including both LLM-based and conventional model-based methods, on prompting tasks while maintaining competitive per-formance in standard sequential recommendation scenarios. Our main contributions are summarized as follows: 
+
+• We define the Promptable Recommendation paradigm, which combines the efficiency of collaborative filtering with the con-trollability of natural language, enabling users to actively steer recommendations via positive steering and negative constraints. 
+
+• We propose the DPR framework, a model-agnostic solution that ensures architectural universality through a decoupled design. It features a fusion module to align semantic and collaborative signals, a Mixture-of-Experts (MoE) Tower that specializes in handling diverse user requests, and a three-stage training strategy that handles diverse modalities. 
+
+• Extensive experiments on real-world datasets demonstrate the effectiveness of DPR under various setups. 
+
+## 2 Related Work 2.1 Sequential Recommendation: from conventional to LLM-powered 
+
+Sequential recommendation (SR) has emerged as a cornerstone of modern information retrieval. Early works [ 6 , 21 ] adopt statistical models with an MF term and an item-item transition term to cap-ture long and short-term preferences. With the improvement of deep learning, various architectures have been adopted in sequen-tial recommendation. For example, GRU4Rec [ 9] adopts the Gated Recurrent Unit to model click sequences for session-based recom-mendation. Attention-based architecture, such as self-attention Give Users the Wheel: Towards Promptable Recommendation Paradigm Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+module [ 10 , 12 ], convolutional module [ 25 ], BERT [ 22 ], and diffu-sion model [ 14 ], have been introduced to capture user interest. After the emergence of LLMs, various models have been leveraging their inherent knowledge [ 1, 13 , 30 ]. One line of work tend to utilize LLM in an offline manner, such as encoding textual features [ 2, 16 ] or enhance training [ 23 , 24 ]. The other line of work aims to transform a pre-trained LLM into a sequential recommender [ 4, 17 , 20 , 28 ]. Our proposed paradigm lies in the middle, aiming to leverage the LLM’s ability to extract the user’s explicit request while maintaining compatibility with the current sequential recommendation pipeline. 
+
+## 2.2 Natural Language Control over Recommendation 
+
+With the empowerment of LLM, natural language has been uti-lized as a controller over existing models due to its nature. LLM itself poses such power when presented with user’s historical in-formation. For example, prior work on instruction-following and conversational recommendation models [ 4, 7, 27 , 28 , 32 ] builds on LLMs to introduce steerable capabilities for recommendation. However, the collaborative signals from the user-item interaction history are difficult for LLMs to learn [ 8], and these approaches often suffer from efficiency issues [ 15 ]. CTRL-Rec [ 3], on the other hand, utilizes two separate LLMs to compute the representation of both user’s request and items’ features. However, it limits the interaction format to matrix factorization, neglecting more complex sequential recommendation solutions. Our work aligns with the intent to control recommendation results via natural language [ 26 ]. 
+
+## 3 Methodology 
+
+In this section, we present the Decoupled Promptable Sequential Recommendation (DPR) framework. In Section 3.1, we formulate both the sequential and promptable recommendation. Section 3.2 describes the decoupled model architecture, consisting of a base sequential encoder and a dual-path prompt fusion module. Finally, Section 3.3 details our unified training objective and the multi-stage fine-tuning strategy. 
+
+## 3.1 Problem Formulation 
+
+Sequential Recommendation. Let U and V denote the set of users and items, respectively. For a specific user 𝑢 ∈ U , their historical interaction sequence is represented as 𝑆 𝑢 = [𝑣 1, 𝑣 2, . . . , 𝑣 𝑡 ], where 
+
+𝑣 𝑖 ∈ V . The target of sequential recommendation is to predict the next item 𝑣 𝑡 +1, formulated as: ˆ𝑣 𝑡 +1 = max 𝑣 𝑃 (𝑣 |𝑆 𝑢 ). Losses such as cross-entropy are commonly adopted to measure the distance between 𝑣 𝑡 +1 and ˆ𝑣 𝑡 +1. Hence, the training objective can be derived as 
+
+min L𝑠𝑒𝑞 , L𝑠𝑒𝑞 =∑︁ 
+
+> 𝑢,𝑡
+
+𝑙 𝐶𝐸 ( ˆ𝑣 𝑡 +1, 𝑣 𝑡 +1). (1) 
+
+Promptable Recommendation. The promptable recommendation task introduces a natural language instruction, denoted as the prompt 𝑝 . Associated with 𝑝 is a semantic indicator 𝑐 ∈ {+ , −} ,which can be easily inferred from the semantic intent of 𝑝 , as shown in Appendix C. Here, we categorize the intent 𝑝 into two classes, where 𝑐 = + signifies a positive desire (e.g., “I want...” ) and 𝑐 = −
+
+signifies a negative constraint (e.g., “Do not show...” ). Our objective is to ensure the output ˆ𝑣 𝑡 +1 = max 𝑣 𝑃 (𝑣 |𝑆 𝑢 , 𝑝, 𝑐 ) aligns with both the historical interests 𝑆 𝑢 and the immediate instruction 𝑝 .
+
+## 3.2 Model Architecture 
+
+The DPR framework comprises two decoupled components: a Se-quential Encoder for extracting historical interests, a Prompt Embedder to encode instructions, and a Signal Fusion Module 
+
+for aligning semantic and collaborative signals. 
+
+Figure 2: Overall Framework 
+
+3.2.1 Sequential Encoder. To capture long-term user preferences, we employ a sequential encoder 𝑓 𝜃 . It is important to note that our framework is model-agnostic , hence 𝑓 𝜃 can be instantiated using various architectures, such as attention-based models (e.g., SAS-Rec [ 10 ], BERT4Rec [ 22 ]) or RNN-based models (e.g., GRU4Rec [ 9 ]). Given the input sequence 𝑆 𝑢 , the encoder outputs the user’s intrin-sic interest representation h𝑢 ∈ R𝑑 :
+
+h𝑢 = 𝑓 𝜃 (𝑆 𝑢 ) (2) This vector h𝑢 encapsulates preferences inferred strictly from his-torical behavior, serving as an uncontaminated foundation for the subsequent fusion process. 
+
+3.2.2 Prompt Embedder. To understand the prompt, we need to encode it into latent space. Hence, the textual prompt 𝑝 is encoded into a semantic vector c𝑝 ∈ R𝑑 via a pre-trained Encoder, e.g., Sentence-BERT [ 19 ], and an MLP projector to align its dimension with h𝑢 . This can be formulated as: 
+
+c𝑝 = 𝑔 𝜃 (𝑝 ) = MLP (Encoder(p) ) (3) 
+
+3.2.3 Signal Fusion Module. To incorporate the prompt signal c𝑝 
+
+and the user’s interest representation h𝑢 , we propose a Mixture-of-Experts (MoE) Tower architecture . Since positive steering (“I Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Fuyuan Lyu et al. 
+
+want X”) and negative suppression (“Do not recommend Y”) repre-sent different semantic operations, forcing them to share a single parameter space may lead to optimization conflicts. Therefore, we design two parallel, independent fusion blocks: a Positive Fusion Block( 𝑓 + 
+
+> 𝜃
+
+) and a Negative Fusion Block ( 𝑓 − 
+
+> 𝜃
+
+). The routing is based on the semantic indicator 𝑐 ∈ {+ , −} . Despite their distinct objectives, both blocks share an identical additive residual architecture 
+
+based on Multi-Head Cross-Attention (MHCA). For each fusion process, we utilize the user’s intrinsic represen-tation h𝑢 as the Query, and the prompt vector c𝑝 as both the Key and Value. The feature interaction is defined as: 
+
+z𝑐 = MHCA 𝑐 (Q = LN (h𝑢 ), K = c𝑝 , V = c𝑝 ) (4) where MHCA 𝑐 denotes the specific attention parameters for the chosen path. Crucially, to preserve the stability of the user’s intrinsic preference, we employ a residual connection for both paths. The prompt information is added to the original representation: 
+
+hres = h𝑢 + z𝑐 (5) Finally, the representation is processed through a path-specific Feed-Forward Network (FFN): 
+
+hfinal = LN (h𝑟𝑒𝑠 + FFN 𝑐 (h𝑟𝑒𝑠 )) (6) The hfinal is used as a representation that combines both histori-cial interest and instruction. The probability of recommending item 
+
+𝑣 ∈ 𝑉 is computed as: 
+
+𝑃 (𝑣 |hfinal ) = exp (h𝑓 𝑖𝑛𝑎𝑙 · e𝑣 )
+
+Í𝑣 ′ ∈ V exp (h𝑓 𝑖𝑛𝑎𝑙 · e𝑣 ′ ) (7) 
+
+## 3.3 Training Strategy 
+
+To achieve precise controllability while maintaining robust sequen-tial recommendation capabilities, we propose a Unified Predic-tion Objective . We formulate both positive steering and negative suppression as a likelihood maximization problem over a context-dependent Target Item Set , denoted as Vtarget .
+
+3.3.1 Target Set Construction. For a given training instance (𝑆 𝑢 , 𝑝, 𝑐 ),we are able to first construct a compliance list for user 𝑢 , where 
+
+V𝑢  
+
+> com
+
+≜ [𝑣 | 𝑣 ∈ V 𝑢  
+
+> future
+
+∧ 𝑣 is compliant with 𝑝 ], V𝑢  
+
+> future
+
+denotes the list containing all future interacted items of user 𝑢 . |V 𝑢  
+
+> com
+
+| = 𝑁 .Hereby selecting the closest 𝑁 samples that comply with the prompt 
+
+𝑝 , we can control the length of the compliance list, forcing the model to focus on short-term or long-term. The construction of Vtarget is dynamically adjusted to the indicator 𝑐 :
+
+• Positive Steering ( 𝑐 = +): The target set Vtarget consists of one unique ground-truth item 𝑣 target that is randomly sampled from the compliance list V𝑢  
+
+> com
+
+to avoid overfitting. 
+
+• Negative Suppression ( 𝑐 = −): The target set Vtarget contains all the elements in the compliance list V𝑢 
+
+> com
+
+, denoted as Vtarget =
+
+{𝑣 |𝑣 ∈ V 𝑢  
+
+> com
+
+}, to suppress the undesired items. 
+
+3.3.2 Unified Loss Function. A standard Cross-Entropy loss frame-work is adopted to optimize the model end-to-end, like Eq. 7. Here we adopt a temperature-scaled variant where: 
+
+𝑃 (𝑣 |hfinal ) = exp (hfinal · e𝑣 /𝜏 )
+
+Í𝑣 ′ ∈ V exp (hfinal · e𝑣 ′ /𝜏 ) . (8) Here e𝑣 is the embedding of item 𝑣 and 𝜏 is the temperature hyperpa-rameter. The final training objective is defined as the cross-entropy loss averaged over the target item set Vtarget :
+
+L = − 1
+
+|V target |∑︁ 𝑣 ∈ V target 
+
+log 𝑃 (𝑣 |h𝑓 𝑖𝑛𝑎𝑙 ) (9) For positive steering tasks ( 𝑐 = +), the objective maximizes the likelihood of a single target item 𝑣 target . This forces the model to actively shift its focus beyond historical interests to satisfy the user’s explicit desire while maintaining robustness, considering the random sampling when selecting 𝑣 target . For negative suppression tasks ( 𝑐 = −), the objective operates as a multi-target optimization over the entire target set. This encourages the model to redistribute probability mass across all valid future interests, thereby implicitly suppressing the scores of restricted items through the softmax competition mechanism. Formally, to ensure the model retains its fundamental recom-mendation capability while acquiring controllability, the overall training objective is formulated as a multi-task learning objective: 
+
+L𝑡𝑜𝑡𝑎𝑙 = L𝑠𝑒𝑞 + L 𝑝𝑟𝑜𝑚𝑝𝑡 (10) where L𝑠𝑒𝑞 denotes the loss for the pure sequential prediction task (𝑣 𝑡 +1), while L𝑝𝑟𝑜𝑚𝑝𝑡 corresponds to the specific instances of the loss L applied to the target set samples. 
+
+3.3.3 Three-stage training. The training of a DPR paradigm evolves through three distinct stages. Stage 1 involves the standard pre-training of the base sequential encoder (e.g., SASRec or GRU4Rec) on the next-item prediction task to capture fundamental user behav-ioral patterns, following Eq. Stage 2 serves as a baseline fine-tuning phase where the model learns to align user representations with broad category (genre) embeddings. Stage 3 , the core contribution of this work, focuses on deep semantic alignment. Notably, the data partitioning, sequence padding, and negative sampling strategies in Stage 3 are identical to those in Stage 2, ensuring a controlled comparison. The primary distinction lies in the transition from coarse-grained genre prompts to fine-grained semantic prompts, supported by the following knowledge augmentation strategies. The overall training pipeline is shown in Algorithm 1 
+
+Semantic Augmentation. To bridge the semantic gap between specific movie titles and abstract genres, we utilize LLMs to enrich the item metadata. For movies in the training set, we generate de-scriptive tags across three dimensions: Narrative (plot and conflict), 
+
+Atmosphere (tone and style), and Appeal (viewer motivation). This transforms coarse genre labels into explanatory semantic bridges. Such tags are utilized only in Stage 3. To rigorously test the model’s generalization beyond simple keyword matching and avoid informa-tion leakage between the training and testing phases, we generate 
+
+lexically distinct but semantically equivalent variants for the testing set. LLMs are tasked with paraphrasing original tags using syn-onyms and alternative syntactic structures. This lexical decoupling 
+
+ensures that the model is evaluated on its understanding of latent semantics rather than surface-level patterns. 
+
+## 4 Experiments 
+
+In this section, we aim to evaluate and answer the following re-search questions: Give Users the Wheel: Towards Promptable Recommendation Paradigm Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Table 1: Main Performance comparison. 
+
+Dataset Task Type Model SASRec GRU4Rec 
+
+NDCG@10 NDCG@20 Recall@10 Recall@20 NDCG@10 NDCG@20 Recall@10 Recall@20 
+
+ML1M Sequential 
+
+Base 0.1728 0.2044 0.3134 0.4386 0.1569 0.1866 0.2914 0.4089 
+
++ f 0.1800 0.2112 0.3235 0.4474 0.1816 0.2140 0.3214 0.4502 
+
++ f + a 0.1410 0.1687 0.2589 0.3687 0.1261 0.1531 0.2397 0.3472 DPR 0.1838 0.2161 0.3341 0.4621 0.1817 0.2145 0.3220 0.4520 Positive 
+
+Base 0.0781 0.1049 0.1574 0.2638 0.0673 0.0906 0.1391 0.2320 
+
++ f 0.0855 0.1108 0.1721 0.2722 0.0708 0.0954 0.1460 0.2437 
+
++ f + a 0.0812 0.1037 0.1609 0.2502 0.0748 0.0975 0.1486 0.2388 Filter 0.3242 0.3534 0.5240 0.6388 0.3008 0.3308 0.4907 0.6088 
+
++ f 0.3345 0.3624 0.5358 0.6452 0.3101 0.3386 0.5056 0.6181 
+
++ f + a 0.3110 0.3404 0.5028 0.6184 0.3038 0.3320 0.4975 0.6085 DPR 0.5748 0.5921 0.7300 0.7981 0.5501 0.5683 0.6991 0.7710 
+
+(+71.84%) (+63.38%) (+36.24%) (+23.70%) (+77.40%) (+67.83%) (+38.27%) (+24.74%) 
+
+Negative 
+
+Base 0.1363 0.1803 0.1641 0.2653 0.1171 0.1579 0.1432 0.2375 
+
++ f 0.1463 0.1916 0.1742 0.2784 0.1230 0.1651 0.1497 0.2471 
+
++ f + a 0.1382 0.1772 0.1618 0.2507 0.1281 0.1675 0.1499 0.2403 Filter 0.1666 0.2147 0.1954 0.3057 0.1443 0.1884 0.1728 0.2742 
+
++ f 0.1789 0.2278 0.2075 0.3197 0.1509 0.1978 0.1792 0.2872 
+
++ f + a 0.1599 0.2026 0.1827 0.2804 0.1465 0.1886 0.1690 0.2653 DPR 0.1772 (-0.95%) 0.2250 (-1.23%) 
+
+0.2076 
+
+(+0.05%) 0.3172 (-0.78%) 
+
+0.1741 
+
+(+15.37%) 
+
+0.2220 
+
+(+12.23%) 
+
+0.2030 
+
+(+13.28%) 
+
+0.3124 
+
+(+8.77%) 
+
+MIND Sequential 
+
+Base 0.1058 0.1268 0.1919 0.2752 0.0977 0.1171 0.1776 0.2546 
+
++ f 0.1097 0.1310 0.1991 0.2836 0.1001 0.1198 0.1819 0.2601 
+
++ f + a 0.1146 0.1380 0.2095 0.3022 0.0997 0.1210 0.1844 0.2689 
+
+DPR 0.1118 0.1334 0.2023 0.2879 0.0959 0.1149 0.1745 0.2498 
+
+Positive 
+
+Base 0.0405 0.0519 0.0789 0.1242 0.0378 0.0484 0.0737 0.1159 
+
++ f 0.0418 0.0539 0.0817 0.1297 0.0373 0.0477 0.0729 0.1146 
+
++ f + a 0.0591 0.0744 0.1147 0.1757 0.0498 0.0633 0.0966 0.1506 Filter 0.3199 0.3356 0.4834 0.5446 0.3122 0.3274 0.4739 0.5332 
+
++ f 0.3332 0.3491 0.5025 0.5645 0.3054 0.3204 0.4621 0.5206 
+
++ f + a 0.4060 0.4225 0.5964 0.6606 0.3717 0.3886 0.5522 0.6179 DPR 0.4591 
+
+(+13.08%) 
+
+0.4751 
+
+(+12.45%) 0.5912 (-0.87%) 0.6543 (-0.95%) 
+
+0.4860 
+
+(+30.75%) 
+
+0.5023 
+
+(+29.26%) 
+
+0.6237 
+
+(+12.95%) 
+
+0.6882 
+
+(+11.38%) 
+
+Negative 
+
+Base 0.0405 0.0519 0.0789 0.1242 0.0583 0.0748 0.0734 0.1158 
+
++ f 0.0418 0.0539 0.0817 0.1297 0.0572 0.0734 0.0724 0.1142 
+
++ f + a 0.0591 0.0744 0.1147 0.1757 0.0763 0.0973 0.0962 0.1501 Filter 0.0664 0.0841 0.0829 0.1284 0.0623 0.0791 0.0775 0.1207 
+
++ f 0.0691 0.0877 0.0861 0.1341 0.0613 0.0778 0.0766 0.1192 
+
++ f + a 0.0967 0.1212 0.1199 0.1827 0.0810 0.1023 0.1010 0.1559 DPR 0.0911 (-5.79%) 0.1138 (-6.11%) 0.1125 (-6.17%) 0.1709 (-6.46%) 
+
+0.0868 
+
+(+7.16%) 
+
+0.1088 
+
+(+6.35%) 
+
+0.1074 
+
+(+6.34%) 
+
+0.1638 
+
+(+5.07%)    
+
+> + f denotes fine-tuning on the NIP task (LowLR), while + f + a denotes implicit fine-tuning (Finetune). DPR’s improvements on controllable tasks are relative to the best performing Filter baseline. Bold indicates the best performance in each category.
+
+Algorithm 1 The Training Process of DPR Paradigm 
+
+Input: Sequential Dataset D, Target Set Vtarget , Semantic Aug-mented Tags T𝑎𝑢𝑔 
+
+Output: A DPR paradigm consists of a sequential encoder, a prompt embedder, and a signal fusion module.  
+
+> 1:
+
+Stage 1: Pretrained the recommendation model 𝑓 𝜃 given Eq. 1 on Dataset D 
+
+> 2:
+
+Stage 2: Train all module except prompt embedder given Eq. 7 with target set Vtarget . 
+
+> 3:
+
+Stage 3: Train all module except prompt embedder given Eq. 7 by replacing the genre tagets in target set Vtarget with semantic augmented tags T𝑎𝑢𝑔 .
+
+• RQ1: How does the proposed DPR system perform compared to traditional recommendation systems and heuristic selection (based on tags)? 
+
+• RQ2: How does the proposed LLM-as-a-prior design compare against other LLM-as-a-posterier designs? 
+
+• RQ3: Is the recommendation system able to understand nuanced user requests? 
+
+## 4.1 Experimental Design 
+
+4.1.1 Dataset Construction. There are no existing benchmarks that are directly suitable for validating our hypothesis. Here, we modify the existing datasets, namely MovieLens-1M and MIND [29 ], to simulate shifts in user interest. Specifically, for MIND , we apply a 20-core filtering to focus on active users with rich interaction Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Fuyuan Lyu et al. 
+
+histories. In addition, we consider both positive and negative cases to simulate shifts in user interest. The dataset statistics are listed in Appendix A. For each user, we partition the interaction sequence into training, validation, and test sets, using a chronological ra-tio of 8:1:1 to avoid future leakage. To prevent interference from the cold-start problem during the controllable task phase, we ap-ply strict filtering: any item that appears only in the validation or test sets and is absent from the training set is removed. This ensures that the backbone encoder has successfully learned the ID embeddings for all potential target items before the prompt-driven fine-tuning stage. To evaluate the model’s responsiveness to explicit user instructions, we construct a candidate set of future items that reflects a "heuristic interest shift." We extract 𝑁 (e.g., 𝑁 = 3) future items from the user’s subsequent sequence as the ground truth (GT) for our controllable tasks. The example prompts used are listed in Appendix B. 
+
+Positive Task. This task simulates a user making an explicit re-quest for a new interest (e.g., “I’m in the mood for a Comedy”). (1) Within the extracted future window of 𝑁 items, we identify those possessing a specific genre 𝑔 𝐵 (where 𝑔 𝐵 is different from the genre of 𝑣 𝑡 ) and randomly select one as the ground-truth target 𝑣 𝑔𝑡 .(2) The model is provided with a positive prompt (e.g., “Recommend a movie in the 𝑔 𝐵 genre”) constructed based on the category of the selected target 𝑣 𝑔𝑡 .
+
+Negative Task. This task simulates a user seeking to avoid a specific category while remaining open to other latent interests (e.g., “Do not show me Horror movies”). (1) We identify the genre 𝑔 𝐴 of the user’s immediate next item as the category to be avoided. (2) The entire ground truth candidate set of 𝑁 items (all with genres different from 𝑔 𝐴 ) serves as the target for the negative request. (3) The model receives a negative prompt (e.g., “I don’t want to watch 𝑔 𝐴 movie tonight”). 
+
+4.1.2 Metrics. Following the mainstream recommendation frame-work, we adopt the commonly-utilized metrics, namely Recall and NDCG, respectively. 
+
+4.1.3 Implementation Details. We implement our DPR framework using PyTorch. Here we adopt two classic recommendation models as sequential encoders: SASRec [ 10 ] and GRU4Rec [ 9]. For the embedder encoder, we adopt a pre-trained Sentence Transformer 1.For the routing indicator 𝑐 , we utilize a zero-shot classification pipeline based on the BART-large-mnli model [ 11 ], with the results shown in Appendix C. 
+
+## 4.2 Comparison with Sequential Recommendation (RQ1) 
+
+In this section, we will compare how our promptable recommen-dation helps better capture users’ interest against a traditional recommendation model. 
+
+> 1https://huggingface.co/sentence-transformers/all-mpnet-base-v2
+
+4.2.1 Main Results and Analysis. We now present the main exper-imental results. The performance on controllable tasks (Positive and Negative Prompts) is reported as the average of metrics over 
+
+𝑁 = 3, 5, 10 ground truth sets to provide a comprehensive view. For our DPR model, we report the improvement over the strong Filter 
+
+baseline families in both relative terms. Based on the results shown in Table 1, we can make the following observations. First, we can observe that DPR consistently achieves perfor-mance comparable to, and in some cases superior to, fine-tuned baselines (denoted as +𝑓 and +𝑓 + 𝑎 ). This suggests that the in-troduction of DPR does not compromise the model’s ability to capture user interests. Second, for Positive Steering , DPR demon-strates dominant performance across both datasets and backbones. On ML-1M, DPR achieves a remarkable 71.84% relative improve-ment in NDCG@10 over the strongest filter baseline using SASRec. Similarly, on MIND, improvements range from 13% to 30% . Both observations confirm that the fusion module effectively follows the positive instruction and accurately retrieves the target item from the candidate pool. Third, for Negative Suppression , the results are more nuanced. With the GRU4Rec backbone, DPR consistently outperforms filter-based methods on both datasets (+15.37% on ML-1M, +7.16% on MIND). However, with the SASRec backbone, DPR slightly trails the strongest filter baselines (e.g., Filter +𝑓 on ML-1M and Filter +𝑓 + 𝑎 on MIND). This suggests that while DPR learns effective soft suppression, “hard filtering” (removing genres from a retrieval list) remains a strong baseline under certain cases. 
+
+Advantage of End-to-End Ranking vs. Heuristic Filtering. An inter-esting and critical observation lies in the disparity between ranking metrics (NDCG) and retrieval metrics (Recall). Across all positive tasks, DPR’s relative gain in NDCG significantly exceeds its gain in Recall. For instance, on ML-1M (SASRec), the NDCG@10 improve-ment is 71.84%, whereas the Recall@10 improvement is 36.24%. Furthermore, the improvements at the top-10 cutoff are generally more pronounced than at the top-20. Both observations highlight one advantage of our DPR approach. Specifically, the Filter baselines cannot alter the backbone’s original ranking order. If a target item is initially ranked low (e.g., 50th) by the backbone, simply filtering out non-compliant items might only promote it marginally (e.g., to 40th). In contrast, DPR will actively alter the ranking order. The prompt vector modifies the user representation to explicitly align with the target item’s semantics. This allows DPR to assign high confidence scores to the target items, “pulling” them to the very top of the recommendation list. This capability to re-rank based on intent, rather than just filter based on constraints, is the core driver of DPR’s superior performance. 
+
+## 4.3 Comparison with LLM-as-a-posterier (RQ2) 
+
+4.3.1 LLM-based Recommendation. In this section, we compare the promptable recommendation to the LLM-powered recommen-dation, which takes the user’s history as part of the prompts. For the LLM-based baselines, including Qwen2.5-7B, Llama-2-7b, and RecGPT-7B, we utilize their off-the-shelf pre-trained check-points without further fine-tuning to evaluate their zero-shot or inherent recommendation capabilities. Following the inference pro-tocol in RecGPT [ 18 ], we employ a beam search strategy (beam size = 10) to generate multiple response outputs. Since generative LLMs Give Users the Wheel: Towards Promptable Recommendation Paradigm Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Table 2: Comparison of DPR with LLM-based recommendation models on the ML1M dataset.                                                             
+
+> Task Metric Qwen2.5-7B Llama-2-7b DeepSeek-V3 GPT-5.2 RecGPT-7B RecLM-gen DPR (SAS) DPR (GRU) [SEQ] Recall@10 0.0296 0.0126 0.0500 0.0640 0.1864 0.1937 0.3341 0.3220 NDCG@10 0.0170 0.0071 0.0227 0.0277 0.0986 0.1073 0.1838 0.1817
+> [POS] Recall@10 0.0137 0.0134 0.0263 0.0313 0.1465 0.3626 0.7300 0.6991 NDCG@10 0.0078 0.0072 0.0129 0.0149 0.0745 0.1774 0.5748 0.5501
+> [NEG] Recall@10 0.0166 0.0103 0.0350 0.0379 0.1277 0.1163 0.2076 0.2030 NDCG@10 0.0130 0.0081 0.0201 0.0228 0.0870 0.0773 0.1772 0.1741
+> All results are reported at Top-10. Bold indicates the best performance, and underline indicates the second best. For DeepSeek-V3 and GPT-5.2, we evaluate on a subset of 1,000 randomly sampled users.
+
+may produce diverse textual descriptions, we apply a semantic-similarity-based approach: the generated outputs are encoded into dense vectors and matched against the entire item candidate pool us-ing FAISS to retrieve the Top-10 most similar items based on cosine similarity. For the RecLM-gen baseline, we adapt its instruction-tuning framework to our specific data environment, covering the full suite of 𝐼 0-𝐼 3 tasks as defined in the original work. The model is fine-tuned using the same 8:1:1 data partitioning and the same SAS-Rec teacher model for label augmentation, ensuring a consistent knowledge base. During inference, RecLM-gen is integrated into our unified evaluation pipeline, where its performance is measured against our instruction-driven ground truth selection protocol to assess its effectiveness in capturing specific user intentions within the interaction history. 
+
+Discussion on RQ2: Comparison with LLM-based Mod-els. As shown in Table 2, two key observations emerge from the comparison on the ML1M dataset: First, general-purpose LLMs (e.g., Qwen2.5, Llama-2, DeepSeek-V3) exhibit limited zero-shot performance, indicating that inherent semantic knowledge alone is insufficient for precise item ranking. In contrast, domain-specific models (RecGPT-7B, RecLM-gen) achieve significantly higher per-formance across all metrics. This validates that encoding collabo-rative information from recommendation data into LLM remains essential for aligning LLMs with user interaction patterns. Second, despite the improvements in fine-tuned LLMs, our DPR framework consistently outperforms the best LLM baseline by a substantial margin across all tasks. For example, in the [POS] task, DPR (SAS) achieves a Recall@10 of 0.7300 compared to 0.3626 for RecLM-gen. This demonstrates that while generative LLMs can understand in-structions, our specialized decoupled fusion architecture is more effective in strictly steering latent user representations to satisfy specific positive and negative constraints without compromising the integrity of sequential modeling. 
+
+4.3.2 LLM-based Reranking. We further investigate a two-stage 
+
+retrieve-and-rerank pipeline, where LLMs (Llama2-7b, DeepSeek-V3) rerank the top-𝐾 candidates retrieved by the backbone model. Table 3 presents the performance across varying candidate sizes (𝐾 ∈ { 20 , 30 , 50 , 100 }). We can observe the followings: First, we observe divergent scaling behaviors in positive steer-ing. In the [POS] task, traditional LLMs like Llama2-7b exhibit a performance decline as the candidate set grows, due to information overload. In sharp contrast, DeepSeek-V3 demonstrates a positive correlation between context size and accuracy. Expanding 𝐾 from 20 to 100 significantly boosts its NDCG@10 (e.g., 0.2453 → 0.5062 
+
+with SASRec), indicating LLM’s superior capability to mine latent positive targets from larger candidate pools. Second, we observe universal vulnerability in negative suppression task. For the [NEG] task, all LLM rerankers degrade in performance as 𝐾 increases. This reveals a fundamental limitation: LLMs are highly sensitive to noise when executing “exclusion” logic. As the candidate pool expands, the complexity of filtering out prohibited items increases, leading models to inadvertently rank restricted items higher. Fi-nally, we observe that despite DeepSeek-V3’s impressive scaling in positive tasks, our DPR framework still outperforms the best rerank-ing configuration (0.5748 vs. 0.5062 in POS NDCG@10). Crucially, DPR achieves this robust control in a single end-to-end inference step, avoiding the high latency and noise sensitivity inherent in large-context LLM reranking. 
+
+## 4.4 Capture of Implicit User Intent (RQ3) 
+
+In this section, we move beyond explicit genre constraints to in-vestigate the model’s ability to interpret nuanced natural-language requests. We employ an LLM-based simulation framework where virtual users powered by external LLM express complex, implicit needs, and an LLM judge evaluates the relevance of recommenda-tions. 
+
+4.4.1 Evaluation Protocol. 
+
+User Simulation. To generate realistic and diverse user queries, we utilize DeepSeek-V3 as a simulator. Given a user’s interaction history, the simulator is prompted to articulate a current viewing desire in natural language without explicitly naming genres (see Appendix B). This ensures the request reflects high-level semantics such as ”I want something chaotic to distract me” rather than simple keyword matching. 
+
+LLM-as-a-Judge. Evaluating subjective alignment is challeng-ing for traditional metrics. We adopt an LLM-as-a-Judge paradigm, which is conceptually aligned with prior work aiming to evaluates LLM’s inherent recommendation capabilities [ 7]. Here a separate LLM instance scores the recommended list (top-10) on a 1–10 scale across three dimensions: History Alignment (consistency with long-term taste), Intent Fulfillment (adherence to the current spe-cific request), and an Overall Score . The detailed judging criteria are provided in Appendix B. 
+
+4.4.2 Results and Analysis. Table 4 reports the comparative perfor-mance of DPR against baselines in satisfying implicit user intents. The results demonstrate that DPR effectively bridges the gap be-tween natural language instruction and latent item semantics. DPR Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Fuyuan Lyu et al. 
+
+Table 3: Comparison of DPR with LLM-based reranking models on the ML1M dataset. 
+
+Rec Model SASRec GRU4Rec 
+
+Method Llama2-7b DeepSeek-V3 DPR Llama2-7b DeepSeek-V3 DPR Context 20 30 20 50 100 - 20 30 20 50 100 -
+
+[POS] 
+
+NDCG@10 0.0824 0.0766 0.2453 0.3950 0.5062 0.5748 0.0700 0.0662 0.2166 0.3695 0.4814 0.5501 
+
+NDCG@20 0.1046 0.1013 0.2455 0.3956 0.5076 0.5921 0.0896 0.0882 0.2167 0.3699 0.4827 0.5683 
+
+Recall@10 0.1650 0.1532 0.2530 0.4134 0.5378 0.7300 0.1447 0.1343 0.2226 0.3861 0.5107 0.6991 
+
+Recall@20 0.2537 0.2516 0.2537 0.4158 0.5429 0.7981 0.2233 0.2223 0.2233 0.3879 0.5157 0.7710 [NEG] 
+
+NDCG@10 0.1215 0.1136 0.1083 0.0876 0.0795 0.1772 0.1050 0.0985 0.0938 0.0781 0.0722 0.1741 
+
+Recall@10 0.1448 0.1361 0.1344 0.1008 0.0901 0.2250 0.1272 0.1201 0.1186 0.0927 0.0842 0.2220 
+
+NDCG@20 0.1694 0.1628 0.1602 0.1261 0.1081 0.2076 0.1486 0.1429 0.1408 0.1138 0.0984 0.2030 
+
+Recall@20 0.2552 0.2502 0.2552 0.1901 0.1561 0.3172 0.2284 0.2241 0.2284 0.1762 0.1450 0.3124 
+
+> Context indicates how many of the top-K recommendation result from the recommendation method is included in the LLM context.
+
+achieves the highest Overall Score , outperforming all baselines. This confirms that our decoupled architecture successfully balances the dual objectives: satisfying the immediate crave (the prompt) while remaining grounded in the user’s established preferences (the history). This confirms that the semantic alignment learned during our fine-tuning stage generalizes well to unstructured, conversa-tional scenarios, empowering the model to handle the ambiguity inherent in real-world user interactions. 
+
+Table 4: LLM-as-a-Judge evaluation results for nuanced semantic requests on ML1M. Scores range from 1 to 10. 
+
+DPR-Rand serves as an ablation to test prompt sensitivity by providing mismatched prompts. Model Intent History Overall Fulfillment Alignment Score 
+
+SASRec 4.076 6.090 4.708 
+
+GPT-5.2 6.231 5.007 5.619 
+
+DPR-Rand (Ablation) 3.288 4.816 3.684 
+
+DPR (Ours) 5.888 5.918 5.932 
+
+## 5 Ablation Study 5.1 Ablation on Stage Design 
+
+To validate the necessity of the three-stage training framework pro-posed in Section 3, specifically the inclusion of the coarse-grained genre alignment (Stage 2), we conducted an ablation study on both ML-1M and MIND datasets. We compare the full 3-Stage (3-S) frame-work against a 2-Stage (2-S) variant. In the 2-S setting, the model skips the genre-based alignment and fine-tunes the pre-trained backbone directly using the fine-grained semantic tags generated by LLMs. The results are reported in Table 8. As observed, the 3-S strategy consistently outperforms the 2-S variant across all metrics and backbones. Removing the interme-diate genre alignment stage results in performance degradation. For instance, on the ML-1M dataset with the SASRec backbone, the NDCG@10 for positive steering ([POS]) and negative suppression ([NEG]) drops by 7.85% and 13.26%, respectively. This empirical evidence suggests that directly mapping user representations to a complex, fine-grained semantic space is optimizationally difficult. The coarse-grained alignment in Stage 2 effectively serves as a scaffold, establishing a stable semantic foundation that facilitates the subsequent deep semantic alignment in Stage 3. 
+
+## 5.2 Ablation on Loss Design 
+
+To investigate the contribution of the specific terms in Eq. 7, we con-duct an ablation study by isolating the control-specific loss terms. We compare the complete model ( Full ) against two variants: (1) 
+
+Pos , which is trained without negative targets; and (2) Neg , which is trained without positive targets. The results are summarized in Table 9. We can make the following observations. First, the results demonstrate that both L𝑝𝑜𝑠 and L𝑛𝑒𝑔 are critical for their respective control capabilities. On the positive steering task ([POS]), the Neg variant exhibits a catastrophic performance col-lapse (e.g., N@10 drops from 0.5748 to 0.1670 on ML-1M with SAS-Rec). This indicates that the ability to retrieve specific items based on semantic prompts cannot be implicitly acquired through suppres-sion training or pure sequential modeling; explicit positive align-ment is indispensable. Similarly, on the negative suppression task ([NEG]), the Pos variant consistently underperforms the Full model (e.g., N@10 decreases from 0.1772 to 0.1634 on ML-1M). This con-firms that our proposed implicit suppression strategy—optimizing over the constrained candidate set S𝑐𝑎𝑛𝑑 —is essential for teaching the model to effectively filter out prohibited items. Additionally, the Full model achieves balanced performance comparable to the specialized single-task variants. For instance, on [NEG] tasks, the 
+
+Full model matches the performance of the Neg variant (0.1772 vs. 0.1772 on ML-1M). While there is a slight trade-off in some positive metrics compared to the Pos variant (e.g., on MIND), the 
+
+Full model maintains robust controllability across both directions. This suggests that our decoupled architecture and unified objective successfully facilitate multi-task learning, enabling the model to master both directional steering and constraint suppression simul-taneously without significant destructive interference. 
+
+## 5.3 Ablation on Tower Architecture Design 
+
+To justify the architectural decision of using distinct fusion path-ways for conflicting control signals, we evaluate the impact of the decoupling strategy. We compare our proposed Two-Tower (2-T) 
+
+architecture—where positive and negative prompts are processed by separate stacks of fusion blocks—against a Single-Tower (1-T) variant. In the 1-T variant, a shared set of MHCA parameters handles both positive steering and negative suppression tasks si-multaneously. The results are presented in Table 10. Give Users the Wheel: Towards Promptable Recommendation Paradigm Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+First, we observe substantial performance degradation when using the Single-Tower architecture across all metrics. For exam-ple, on the ML-1M dataset using SASRec, the NDCG@10 decreases by 27.40% for the positive task and by 35.33% for the negative task. Similarly, on the MIND dataset, the performance drop for the negative task exceeds 40% . This significant gap validates our hypothesis that positive steering and negative suppression are fun-damentally divergent operations. Positive steering requires the model to enhance semantic features related to the prompt (feature injection), whereas negative suppression requires the model to neu-tralize specific features (feature rejection). Forcing a single set of parameters to learn these opposing transformations simultaneously leads to severe optimization conflicts and parameter interference. The Two-Tower architecture effectively resolves this by allocating independent parameter spaces for each control type, allowing the model to specialize in both feature excitation and inhibition without conflicting each other. 
+
+## 6 Conclusion 
+
+In this work, we discuss a simple yet unfulfilled request: instruct-ing recommendation models throughout natural language. After identifying the drawbacks of existing paradigms, we propose the De-coupled Promptable Sequential Recommendation (DPR) framework, a model-agnostic paradigm that empowers conventional backbones to natively follow natural-language prompts. DPR outperforms ex-isting baselines under various scenarios. Ablation study further demonstrates the necessity of various designs. 
+
+## Acknowledgments 
+
+To Robert, for the bagels and explaining CMYK and color spaces. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Fuyuan Lyu et al. 
+
+## References 
+
+[1] Keqin Bao, Jizhi Zhang, Yang Zhang, Wang Wenjie, Fuli Feng, and Xiangnan He. 2023. Large language models for recommendation: Progresses and future directions. In Proceedings of the Annual International ACM SIGIR Conference on Research and Development in Information Retrieval in the Asia Pacific Region . ACM, Beijing, China, 306–309. [2] Artun Boz, Wouter Zorgdrager, Zoe Kotti, Jesse Harte, Panos Louridas, Vassilios Karakoidas, Dietmar Jannach, and Marios Fragkoulis. 2026. Improving Sequential Recommendations with LLMs. Trans. Recomm. Syst. 4, 2 (2026), 19:1–19:35. doi:10.1145/3711667 [3] Micah Carroll, Adeline Foote, Kevin Feng, Marcus Williams, Anca D. Dragan, W. Bradley Knox, and Smitha Milli. 2025. CTRL-Rec: Controlling Recommender Systems With Natural Language. CoRR abs/2510.12742 (2025). arXiv:2510.12742 doi:10.48550/ARXIV.2510.12742 [4] Shijie Geng, Shuchang Liu, Zuohui Fu, Yingqiang Ge, and Yongfeng Zhang. 2022. Recommendation as Language Processing (RLP): A Unified Pretrain, Personalized Prompt & Predict Paradigm (P5). In RecSys ’22: Sixteenth ACM Conference on Recommender Systems . ACM, Seattle, WA, USA, 299–315. doi:10.1145/3523227. 3546767 [5] Donghee Han, Hwanjun Song, and Mun Yong Yi. 2025. Rethinking LLM-Based Recommendations: A Query Generation-Based, Training-Free Approach. CoRR 
+
+abs/2504.11889 (2025). arXiv:2504.11889 doi:10.48550/ARXIV.2504.11889 [6] Ruining He and Julian J. McAuley. 2016. Fusing Similarity Models with Markov Chains for Sparse Sequential Recommendation. In IEEE 16th International Con-ference on Data Mining, ICDM 2016 , Francesco Bonchi, Josep Domingo-Ferrer, Ricardo Baeza-Yates, Zhi-Hua Zhou, and Xindong Wu (Eds.). IEEE Computer Society, Barcelona, Spain, 191–200. doi:10.1109/ICDM.2016.0030 [7] Zhankui He, Zhouhang Xie, Rahul Jha, Harald Steck, Dawen Liang, Yesu Feng, Bodhisattwa Prasad Majumder, Nathan Kallus, and Julian J. McAuley. 2023. Large Language Models as Zero-Shot Conversational Recommenders. In CIKM . ACM, Birmingham, United Kingdom, 720–730. [8] Zhankui He, Zhouhang Xie, Harald Steck, Dawen Liang, Rahul Jha, Nathan Kallus, and Julian J. McAuley. 2025. Reindex-Then-Adapt: Improving Large Lan-guage Models for Conversational Recommendation. In WSDM . ACM, Hannover, Germany, 866–875. [9] Balázs Hidasi, Alexandros Karatzoglou, Linas Baltrunas, and Domonkos Tikk. 2016. Session-based Recommendations with Recurrent Neural Networks. In 4th International Conference on Learning Representations, ICLR 2016 . OpenReview, San Juan, Puerto Rico. http://arxiv.org/abs/1511.06939 [10] Wang-Cheng Kang and Julian J. McAuley. 2018. Self-Attentive Sequential Rec-ommendation. In IEEE International Conference on Data Mining, ICDM 2018 . IEEE Computer Society, Singapore, 197–206. doi:10.1109/ICDM.2018.00035 [11] Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Veselin Stoyanov, and Luke Zettlemoyer. 2020. BART: Denoising sequence-to-sequence pre-training for natural language generation, translation, and comprehension. In Proceedings of the 58th annual meeting of the association for computational linguistics . Association for Computational Linguis-tics, Online, 7871–7880. [12] Jing Li, Pengjie Ren, Zhumin Chen, Zhaochun Ren, Tao Lian, and Jun Ma. 2017. Neural Attentive Session-based Recommendation. In Proceedings of the 2017 ACM on Conference on Information and Knowledge Management, CIKM 2017 . ACM, Singapore, 1419–1428. doi:10.1145/3132847.3132926 [13] Lei Li, Yongfeng Zhang, Dugang Liu, and Li Chen. 2024. Large language models for generative recommendation: A survey and visionary discussions. In Proceedings of the 2024 joint international conference on computational linguistics, language resources and evaluation (LREC-COLING 2024) . ELRA and ICCL, Torino, Italy, 10146–10159. [14] Zihao Li, Aixin Sun, and Chenliang Li. 2023. Diffurec: A diffusion model for sequential recommendation. ACM Transactions on Information Systems 42, 3 (2023), 1–28. [15] Xinyu Lin, Chaoqun Yang, Wenjie Wang, Yongqi Li, Cunxiao Du, Fuli Feng, See-Kiong Ng, and Tat-Seng Chua. 2025. Efficient Inference for Large Language Model-based Generative Recommendation. In ICLR . OpenReview, Singapore. [16] Qidong Liu, Xian Wu, Yejing Wang, Zijian Zhang, Feng Tian, Yefeng Zheng, and Xiangyu Zhao. 2024. LLM-ESR: Large Language Models En-hancement for Long-tailed Sequential Recommendation. In Advances in Neural Information Processing Systems 38: Annual Conference on Neural In-formation Processing Systems 2024, NeurIPS 2024 . Curran Associates, Van-couver, BC, Canada. http://papers.nips.cc/paper_files/paper/2024/hash/ 2f0728449cb3150189d765fc87afc913-Abstract-Conference.html [17] Wensheng Lu, Jianxun Lian, Wei Zhang, Guanghua Li, Mingyang Zhou, Hao Liao, and Xing Xie. 2024. Aligning Large Language Models for Controllable Recommendations. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), ACL 2024 , Lun-Wei Ku, Andre Martins, and Vivek Srikumar (Eds.). Association for Computational Linguistics, Bangkok, Thailand, 8159–8172. doi:10.18653/V1/2024.ACL-LONG.443 [18] Hoang Ngo and Dat Quoc Nguyen. 2024. RecGPT: Generative Pre-training for Text-based Recommendation. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics, ACL 2024 - Short Papers . Association for Computational Linguistics, Bangkok, Thailand, 302–313. doi:10.18653/V1/ 2024.ACL-SHORT.29 [19] Nils Reimers and Iryna Gurevych. 2019. Sentence-bert: Sentence embeddings using siamese bert-networks. arXiv preprint arXiv:1908.10084 (2019). [20] Xubin Ren, Wei Wei, Lianghao Xia, Lixin Su, Suqi Cheng, Junfeng Wang, Dawei Yin, and Chao Huang. 2024. Representation Learning with Large Language Models for Recommendation. In Proceedings of the ACM on Web Conference 2024, WWW 2024 . ACM, Singapore, 3464–3475. doi:10.1145/3589334.3645458 [21] Steffen Rendle, Christoph Freudenthaler, and Lars Schmidt-Thieme. 2010. Factor-izing personalized Markov chains for next-basket recommendation. In Proceed-ings of the 19th International Conference on World Wide Web, WWW 2010 . ACM, Raleigh, North Carolina, USA, 811–820. doi:10.1145/1772690.1772773 [22] Fei Sun, Jun Liu, Jian Wu, Changhua Pei, Xiao Lin, Wenwu Ou, and Peng Jiang. 2019. BERT4Rec: Sequential Recommendation with Bidirectional Encoder Rep-resentations from Transformer. In Proceedings of the 28th ACM International Conference on Information and Knowledge Management, CIKM 2019 . ACM, Beijing, China, 1441–1450. doi:10.1145/3357384.3357895 [23] Yuqi Sun, Qidong Liu, Haiping Zhu, and Feng Tian. 2025. LLMSeR: Enhanc-ing Sequential Recommendation via LLM-based Data Augmentation. CoRR 
+
+abs/2503.12547 (2025). doi:10.48550/ARXIV.2503.12547 [24] Zhongxiang Sun, Zihua Si, Xiaoxue Zang, Kai Zheng, Yang Song, Xiao Zhang, and Jun Xu. 2024. Large Language Models Enhanced Collaborative Filtering. In Proceedings of the 33rd ACM International Conference on Information and Knowledge Management, CIKM 2024 , Edoardo Serra and Francesca Spezzano (Eds.). ACM, Boise, ID, USA, 2178–2188. doi:10.1145/3627673.3679558 [25] Jiaxi Tang and Ke Wang. 2018. Personalized Top-N Sequential Recommendation via Convolutional Sequence Embedding. In Proceedings of the Eleventh ACM International Conference on Web Search and Data Mining, WSDM 2018 . ACM, Marina Del Rey, CA, USA, 565–573. doi:10.1145/3159652.3159656 [26] Tomorrow’s Publisher. 2025. Google tests prompt-based controls for Discover Personalisation. https://tomorrowspublisher.today/new-audiences/google-tests-prompt-based-controls-for-discover-personalisation/. Accessed: 2026-02-01. [27] Arpita Vats, Vinija Jain, Rahul Raja, and Aman Chadha. 2024. Exploring the impact of large language models on recommender systems: An extensive review. 
+
+arXiv preprint arXiv:2402.18590 (2024). [28] Zihan Wang, Jinghao Lin, Xiaocui Yang, Yongkang Liu, Shi Feng, Daling Wang, and Yifei Zhang. 2025. Enhancing LLM-based Recommendation through Semantic-Aligned Collaborative Knowledge. CoRR abs/2504.10107 (2025). doi:10. 48550/ARXIV.2504.10107 [29] Fangzhao Wu, Ying Qiao, Jiun-Hung Chen, Chuhan Wu, Tao Qi, Jianxun Lian, Danyang Liu, Xing Xie, Jianfeng Gao, Winnie Wu, et al . 2020. Mind: A large-scale dataset for news recommendation. In Proceedings of the 58th annual meeting of the association for computational linguistics . Association for Computational Linguistics, Online, 3597–3606. [30] Lanling Xu, Junjie Zhang, Bingqian Li, Jinpeng Wang, Mingchen Cai, Wayne Xin Zhao, and Ji-Rong Wen. 2024. Prompting large language models for recommender systems: A comprehensive framework and empirical analysis. arXiv preprint arXiv:2401.04997 (2024). [31] Haobo Zhang, Qiannan Zhu, and Zhicheng Dou. 2025. Enhancing Reranking for Recommendation with LLMs through User Preference Retrieval. In Proceedings of the 31st International Conference on Computational Linguistics, COLING 2025 .Association for Computational Linguistics, Abu Dhabi, UAE, 658–671. https: //aclanthology.org/2025.coling-main.45/ [32] Junjie Zhang, Ruobing Xie, Yupeng Hou, Xin Zhao, Leyu Lin, and Ji-Rong Wen. 2025. Recommendation as Instruction Following: A Large Language Model Empowered Recommendation Approach. ACM Trans. Inf. Syst. 43, 5 (2025), 114:1–114:37. doi:10.1145/3708882 [33] Xinyu Zhang, Linmei Hu, Luhao Zhang, Wentao Cheng, Yashen Wang, Ge Shi, Chong Feng, and Liqiang Nie. 2025. Bi-Tuning with Collaborative Information for Controllable LLM-based Sequential Recommendation. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), ACL 2025 . Association for Computational Linguistics, Vienna, Austria, 19340–19351. https://aclanthology.org/2025.acl-long.949/ Give Users the Wheel: Towards Promptable Recommendation Paradigm Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+## A Datasets and Preprocessing 
+
+Table 5: Statistics of datasets. 
+
+Dataset #Users #Items #Int. Avg. Len. Sparsity 
+
+ML-1M 6,040 3,667 1,000,155 165.59 95.48% MIND 265,016 21,901 12,376,034 46.70 99.79% 
+
+## B Experimental Prompt Templates 
+
+This appendix details the prompts we utilized. 
+
+## B.1 Experimental Prompt Templates 
+
+To simulate explicit user instructions, we construct prompts by injecting target or avoided attributes into predefined templates, such as “I feel like watching a {category} film. What should I see?” 
+
+for positive steering, and “I want to watch something different, so avoid the {category} type.” for negative suppression. Specifically, we curated a pool of 20 distinct templates for each task to ensure linguistic diversity. Crucially, to rigorously evaluate the model’s semantic generalization capabilities, the template pools used during training and evaluation are strictly disjoint. This design ensures that the fusion module learns to interpret underlying user intents rather than merely memorizing specific lexical patterns. 
+
+## B.2 Training Tag Generation Prompt (Stage 3) 
+
+To illustrate the output of the semantic knowledge augmentation process, consider the movie Toy Story (ID: 1), which is originally associated with the broad genre “Animation” . Our framework gen-erates the following three multi-dimensional tags to bridge the semantic gap: (i) “Toys come to life with secret adventures” (Narra-tive focus); (ii) “Whimsical and heartwarming childhood nostalgia” 
+
+(Atmosphere focus); (iii) “Family-friendly imaginative storytelling with emotional depth” (Appeal focus). This transformed metadata allows the model to learn fine-grained semantic alignment beyond coarse categories. The specific prompt used for this generation process is provided below: 
+
+[System Prompt] You are a film expert specializing in semantic tagging for recommendation systems. Your task is to bridge the gap between specific Movie Titles and their broad Genres. [User Prompt] Here are {N} movies with their Titles and assigned Genres: {items_block} **Task:** For EACH movie, generate **3 Descriptive Semantic Tags**. **Requirements for Tags:** 1. **Bridging Logic:** The tags must explain *why* this specific Title belongs to these Genres. Connect the specific content/plot/vibe to the abstract genre category. 2. **Diverse Angles:** - Tag 1: Focus on **Narrative/Plot** (What happens?). - Tag 2: Focus on **Atmosphere/Tone** (How does it feel ?). - Tag 3: Focus on **Viewer Experience/Appeal** (Why do people watch it?). 3. **Constraint:** Do NOT strictly repeat the Genre name. Use descriptive words like "high-octane combat", " explosive set pieces", etc. 4. **Length:** Keep each tag concise (5-12 words). **Output Format (JSON):** [{"id": "1", "tags": [ "Toys come to life with secret adventures", "Whimsical and heartwarming childhood nostalgia", "Family-friendly imaginative storytelling with emotional depth" ]}, ... ]
+
+## B.3 Evaluation Tag Rewriting (Stage 3) 
+
+To rigorously evaluate the model’s ability to understand latent se-mantics rather than relying on surface-level keyword matching, we generate lexically distinct but semantically equivalent variants for the testing set. Using the movie Toy Story (ID: 1) as an example, the original training tags are rephrased as follows: (i) “Playthings awaken to embark on hidden escapades” (Narrative); (ii) “Enchant-ing and tender evocation of youthful memories” (Atmosphere); (iii) 
+
+“Inventive tale for all ages, rich with heartfelt layers” (Experience). By comparing these with the training tags (e.g., “Toys” → “Play-things” , “Nostalgia” → “Youthful memories” ), we ensure that the model must generalize across vocabularies to satisfy user intents. The prompt used for this paraphrasing task is detailed below: 
+
+[System Prompt] You are an expert editor and semantic linguist. Your task is to **rewrite** movie descriptions to be ** lexically distinct** (using different words) but ** semantically equivalent** (keeping the exact same meaning and depth). [User Prompt] Here are {N} movies. Each comes with its Title, Genres, and 3 specific "Original Description" tags. {items_block} **Task:** For EACH movie, rewrite the 3 "Original Description" tags into 3 "New Evaluation" tags. **Strict Requirements:** 1. **Paraphrase, Don 't Summarize:** The new tags must maintain the **same level of detail and length** as the original. Do NOT make them shorter. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Fuyuan Lyu et al. 
+
+2. **Vocabulary Shift:** Use synonyms, different sentence structures, and alternative adjectives. - Example: "Dystopian" -> "Oppressive futuristic society"; "Heartwarming" -> "Emotionally uplifting ". 3. **Accuracy:** Do not change the facts or the vibe. Just change the wording. 4. **Structure:** - New Tag 1 corresponds to Original Tag 1 (Narrative). - New Tag 2 corresponds to Original Tag 2 (Atmosphere). - New Tag 3 corresponds to Original Tag 3 (Experience). **Output Format (JSON):** [{"id": "1", "tags": [ "Playthings awaken to embark on hidden escapades", "Enchanting and tender evocation of youthful memories", "Inventive tale for all ages, rich with heartfelt layers" ]}, ... ]
+
+## B.4 User Simulation Prompt (RQ3) 
+
+[System Prompt] You are an AI simulating a movie enthusiast with a rich viewing history. Your goal is to express what you want to watch *right now * using natural, human-like language. You never ask for genres directly; instead, you express feelings, vibes, specific plot cravings, or viewing occasions. [User Prompt] Here is the user 's movie watch history (Last 20 items): <history> {user_history_str} </history> **Task:** Generate **THREE** distinct requests representing three different "Search Modes" for this user. **Mode 1: The Mood/Vibe Seeker** - Express an emotional state or a desired atmosphere. - Example: "I 've had a stressful week, I need something chaotic to distract me," or "I want a movie that feels like a rainy Sunday afternoon." **Mode 2: The Specific Plot Craving** - Describe a specific narrative hook or character dynamic without naming the genre. - Example: "Show me a story about a heist that goes wrong ," or "I want to watch someone struggle against isolation in nature." **Mode 3: The Occasion/Abstract User** - Describe a viewing context or use an abstract metaphor. - Example: "It 's date night, need something not too heavy ," or "I want a movie that tastes like expensive wine." **Constraints:** 1. **Strictly NO explicit genre names** (e.g., ban " Horror", "Action", "Romance"). 2. Keep it conversational and natural (1st person). 3. Ensure the three requests are distinct from each other. **Output Format (JSON):** [{"implied_intent": "[The underlying genre/theme you are hinting at]", "statement": "Your generated natural language request here." }, ... ]
+
+## B.5 LLM Judge Prompt (RQ3) 
+
+[System Prompt] You are a sophisticated movie recommendation critic. You evaluate how well a list of movies satisfies a user '
+
+s complex, natural language request. You understand that users often describe *vibes* or * occasions* rather than technical movie attributes. [User Prompt] **Context:** 1. **User History (Long-term Taste):** <history> {user_history_str} </history> 2. **User Request (Current Intent):** <request> "{user_request}" </request> **System Recommendations:** <recommendations> {recommendations_with_info} </recommendations> **Evaluation Task:** Rate the recommendation list by providing three separate scores from 1 (worst) to 10 (best). **1. History Alignment Score:** Does this list look like something this user would generally enjoy, ignoring the current specific request? - 9-10: Perfect fit for their long-term habits. - 1-2: Alien to their established taste. **2. Intent Fulfillment Score:** Give Users the Wheel: Towards Promptable Recommendation Paradigm Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+**Crucial:** How well does the list capture the **spirit, mood, or specific scenario** described in the request? - If the user asked for "stress relief," are these movies distracting/fun? - If the user asked for "isolation," do these movies convey loneliness? - Do NOT look for exact keyword matches. Look for ** Semantic Alignment**. - 9-10: Perfectly captures the requested vibe/plot. - 1-2: Completely misses the point of the user 's words. **3. Overall Score:** A holistic score combining history compatibility and intent satisfaction. - A good recommendation must solve the user 's *current* problem (the request) without violating their * fundamental* taste (history). - Weight **Intent Fulfillment** heavily. **Output Format:** Provide the output strictly in the following JSON format (do not include markdown fencing). {"scores": { "history_alignment": <int 1-10>, "intent_fulfillment": <int 1-10>, "overall_score": <int 1-10> }, "reasoning": { "history_alignment": "<Brief justification>", "intent_fulfillment": "<Brief justification, focusing on the vibe/semantic match>", "overall_score": "<Final verdict>" }}
+
+## B.6 Movie Summary Generation Prompt 
+
+[System Prompt] You are a knowledgeable film critic. Provide accurate movie summaries. [User Prompt] You are tasked with generating a summary of the movie: "{ movie_title}". This summary should be maximally helpful for deciding if it fits a specific mood or vibe. Include: 1. Genre and Tone (e.g., dark, lighthearted, tense, slow-burn). 2. Main Themes. **Constraint:** Keep it concise (max 40-50 words). No spoilers. 
+
+## C Automatic Intent Classification for Routing 
+
+To operationalize the control indicator 𝑐 without manual labeling or specialized training, we employ a zero-shot classification ap-proach based on the BART-large-mnli model [ 11 ]. This approach leverages the Natural Language Inference (NLI) capability of the model to determine the logical relationship between a user prompt and a predefined intent. 
+
+## C.1 Classification Protocol 
+
+We define the intent detection as a binary classification task with two candidate labels: “positive preference” (corresponding to 𝑐 = +)and “negative preference” (corresponding to 𝑐 = −). To enhance the model’s logical reasoning, we utilize a hypothesis template : “This text expresses a {}.” During inference, the BART model treats the user prompt as the “premise” and the filled template (e.g., “This text expresses a positive preference.”) as the “hypothesis.” The model then calculates the probability of entailment between the premise and each hypothesis. The label with the highest entailment score is selected as the predicted intent. 
+
+## C.2 Data Pre-processing and Verification 
+
+During the system’s development and verification, we processed the prompt templates (e.g., “I am in the mood for {category}” ) by replac-ing placeholders with specific concrete instances (such as “sports”) to ensure the model could process the logic in a contextualized manner. We conducted a rigorous evaluation using the full set of train-ing and evaluation prompts. The BART-based classifier achieved a 100% accuracy rate across all samples. This perfect classifica-tion performance ensures that the routing mechanism within our dual-path architecture is virtually flawless, providing a reliable foundation for the subsequent decoupled fusion process. By using this zero-shot approach, we demonstrate that user intent routing can be achieved efficiently without additional annotated data or intent-specific training. 
+
+## D Additional Experiment D.1 Detailed results on various 𝑁 settings 
+
+Here, we report the individual results for the 𝑁 = 3, 5, 10 settings in Table 1. Specifically, we have Table 6, listing results for 𝑁 = 3, 5, 10 
+
+on the MovieLens-1M dataset, and Table 7, listing results for 𝑁 =
+
+3, 5 on the MIND dataset. Notice that the MIND dataset lacks the 
+
+𝑁 = 10 setting due to its sequence length. 
+
+## D.2 Results for Ablation on Stage Design 
+
+Here we report the results discussed in Section 5.1. The result is shown in Table 8. 
+
+## D.3 Results for Ablation on Loss Design 
+
+Here we report the results discussed in Section 5.2. The result is shown in Table 9. Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Fuyuan Lyu et al. 
+
+Table 6: Performance comparison on the ML-1M dataset with varied 𝑁 settings. 
+
+Task Type Model SASRec GRU4Rec 
+
+NDCG@10 NDCG@20 Recall@10 Recall@20 NDCG@10 NDCG@20 Recall@10 Recall@20 
+
+Positive 
+
+(N = 3 )Base 0.0992 0.1293 0.1978 0.3171 0.0873 0.1155 0.1780 0.2898 
+
++ f 0.1084 0.1373 0.2169 0.3320 0.0915 0.1204 0.1885 0.3034 
+
++ f + a 0.0990 0.1237 0.1930 0.2912 0.0915 0.1155 0.1784 0.2737 Filter 0.3705 0.3989 0.5781 0.6896 0.3496 0.3794 0.5495 0.6674 
+
++ f 0.3840 0.4117 0.5913 0.7001 0.3568 0.3852 0.5625 0.6746 
+
++ f + a 0.3466 0.3759 0.5425 0.6575 0.3377 0.3661 0.5365 0.6485 DPR 0.6159 
+
+(+60.39%) 
+
+0.6315 
+
+(+53.39%) 
+
+0.7664 
+
+(+29.61%) 
+
+0.8279 
+
+(+18.25%) 
+
+0.5929 
+
+(+66.17%) 
+
+0.6097 
+
+(+58.28%) 
+
+0.7410 
+
+(+31.73%) 
+
+0.8071 
+
+(+19.64%) 
+
+Negative 
+
+(N = 3 )Base 0.1402 0.1809 0.2005 0.3154 0.1223 0.1609 0.1786 0.2874 
+
++ f 0.1505 0.1922 0.2136 0.3313 0.1275 0.1673 0.1858 0.2983 
+
++ f + a 0.1360 0.1707 0.1909 0.2887 0.1270 0.1623 0.1779 0.2779 Filter 0.1717 0.2152 0.2380 0.3606 0.1517 0.1921 0.2159 0.3299 
+
++ f 0.1850 0.2290 0.2537 0.3779 0.1570 0.2002 0.2219 0.3436 
+
++ f + a 0.1571 0.1948 0.2142 0.3206 0.1451 0.1829 0.1989 0.3058 DPR 0.1821 (-1.57%) 0.2255 (-1.53%) 0.2530 (-0.28%) 0.3754 (-0.66%) 
+
+0.1806 
+
+(+15.03%) 
+
+0.2235 
+
+(+11.64%) 
+
+0.2504 
+
+(+12.84%) 
+
+0.3712 
+
+(+8.03%) 
+
+Positive 
+
+(N = 5 )Base 0.0779 0.1066 0.1581 0.2721 0.0708 0.0948 0.1453 0.2406 
+
++ f 0.0859 0.1118 0.1747 0.2776 0.0743 0.0995 0.1513 0.2513 
+
++ f + a 0.0814 0.1043 0.1633 0.2544 0.0718 0.0951 0.1484 0.2409 Filter 0.3325 0.3621 0.5401 0.6562 0.3095 0.3404 0.5073 0.6286 
+
++ f 0.3419 0.3702 0.5508 0.6625 0.3189 0.3486 0.5240 0.6414 
+
++ f + a 0.3165 0.3445 0.5146 0.6250 0.3046 0.3347 0.5003 0.6193 DPR 0.5841 
+
+(+70.84%) 
+
+0.6014 
+
+(+62.45%) 
+
+0.7401 
+
+(+34.37%) 
+
+0.8082 
+
+(+21.99%) 
+
+0.5608 
+
+(+75.85%) 
+
+0.5784 
+
+(+65.92%) 
+
+0.7087 
+
+(+35.25%) 
+
+0.7778 
+
+(+21.27%) 
+
+Negative 
+
+(N = 5 )Base 0.1400 0.1841 0.1701 0.2734 0.1221 0.1641 0.1492 0.2476 
+
++ f 0.1500 0.1962 0.1797 0.2880 0.1285 0.1717 0.1558 0.2571 
+
++ f + a 0.1408 0.1788 0.1670 0.2559 0.1298 0.1687 0.1536 0.2449 Filter 0.1709 0.2193 0.2021 0.3155 0.1503 0.1954 0.1796 0.2852 
+
++ f 0.1834 0.2334 0.2138 0.3311 0.1576 0.2054 0.1862 0.2985 
+
++ f + a 0.1623 0.2043 0.1881 0.2866 0.1481 0.1895 0.1732 0.2703 DPR 0.1826 (-0.44%) 0.2305 (-1.24%) 0.2160 (+1.03%) 0.3281 (-0.91%) 
+
+0.1808 
+
+(+14.72%) 
+
+0.2292 
+
+(+11.59%) 
+
+0.2111 
+
+(+13.37%) 
+
+0.3241 
+
+(+8.58%) 
+
+Positive 
+
+(N = 10 )Base 0.0573 0.0789 0.1164 0.2023 0.0436 0.0615 0.0939 0.1656 
+
++ f 0.0623 0.0832 0.1245 0.2071 0.0465 0.0662 0.0983 0.1765 
+
++ f + a 0.0633 0.0831 0.1265 0.2051 0.0611 0.0819 0.1189 0.2019 Filter 0.2696 0.2992 0.4537 0.5705 0.2434 0.2727 0.4154 0.5302 
+
++ f 0.2777 0.3052 0.4654 0.5729 0.2548 0.2820 0.4303 0.5383 
+
++ f + a 0.2700 0.3007 0.4512 0.5725 0.2691 0.2950 0.4557 0.5576 DPR 0.5245 
+
+(+88.87%) 
+
+0.5434 
+
+(+78.05%) 
+
+0.6835 
+
+(+46.86%) 
+
+0.7584 
+
+(+32.38%) 
+
+0.4966 
+
+(+84.54%) 
+
+0.5170 
+
+(+75.25%) 
+
+0.6476 
+
+(+42.11%) 
+
+0.7280 
+
+(+30.56%) 
+
+Negative 
+
+(N = 10 )Base 0.1287 0.1758 0.1217 0.2070 0.1069 0.1487 0.1019 0.1776 
+
++ f 0.1385 0.1865 0.1292 0.2159 0.1130 0.1561 0.1077 0.1585 
+
++ f + a 0.1378 0.1822 0.1275 0.2075 0.1274 0.1715 0.1182 0.1981 Filter 0.1571 0.2097 0.1460 0.2411 0.1309 0.1776 0.1229 0.2075 
+
++ f 0.1684 0.2211 0.1551 0.2502 0.1382 0.1878 0.1295 0.2195 
+
++ f + a 0.1601 0.2088 0.1459 0.2341 0.1463 0.1934 0.1349 0.2199 DPR 0.1670 (-0.83%) 0.2191 (-0.90%) 0.1537 (-0.90%) 0.2479 (-0.92%) 
+
+0.1609 
+
+(+9.98%) 
+
+0.2132 
+
+(+10.24%) 
+
+0.1476 
+
+(+9.41%) 
+
+0.2420 
+
+(+10.05%)   
+
+> Relative improvements for DPR are calculated based on the strongest Filter baseline in each sub-task. Bold indicates the best overall performance.
+
+## D.4 Results for Ablation on Tower Architecture Design 
+
+Here we report the results discussed in Section 5.3. The result is shown in Table 10. Give Users the Wheel: Towards Promptable Recommendation Paradigm Conference acronym ’XX, June 03–05, 2018, Woodstock, NY 
+
+Table 7: Performance comparison on the MIND dataset with different 𝑁 settings. 
+
+Task Type Model SASRec GRU4Rec 
+
+NDCG@10 NDCG@20 Recall@10 Recall@20 NDCG@10 NDCG@20 Recall@10 Recall@20 
+
+Positive 
+
+(N = 3 )Base 0.0431 0.0545 0.0835 0.1291 0.0395 0.0504 0.0767 0.1200 
+
++ f 0.0441 0.0564 0.0852 0.1341 0.0390 0.0499 0.0759 0.1192 
+
++ f + a 0.0622 0.0777 0.1200 0.1819 0.0525 0.0665 0.1017 0.1574 Filter 0.3259 0.3413 0.4893 0.5496 0.3170 0.3320 0.4786 0.5370 
+
++ f 0.3386 0.3542 0.5075 0.5686 0.3117 0.3266 0.4696 0.5270 
+
++ f + a 0.4127 0.4291 0.6030 0.6670 0.3798 0.3965 0.5613 0.6265 DPR 0.4679 
+
+(+13.38%) 
+
+0.4836 
+
+(+12.70%) 0.5998 (-0.53%) 0.6619 (-0.76%) 
+
+0.4956 
+
+(+30.49%) 
+
+0.5117 
+
+(+29.05%) 
+
+0.6326 
+
+(+12.70%) 
+
+0.6959 
+
+(+11.08%) 
+
+Negative 
+
+(N = 3 )Base 0.0600 0.0764 0.0827 0.1291 0.0557 0.0711 0.0767 0.1202 
+
++ f 0.0620 0.0793 0.0854 0.1343 0.0548 0.0701 0.0758 0.1190 
+
++ f + a 0.0877 0.1100 0.1202 0.1830 0.0737 0.0935 0.1013 0.1572 Filter 0.0643 0.0809 0.0875 0.1345 0.0596 0.0753 0.0809 0.1253 
+
++ f 0.0665 0.0841 0.0904 0.1400 0.0588 0.0744 0.0802 0.1242 
+
++ f + a 0.0932 0.1159 0.1260 0.1903 0.0783 0.0984 0.1063 0.1632 DPR 0.0868 (-6.87%) 0.1079 (-6.90%) 0.1171 (-7.06%) 0.1767 (-7.15%) 
+
+0.0842 
+
+(+7.54%) 
+
+0.1048 
+
+(+6.50%) 
+
+0.1136 
+
+(+6.87%) 
+
+0.1717 
+
+(+5.21%) 
+
+Positive 
+
+(N = 5 )Base 0.0380 0.0493 0.0743 0.1192 0.0361 0.0464 0.0706 0.1119 
+
++ f 0.0396 0.0514 0.0782 0.1252 0.0355 0.0456 0.0699 0.1100 
+
++ f + a 0.0560 0.0711 0.1093 0.1694 0.0470 0.0601 0.0915 0.1438 Filter 0.3139 0.3298 0.4775 0.5396 0.3074 0.3228 0.4692 0.5294 
+
++ f 0.3279 0.3440 0.4974 0.5605 0.2991 0.3141 0.4545 0.5134 
+
++ f + a 0.3994 0.4159 0.5898 0.6542 0.3636 0.3806 0.5431 0.6093 DPR 0.4503 
+
+(+12.74%) 
+
+0.4665 
+
+(+12.17%) 0.5825 (-1.24%) 0.6468 (-1.13%) 
+
+0.4764 
+
+(+31.02%) 
+
+0.4930 
+
+(+29.53%) 
+
+0.6149 
+
+(+13.22%) 
+
+0.6804 
+
+(+11.67%) 
+
+Negative 
+
+(N = 5 )Base 0.0639 0.0824 0.0738 0.1173 0.0608 0.0784 0.0702 0.1114 
+
++ f 0.0667 0.0862 0.0772 0.1229 0.0595 0.0768 0.0689 0.1094 
+
++ f + a 0.0944 0.1200 0.1084 0.1685 0.0789 0.1010 0.0911 0.1430 Filter 0.0686 0.0873 0.0782 0.1223 0.0651 0.0829 0.0741 0.1161 
+
++ f 0.0716 0.0914 0.0818 0.1282 0.0638 0.0813 0.0730 0.1142 
+
++ f + a 0.1002 0.1264 0.1137 0.1752 0.0837 0.1063 0.0956 0.1486 DPR 0.0931 (-7.09%) 0.1170 (-7.44%) 0.1055 (-7.21%) 0.1616 (-7.76%) 
+
+0.0894 
+
+(+6.81%) 
+
+0.1128 
+
+(+6.11%) 
+
+0.1012 
+
+(+5.86%) 
+
+0.1559 
+
+(+4.91%)      
+
+> + f and + f + a represent different fine-tuning stages. DPR’s improvements are calculated relative to the Filter + f + a baseline. Bold numbers indicate the best results within each sub-task.
+
+Table 8: Ablation study of the multi-stage framework (3-Stage vs. 2-Stage) on ML-1M and MIND datasets. 
+
+Dataset ML-1M MIND 
+
+Model SASRec GRU4Rec SASRec GRU4Rec 
+
+Stage 3-S 2-S Diff 3-S 2-S Diff 3-S 2-S Diff 3-S 2-S Diff 
+
+[SEQ] 
+
+N@10 0.1838 0.1822 -0.87% 0.1817 0.1718 -5.45% 0.1117 0.1093 -2.15% 0.0959 0.0959 0.00% N@20 0.2161 0.2135 -1.20% 0.2145 0.2024 -5.64% 0.1333 0.1310 -1.73% 0.1149 0.1150 +0.09% R@10 0.3341 0.3306 -1.05% 0.3220 0.3079 -4.38% 0.2022 0.1986 -1.78% 0.1745 0.1750 +0.29% R@20 0.4621 0.4541 -1.73% 0.4520 0.4290 -5.09% 0.2878 0.2849 -1.01% 0.2498 0.2511 +0.52% 
+
+[POS] 
+
+N@10 0.5748 0.5297 -7.85% 0.5501 0.4925 -10.47% 0.4591 0.4181 -8.93% 0.4688 0.4597 -1.94% N@20 0.5921 0.5483 -7.40% 0.5683 0.5116 -9.98% 0.4751 0.4334 -8.78% 0.4855 0.4746 -2.25% R@10 0.7300 0.6809 -6.73% 0.6991 0.6414 -8.25% 0.5912 0.5389 -8.85% 0.6058 0.5792 -4.39% R@20 0.7981 0.7543 -5.49% 0.7710 0.7169 -7.02% 0.6543 0.5997 -8.34% 0.6719 0.6383 -5.00% 
+
+[NEG] 
+
+N@10 0.1772 0.1537 -13.26% 0.1741 0.1511 -13.21% 0.0899 0.0884 -1.67% 0.0876 0.0824 -5.94% N@20 0.2250 0.2001 -11.07% 0.2220 0.1963 -11.58% 0.1124 0.1111 -1.16% 0.1109 0.1049 -5.41% R@10 0.2076 0.1832 -11.75% 0.2030 0.1796 -11.53% 0.1113 0.1098 -1.35% 0.0981 0.0929 -5.30% R@20 0.3172 0.2899 -8.61% 0.3124 0.2835 -9.25% 0.1691 0.1682 -0.53% 0.1513 0.1444 -4.56% Conference acronym ’XX, June 03–05, 2018, Woodstock, NY Fuyuan Lyu et al. 
+
+Table 9: Ablation study of Loss Functions on ML-1M and MIND datasets. 
+
+Dataset ML-1M MIND 
+
+Model SASRec GRU4Rec SASRec GRU4Rec 
+
+Loss Type Full Pos Neg Full Pos Neg Full Pos Neg Full Pos Neg 
+
+[POS] 
+
+N@10 0.5748 0.5672 0.1670 0.5501 0.5496 0.1630 0.4591 0.4629 0.0946 0.4688 0.5068 0.1211 N@20 0.5921 0.5853 0.1973 0.5683 0.5672 0.1913 0.4751 0.4789 0.1110 0.4855 0.5206 0.1373 R@10 0.7300 0.7219 0.3079 0.6991 0.6986 0.2957 0.5912 0.5955 0.1633 0.6058 0.6292 0.1997 R@20 0.7981 0.7930 0.4281 0.7710 0.7680 0.4079 0.6543 0.6588 0.2286 0.6719 0.6837 0.2643 
+
+[NEG] 
+
+N@10 0.1772 0.1634 0.1772 0.1741 0.1639 0.1733 0.0899 0.0759 0.0896 0.0876 0.0831 0.0850 N@20 0.2250 0.2089 0.2246 0.2220 0.2088 0.2216 0.1124 0.0956 0.1122 0.1109 0.1057 0.1077 R@10 0.2076 0.1904 0.2070 0.2030 0.1910 0.2026 0.1113 0.0940 0.1097 0.0981 0.0934 0.0954 R@20 0.3172 0.2947 0.3156 0.3124 0.2938 0.3131 0.1691 0.1446 0.1679 0.1513 0.1450 0.1474 
+
+Table 10: Ablation study of Model Architecture (Two-Tower vs. Single-Tower) on ML-1M and MIND datasets. 
+
+Dataset ML-1M MIND 
+
+Model SASRec GRU4Rec SASRec GRU4Rec 
+
+Arch. 2-T 1-T Diff 2-T 1-T Diff 2-T 1-T Diff 2-T 1-T Diff 
+
+[POS] 
+
+N@10 0.5748 0.4173 -27.40% 0.5501 0.3941 -28.36% 0.4591 0.3158 -31.21% 0.4688 0.3666 -21.80% N@20 0.5921 0.4396 -25.76% 0.5683 0.4164 -26.73% 0.4751 0.3329 -29.93% 0.4855 0.3816 -21.40% R@10 0.7300 0.5650 -22.60% 0.6991 0.5390 -22.90% 0.5912 0.4288 -27.47% 0.6058 0.4755 -21.51% R@20 0.7981 0.6528 -18.21% 0.7710 0.6270 -18.68% 0.6543 0.4963 -24.15% 0.6719 0.5348 -20.40% 
+
+[NEG] 
+
+N@10 0.1772 0.1146 -35.33% 0.1741 0.1152 -33.83% 0.0899 0.0507 -43.60% 0.0876 0.0477 -45.55% N@20 0.2250 0.1581 -29.73% 0.2220 0.1592 -28.29% 0.1124 0.0707 -37.10% 0.1109 0.0688 -37.96% R@10 0.2076 0.1487 -28.37% 0.2030 0.1484 -26.90% 0.1113 0.0727 -34.68% 0.0981 0.0642 -34.56% R@20 0.3172 0.2490 -21.50% 0.3124 0.2501 -19.94% 0.1691 0.1241 -26.61% 0.1513 0.1128 -25.45%

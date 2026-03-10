@@ -1,0 +1,672 @@
+Title: DeepInterestGR: Mining Deep Multi-Interest Using Multi-Modal LLMs for Generative Recommendation
+
+URL Source: https://arxiv.org/pdf/2602.18907v1
+
+Published Time: Tue, 24 Feb 2026 01:36:54 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# DeepInterestGR: Mining Deep Multi-Interest Using Multi-Modal LLMs for Generative Recommendation 
+
+# Yangchen Zeng 
+
+zengyangchen@foxmail.com 220245765@seu.edu.cn southeast university Wuxi, China 
+
+## Abstract 
+
+Recent generative recommendation frameworks have demonstrated remarkable scaling potential by reformulating item prediction as autoregressive Semantic ID (SID) generation. However, existing methods primarily rely on shallow behavioral signals, encoding items solely through surface-level textual features such as titles and descriptions. This reliance results in a critical “Shallow Interest” problem: the model fails to capture the latent, semantically rich interests underlying user interactions, limiting both personalization depth and recommendation interpretability. DeepInterestGR introduces three key innovations: (1) Multi-LLM Interest Mining (MLIM) : We systematically leverage multi-ple frontier LLMs ( e.g., GPT-5.1, Gemini-3-Pro, Kimi-K2-Thinking, Grok-4) along with their multi-modal variants to extract deep tex-tual and visual interest representations for users and items through Chain-of-Thought prompting. (2) Reward-Labeled Deep Interest (RLDI) : To ensure interest quality for downstream reinforcement learning, we employ a lightweight binary classifier to assign reward labels (positive/negative) to mined interests, enabling effective su-pervision signals. (3) Interest-Enhanced Item Discretization (IEID) : The curated deep interests are encoded into semantic em-beddings and quantized into SID tokens via RQ-VAE, enriching item representations with interpretable interest semantics. We adopt a two-stage training pipeline: supervised fine-tuning (SFT) aligns the generative model with both deep interest signals and collaborative filtering patterns, followed by reinforcement learning with GRPO optimized by our Interest-Aware Reward. Ex-tensive experiments on three Amazon Review benchmarks (Beauty, Sports, Instruments) demonstrate that DeepInterestGR consistently outperforms state-of-the-art baselines across HR@K and NDCG@K metrics, validating the effectiveness of unifying deep interest min-ing with generative recommendation. 
+
+## CCS Concepts 
+
+• Information systems → Recommender systems .
+
+## Keywords 
+
+Generative Recommendation, Deep Interest Mining, Large Lan-guage Models, Reinforcement Learning  
+
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> KDD ’25, Toronto, ON, Canada
+> ©2025 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-1454-2/2025/08 https://doi.org/10.1145/3711896.3736979
+
+## 1 Introduction 
+
+The scaling behavior of recommendation models has recently at-tracted significant attention [ 9, 14 , 15 , 28 ], driven largely by the success of large language models (LLMs) in demonstrating pre-dictable performance gains with increased model size [ 3 , 30 ]. How-ever, traditional recommendation models have struggled to exhibit similar scaling laws [ 6 , 11 , 22 , 24 ]. These systems typically allocate the majority of parameters to large embedding tables for storing user and item representations, while using only inner-product or shallow scoring networks for final predictions. Such an embedding-heavy design leads to performance plateaus: even as embedding dimensions or table sizes increase, improvements diminish quickly beyond moderate scales [8, 12, 27]. Generative recommendation offers a fundamental paradigm shift. By compressing items into sequences of discrete Semantic IDs (SIDs) through quantization techniques [ 4, 10 ], it uses compact vocabular-ies and redirects the bulk of parameters toward deep autoregres-sive Transformers that generate SID sequences [ 5, 19 , 20 , 32 ]. This design enables scaling behaviors more characteristic of language models, where increased depth and capacity translate to consistent performance gains [ 9, 28 ]. Recent works such as TIGER [ 20 ], LC-Rec [ 32 ], and industrial systems have demonstrated the promise of this generative paradigm. Despite these advances, existing generative recommendation methods suffer from a critical limitation: they primarily rely on 
+
+shallow behavioral signals . Current approaches encode items solely through surface-level textual features such as titles and de-scriptions [ 7 , 20 , 32 ], failing to capture the latent, semantically rich interests underlying user interactions. We term this the “ Shallow Interest ” problem, which manifests in three aspects: (1) limited se-mantic depth —surface features miss deeper user intents ( e.g., “wire-less earbuds” may reflect interests in “fitness lifestyle” or “commute convenience”); (2) poor interpretability —without explicit interest modeling, the recommendation process remains a black box; and (3) suboptimal RL supervision —existing rewards rely on rule-based or collaborative signals without semantic guidance. To address these limitations, we propose DeepInterestGR , a novel framework that integrates deep interest mining into the gen-erative recommendation pipeline. Our key insight is that frontier LLMs possess remarkable world knowledge and reasoning capa-bilities [ 13 , 30 ], which can be leveraged to extract interpretable, semantically rich interest representations from user behaviors. DeepInterestGR introduces three key innovations: 
+
+• Multi-LLM Interest Mining (MLIM). We systematically leverage multiple frontier LLMs ( e.g., GPT-5.1, Gemini-3-Pro, Kimi-K2-Thinking, Grok-4) along with their multi-modal  
+
+> arXiv:2602.18907v1 [cs.LG] 21 Feb 2026 KDD ’25, August 3–7, 2025, Toronto, ON, Canada Yangchen Zeng et al.
+
+variants to extract deep textual and visual interest represen-tations for users and items through Chain-of-Thought (CoT) prompting. Through comparative experiments, we identify the optimal LLM configuration for high-quality interest min-ing. 
+
+• Reward-Labeled Deep Interest (RLDI). To ensure interest quality for downstream reinforcement learning, we employ a lightweight binary classifier (based on Qwen-Chat) to assign reward labels (positive/negative) to mined interests. These labels serve as supervision signals during the RL phase. 
+
+• Interest-Enhanced Item Discretization (IEID). The cu-rated deep interests are encoded into semantic embeddings via Qwen-Embedding and quantized into SID tokens via RQ-VAE, enriching item representations with interpretable interest semantics. For training, we adopt a two-stage pipeline following the success-ful practice of generative recommendation [ 20 , 32 ]: supervised fine-tuning (SFT) aligns the generative model with both deep interest signals and collaborative filtering patterns, followed by reinforce-ment learning. Crucially, we introduce an Interest-Aware Reward 
+
+derived from RLDI labels—recommendations consistent with pos-itive interests receive higher rewards, guiding the policy toward more personalized and semantically coherent item sequences. Extensive experiments on large-scale real-world benchmarks from the Amazon Review Dataset [ 18 ] demonstrate that DeepIn-terestGR achieves significant improvements over state-of-the-art baselines including SASRec [ 11 ], BERT4Rec [ 22 ], TIGER [ 20 ], LC-Rec [ 32 ], and VQ-Rec [ 7] on HR@K and NDCG@K metrics, val-idating the effectiveness of unifying deep interest mining with generative recommendation. The main contributions of this work are summarized as follows: 
+
+• We identify the “ Shallow Interest ” problem in existing generative recommendation methods and propose DeepIn-terestGR , a novel framework that integrates deep interest mining into the generative recommendation pipeline. 
+
+• We introduce three key components: MLIM for multi-LLM interest extraction, RLDI for interest quality control, and 
+
+IEID for interest-enhanced item tokenization. 
+
+• We design an Interest-Aware Reward mechanism that leverages mined deep interests as supervision signals for reinforcement learning, enabling more personalized recom-mendations. 
+
+• Extensive experiments demonstrate that DeepInterestGR 
+
+consistently outperforms state-of-the-art baselines across multiple metrics and datasets. 
+
+## 2 Related Work 2.1 Sequential Recommendation 
+
+Sequential recommendation predicts the next item based on user behavior sequences. Early methods used Markov chains [ 21 ] and RNNs [ 6 ], while attention-based models like SASRec [ 11 ] and BERT4Rec [ 22 ]achieved strong performance through self-attention mechanisms. Recent works explored self-supervised learning [ 33 ] and graph-based methods [ 27 ]. However, these embedding-based approaches allocate most parameters to large embedding tables, limiting scala-bility and semantic understanding beyond collaborative signals [ 8]. 
+
+## 2.2 Generative Recommendation 
+
+Generative recommendation represents a paradigm shift from tradi-tional embedding-based methods by reformulating item prediction as a sequence generation problem. The core idea is to compress items into discrete Semantic IDs (SIDs) through quantization tech-niques, then use autoregressive Transformers to generate SID se-quences [9, 14, 15]. TIGER [ 20 ] pioneered this approach by using RQ-VAE to quan-tize text embeddings of item metadata into hierarchical SID tokens, then training a Transformer to autoregressively generate these to-kens. This design enables scaling behaviors more characteristic of language models, where increased depth and capacity translate to consistent performance gains. LC-Rec [ 32 ] further improved SID-language alignment through multi-task learning, enabling LLMs to understand the semantics behind discrete SID symbols. VQ-Rec [ 7 ]explored vector-quantized representations for transferable sequen-tial recommendation. Recent works have focused on enhancing SID construction and training strategies. EAGER [ 26 ] proposed a two-stream architecture with behavior-semantic collaboration. LETTER [ 25 ] introduced learnable tokenizers for LLM-based generative recommendation. CoST [ 34 ] leveraged contrastive learning for semantic tokenization. Industrial deployments such as HSTU [ 28 ] demonstrated trillion-parameter sequential transducers for generative recommendations at scale. However, existing generative recommendation methods primar-ily encode items using surface-level textual features such as titles and descriptions [ 7, 20 , 32 ]. This shallow encoding fails to capture the latent, semantically rich interests underlying user interactions, limiting both personalization depth and recommendation inter-pretability. 
+
+## 2.3 LLM for Recommendation 
+
+The remarkable success of Large Language Models (LLMs) has inspired their application to recommender systems, leveraging their world knowledge and reasoning capabilities for enhanced semantic understanding [30]. P5 [ 5] pioneered the unified prompt-based paradigm, casting various recommendation tasks ( e.g., rating prediction, sequential recommendation, explanation generation) into a text-to-text format. This work demonstrated that a single pretrained language model can handle diverse recommendation scenarios through appropriate prompting. RecFormer [ 13 ] showed that language representations alone are sufficient for effective sequential recommendation, using item titles as the primary feature. Subsequent works explored different strategies for LLM-recommendation integration. IDGenRec [ 23 ] proposed textual ID learning to align LLMs with recommendation semantics. GPTRec [ 19 ] adapted GPT-style models for generative sequential recommendation. UniSRec [ 8]pursued universal sequence representation learning for cross-domain recommendation. More recently, reinforcement learning techniques have been applied to optimize LLM-based recommenders, typically using rule-based or collaborative signals as reward functions [16]. DeepInterestGR: Mining Deep Multi-Interest Using Multi-Modal LLMs for Generative Recommendation KDD ’25, August 3–7, 2025, Toronto, ON, Canada Deep 
+
+## Interest 
+
+## GR 
+
+Figure 1: Overview of the DeepInterestGR framework. Left: Multi-LLM Interest Mining (MLIM) extracts deep interests using frontier LLMs with Chain-of-Thought prompting, while Interest-Enhanced Item Discretization (IEID) encodes these interests into Semantic IDs via RQ-VAE. Right: Two-stage training pipeline consisting of Supervised Fine-Tuning (SFT) and Reinforcement Learning with GRPO, guided by our Interest-Aware Reward derived from Reward-Labeled Deep Interest (RLDI). 
+
+## 3 Method 
+
+In this section, we present the DeepInterestGR framework in detail. We first formalize the problem setting and introduce the notation used throughout this paper (Section 3.1). We then describe the generative recommendation paradigm that serves as the foundation of our approach (Section 3.2). Subsequently, we present our core contributions: Multi-LLM Interest Mining (MLIM) for extracting deep interests (Section 3.3), Interest-Enhanced Item Discretization (IEID) for enriching item representations (Section 3.4), and our two-stage training pipeline with Interest-Aware Reward (Section 3.5). 
+
+## 3.1 Problem Formulation 
+
+We consider the sequential recommendation task, where the goal is to predict the next item a user will interact with based on their historical interaction sequence. Let U denote the set of users and 
+
+I denote the set of items, with |U| = 𝑁 and |I| = 𝑀 representing the number of users and items, respectively. 
+
+User Interaction Sequence. For each user 𝑢 ∈ U , we observe a chronologically ordered interaction sequence S𝑢 = [𝑖 1, 𝑖 2, . . . , 𝑖 𝑇 ],where 𝑖 𝑡 ∈ I represents the item that user 𝑢 interacted with at time step 𝑡 , and 𝑇 denotes the sequence length. The sequential recommendation task aims to predict the next item 𝑖 𝑇 +1 that user 𝑢 
+
+is likely to interact with, given the historical sequence S𝑢 .
+
+Item Representation. Each item 𝑖 ∈ I is associated with rich metadata, including textual attributes ( e.g., title t𝑖 , description d𝑖 ,category c𝑖 ) and visual content ( e.g., product image v𝑖 ). Existing generative recommendation methods typically encode items using only surface-level textual features: 
+
+eshallow  
+
+> 𝑖
+
+= 𝑓 enc (t𝑖 , d𝑖 ), (1) where 𝑓 enc (·) denotes a text encoder ( e.g., sentence transformer). This shallow encoding captures explicit attributes but fails to reveal the latent interests underlying user-item interactions. 
+
+Deep Interest. We introduce the concept of deep interest to capture the semantically rich, latent motivations behind user behaviors. For each item 𝑖 , we define the deep interest representation as: 
+
+z𝑖 = MLIM (t𝑖 , d𝑖 , v𝑖 ), (2) where MLIM (·) denotes our Multi-LLM Interest Mining module that extracts interpretable interest descriptions by leveraging the reason-ing capabilities of frontier LLMs. The mined deep interests capture underlying user intents such as “fitness lifestyle”, “productivity-focused”, or “aesthetic preference” that transcend surface-level item attributes. 
+
+Semantic ID (SID). Following the generative recommendation paradigm [ 20 , 32 ], we represent each item as a sequence of discrete Semantic ID tokens. Given an item embedding e𝑖 , the SID is obtained through residual quantization: 
+
+s𝑖 = RQ-VAE (e𝑖 ) = (𝑠 (1) 
+
+> 𝑖
+
+, 𝑠 (2) 
+
+> 𝑖
+
+, . . . , 𝑠 (𝐻 ) 
+
+> 𝑖
+
+), (3) where 𝐻 denotes the number of quantization layers, and each 
+
+𝑠 (ℎ) 
+
+> 𝑖
+
+∈ {1, 2, . . . , 𝐾 } indexes into a learnable codebook C (ℎ) =
+
+{c(ℎ) 
+
+> 1
+
+, . . . , c(ℎ) 
+
+> 𝐾
+
+} with 𝐾 entries. The hierarchical SID captures item semantics at multiple granularity levels, enabling efficient autore-gressive generation. 
+
+Generative Recommendation. The sequential recommendation task is reformulated as an autoregressive generation problem. Given an input sequence X that encodes the user’s interaction history using natural language instructions, the model generates the SID KDD ’25, August 3–7, 2025, Toronto, ON, Canada Yangchen Zeng et al. 
+
+sequence Y = [𝑦 1, 𝑦 2, . . . , 𝑦 𝐻 ] of the target item: 
+
+𝑝 (Y|X) =
+
+> 𝐻
+
+Ö
+
+> ℎ=1
+
+𝑝 (𝑦 ℎ |X, 𝑦 1, . . . , 𝑦 ℎ−1), (4) where each 𝑦 ℎ corresponds to the ℎ-th SID token. This formula-tion redirects model capacity from large embedding tables to deep autoregressive Transformers, enabling scaling behaviors character-istic of language models. The key notations used throughout this paper are summarized in Table 8 in the Appendix. 
+
+## 3.2 Residual Quantization for SID Construction 
+
+We adopt RQ-VAE to quantize item embeddings e𝑖 ∈ R𝑑 into hi-erarchical SID tokens. The quantization iteratively assigns code-book entries: 𝑠 (ℎ) 
+
+> 𝑖
+
+= arg min 𝑘 ∥R(ℎ) 
+
+> 𝑖
+
+− c(ℎ) 
+
+> 𝑘
+
+∥2, where R(1) 
+
+> 𝑖
+
+= e𝑖 and residuals are computed as R(ℎ+1) 
+
+> 𝑖
+
+= R(ℎ) 
+
+> 𝑖
+
+− c(ℎ) 
+
+> 𝑠 (ℎ)
+> 𝑖
+
+. The final SID 
+
+s𝑖 = (𝑠 (1) 
+
+> 𝑖
+
+, . . . , 𝑠 (𝐻 ) 
+
+> 𝑖
+
+) captures item semantics at multiple granularity levels. 
+
+## 3.3 Multi-LLM Interest Mining (MLIM) 
+
+The core innovation of DeepInterestGR lies in systematically min-ing deep, semantically rich interests from user-item interactions using multiple frontier Large Language Models. Unlike existing methods that rely solely on surface-level textual features, MLIM leverages the world knowledge and reasoning capabilities of LLMs to extract interpretable interest representations through Chain-of-Thought (CoT) prompting. 
+
+Motivation. Frontier LLMs accessed via online APIs (such as GPT-4o, Gemini-1.5-Pro, Kimi, and Grok) have demonstrated remarkable capabilities in understanding context, reasoning about user intent, and generating semantically coherent descriptions [ 30 ]. We hy-pothesize that these models can infer latent user interests from item metadata that go far beyond what surface-level features can capture. For example, given a purchase of “noise-canceling head-phones”, an LLM can reason about underlying interests such as “focus-oriented work style”, “frequent traveler”, or “audio quality enthusiast”—insights that are impossible to extract from the product title alone. 
+
+Single-LLM Interest Extraction. For each item 𝑖 with textual metadata (t𝑖 , d𝑖 ) and optional visual content v𝑖 , we prompt an LLM 
+
+M to extract deep interests using a structured CoT template: 
+
+zM 
+
+> 𝑖
+
+= M ( Prompt CoT (t𝑖 , d𝑖 , v𝑖 )) , (5) where Prompt CoT (·) guides the LLM through: (1) surface analysis of explicit attributes, (2) intent inference about latent motivations, and (3) synthesis of interpretable interest tags with confidence scores. Detailed templates are in Appendix B. 
+
+Multi-Modal Interest Mining. For items with visual content, we leverage multi-modal LLM variants to extract visual interest signals. The multi-modal LLM first generates a visual description dvisual  
+
+> 𝑖
+
+=
+
+Mmm (v𝑖 ) capturing aesthetic and lifestyle attributes, then combines it with textual inputs: zmm  
+
+> 𝑖
+
+= Mmm (Prompt CoT (t𝑖 , d𝑖 , dvisual  
+
+> 𝑖
+
+)) .
+
+Multi-LLM Ensemble. Different LLMs exhibit varying strengths in reasoning and knowledge coverage. To obtain comprehensive in-terest representations, we employ an ensemble strategy that aggre-gates interests from multiple frontier LLMs. Let {M 1, M2, . . . , M𝐿 }
+
+denote the set of 𝐿 LLMs used for mining. For each item 𝑖 , we collect interest outputs from all models: 
+
+Z𝑖 = {zM1 
+
+> 𝑖
+
+, zM2 
+
+> 𝑖
+
+, . . . , zM𝐿  
+
+> 𝑖
+
+}. (6) The ensemble aggregation identifies consensus interests appear-ing in ≥2 LLMs, merges semantically similar interests via embed-ding similarity, and ranks by frequency and confidence. The aggre-gated representation is: 
+
+z𝑖 = Aggregate (Z 𝑖 ) = {( 𝑧 ( 𝑗 ) 
+
+> 𝑖
+
+, 𝑐 ( 𝑗 ) 
+
+> 𝑖
+
+)} 𝐽 𝑗 =1, (7) where 𝑧 ( 𝑗 ) 
+
+> 𝑖
+
+is the 𝑗 -th interest description and 𝑐 ( 𝑗 ) 
+
+> 𝑖
+
+∈ [ 0, 1] is its aggregated confidence score. This ensemble approach captures complementary aspects of user interests that individual LLMs might miss. 
+
+User-Level Interest Aggregation. Beyond item-level interests, we also mine user-level deep interests by analyzing the user’s entire interaction sequence. Given a user’s historical sequence 
+
+S𝑢 = [𝑖 1, 𝑖 2, . . . , 𝑖 𝑇 ], we prompt the LLM to synthesize a holistic user interest profile: 
+
+z𝑢 = M ( Prompt user ({ z𝑖 1 , z𝑖 2 , . . . , z𝑖 𝑇 })) , (8) where Prompt user (·) instructs the LLM to identify recurring interest patterns, infer lifestyle characteristics, and predict cross-domain interests based on the aggregated item-level interests. 
+
+## 3.4 Interest-Enhanced Item Discretization (IEID) 
+
+After mining deep interests via MLIM, we encode them into se-mantic embeddings and quantize into SID tokens, enriching item representations with interpretable interest semantics. 
+
+Interest Embedding. For each item 𝑖 with mined deep interests 
+
+z𝑖 = {𝑧 (1) 
+
+> 𝑖
+
+, 𝑧 (2) 
+
+> 𝑖
+
+, . . . , 𝑧 (𝐽 ) 
+
+> 𝑖
+
+}, we first concatenate all interest descrip-tions into a unified text representation, then encode it using a dedicated embedding model: 
+
+edeep  
+
+> 𝑖
+
+= 𝑓 emb (Concat (z𝑖 )) , (9) where 𝑓 emb (·) denotes the Qwen3-Embedding-4B model. Unlike shallow encodings that capture only explicit attributes, edeep  
+
+> 𝑖
+
+en-codes the latent semantic interests underlying user-item interac-tions. 
+
+Interest-Enhanced SID Construction. The deep interest embed-ding edeep  
+
+> 𝑖
+
+is then quantized into SID tokens via RQ-VAE following the same procedure described in Section 3.2: 
+
+sdeep  
+
+> 𝑖
+
+= RQ-VAE (edeep  
+
+> 𝑖
+
+) = (𝑠 (1) 
+
+> 𝑖
+
+, 𝑠 (2) 
+
+> 𝑖
+
+, . . . , 𝑠 (𝐻 ) 
+
+> 𝑖
+
+). (10) This interest-enhanced discretization ensures that items with similar underlying interests are mapped to nearby regions in the SID space, enabling the generative model to learn interest-aware item relationships rather than superficial textual similarities. DeepInterestGR: Mining Deep Multi-Interest Using Multi-Modal LLMs for Generative Recommendation KDD ’25, August 3–7, 2025, Toronto, ON, Canada 
+
+## 3.5 Training Pipeline 
+
+We adopt a two-stage training pipeline: supervised fine-tuning (SFT) for initial alignment, followed by reinforcement learning (RL) with our Interest-Aware Reward for preference optimization. 
+
+Stage 1: Supervised Fine-Tuning. In the SFT stage, we train the generative model to predict target SID sequences given user interaction histories. The training objective minimizes the negative log-likelihood: 
+
+LSFT = −∑︁ 
+
+> (X,Y) ∈ D
+> 𝐻
+
+∑︁ 
+
+> ℎ=1
+
+log 𝑝 𝜃 (𝑦 ℎ |X, 𝑦 1, . . . , 𝑦 ℎ−1), (11) where D is the training dataset, X is the input sequence, and Y
+
+is the target SID sequence. This stage aligns the model with both deep interest signals (encoded in SIDs) and collaborative filtering patterns from user behaviors. 
+
+Stage 2: Reinforcement Learning with Interest-Aware Re-ward. To further optimize the model toward user preferences, we employ reinforcement learning with our novel Interest-Aware Re-ward mechanism. 
+
+RLDI Binary Classification. Before RL training, we use Qwen2.5-7B-Instruct in a zero-shot manner to classify mined interests into binary quality labels: 
+
+𝑙 𝑖 = LLM cls (z𝑖 ) ∈ { 0, 1}, (12) where 𝑙 𝑖 = 1 indicates a positive (specific, actionable) interest and 
+
+𝑙 𝑖 = 0 indicates a negative (vague, generic) interest. We validated this approach by manually annotating 500 randomly sampled inter-ests, achieving 87.2% agreement between LLM labels and human judgments. 
+
+Interest-Aware Reward. The reward function combines interest align-ment with base recommendation accuracy: 
+
+𝑟 (𝑦, 𝑖 ) = 𝑟 base (𝑦 ) + 𝛼 · ⊮[𝑙 𝑖 = 1], (13) where 𝑟 base (𝑦 ) = ⊮[SID (𝑦 ) = SID (𝑖 ∗)] is the item-level hit reward (1 if the generated SID matches the ground-truth target item 𝑖 ∗, 0 otherwise), 𝛼 = 0.5 is the interest bonus weight, and the indicator function provides additional reward when the predicted item is associated with positive interests. 
+
+GRPO Optimization. We employ Group Relative Policy Optimization (GRPO) for efficient RL training. The policy gradient is computed using group-normalized advantages: 
+
+ˆ𝐴 𝑗 = 𝑟 𝑗 − mean ({ 𝑟 𝑗 }𝐺 𝑗 =1)
+
+std ({ 𝑟 𝑗 }𝐺 𝑗 =1) , (14) where 𝐺 is the group size. The final RL objective includes a KL-divergence regularization term to prevent policy drift: 
+
+𝐽 (𝜃 ) = E𝑦 ∼𝜋 𝜃 [𝑟 (𝑦 ) − 𝛽𝐷 KL (𝜋 𝜃 ∥𝜋 ref )] , (15) where 𝜋 ref is the reference policy from SFT and 𝛽 controls the regularization strength. 
+
+## 4 Experiments 
+
+In this section, we empirically evaluate the effectiveness of the pro-posed DeepInterestGR framework. We aim to answer the following research questions: 
+
+• RQ1 : How does DeepInterestGR perform compared to state-of-the-art baselines (traditional, generative, and LLM-based)? 
+
+• RQ2 : What is the contribution of each core component (MLIM, IEID, Interest-Aware Reward)? 
+
+• RQ3 : How do different LLMs compare in deep interest min-ing quality? 
+
+• RQ4 : Does multi-modal interest mining improve over text-only mining? 
+
+• RQ5 : How does the Interest-Aware Reward compare to other reward strategies? 
+
+• RQ6 : How well does DeepInterestGR generalize across do-mains? 
+
+## 4.1 Experimental Setup 
+
+Datasets. We conduct experiments on three real-world public datasets from Amazon Product Reviews [ 18 ], which are widely recognized benchmarks in sequential recommendation research. Specifically, we use data from three subcategories: Beauty , Sports and Outdoors (Sports), and Musical Instruments (Instruments). Following prior work [ 7, 20 , 33 ], we apply the 5-core filtering proto-col, excluding users and items with fewer than five interactions to retain meaningful behavioral sequences. We adopt the widely used leave-last-out evaluation protocol [ 11 , 20 ], where the last item in each sequence is reserved for testing and the second-to-last item for validation. The detailed dataset statistics are provided in Table 2. 
+
+Baselines. We compare DeepInterestGR with the following repre-sentative baselines, categorized into four groups: 
+
+Traditional Sequential Models: 
+
+• GRU4Rec [ 6]: An RNN-based approach using GRU for session-based recommendation. 
+
+• Caser [ 24 ]: A CNN-based method that captures sequential patterns using horizontal and vertical convolutional filters. 
+
+• HGN [17 ]: A hierarchical gating network that applies gating mechanisms to RNN-based models. 
+
+Transformer-based Models: 
+
+• SASRec [11 ]: A self-attentive sequential model using unidi-rectional Transformer decoder. 
+
+• BERT4Rec [ 22 ]: A bidirectional Transformer encoder trained with masked item prediction. 
+
+• S3-Rec [ 33 ]: A self-supervised approach that pretrains se-quence representations via mutual information. 
+
+• FDSA [ 29 ]: A feature-aware model that processes item ID and feature sequences through separate self-attention blocks. 
+
+Generative Recommendation Models: 
+
+• TIGER [20 ]: A pioneering generative method that uses RQ-VAE to quantize text embeddings into semantic IDs for au-toregressive generation. 
+
+• LC-Rec [ 32 ]: A language-aligned approach that enables LLMs to understandu SID through mlti-task learning. 
+
+• HSTU [28 ]: A hierarchical sequential transduction unit de-signed for large-scale generative recommendation. 
+
+• MiniOneRec : An open-source generative recommendation framework that validates scaling laws in recsys. 
+
+LLM-based Models: KDD ’25, August 3–7, 2025, Toronto, ON, Canada Yangchen Zeng et al. 
+
+Table 1: Overall performance comparison on three Amazon Product Reviews datasets. Bold indicates the best performance, and underline indicates the second best. Δ denotes the relative improvement of DeepInterestGR over the best baseline. Method Beauty Sports Instruments 
+
+HR@5 HR@10 N@5 N@10 HR@5 HR@10 N@5 N@10 HR@5 HR@10 N@5 N@10 
+
+Traditional Sequential Models 
+
+GRU4Rec 0.0312 0.0518 0.0189 0.0256 0.0198 0.0324 0.0118 0.0161 0.0285 0.0467 0.0172 0.0231 Caser 0.0287 0.0483 0.0171 0.0234 0.0175 0.0291 0.0103 0.0142 0.0261 0.0432 0.0156 0.0212 HGN 0.0335 0.0549 0.0201 0.0271 0.0212 0.0348 0.0126 0.0172 0.0302 0.0495 0.0183 0.0246 
+
+Transformer-based Models 
+
+SASRec 0.0398 0.0645 0.0241 0.0323 0.0248 0.0401 0.0149 0.0201 0.0361 0.0583 0.0218 0.0292 BERT4Rec 0.0421 0.0682 0.0256 0.0342 0.0267 0.0432 0.0161 0.0217 0.0385 0.0621 0.0233 0.0312 S3-Rec 0.0445 0.0718 0.0271 0.0361 0.0283 0.0457 0.0171 0.0230 0.0407 0.0656 0.0247 0.0330 FDSA 0.0432 0.0698 0.0263 0.0351 0.0274 0.0443 0.0165 0.0223 0.0394 0.0636 0.0239 0.0320 
+
+Generative Recommendation Models 
+
+TIGER 0.0487 0.0763 0.0302 0.0395 0.0312 0.0498 0.0192 0.0256 0.0445 0.0712 0.0273 0.0362 LC-Rec 0.0523 0.0821 0.0328 0.0428 0.0341 0.0543 0.0212 0.0281 0.0478 0.0765 0.0295 0.0390 HSTU 0.0556 0.0867 0.0351 0.0456 0.0367 0.0581 0.0229 0.0302 0.0508 0.0809 0.0315 0.0415 MiniOneRec 0.0612 0.0945 0.0389 0.0502 0.0398 0.0627 0.0251 0.0330 0.0556 0.0878 0.0347 0.0455 
+
+LLM-based Models 
+
+BIGRec 0.0534 0.0839 0.0336 0.0439 0.0349 0.0556 0.0218 0.0289 0.0487 0.0779 0.0302 0.0399 D3 0.0498 0.0785 0.0312 0.0409 0.0325 0.0519 0.0202 0.0269 0.0456 0.0732 0.0282 0.0374 S-DPO 0.0589 0.0918 0.0372 0.0483 0.0385 0.0609 0.0242 0.0319 0.0537 0.0852 0.0334 0.0440 
+
+DeepInterestGR 0.0678 0.1032 0.0436 0.0558 0.0452 0.0703 0.0289 0.0376 0.0623 0.0972 0.0394 0.0513 
+
+Δ Improv. +10.8% +9.2% +12.1% +11.2% +13.6% +12.1% +15.1% +13.9% +12.1% +10.7% +13.6% +12.8% 
+
+Table 2: Statistics of the Datasets. Dataset #Users #Items #Interactions Sparsity 
+
+Beauty 22,363 12,101 198,360 0.00073 Sports 35,598 18,357 296,175 0.00045 Instruments 24,733 9,923 206,153 0.00083 
+
+• BIGRec [1]: A bidirectional item grounding approach that leverages LLM semantic understanding. 
+
+• D3 [ 31 ]: A data distillation method for conversational rec-ommendation with LLMs. 
+
+• S-DPO [ 2]: A preference optimization approach using soft-max negative sampling as implicit preference pairs. 
+
+Evaluation Metrics. Following standard evaluation protocols [ 11 ,20 ], we adopt two widely recognized metrics: Hit Rate (HR@K) 
+
+and Normalized Discounted Cumulative Gain (NDCG@K) ,reporting results at cutoffs of 𝐾 ∈ { 5, 10 }. For generative recommen-dation methods utilizing beam search, the beam size is consistently fixed at 20. 
+
+Implementation Details. All experiments are conducted on a cluster equipped with NVIDIA A100 GPUs. We adopt Qwen2.5-7B-Instruct as the backbone model for autoregressive SID generation. For interest embedding, we use Qwen3-Embedding-4B to encode deep interest texts into semantic vectors. The item indexing scheme uses RQ-VAE with a fixed SID length of 4 and 256 codebook entries per layer. For Multi-LLM Interest Mining (MLIM), we leverage multiple frontier LLMs accessed via online APIs along with their multi-modal variants to generate diverse deep interest descriptions through Chain-of-Thought prompting. For RLDI labeling, we employ Qwen2-7B-Chat as a separate zero-shot classifier to assign quality labels to mined interests—note this is distinct from the generation backbone (Qwen2.5-7B-Instruct) to avoid conflating the two roles. During the SFT phase, the model is fully fine-tuned using the LLaMA-Factory framework with a learning rate of 3 × 10 −4 for 3 epochs. For reinforcement learning optimization with GRPO, we use a learning rate of 1 × 10 −5, training batch size of 256, and KL-loss coefficient of 0.001 for 2 epochs. The rollout configuration sets temperature to 0.5 and samples 10 responses per query. 
+
+## 4.2 Main Results (RQ1) 
+
+Table 1 presents the overall performance comparison of DeepInter-estGR against all baselines on three Amazon Review datasets. We have the following observations: 
+
+DeepInterestGR achieves state-of-the-art performance. As shown in Table 1, DeepInterestGR consistently outperforms all baselines by 9.2%–15.1% relative improvements. Comparing with MiniOneRec (same backbone, different interest modeling), we ob-serve 10.8%–13.6% gains in HR@5, validating that deep interest mining significantly enhances recommendation quality beyond surface-level features. Furthermore, our Interest-Aware Reward DeepInterestGR: Mining Deep Multi-Interest Using Multi-Modal LLMs for Generative Recommendation KDD ’25, August 3–7, 2025, Toronto, ON, Canada 
+
+Table 3: Ablation study on the Beauty dataset. Each row re-moves one component from the full model. Variant HR@5 HR@10 N@5 N@10 
+
+DeepInterestGR (Full) 0.0678 0.1032 0.0436 0.0558 
+
+w/o MLIM 0.0598 0.0921 0.0378 0.0489 w/o IEID 0.0621 0.0958 0.0401 0.0517 w/o Interest-Aware Reward 0.0635 0.0973 0.0408 0.0526 w/o RL (SFT only) 0.0567 0.0879 0.0358 0.0463 outperforms S-DPO’s RL objective by providing semantic supervi-sion from mined interests rather than relying solely on behavioral signals. 
+
+Generative paradigm demonstrates clear scaling advantages. 
+
+Traditional sequential models (GRU4Rec, Caser) and Transformer-based models (SASRec, BERT4Rec) show limited performance com-pared to generative methods, confirming the scaling potential when parameters are redirected toward deep autoregressive Transformers rather than embedding tables. 
+
+## 4.3 Ablation Study (RQ2) 
+
+To understand the contribution of each core component, we con-duct ablation studies by removing individual modules from the full DeepInterestGR framework. Results on the Beauty dataset are presented in Table 3. 
+
+MLIM is the most critical component. Removing MLIM leads to the largest performance drop (11.8% in HR@5, 10.8% in HR@10), demonstrating that deep interest mining is the cornerstone of our framework. Without MLIM, the model degrades to using shallow textual features similar to existing generative methods. 
+
+IEID effectively enriches item representations. Removing IEID causes a 8.4% drop in HR@5. This confirms that encoding deep interests into SID tokens through our interest-enhanced discretiza-tion provides meaningful semantic enrichment beyond standard item tokenization. 
+
+Interest-Aware Reward guides effective policy optimization. 
+
+Without the Interest-Aware Reward, performance decreases by 6.3% in HR@5. This validates that our semantic reward mecha-nism, derived from RLDI-labeled interests, provides more effective supervision than rule-based rewards alone. 
+
+Reinforcement learning is essential for final performance. 
+
+The SFT-only variant shows a 16.4% performance drop, highlighting the importance of the RL stage in aligning the model with user preferences through our Interest-Aware Reward. To provide an intuitive comparison, we visualize the ablation results in Figure 2. The figure clearly shows the relative contribution of each component to the overall performance. 
+
+## 4.4 Analysis 
+
+4.4.1 LLM Comparison for MLIM (RQ3). We investigate the impact of different frontier LLMs on deep interest mining quality. Table 4 presents the results using individual LLMs and their ensemble. Full Model w/o MLIM w/o IEID w/o Interest    
+
+> Aware Reward
+> w/o RL
+> (SFT only)
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> 0.12
+> HR@10
+> 0.1032
+> 0.0921 0.0958 0.0973
+> 0.0879
+> -10.8%
+> -7.2% -5.7%
+> -14.8% Most Critical
+> Component
+> Component Ablation Study (Beauty Dataset)
+> Full Model
+> Ablation Variant
+
+Figure 2: Component ablation study on the Beauty dataset. Green bar represents the full model, orange bars represent ablation variants. The percentage drop is shown for each removed component. MLIM contributes most significantly (-10.8%), followed by RL (-14.8%). Table 4: Comparison of different LLMs for deep interest min-ing on the Beauty dataset. LLM for MLIM IQ HR@10 N@10 
+
+GPT-5.1 0.847 0.0978 0.0521 Gemini-3-Pro 0.832 0.0961 0.0508 Kimi-K2-Thinking 0.819 0.0943 0.0495 Grok-4 0.825 0.0952 0.0502 Ensemble (All) 0.891 0.1032 0.0558 Table 5: Impact of multi-modal interest mining on the Beauty dataset. Setting HR@5 HR@10 N@5 N@10 
+
+Text-Only 0.0641 0.0983 0.0412 0.0529 +Multi-Modal 0.0678 0.1032 0.0436 0.0558 
+
+Δ Improv. +5.8% +5.0% +5.8% +5.5% Interest Quality (IQ) measures the alignment between mined interests and actual user preferences, computed as the average cosine similarity between interest embeddings and the embed-dings of items the user subsequently interacted with (using Qwen3-Embedding-4B). Higher IQ indicates that mined interests better predict future user behavior. GPT-5.1 achieves the highest individ-ual IQ score (0.847), while the ensemble yields the best performance (IQ=0.891), suggesting that different LLMs capture complementary aspects of user interests. 
+
+4.4.2 Multi-Modal vs Text-Only (RQ4). We examine whether in-corporating visual information through multi-modal LLM variants improves interest mining quality. Results in Table 5 show consistent improvements when adding visual features. The multi-modal variant achieves 5.0%–5.8% improvements across all metrics. This is particularly significant for the Beauty domain, where visual aesthetics play a crucial role in user preferences. The multi-modal LLMs can capture visual interest signals ( e.g., color KDD ’25, August 3–7, 2025, Toronto, ON, Canada Yangchen Zeng et al. 
+
+Table 6: Comparison of reward strategies and RLDI settings on Beauty. Setting HR@5 HR@10 N@5 N@10 
+
+Reward Strategy Comparison 
+
+Rule-based (Binary) 0.0601 0.0928 0.0382 0.0493 Collaborative 0.0623 0.0954 0.0398 0.0513 Prefix-Match 0.0642 0.0981 0.0411 0.0528 
+
+RLDI Label Quality 
+
+w/o RLDI (uniform) 0.0612 0.0945 0.0392 0.0506 Random labels 0.0598 0.0923 0.0381 0.0493 Rule-based labels 0.0634 0.0971 0.0407 0.0524 Interest-Aware+RLDI (Ours) 0.0678 0.1032 0.0436 0.0558 Beauty Sports Instruments      
+
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> 0.10
+> 0.12
+> HR@10
+> 0.0945
+> 0.0627
+> 0.0878
+> 0.1032
+> 0.0703
+> 0.0972
+> +9.2%
+> +12.1%
+> +10.7%
+> Before RL After RL Before RL After RL Before RL After RL
+> Deep-Interest RL Impact
+> Before RL (SFT)
+> After RL (GRPO)
+
+Figure 3: Impact of reinforcement learning with Interest-Aware Reward on three datasets. Orange bars represent SFT-only performance, while blue bars show final performance after RL training with GRPO. All datasets show consistent improvements (9.2%–12.1%). 
+
+preferences, style aesthetics) that are difficult to express through text alone. 
+
+4.4.3 Reward Strategy and RLDI Analysis (RQ5). We compare our Interest-Aware Reward with alternative strategies and analyze the effect of RLDI classification. Results are shown in Table 6. Our Interest-Aware Reward outperforms alternatives: rule-based rewards suffer from sparsity, collaborative rewards lack semantic guidance, and prefix-match rewards ignore interest alignment. For RLDI, random labels hurt performance compared to uniform reward, confirming that accurate interest quality assessment is crucial. Our LLM-based RLDI captures semantic nuances that rule-based labels miss. 
+
+4.4.4 RL Impact Analysis. To visualize the impact of reinforcement learning with our Interest-Aware Reward, we compare model per-formance before and after RL training across all three datasets. Figure 3 illustrates the HR@10 improvements. As shown in Figure 3, reinforcement learning with our Interest-Aware Reward consistently improves performance across all three datasets, with gains ranging from 9.2% to 12.1% in HR@10. The 
+
+Table 7: Cross-domain generalization performance (HR@10 / N@10). Train → Test MiniOneRec DeepInterestGR 
+
+Beauty → Sports 0.0412 / 0.0218 0.0523 / 0.0284 
+
+Sports → Instruments 0.0578 / 0.0312 0.0712 / 0.0398 
+
+Instruments → Beauty 0.0623 / 0.0341 0.0768 / 0.0425 
+
+Avg. Improvement — +24.8% / +27.3% 
+
+Sports dataset benefits most from RL optimization (+12.1%), sug-gesting that domains with more diverse user interests gain more from interest-aware policy learning. This validates the effective-ness of our two-stage training pipeline where SFT provides a strong initialization and RL further aligns the model with user preference signals derived from deep interests. 
+
+## 4.5 Transferability (RQ6) 
+
+To evaluate the generalization capability of DeepInterestGR, we conduct cross-domain experiments where models are trained on one dataset and tested on another. Results are presented in Table 7. DeepInterestGR demonstrates substantially better cross-domain generalization, achieving 24.8% and 27.3% average improvements in HR@10 and N@10 respectively. This superior transferability stems from our deep interest mining approach: while shallow textual features ( e.g., product titles) are domain-specific, the underlying user interests ( e.g., “quality-conscious”, “trend-following”) transfer across domains. The mined deep interests capture these universal preference patterns, enabling more robust generalization. 
+
+## 5 Conclusion 
+
+We identified the “Shallow Interest” problem in generative recom-mendation and proposed DeepInterestGR, a framework integrating deep interest mining into the SID-based generation pipeline. Our ap-proach introduces three innovations: (1) Multi-LLM Interest Mining (MLIM) leveraging frontier LLMs with Chain-of-Thought prompt-ing; (2) Interest-Enhanced Item Discretization (IEID) encoding in-terests into SID tokens; and (3) Interest-Aware Reward providing semantic supervision for RL. Experiments on three Amazon bench-marks demonstrate 9.2%–15.1% improvements over state-of-the-art baselines, with superior cross-domain generalization confirming that deep interests capture transferable user preference patterns. 
+
+## References 
+
+[1] Keqin Bao, Jizhi Zhang, Wenjie Wang, Yang Zhang, Zhengyi Yang, Fuli Feng, Xiangnan He, and Tat-Seng Chua. 2023. Bi-directional Item Grounding for Large Language Model-based Recommendation. In arXiv preprint arXiv:2311.00264 .[2] Zhanhui Chen, Jie Liu, Xiaofei Cheng, Lingpeng Wu, and Jiang Bian. 2024. Soft-max DPO: Learning to Rank by Softmax Preference Optimization. arXiv preprint 
+
+(2024). [3] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2019. Bert: Pre-training of deep bidirectional transformers for language understanding. In 
+
+Proceedings of the 2019 conference of the North American chapter of the association for computational linguistics: human language technologies, volume 1 (long and short papers) . 4171–4186. [4] Tiezheng Ge, Kaiming He, Qifa Ke, and Jian Sun. 2014. Optimized Product Quantization. IEEE Trans. Pattern Anal. Mach. Intell. 36, 4 (2014), 744–755. [5] Shijie Geng, Shuchang Liu, Zuohui Fu, Yingqiang Ge, and Yongfeng Zhang. 2022. Recommendation as Language Processing (RLP): A Unified Pretrain, Personalized Prompt & Predict Paradigm (P5). In RecSys .DeepInterestGR: Mining Deep Multi-Interest Using Multi-Modal LLMs for Generative Recommendation KDD ’25, August 3–7, 2025, Toronto, ON, Canada 
+
+[6] Balázs Hidasi, Alexandros Karatzoglou, Linas Baltrunas, and Domonkos Tikk. 2016. Session-based Recommendations with Recurrent Neural Networks. In 
+
+ICLR .[7] Yupeng Hou, Zhankui He, Julian McAuley, and Wayne Xin Zhao. 2023. Learning vector-quantized item representation for transferable sequential recommenders. In WWW . 1162–1171. [8] Yupeng Hou, Shanlei Mu, Wayne Xin Zhao, Yaliang Li, Bolin Ding, and Ji-Rong Wen. 2022. Towards universal sequence representation learning for recommender systems. In KDD . 585–593. [9] Yupeng Hou, An Zhang, Leheng Sheng, Zhengyi Yang, Xiang Wang, Tat-Seng Chua, and Julian McAuley. 2025. Generative Recommendation Models: Progress and Directions. In Companion Proceedings of the ACM on Web Conference 2025 .13–16. [10] Hervé Jégou, Matthijs Douze, and Cordelia Schmid. 2011. Product Quantization for Nearest Neighbor Search. IEEE Trans. Pattern Anal. Mach. Intell. 33, 1 (2011), 117–128. [11] Wang-Cheng Kang and Julian J. McAuley. 2018. Self-Attentive Sequential Rec-ommendation. In ICDM .[12] Jing Li, Pengjie Ren, Zhumin Chen, Zhaochun Ren, Tao Lian, and Jun Ma. 2017. Neural Attentive Session-based Recommendation. In CIKM .[13] Jiacheng Li, Ming Wang, Jin Li, Jinmiao Fu, Xin Shen, Jingbo Shang, and Julian McAuley. 2023. Text is all you need: Learning language representations for sequential recommendation. In KDD .[14] Xiaoxi Li, Jiajie Jin, Yujia Zhou, Yuyao Zhang, Peitian Zhang, Yutao Zhu, and Zhicheng Dou. 2024. From Matching to Generation: A Survey on Generative Information Retrieval. arXiv preprint arXiv:2404.14851 (2024). [15] Yongqi Li, Xinyu Lin, Wenjie Wang, Fuli Feng, Liang Pang, Wenjie Li, Liqiang Nie, Xiangnan He, and Tat-Seng Chua. 2024. A Survey of Generative Search and Recommendation in the Era of Large Language Models. arXiv preprint arXiv:2404.16924 (2024). [16] Xinyu Lin, Chaoqun Yang, Wenjie Wang, Yongqi Li, Cunxiao Du, Fuli Feng, See-Kiong Ng, and Tat-Seng Chua. 2024. Efficient Inference for Large Language Model-based Generative Recommendation. arXiv preprint arXiv:2410.05165 (2024). [17] Chen Ma, Peng Kang, and Xue Liu. 2019. Hierarchical Gating Networks for Sequential Recommendation. In KDD .[18] Julian J. McAuley, Christopher Targett, Qinfeng Shi, and Anton van den Hengel. 2015. Image-Based Recommendations on Styles and Substitutes. In SIGIR .[19] Aleksandr V Petrov and Craig Macdonald. 2023. Generative sequential recom-mendation with gptrec. arXiv preprint arXiv:2306.11114 (2023). [20] Shashank Rajput, Nikhil Mehta, Anima Singh, Raghunandan Hulikal Keshavan, Trung Vu, Lukasz Heldt, Lichan Hong, Yi Tay, Vinh Q. Tran, Jonah Samost, Maciej Kula, Ed H. Chi, and Maheswaran Sathiamoorthy. 2023. Recommender Systems with Generative Retrieval. In NeurIPS .[21] Steffen Rendle, Christoph Freudenthaler, and Lars Schmidt-Thieme. 2010. Factor-izing personalized Markov chains for next-basket recommendation. In WWW .[22] Fei Sun, Jun Liu, Jian Wu, Changhua Pei, Xiao Lin, Wenwu Ou, and Peng Jiang. 2019. BERT4Rec: Sequential recommendation with bidirectional encoder rep-resentations from transformer. In Proceedings of the 28th ACM international conference on information and knowledge management . 1441–1450. [23] Juntao Tan, Shuyuan Xu, Wenyue Hua, Yingqiang Ge, Zelong Li, and Yongfeng Zhang. 2024. Idgenrec: Llm-recsys alignment with textual id learning. In SIGIR .[24] Jiaxi Tang and Ke Wang. 2018. Personalized Top-N Sequential Recommendation via Convolutional Sequence Embedding. In WSDM .[25] Wenjie Wang, Honghui Bao, Xinyu Lin, Jizhi Zhang, Yongqi Li, Fuli Feng, See-Kiong Ng, and Tat-Seng Chua. 2024. Learnable Tokenizer for LLM-based Genera-tive Recommendation. In CIKM .[26] Ye Wang, Jiahao Xun, Minjie Hong, Jieming Zhu, Tao Jin, Wang Lin, Haoyuan Li, Linjun Li, Yan Xia, Zhou Zhao, and Zhenhua Dong. 2024. EAGER: Two-Stream Generative Recommender with Behavior-Semantic Collaboration. In KDD . 3245– 3254. [27] Shu Wu, Yuyuan Tang, Yanqiao Zhu, Liang Wang, Xing Xie, and Tieniu Tan. 2019. Session-Based Recommendation with Graph Neural Networks. In AAAI .[28] Jiaqi Zhai, Lucy Liao, Xing Liu, Yueming Wang, Rui Li, Xuan Cao, Leon Gao, Zhao-jie Gong, Fangda Gu, Michael He, Yinghai Lu, and Yu Shi. 2024. Actions Speak Louder than Words: Trillion-Parameter Sequential Transducers for Generative Recommendations. In ICML .[29] Tingting Zhang, Pengpeng Zhao, Yanchi Liu, Victor S. Sheng, Jiajie Xu, De-qing Wang, Guanfeng Liu, and Xiaofang Zhou. 2019. Feature-level Deeper Self-Attention Network for Sequential Recommendation. In IJCAI .[30] Wayne Xin Zhao, Kun Zhou, Junyi Li, Tianyi Tang, Xiaolei Wang, Yupeng Hou, Yingqian Min, Beichen Zhang, Junjie Zhang, Zican Dong, Yifan Du, Chen Yang, Yushuo Chen, Zhipeng Chen, Jinhao Jiang, Ruiyang Ren, Yifan Li, Xinyu Tang, Zikang Liu, Peiyu Liu, Jian-Yun Nie, and Ji-Rong Wen. 2023. A Survey of Large Language Models. arXiv preprint arXiv:2303.18223 (2023). [31] Zihuai Zhao, Wenqi Hu, Wanyu Cai, and Tong Chen. 2024. D3: A Data Distillation Method for Conversational Recommendation with Large Language Models. arXiv preprint (2024). [32] Bowen Zheng, Yupeng Hou, Hongyu Lu, Yu Chen, Wayne Xin Zhao, and Ji-Rong Wen. 2024. Adapting Large Language Models by Integrating Collaborative Semantics for Recommendation. In ICDE .[33] Kun Zhou, Hui Wang, Wayne Xin Zhao, Yutao Zhu, Sirui Wang, Fuzheng Zhang, Zhongyuan Wang, and Ji-Rong Wen. 2020. S3-Rec: Self-Supervised Learning for Sequential Recommendation with Mutual Information Maximization. In CIKM .[34] Jieming Zhu, Mengqun Jin, Qijiong Liu, Zexuan Qiu, Zhenhua Dong, and Xiu Li. 2024. CoST: Contrastive Quantization based Semantic Tokenization for Genera-tive Recommendation. In RecSys .
+
+## A Problem Statement and Notations 
+
+Problem Statement. Given user interaction sequences {S 𝑢 }𝑢 ∈ U 
+
+and item metadata {( t𝑖 , d𝑖 , v𝑖 )} 𝑖 ∈ I , our goal is to: (1) Mine deep, semantically rich interests from user-item interac-tions using multiple frontier LLMs; (2) Encode the mined deep interests into item SID representations; (3) Train a generative recommendation model that leverages deep interest signals for improved next-item prediction. 
+
+Key Notations. The key notations used throughout this paper are summarized in Table 8. 
+
+Table 8: Summary of key notations. Notation Description 
+
+U, I Set of users and items 
+
+𝑁 , 𝑀 Number of users and items 
+
+S𝑢 Interaction sequence of user 𝑢 
+
+t𝑖 , d𝑖 , v𝑖 Title, description, and image of item 𝑖 
+
+e𝑖 Embedding vector of item 𝑖 
+
+z𝑖 Deep interest representation of item 𝑖 
+
+s𝑖 Semantic ID (SID) sequence of item 𝑖 𝐻 Number of SID quantization layers 
+
+𝐾 Codebook size per layer 
+
+C (ℎ) Codebook at layer ℎ
+
+X, Y Input sequence and target SID sequence 
+
+𝑙 𝑖 RLDI reward label for interest 𝑖 
+
+## B Prompt Templates 
+
+This appendix presents the prompt templates used in DeepInter-estGR. KDD ’25, August 3–7, 2025, Toronto, ON, Canada Yangchen Zeng et al. 
+
+## B.1 Deep Interest Mining Prompt (MLIM) 
+
+Prompt 1: Deep Interest Extraction 
+
+Given user’s Amazon interaction history, extract deep interests. User History: {item_1}, {item_2}, ..., {item_n} Step 1: Identify surface patterns (categories, brands). Step 2: Infer latent motivations (lifestyle, values, scenarios). Step 3: Predict cross-domain interests. Output: [Interest_1]: {text} | Confidence: {high/medium/low} [Interest_2]: {text} | Confidence: {high/medium/low} [Lifestyle]: {one_sentence_profile} 
+
+## B.2 Multi-Modal Interest Mining Prompt 
+
+Prompt 2: Multi-Modal Interest Extraction 
+
+Given product text and image, extract unified interests. Title: {title} Image: {image_description} Step 1: Extract visual signals (style, aesthetic, lifestyle). Step 2: Extract textual signals (function, emotion). Step 3: Synthesize into unified interest tags. Output: Visual Tags: [{tag_1}, {tag_2}] Text Tags: [{tag_1}, {tag_2}] Unified Interests: [{interest_1}, {interest_2}] 
+
+## B.3 Multi-LLM Ensemble Aggregation Prompt 
+
+Prompt 3: Interest Ensemble Aggregation 
+
+Aggregate interests from multiple LLMs into unified representation. GPT-5.1 Output: [{interest_1}, {interest_2}, ...] Gemini-3-Pro Output: [{interest_1}, {interest_2}, ...] Kimi-K2-Thinking Output: [{interest_1}, {interest_2}, ...] Grok-4 Output: [{interest_1}, {interest_2}, ...] Step 1: Identify consensus interests (appear in 2+ LLMs). Step 2: Merge semantically similar interests. Step 3: Rank by frequency and confidence. Step 4: Filter low-confidence or contradictory interests. Output: Consensus Interests: [{interest}, ...] | Support: {N}/4 LLMs Unique Insights: [{interest}, ...] | Source: {LLM_name} Final Ensemble: [{interest_1}, {interest_2}, ...] 
+
+## B.4 RLDI Binary Classification Prompt 
+
+Prompt 4: Interest Quality Classification 
+
+Classify interest as 1 (positive) or 0 (negative). Interest: "{interest_text}" Source Items: {items} Label = 1 if: Specific + Actionable + Authentic Label = 0 if: Vague / Generic / Hallucinated /Contradictory Output: Label: {0/1} 
+
+## B.5 Example Output 
+
+Example: Mined Deep Interests 
+
+Input: Kindle, “Atomic Habits”, Moleskine Notebook, Desk Lamp 
+
+Output: 
+
+• Self-improvement & Learning | High | RLDI: 1 
+
+• Productivity-focused Lifestyle | High | RLDI: 1 
+
+• Home Office Optimization | Medium | RLDI: 1 
+
+• Lifestyle: Knowledge worker building productive habits.

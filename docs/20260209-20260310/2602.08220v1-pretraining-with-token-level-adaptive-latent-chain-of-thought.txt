@@ -1,0 +1,603 @@
+Title: Pretraining with Token-Level Adaptive Latent Chain-of-Thought
+
+URL Source: https://arxiv.org/pdf/2602.08220v1
+
+Published Time: Tue, 10 Feb 2026 02:55:16 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+## LUMIA Lab 2026-02-07 
+
+# Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+Boyi Zeng 1★, Yiqin Hao 1★, He Li 1, Shixiang Song 1, Feichen Song 1, Zitong Wang 1,4, Siyuan Huang 1, Yi Xu 3,ZiWei He 2, Xinbing Wang 3, Zhouhan Lin 1‡           
+
+> 1LUMIA Lab, School of Artificial Intelligence, Shanghai Jiao Tong University
+> 2Shanghai Innovation Institute 3Shanghai Jiao Tong University 4Sun Yat-sen University
+> #boyizeng@sjtu.edu.cn, hyq718@sjtu.edu.cn, lin.zhouhan@gmail.com ★Equal Contribution ‡Corresponding Author.
+
+Abstract Scaling large language models by increasing parameters and training data is increasingly constrained by limited high-quality corpora and rising communication costs. This work explores an alternative axis: increasing per-token computation without expanding parameters, by internalizing latent Chain-of-Thought (CoT) into pretraining. We propose Pretraining with Token-Level Adaptive Latent CoT 
+
+(adaptive latent CoT), where the model generates a variable-length latent CoT trajectory before emitting each token—allocating longer trajectories to difficult tokens and shorter (or even zero) trajectories to easy ones. Importantly, this behavior emerges naturally from one-stage pretraining on general text and reduces computation in both training and inference via token-wise adaptive halting. Experiments with Llama architectures show that adaptive latent CoT consistently improves language modeling perplexity and broad downstream accuracy, even with fewer training FLOPs than prior recurrent baselines. 
+
+## 1. Introduction 
+
+The remarkable success of Large Language Models (LLMs) has been primarily driven by scaling up model parameters and training data (Brown et al., 2020; Kaplan et al., 2020; Liu et al., 2024). However, this paradigm is approaching critical bottlenecks: the exhaustion of high-quality public data (Muennighoff et al., 2023; Villalobos et al., 2022) and the substantial communication overheads associated with scaling model size (Hoffmann et al., 2022; Narayanan et al., 2021; Pati et al., 2023). Consequently, a key research direction is to improve model capability under a fixed parameter and data budget by scaling compute per token. To scale compute without expanding parameters, prior work has explored parameter-sharing strategies that emulate greater depth by recursively reusing the same layer weights (Giannou et al., 2023; Zeng et al., 2025b; Zhu et al., 2025). While appealing, this form of depth scaling can be prone to training instability. More recently, PonderLM2 (Zeng et al., 2025a) introduces latent computation before predicting the next token, but parallelizing this process often requires Jacobi-style iteration and incurs substantial training FLOPs. Moreover, these approaches typically allocate uniform compute to all tokens, which is inherently suboptimal compared to human cognition where thinking 
+
+is adaptive—brief for simple concepts and prolonged for complex reasoning. Parallel to architectural modifications, another line of research has demonstrated that scaling inference-time compute—via CoT (Wei et al., 2022)—has achieved remarkable success. However, this capability typically relies on explicit supervision (annotated CoT data), is confined to a discrete token space, and is ultimately capped by the base model’s pre-trained capabilities (Yue et al., 2025). These observations motivate a fundamental question: Can we internalize the benefits of Chain-of-
+
+> arXiv:2602.08220v1 [cs.CL] 9 Feb 2026
+
+## Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+Thought directly into pre-training, within a continuous latent space, and learn to allocate compute adaptively? In this work, we propose Pretraining LLMs with Adaptive Latent CoT, a pre-training framework that encourages the model to generate an adaptive sequence of latent CoT steps before emitting each observed token. The model learns to produce short (or even zero) latent trajectories for simple tokens while allocating longer latent chains for complex concepts. Unlike prior methods that require multi-stage training (Fu et al., 2025; Schuster et al., 2022; Zhu et al., 2025), additional supervision (Elbayad et al., 2019), only reduce inference compute (Banino et al., 2021; Schuster et al., 2022; Zhu et al., 2025), or assume a prescribed halting prior (Bae et al., 2025; Banino et al., 2021; Chen et al., 2025; Raposo et al., 2024; Zhu et al., 2025), our adaptive latent CoT emerges naturally from one-stage pre-training on general text, and can reduce computation in both training and inference. 
+
+## 2. Related works 
+
+Latent Reasoning To improve model capability without increasing parameters, an emerging line of work studies latent reasoning, where LLMs conduct reasoning internally in hidden states rather than via explicit verbalization. One branch remains in the discrete vocabulary space by inserting specialized markers—e.g., Pause (Goyal et al., 2023), Filler (Pfau et al., 2024), or Planning (Wang et al., 2023) tokens—to allocate additional “thinking time” and induce extra implicit computation steps. Similarly, Quiet-STaR (Zelikman et al., 2024) uses reinforcement learning to generate token-level rationales. However, these approaches are fundamentally constrained by the discreteness of the vocabulary, which limits the expressiveness and flexibility of the reasoning process. Consequently, another line of work moves reasoning into continuous spaces. For example, Coconut and SIM-CoT (Hao et al., 2024; Wei et al., 2025) leverage hidden states (e.g., the final-layer representations) as continuous inputs to simulate chain-of-thought. Despite encouraging results, most existing continuous latent reasoning methods still rely on supervised fine-tuning and curated CoT annotations, which hinders scalability. 
+
+Recursive Models In parallel, an orthogonal way to improve capability under a fixed parameter budget is recursive parameter sharing, which scales compute per token by iteratively reusing the same weights. Universal Transformers (Dehghani et al., 2018) show that weight sharing can provide strong capacity with minimal parameter growth, and ALBERT (Lan et al., 2019) further improves efficiency via extensive sharing without hurting performance. More recent work leverages recurrence to scale effective depth and performance: PonderLM2 (Zeng et al., 2025a) adds recursive latent computation before next-token prediction and reports strong gains, though parallelizing often relies on Jacobi-style iteration and can be FLOP-heavy. Looped Transformers, PonderLM, and related methods (Geiping et al., 2025; Giannou et al., 2023; Zeng et al., 2025b) similarly reuse parameters to increase depth and show benefits on general modeling and reasoning tasks. However, as effective depth grows, training can become unstable, and compute is uniform across tokens regardless of input difficulty. 
+
+Adaptive Computation Many works adopt Adaptive Computation Time (ACT) (Graves, 2016) to let models decide per token how many iterative steps to run, and this has inspired a broad class of adaptive token/layer routing methods. For example, ITT (Chen et al., 2025) uses a predefined per-layer token-selection ratio, while MoD/MoR (Bae et al., 2025; Raposo et al., 2024) activate only top-𝑘 tokens. PonderNet (Banino et al., 2021) adds a geometric halting prior to stabilize learning. However, these approaches typically fix or strongly constrain compute allocation a priori, limiting the model’s ability to explore adaptive policies during training. A complementary line achieves adaptivity via multi-stage training and inference-time early exiting, e.g., TaH (Fu et al., 2025), Ouro (Zhu et al., 2025), and CALM (Schuster et al., 2022). Ouro, for instance, learns an exit gate with an entropy regularizer during pretraining and then freezes the LM while fine-tuning only the gate. Other 
+
+## 2Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+methods use extra supervision, such as Depth-adaptive Transformers (Elbayad et al., 2019) that predict when to skip remaining layers using likelihood/correctness signals. Moreover, methods like Ouro, PonderNet, and CALM (Banino et al., 2021; Schuster et al., 2022; Zhu et al., 2025) typically still require full computation during training, so they do not reduce training FLOPs and mainly save compute at inference. In contrast, we propose a one-stage pretraining framework that learns ACT end-to-end without a priori constraints, reducing computation in both training and inference. 
+
+## 3. Method 
+
+We propose an efficient latent Chain-of-Thought (latent-CoT) training and inference framework that removes the sequential dependency bottleneck while attaining adaptive compute. Our method consists of three key components: (1) Parallel Masking that extends attention causality to a 2D index (𝑡, 𝑘 )
+
+(token position and latent step), enabling parallel computation over all positions at each latent step; (2) a probabilistic halting mechanism with a lightweight Router that models continuation/exit probabilities, together with threshold pruning and mass-preserving mixing to obtain the final representation; and (3) a correctness-aware adaptive loss that discourages unnecessary latent computation when the model is already confident on the ground-truth token. 
+
+3.1. The Sequential Dependency Bottleneck 
+
+Let x = {𝑥 1, . . . , 𝑥 𝐿 } denote the input sequence. In a standard latent CoT framework, for each position  
+
+> 𝑡
+
+the model inserts a sequence of latent steps z𝑡 = {𝑧 (1)   
+
+> 𝑡 , . . . , 𝑧 (𝐾 )
+> 𝑡
+
+} before the subsequent target token 
+
+> 𝑥 𝑡 +1
+
+. Here, 𝑧 (𝑘 ) 
+
+> 𝑡
+
+denotes the last-layer hidden state at position 𝑡 produced by the 𝑘 -th forward pass. The model generates these latent-step representations autoregressively, which introduces a strict 
+
+sequential dependency across both the sequence dimension ( 𝑡 ) and the latent-step dimension ( 𝑘 ). 
+
+Figure 1 | Left: Standard latent-CoT induces a strict sequential chain across both sequence length  
+
+> 𝐿
+
+and latent depth 𝐾 (highlighted in red): later tokens (e.g., 𝑥 2) can depend on deeper latent states of earlier positions. Right: Enforcing strict 2D causality with an attention mask that allows 
+
+(𝑡 𝑖 , 𝑘 𝑖 ) → ( 𝑡 𝑗 , 𝑘 𝑗 ) only if 𝑡 𝑗 ≤ 𝑡 𝑖 and 𝑘 𝑗 ≤ 𝑘 𝑖 blocks cross-token dependencies on future latent steps (shown by ×), making the process sequential only in 𝑘 and enabling parallel computation over all 𝑡 at each step. 
+
+A minimal example. Consider autoregressive generation for tokens 𝑥 1 and 𝑥 2 with latent steps. The hidden state h𝑥 2 for 𝑥 2 depends on the com-plete resolution of all latent steps associated with 𝑥 1:
+
+h𝑥 2 = LM 
+
+   
+
+> 𝑥 1, 𝑧 (1)
+> 1, . . . , 𝑧 (𝐾 )
+> 1, 𝑥 2
+
+ 
+
+> .
+
+(1) As illustrated in Figure 1(left), this means h𝑥 2
+
+cannot be computed until the entire chain   
+
+> 𝑧 (1...𝐾 )
+> 1
+
+is finalized, since attention requires ac-cess to progressively deeper latent hidden states (highlighted by the red dependencies). 
+
+The pre-training dilemma. Naively training under this strictly sequential dependency incurs 
+
+> 𝑂
+
+(𝐿 × 𝐾 ) sequential operations per sequence, which becomes computationally prohibitive for long contexts (e.g., thousands of tokens). Pon-derLM2 (Zeng et al., 2025a) mitigates this by computing latent states for every token at each latent step simultaneously and then refining them with multi-step Jacobi iterations. While this enables 
+
+## 3Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+Figure 2 | Motivation for adaptive computation and the correctness-aware adaptive loss. We probe a latent-CoT model without adaptive computation on 0.34B tokens. At each latent step 𝑘 , we bucket tokens by their current target-token probability 𝑝 (𝑘 ) 
+
+> target
+
+(x-axis), and measure the average improvement in the target probability brought by the next latent step, 𝑝 (𝑘 +1) 
+
+> target
+
+− 𝑝 (𝑘 ) 
+
+> target
+
+(y-axis). While extra latent computation substantially improves low-confidence tokens, the gains diminish as 𝑝 (𝑘 ) 
+
+> target
+
+increases, and can become negative for already confident tokens (negative bars), suggesting unnecessary or even harmful computation. parallelism, the iterative refinement substantially increases training compute—for example, even with a latent step budget of 𝐾 = 1, it can incur around 8× the training FLOPs of the vanilla model. 
+
+3.2. Parallel Latent Steps via Parallel Masking 
+
+To enable parallel computation while maintaining training efficiency, we expand attention into two dimensions: sequence position (𝑡 ) and latent step (𝑘 ). We define a Parallel Attention Mask over 2D indices (𝑡, 𝑘 ) that enforces strict causality in both dimensions: 
+
+𝑀 (𝑡 𝑖 ,𝑘 𝑖 ),(𝑡 𝑗 ,𝑘 𝑗 ) =
+
+(
+
+0 if 𝑡 𝑗 ≤ 𝑡 𝑖 ∧ 𝑘 𝑗 ≤ 𝑘 𝑖 ,
+
+−∞ otherwise. (2) This mask induces a partial order over the 2D computation graph (Figure 1, right): at any fixed latent step 𝑘 , the model can compute states for the entire sequence 𝑡 ∈ [ 1, 𝐿 ] in parallel. Unlike standard autoregressive generation which is sequential in 𝐿 , our training process effectively unrolls the latent iterations. This transforms the dependency graph from 𝑂 (𝐿 × 𝐾 ) sequential operations to 𝑂 (𝐾 )
+
+sequential steps, thereby leveraging the massive parallelism of GPUs over the sequence dimension. 
+
+3.3. Adaptive Computation via Probabilistic Halting 
+
+While the parallel masking enables efficient unrolling over latent steps, executing many steps uniformly for all tokens is not always desirable. Empirically, once a token is already likely correct (high 𝑝 target ), further latent computation yields diminishing returns and can even hurt the target probability Figure 2. We therefore introduce a probabilistic halting mechanism to adapt computation per token. We denote the maximum latent CoT length by ℓmax , and implement it with 𝐾 max = ℓmax + 1.
+
+Router (conditional continuation). At each latent step 𝑘 ∈ { 1, . . . , 𝐾 max }, the Router predicts the conditional probability of continuing to the next latent step: 
+
+𝑔 (𝑘 ) 
+
+> 𝑡
+
+≜ 𝑃 (Continue | Reach step 𝑘 ) = 𝜎  Linear (𝑧 (𝑘 ) 
+
+> 𝑡
+
+). (3) Accordingly, 𝑃 (Stop | Reach step 𝑘 ) = 1 − 𝑔 (𝑘 ) 
+
+> 𝑡
+
+.
+
+Reach probability (accumulated probability flow). For computation to exist at step 𝑘 , it must have continued through all previous steps. We define the reach probability recursively: 
+
+𝑝 (1) 
+
+> reach ,𝑡
+
+≜ 1, 𝑝 (𝑘 +1) 
+
+> reach ,𝑡
+
+≜ 𝑝 (𝑘 ) 
+
+> reach ,𝑡
+
+𝑔 (𝑘 ) 
+
+> 𝑡
+
+. (4) 
+
+## 4Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+Exit probability (halting distribution). The probability of halting exactly at step 𝑘 is the joint probability of reaching step 𝑘 and deciding to stop: 
+
+𝑝 (𝑘 ) 
+
+> exit ,𝑡
+
+≜ 𝑃 (𝐾 𝑡 = 𝑘 ) = 𝑝 (𝑘 )
+
+> reach ,𝑡
+
+ 1 − 𝑔 (𝑘 )
+
+> 𝑡
+
+. (5) We set 𝑔 (𝐾 max ) 
+
+> 𝑡
+
+= 0 so that the process always halts by 𝐾 max , yielding 𝑝 (𝐾 max ) 
+
+> exit ,𝑡
+
+= 𝑝 (𝐾 max ) 
+
+> reach ,𝑡
+
+.
+
+Truncation (threshold pruning). To save FLOPs, we avoid executing latent steps that are unlikely to be reached. After computing 𝑔 (𝑘 ) 
+
+> 𝑡
+
+, we estimate the probability of reaching the next step via 𝑝 (𝑘 +1) 
+
+> reach ,𝑡
+
+. If 
+
+𝑝 (𝑘 +1) 
+
+> reach ,𝑡
+
+< 𝜏 , we prune token 𝑡 from the batch for all subsequent steps. Equivalently, we define the last executed step: 
+
+𝐾 ★𝑡 ≜ max 
+
+n
+
+𝑘 ≤ 𝐾 max 𝑝 (𝑘 ) 
+
+> reach ,𝑡
+
+≥ 𝜏 
+
+o
+
+. (6) 
+
+Expectation-based mixing with residual re-allocation. We compute the final token representation as the expectation of latent-step states under the (truncated) halting distribution. Since pruning truncates the unrolled process, naïvely using { 𝑝 (𝑘 ) 
+
+> exit ,𝑡
+
+}𝑘 ≤ 𝐾 ★𝑡 would discard probability mass beyond 𝐾 ★𝑡 .We therefore re-allocate the residual mass to the terminal executed state: 
+
+ˆ𝑝 (𝑘 ) 
+
+> exit ,𝑡
+
+=
+
+
+
+𝑝 (𝑘 ) 
+
+> exit ,𝑡
+
+if 𝑘 < 𝐾 ★𝑡 ,𝑝 (𝐾 ★𝑡 ) 
+
+> reach ,𝑡
+
+=
+
+> 𝐾 max
+
+∑︁ 
+
+> 𝑘 ′=𝐾 ★𝑡
+
+𝑝 (𝑘 ′ ) 
+
+> exit ,𝑡
+
+if 𝑘 = 𝐾 ★𝑡 , (7) which preserves total mass Í𝐾 ★𝑡  
+
+> 𝑘 =1
+
+ˆ𝑝 (𝑘 ) 
+
+> exit ,𝑡
+
+= 1. Finally, the output embedding is 
+
+𝑧 final  
+
+> 𝑡
+
+=
+
+> 𝐾 ★𝑡
+
+∑︁ 
+
+> 𝑘 =1
+
+ˆ𝑝 (𝑘 ) 
+
+> exit ,𝑡
+
+𝑧 (𝑘 ) 
+
+> 𝑡
+
+. (8) Importantly, the Router gates {𝑔 (𝑘 ) 
+
+> 𝑡
+
+} affect ˆ𝑝 (𝑘 ) 
+
+> exit ,𝑡
+
+(via the probability flow 𝑝 reach → 𝑝 exit ), hence gradients from the main CE loss backpropagate to the Router through the mixing weights. 
+
+3.4. Correctness-Aware Adaptive Loss 
+
+While probabilistic halting enables token-wise adaptive computation, we additionally need to guide the Router to stop when extra computation is unlikely to help. As evidenced in Figure 2, once 𝑝 (𝑘 )
+
+> target
+
+is high, additional latent steps bring little benefit and can even be detrimental. We therefore propose a Correctness-Aware Adaptive Loss that encourages early halting for tokens that are already likely correct, reducing overall FLOPs. Let 
+
+𝑝 (𝑘 ) 
+
+> target ,𝑡
+
+≜ LMHead (𝑧 (𝑘 ) 
+
+> 𝑡
+
+) 
+
+> 𝑦 𝑡
+
+(9) denote the probability assigned to the ground-truth token 𝑦 𝑡 at step 𝑘 . We encourage the model to halt when it is already likely correct by penalizing continuation proportional to this step-wise target probability: 
+
+Ladaptive = 𝜆 ∑︁ 
+
+> 𝑡 𝐾 ★𝑡
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑔 (𝑘 ) 
+
+> 𝑡
+
+· sg 
+
+
+
+( 𝑝 (𝑘 ) 
+
+> target ,𝑡
+
+)𝛽 
+
+
+
+, (10) where sg (·) denotes stop-gradient to prevent degenerate solutions (e.g., reducing 𝑝 target solely to weaken the compute penalty), 𝛽 controls the nonlinearity of the weighting (larger 𝛽 concentrates the 
+
+## 5Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+Figure 3 | Inference: token-wise adaptive latent CoT via reach probability. Left: At decoding position 
+
+𝑡 , the model iterates latent steps to produce 𝑧 (1) 
+
+> 𝑡
+
+, 𝑧 (2) 
+
+> 𝑡
+
+, . . . and updates the reach probability, stopping when the next-step reach probability 𝑝 (𝑘 +1) 
+
+> reach ,𝑡
+
+falls below the threshold 𝜏 . Easy tokens ( 𝑥 2, 𝑥 3) stop earlier (shorter latent CoT), while harder tokens ( 𝑥 1) continue longer. The final representation is obtained by 𝑝 exit -weighted mixing of the executed latent states, and is fed to the LM head for prediction. Right: 
+
+The Router takes each latent hidden state 𝑧 (𝑘 ) 
+
+> 𝑡
+
+and outputs a gate 𝑔 (𝑘 ) 
+
+> 𝑡
+
+(the conditional continuation probability), which defines the probability flow: 𝑝 𝑘 +1reach = 𝑝 𝑘 
+
+> reach
+
+𝑔 𝑘 and 𝑝 𝑘  
+
+> exit
+
+= 𝑝 𝑘  
+
+> reach
+
+(1 − 𝑔 𝑘 ).penalty on high-𝑝 target steps), and 𝜆 scales the overall strength of the adaptive term relative to LCE .Intuitively, when 𝑝 (𝑘 ) 
+
+> target
+
+is high, the penalty encourages halting ( 𝑔 → 0); when the model is uncertain, the penalty is small, allowing additional latent computation. The overall objective is: 
+
+L = LCE 
+
+
+
+LMHead (𝑧 final ), 𝑦 
+
+
+
++ L adaptive . (11) 
+
+3.5. Training and Inference Workflows 
+
+We now summarize how the above components are integrated in practice. 
+
+Training. We unroll latent computation for 𝑘 = 1, . . . , 𝐾 max under the parallel attention mask. At each latent step, all active token positions are processed in parallel over 𝑡 . To improve efficiency, we reuse the KV cache across latent steps to avoid recomputing shared attention context, and apply threshold pruning so the active token set shrinks as 𝑘 increases, reducing overall training FLOPs (Figure 4). The Router is trained jointly through (i) gradients from the main cross-entropy loss computed on the mixed representation 𝑧 final and (ii) the correctness-aware adaptive penalty that discourages unnecessary continuation. 
+
+Inference. We use the same Router to perform token-wise halting during decoding. For each position, we iteratively compute latent states and update the reach probability, stopping when the next-step reach probability falls below a threshold 𝜏 . We then form 𝑧 final via the (truncated) 𝑝 exit -weighted mixing of the executed latent states and emit the next token with the LM head (Figure 3). 
+
+3.6. Positional Embedding 
+
+All latent-step states 𝑧 (𝑘 ) 
+
+> 𝑡
+
+share the same positional embedding (position id) as the input token 𝑥 𝑡 at position 𝑡 , rather than using new positions. Thus, latent steps do not consume extra position ids, and 
+
+the effective context window stays unchanged from the vanilla model. 
+
+## 4. Experiments 
+
+## 6Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+Figure 4 | A training example with unrolled latent steps, pruning, and KV-cache reuse. We illustrate one sequence (𝑥 1, 𝑥 2, 𝑥 3) with a latent budget 𝐾 max = 4. With the parallel attention mask, we unroll computation along latent steps and, at each step, compute all active tokens in parallel. At step 1, the model produces (𝑧 (1)   
+
+> 1, 𝑧 (1)
+> 2, 𝑧 (1)
+> 3
+
+) and the Router outputs gates (conditional continuation probabilities) for each token, which update 𝑝 reach and determine whether a token remains active. In the figure,  
+
+> 𝑥 1, 𝑥 2
+
+keep sufficient reach probability to proceed (green checks), while 𝑥 3 is pruned (red cross). At step 2, only 𝑥 1, 𝑥 2 remain; the updated reach probability prunes 𝑥 2, so steps 3–4 are executed only for 𝑥 1. Across latent steps, we reuse the KV cache so later steps reuse cached attention context, avoiding redundant computation. Since pruning shrinks the active token set as 𝑘 increases, the overall training FLOPs decrease. For supervision, we compute per-position LM losses ( L1, L2, L3) on the final representation 𝑧 f 
+
+> 𝑡
+
+obtained by 𝑝 exit -weighted mixing of the executed latent states, and add a correctness-aware adaptive loss (proportional to 𝑝 target ) to penalize continuing when the model already assigns high probability to the ground-truth token, the 𝑝 exit -weighted mixing and Ladaptive 
+
+provide learning signals to both the LM and the Router. 
+
+4.1. Setup Training Setup and Baselines. We train all models from scratch using the LLaMA architecture (Dubey et al., 2024). Specifically, we pretrain two model sizes (410M and 1.4B parameters) for 26B tokens on the Pile over 50,000 optimization steps, following the protocol of Zeng et al. (2025a). To ensure a controlled comparison, we train a suite of baselines under an identical pretraining protocol —matching the training data, optimization schedule, and hyperparameters—including vanilla LLaMA models as well as competitive compute-scaling and recurrent variants: LoopedLM (Giannou et al., 2023), PausedLM (Goyal et al., 2023), PonderLM (Zeng et al., 2025b), PonderLM2 (Zeng et al., 2025a), and the adaptive Mixture-of-Recurrence (MoR) method (Bae et al., 2025). 
+
+Evaluation. We evaluate language modeling quality using validation perplexity on The Pile (Gao et al., 2020), WikiText (Merity et al., 2016), and LAMBADA (Paperno et al., 2016) (both the OpenAI and standard splits). To assess downstream generalization, we follow the evaluation protocol of Gu & Dao (2024) and report 0-shot and 5-shot accuracy on a broad benchmark suite, including LAM-BADA (Paperno et al., 2016), SciQ (Welbl et al., 2017), HellaSwag (Zellers et al., 2019), PIQA (Bisk et al., 2020), WinoGrande (Sakaguchi et al., 2021), ARC-Easy and ARC-Challenge (Clark et al., 2018), and RACE (Lai et al., 2017). 
+
+4.2. Main Results Language Modeling Ability. As shown in Figure 5, our method consistently achieves the lowest perplexity across all datasets while using the least training FLOPs. Specifically, our LLaMA-1.4B model with max latent CoT length ℓmax = 3 outperforms the strongest baseline (PonderLM-2) while requiring less than half of the training compute (7.47 vs. 17.47 ×10 20 FLOPs). Moreover, increasing  
+
+> ℓmax
+
+to 5 further improves performance. 
+
+## 7Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+Figure 5 | Language modeling perplexity (PPL ↓). Validation perplexity on The Pile, WikiText, and LAMBADA (OpenAI and standard splits). Our method consistently achieves the lowest perplexity across all datasets while using fewer training FLOPs. 
+
+Downstream Tasks. Across both zero-shot and five-shot settings and under all compute budgets, our method achieves the best overall average accuracy (Table 1). Notably, our LLaMA-410M with  
+
+> ℓmax
+
+= 3 outperforms the compute-comparable vanilla LLaMA-1.4B baseline in average accuracy for both zero-shot and five-shot, indicating that our approach can be even more effective than simply scaling up the parameter count under a matched compute budget. 
+
+4.3. Iso-data and Iso-FLOP Comparison 
+
+In Figure 6, we compare four 410M-parameter models (LoopedLM, PausedLM, PonderLM, and ours) and report their validation loss under two alignment settings: (i) iso-data , where checkpoints are matched by the same token/step budget, and (ii) iso-FLOPs , where checkpoints are matched by the same estimated total training compute. Across both settings and all budgets, our method consistently achieves the lowest validation loss. 
+
+## 8Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+Table 1 | Zero-shot and five-shot accuracy (%) on downstream tasks. FLOPs denote total pretraining compute (in units of ×10 20 ), estimated following Kaplan et al. (2020). Rows are grouped by compute budget. † denotes a vanilla baseline with comparable compute. 
+
+Model FLOPs Lambada (OpenAI) Lambada (Std) ARC -C ARC -E Wino Grande PIQA Hella Swag SciQ RACE Avg. Acc. 
+
+Zero-shot Performance 
+
+Looped LLaMA-410M (4 loops) 2.56 47.1 34.9 22.6 50.9 51.2 65.5 32.6 79.5 30.4 46.1 Pause LLaMA-410M (3 pauses) 2.56 46.3 35.3 20.9 49.9 51.7 64.7 31.7 80.1 30.4 45.7 PonderLM-410M (3 steps) 2.56 48.9 36.9 21.2 50.4 54.1 66.3 33.3 80.6 30.4 46.9 PonderLM2-410M (1 step) 5.12 48.7 37.7 21.0 50.6 51.3 65.1 33.0 79.8 30.8 46.4 MoR-410M (4 Recursions) 2.27 43.1 32.0 19.8 49.5 51.7 64.9 31.1 80.8 30.9 44.9 LLaMA-1.4B (train from scratch) † 2.18 50.6 37.1 20.9 52.2 53.0 65.6 33.6 84.5 31.8 47.7 
+
+Our LLaMA-410M ( ℓmax = 3) 2.27 49.3 40.2 23.6 50.8 53.7 65.9 33.9 82.2 33.0 48.1 
+
+Looped LLaMA-1.4B (4 loops) 8.74 55.8 45.6 23.2 55.2 54.1 68.9 37.6 84.9 33.0 50.9 Pause LLaMA-1.4B (3 pauses) 8.74 56.2 46.5 24.2 54.0 55.3 68.8 36.7 85.4 32.3 51.0 PonderLM-1.4B (3 steps) 8.74 56.7 45.4 23.8 56.3 55.6 68.3 37.8 86.3 33.0 51.5 
+
+Our LLaMA-1.4B ( ℓmax = 3) 7.47 58.8 49.4 25.8 57.1 57.4 69.2 39.3 87.2 33.4 53.1 
+
+PonderLM-1.4B (4 steps) 10.92 56.2 45.8 24.9 54.5 54.7 69.0 38.1 84.3 35.4 51.4 PonderLM2-1.4B (1 step) 17.47 58.1 48.2 25.2 58.0 53.9 70.7 38.6 85.9 32.4 52.3 
+
+Our LLaMA-1.4B ( ℓmax = 5) 10.84 61.0 52.7 25.9 59.2 57.6 70.4 40.9 87.1 35.3 54.5 
+
+Five-shot Performance 
+
+Looped LLaMA-410M (4 loops) 2.56 42.0 33.6 22.7 52.2 50.9 66.2 33.0 86.9 30.5 46.4 Pause LLaMA-410M (3 pauses) 2.56 40.1 32.0 22.4 50.3 52.8 65.6 31.7 84.8 30.8 45.6 PonderLM-410M (3 steps) 2.56 42.3 36.0 23.5 52.6 52.8 66.9 33.4 87.5 31.5 47.4 PonderLM2-410M (1 step) 5.12 43.5 34.4 21.7 53.3 51.8 66.3 33.2 88.5 31.2 47.1 MoR-410M (4 Recursions) 2.27 40.3 32.3 22.3 52.3 50.0 66.8 33.2 88.7 31.1 46.3 LLaMA-1.4B (train from scratch) † 2.18 45.1 34.7 22.3 53.5 50.9 66.1 33.6 89.3 31.6 47.5 
+
+Our LLaMA–410M ( ℓmax = 3) 2.27 42.7 35.7 23.6 53.8 52.3 67.3 33.7 89.8 32.0 47.9 
+
+Looped LLaMA-1.4B (4 loops) 8.74 48.0 42.8 25.0 58.5 54.8 70.4 37.6 89.2 28.5 50.5 Pause LLaMA-1.4B (3 pauses) 8.74 48.8 41.0 24.1 56.6 54.1 69.3 36.6 90.7 32.6 50.4 PonderLM-1.4B (3 steps) 8.74 49.5 42.6 25.4 58.8 54.3 69.2 37.9 91.2 34.7 51.5 
+
+Our LLaMA-1.4B ( ℓmax = 3) 7.47 51.7 41.7 27.7 60.4 56.0 70.4 39.6 92.4 32.7 52.5 
+
+PonderLM-1.4B (4 steps) 10.92 50.3 44.5 26.0 58.6 55.8 69.9 38.4 92.4 33.1 52.1 PonderLM2-1.4B (1 step) 17.47 49.8 45.6 27.7 59.6 56.3 69.8 38.7 91.3 28.0 51.9 
+
+Our LLaMA-1.4B ( ℓmax = 5) 10.84 54.8 51.0 27.5 62.5 56.8 71.4 41.2 91.4 35.5 54.7 
+
+Figure 6 | Validation loss versus token and compute. Our method consistently achieves the lowest validation loss across budgets. 
+
+Figure 7 | Case studies of our adaptive latent cot model. Two examples from the 1.4B model with 𝑙 max = 5, showing per-token executed latent steps (color-coded). 
+
+## 9Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+4.4. Analysis of Token-Level Adaptive Latent CoT 
+
+We analyze when the model decides to halt or continue latent CoT, and how these decisions allocate computation across tokens. We use our previously trained LLaMA-1.4B models with max latent CoT length ℓmax ∈ { 3, 5}. Specifically, we study: (i) the relationship between token-wise latent CoT length and 𝑝 target (the probability assigned to the ground-truth next token), (ii) whether the model generates shorter latent CoT for easy tokens and longer latent CoT for difficult tokens, and (iii) qualitative case studies illustrating where longer latent CoT is triggered in real sequences. 
+
+4.4.1. Token-wise Latent CoT Length vs. 𝑝 target 
+
+We examine how 𝑝 target varies across tokens that execute different latent CoT lengths. The results in Figure 8 exhibit a clear monotonic trend: tokens with longer latent CoT tend to have lower 𝑝 target ,whereas tokens with higher 𝑝 target typically halt earlier. This observation aligns with our correctness-aware design: pruning is encouraged when the ground-truth token already receives a high probability, while ambiguous tokens are allocated more latent computation. 
+
+4.4.2. Token Difficulty vs. Latent CoT Length 
+
+On WikiText (Merity et al., 2016), we use token-wise cross-entropy as a difficulty score and bucket tokens accordingly. As shown in Figure 8, latent CoT length increases monotonically with difficulty: easy (low-loss) tokens execute ∼0–1 latent steps on average, while difficult (high-loss) tokens trigger deeper computation and approach the maximum length. This suggests the model learns a sensible compute-allocation rule, using minimal latent CoT for easy tokens and longer latent CoT for difficult ones. 
+
+Figure 8 | Left: 𝑝 target monotonically decreases with latent CoT length: tokens that generate longer latent CoT have lower 𝑝 target . Right: We bucket tokens by token-wise cross-entropy (log-scale) and report average latent COT length for 1.4B models with 𝑙 max ∈ { 3, 5}. Easy tokens use ∼0–1 steps, while harder tokens receive more computation. 
+
+4.4.3. Case Studies 
+
+Finally, we visualize where the model chooses to generate long latent CoT in real sequences. Figure 7 shows two examples from the 1.4B model with max latent CoT length ℓmax = 5, where each token is colored by the number of executed latent steps. The router assigns minimal computation to highly predictable spans (e.g., common function words and locally determined continuations), while allocating longer latent CoT to information-dense tokens such as entities, numbers, and key content words. 
+
+## 5. Ablation Studies 
+
+We run controlled ablations on 70M-parameter Llama models to isolate key design choices in our adaptive latent CoT. 
+
+## 10 Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+Table 2 | Effect of router architecture ( 𝑙 max = 5). No-Adaptive disables routing (no pruning). Lin-ear /MLP share one router across latent steps, while Multi-Linear /Multi-MLP use step-specific routers. We report CE loss (lower is better) and prune ratio (higher saves more compute). Notably, shared Linear outperforms No-Adaptive in CE loss while pruning ∼12% of steps.                           
+
+> Router 𝜆 𝛽 CE ↓Prune Ratio (%) ↑
+> No-Adaptive ––2.671 –MLP 0.4 10 2.675 13.4 Linear 0.4 10 2.670 12.4 Multi-MLP 0.4 10 2.672 13.8 Multi-Linear 0.4 10 2.672 11.8
+
+5.1. Effect of Router Architecture. 
+
+We compare five router designs with the backbone and training setup fixed (Table 2). No-Adaptive dis-ables routing (no pruning). Linear /MLP share one router across latent steps, while Multi-Linear /Multi-MLP use step-specific routers (no sharing). As shown in Table 2, adaptive routing improves efficiency while also improving performance. The shared Linear router achieves the lowest CE loss, and we use it as the default. 
+
+5.2. Effect of 𝜆 and 𝛽 in the Adaptive Loss. 
+
+We ablate the two key hyperparameters in our correctness-aware adaptive loss (Equation 10): the compute weight 𝜆 and the exponent 𝛽 on 𝑝 target . All runs use a shared linear router with 𝑙 max =5; when varying 𝜆 we fix 𝛽 =10 , and when varying 𝛽 we fix 𝜆 =0.4. As shown in Figure 9(a), larger 𝜆 increases the prune ratio but slightly worsens CE loss, reflecting a quality–efficiency trade-off; meanwhile Figure 9(b) shows that larger 𝛽 improves CE loss but reduces pruning, indicating more conservative early exits focused on highly confident tokens. We adopt 𝜆 =0.4 and 𝛽 =10 in our experiments. 
+
+Figure 9 | Ablations on loss hyperparameters and max latent cot length 𝑙 max . Blue curves (left axis) report CE loss (lower is better), and red curves (right axis) report prune ratio (higher indicates more pruning), defined as 1 − 𝔼 [ℓ] 
+
+> 𝑙 max
+
+, where ℓ denotes the executed latent CoT length per token. (a) Vary 𝜆 with 𝛽 =10 and 𝑙 max =5. (b) Vary 𝛽 with 𝜆 =0.4 and 𝑙 max =5. (c) Vary 𝑙 max with 𝜆 =0.4 and 𝛽 =10 .
+
+5.3. Effect of max latent CoT length 𝑙 max .
+
+We vary 𝑙 max and evaluate its impact on CE loss and pruning. As shown in Figure 9(c), larger 𝑙 max 
+
+consistently reduces CE loss, suggesting extra latent cot improves modeling quality. Meanwhile, the prune ratio also increases, indicating the router uses the larger budget to skip more steps on easy tokens while allocating computation to difficult ones. 
+
+## 11 Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+## 6. Conclusion 
+
+We introduced Adaptive Latent COT, a one-stage pretraining framework that increases per-token computation by generating variable-length latent COT before emitting each token. Experiments on LLaMA backbones show consistent improvements in language-modeling perplexity and downstream tasks compared to strong compute-scaling baselines. 
+
+## Acknowledgement 
+
+This work is sponsored by the National Natural Science Foundation of China (NSFC) grant (No. 62576211) and the National Key Research and Development Program of China (No. 2023ZD0121402). 
+
+## 12 Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+## References 
+
+Bae, S., Kim, Y., Bayat, R., Kim, S., Ha, J., Schuster, T., Fisch, A., Harutyunyan, H., Ji, Z., Courville, A., et al. Mixture-of-recursions: Learning dynamic recursive depths for adaptive token-level computation. arXiv preprint arXiv:2507.10524 , 2025. Banino, A., Balaguer, J., and Blundell, C. Pondernet: Learning to ponder. arXiv preprint arXiv:2107.05407 , 2021. Bisk, Y., Zellers, R., Gao, J., Choi, Y., et al. Piqa: Reasoning about physical commonsense in natural language. In Proceedings of the AAAI conference on artificial intelligence , volume 34, pp. 7432–7439, 2020. Brown, T., Mann, B., Ryder, N., Subbiah, M., Kaplan, J. D., Dhariwal, P., Neelakantan, A., Shyam, P., Sastry, G., Askell, A., et al. Language models are few-shot learners. Advances in neural information processing systems , 33:1877–1901, 2020. Chen, Y., Shang, J., Zhang, Z., Xie, Y., Sheng, J., Liu, T., Wang, S., Sun, Y., Wu, H., and Wang, H. Inner thinking transformer: Leveraging dynamic depth scaling to foster adaptive internal thinking. 
+
+arXiv preprint arXiv:2502.13842 , 2025. Clark, P., Cowhey, I., Etzioni, O., Khot, T., Sabharwal, A., Schoenick, C., and Tafjord, O. Think you have solved question answering? try arc, the ai2 reasoning challenge. arXiv preprint arXiv:1803.05457 ,2018. Dehghani, M., Gouws, S., Vinyals, O., Uszkoreit, J., and Kaiser, Ł. Universal transformers. arXiv preprint arXiv:1807.03819 , 2018. Dubey, A., Jauhri, A., Pandey, A., Kadian, A., Al-Dahle, A., Letman, A., Mathur, A., Schelten, A., Yang, A., Fan, A., et al. The llama 3 herd of models. arXiv e-prints , pp. arXiv–2407, 2024. Elbayad, M., Gu, J., Grave, E., and Auli, M. Depth-adaptive transformer. arXiv preprint arXiv:1910.10073 , 2019. Fu, T., You, Y., Chen, Z., Dai, G., Yang, H., and Wang, Y. Think-at-hard: Selective latent iterations to improve reasoning language models. arXiv preprint arXiv:2511.08577 , 2025. Gao, L., Biderman, S., Black, S., Golding, L., Hoppe, T., Foster, C., Phang, J., He, H., Thite, A., Nabeshima, N., et al. The pile: An 800gb dataset of diverse text for language modeling. arXiv preprint arXiv:2101.00027 , 2020. Geiping, J., McLeish, S., Jain, N., Kirchenbauer, J., Singh, S., Bartoldson, B. R., Kailkhura, B., Bhatele, A., and Goldstein, T. Scaling up test-time compute with latent reasoning: A recurrent depth approach. arXiv preprint arXiv:2502.05171 , 2025. Giannou, A., Rajput, S., Sohn, J.-y., Lee, K., Lee, J. D., and Papailiopoulos, D. Looped transformers as programmable computers. In International Conference on Machine Learning , pp. 11398–11442. PMLR, 2023. Goyal, S., Ji, Z., Rawat, A. S., Menon, A. K., Kumar, S., and Nagarajan, V. Think before you speak: Training language models with pause tokens. arXiv preprint arXiv:2310.02226 , 2023. Graves, A. Adaptive computation time for recurrent neural networks. arXiv preprint arXiv:1603.08983 ,2016. 
+
+## 13 Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+Gu, A. and Dao, T. Mamba: Linear-time sequence modeling with selective state spaces. In First conference on language modeling , 2024. Hao, S., Sukhbaatar, S., Su, D., Li, X., Hu, Z., Weston, J., and Tian, Y. Training large language models to reason in a continuous latent space. arXiv preprint arXiv:2412.06769 , 2024. Hoffmann, J., Borgeaud, S., Mensch, A., Buchatskaya, E., Cai, T., Rutherford, E., Casas, D. d. L., Hendricks, L. A., Welbl, J., Clark, A., et al. Training compute-optimal large language models. arXiv preprint arXiv:2203.15556 , 2022. Kaplan, J., McCandlish, S., Henighan, T., Brown, T. B., Chess, B., Child, R., Gray, S., Radford, A., Wu, J., and Amodei, D. Scaling laws for neural language models. arXiv preprint arXiv:2001.08361 ,2020. Lai, G., Xie, Q., Liu, H., Yang, Y., and Hovy, E. Race: Large-scale reading comprehension dataset from examinations. arXiv preprint arXiv:1704.04683 , 2017. Lan, Z., Chen, M., Goodman, S., Gimpel, K., Sharma, P., and Soricut, R. Albert: A lite bert for self-supervised learning of language representations. arXiv preprint arXiv:1909.11942 , 2019. Liu, A., Feng, B., Xue, B., Wang, B., Wu, B., Lu, C., Zhao, C., Deng, C., Zhang, C., Ruan, C., et al. Deepseek-v3 technical report. arXiv preprint arXiv:2412.19437 , 2024. Merity, S., Xiong, C., Bradbury, J., and Socher, R. Pointer sentinel mixture models. arXiv preprint arXiv:1609.07843 , 2016. Muennighoff, N., Rush, A., Barak, B., Le Scao, T., Tazi, N., Piktus, A., Pyysalo, S., Wolf, T., and Raffel, C. A. Scaling data-constrained language models. Advances in Neural Information Processing Systems ,36:50358–50376, 2023. Narayanan, D., Shoeybi, M., Casper, J., LeGresley, P., Patwary, M., Korthikanti, V., Vainbrand, D., Kashinkunti, P., Bernauer, J., Catanzaro, B., et al. Efficient large-scale language model training on gpu clusters using megatron-lm. In Proceedings of the international conference for high performance computing, networking, storage and analysis , pp. 1–15, 2021. Paperno, D., Kruszewski, G., Lazaridou, A., Pham, N.-Q., Bernardi, R., Pezzelle, S., Baroni, M., Boleda, G., and Fernández, R. The lambada dataset: Word prediction requiring a broad discourse context. In Proceedings of the 54th annual meeting of the association for computational linguistics (volume 1: Long papers) , pp. 1525–1534, 2016. Pati, S., Aga, S., Islam, M., Jayasena, N., and Sinclair, M. D. Computation vs. communication scaling for future transformers on future hardware. arXiv preprint arXiv:2302.02825 , 2023. Pfau, J., Merrill, W., and Bowman, S. R. Let’s think dot by dot: Hidden computation in transformer language models. arXiv preprint arXiv:2404.15758 , 2024. Raposo, D., Ritter, S., Richards, B., Lillicrap, T., Humphreys, P. C., and Santoro, A. Mixture-of-depths: Dynamically allocating compute in transformer-based language models. arXiv preprint arXiv:2404.02258 , 2024. Sakaguchi, K., Bras, R. L., Bhagavatula, C., and Choi, Y. Winogrande: An adversarial winograd schema challenge at scale. Communications of the ACM , 64(9):99–106, 2021. Schuster, T., Fisch, A., Gupta, J., Dehghani, M., Bahri, D., Tran, V., Tay, Y., and Metzler, D. Confident adaptive language modeling. Advances in Neural Information Processing Systems , 35:17456–17472, 2022. 
+
+## 14 Pretraining with Token-Level Adaptive Latent Chain-of-Thought 
+
+Villalobos, P., Sevilla, J., Heim, L., Besiroglu, T., Hobbhahn, M., and Ho, A. Will we run out of data? an analysis of the limits of scaling datasets in machine learning. arXiv preprint arXiv:2211.04325 ,1:1, 2022. Wang, X., Caccia, L., Ostapenko, O., Yuan, X., Wang, W. Y., and Sordoni, A. Guiding language model reasoning with planning tokens. arXiv preprint arXiv:2310.05707 , 2023. Wei, J., Wang, X., Schuurmans, D., Bosma, M., Xia, F., Chi, E., Le, Q. V., Zhou, D., et al. Chain-of-thought prompting elicits reasoning in large language models. Advances in neural information processing systems , 35:24824–24837, 2022. Wei, X., Liu, X., Zang, Y., Dong, X., Cao, Y., Wang, J., Qiu, X., and Lin, D. Sim-cot: Supervised implicit chain-of-thought. arXiv preprint arXiv:2509.20317 , 2025. Welbl, J., Liu, N. F., and Gardner, M. Crowdsourcing multiple choice science questions. arXiv preprint arXiv:1707.06209 , 2017. Yue, Y., Chen, Z., Lu, R., Zhao, A., Wang, Z., Song, S., and Huang, G. Does reinforcement learning really incentivize reasoning capacity in llms beyond the base model? arXiv preprint arXiv:2504.13837 ,2025. Zelikman, E., Harik, G., Shao, Y., Jayasiri, V., Haber, N., and Goodman, N. D. Quiet-star: Language models can teach themselves to think before speaking. arXiv preprint arXiv:2403.09629 , 2024. Zellers, R., Holtzman, A., Bisk, Y., Farhadi, A., and Choi, Y. Hellaswag: Can a machine really finish your sentence? arXiv preprint arXiv:1905.07830 , 2019. Zeng, B., Li, H., Song, S., Wang, Y., He, Z., Wang, X., and Lin, Z. Ponderlm-2: Pretraining llm with latent thoughts in continuous space. arXiv preprint arXiv:2509.23184 , 2025a. Zeng, B., Li, H., Song, S., Wang, Y., He, Z., Wang, X., and Lin, Z. Pretraining llm with latent thoughts in continuous space. arXiv e-prints , pp. arXiv–2509, 2025b. Zhu, R.-J., Wang, Z., Hua, K., Zhang, T., Li, Z., Que, H., Wei, B., Wen, Z., Yin, F., Xing, H., et al. Scaling latent reasoning via looped language models. arXiv preprint arXiv:2510.25741 , 2025. 
+
+## 15

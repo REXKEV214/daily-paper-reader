@@ -1,0 +1,979 @@
+Title: Dialogue Model Optimization via Agent Game and Adaptive Tree-based GRPO
+
+URL Source: https://arxiv.org/pdf/2602.08533v2
+
+Published Time: Wed, 11 Feb 2026 02:10:07 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Dialogue Model Optimization via Agent Game and Adaptive Tree-based GRPO 
+
+# Kun Peng †a, Conghui Tan ‡, Yu Liu †, Guohua Tang ‡, Zhongqian Sun ‡, Wei Yang ‡, Zining Zhu ‡,Lei Jiang †b, Yanbing Liu †, Hao Peng †
+
+†Institute of Information Engineering, Chinese Academy of Sciences ‡Tencent pengkun@iie.ac.cn 
+
+## Abstract 
+
+Open-ended dialogue agents aim to deliver engaging, personal-ized interactions by adapting to users’ traits, but existing methods face critical limitations: over-reliance on pre-collected user data, and short-horizon biases in reinforcement learning (RL) that ne-glect long-term dialogue value. To address these, we propose a novel long-horizon RL framework integrating online personaliza-tion with Adaptive Tree-based Group Relative Policy Optimization (AT-GRPO). Adopting a two-agent game paradigm, a user agent constructs dynamic environments via style mimicry (learning user-specific conversational traits) and active termination (predicting turn-level termination probabilities as immediate rewards), forming an iterative cycle that drives the dialogue agent to deepen interest exploration. AT-GRPO reinterprets dialogue trajectories as trees and introduces adaptive observation ranges. Unlike full tree ex-pansion that incurs exponential overhead, it limits each node to aggregate rewards from a stage-aware range: larger ranges support early-stage topic exploration, while smaller ranges facilitate late-stage dialogue maintenance. This design reduces rollout budgets from exponential to polynomial in the dialogue length, while pre-serving long-term reward capture. Extensive experiments show our framework’s superior performance, sample efficiency, and robust-ness. 
+
+## CCS Concepts 
+
+• Computing methodologies → Discourse, dialogue and prag-matics ; Reinforcement learning .
+
+## Keywords 
+
+Dialogue Model, Reinforcement Learning 
+
+## 1 Introduction 
+
+Open-ended dialogue agents built on large language models (LLMs) have grown increasingly indispensable in human-computer inter-action, finding broad applications in social robotics, game non-player characters (NPCs), virtual assistants, and educational men-tors [ 1, 7, 8 , 44 , 45 ]. Beyond generating grammatically sound re-sponses, the primary objective of such agents is to flexibly adapt to users’ distinct personalities, interest inclinations, and conversa-tional patterns—delivering a personalized interaction experience that strengthens user involvement and loyalty [ 3, 21 , 37 ]. Despite remarkable advancements in LLMs that have elevated dialogue flu-ency and contextual comprehension [ 34 ], their capacity to achieve  
+
+> a
+
+Work done during internship at Tencent  
+
+> b
+
+Corresponding author. Turn 2  
+
+> (d) Long -horizon Optimization
+> (AT -GRPO )
+
+Limitations of Existing Methods Advantages of Our Framework                       
+
+> (a) Offline Data Dependence
+> (Existing Methods)
+> (c) Online Personalization
+> (Our Framework)
+> (b) Short -horizon Bias
+> (Existing RL Methods)
+> User
+> (No Prior Data)
+> Dialogue
+> Agent
+> Effective
+> Personalization
+> User
+> (No Prior Data)
+> Failed
+> Personalization Pre -collected
+> User Data
+> (Required )
+> Dialogue
+> Agent
+> Turn 1 I don't know
+> which in -game
+> items to
+> exchange.
+> User Immediate Reward: 0. 8
+> All items are good;
+> just p ick one.
+> Which do you
+> prefer: functional,
+> cosmetic or rare
+> items ?
+> User
+> Unhelpful, bye .
+> Immediate Reward: 0. 1
+> Abrupt
+> Termination
+> Potential Long -
+> term Reward: 0.8
+> All items are
+> good; just
+> pick one.
+> Actual
+> Reward :0. 2
+> Which do you
+> prefer: functional,
+> cosmetic or rare
+> items?
+> which in -game
+> items to exchange .
+> Iterative Game:
+> Learn User Traits
+> On -the -fly
+> Actual
+> Reward :0.9
+> Adaptive Observation Range
+> Long -term Reward: 0.8
+> User Termination
+> Long -term Reward: 0. 1
+> Topics
+> Deepening
+> User Agent:
+> Style Mimicry +
+> Dynamic Termination
+> Agent
+
+Figure 1: Limitations of existing methods vs. our framework. 
+
+effective personalization in real-world scenarios remains limited, particularly when no prior user data is accessible. Personalization is essential rather than optional for human-oriented conversational systems. However, the majority of existing personalization approaches for LLMs depend heavily on large vol-umes of pre-collected user histories, profiles, or latent feature rep-resentations [ 18 , 24 , 25 , 32 , 33 , 46 ], restricting their applicability in on-demand scenarios such as anonymous interactions, temporary virtual assistants, or privacy-protected domains. These scenarios call for online personalization capabilities—where the agent ac-quires insights into the user dynamically during the conversation, reducing ambiguity about user characteristics as the interaction progresses without relying on offline data stores [35]. Reinforcement Learning (RL) has emerged as a viable approach for training personalized dialogue agents, enabling them to refine their strategies through real-time feedback from interactions [ 20 ]. That said, existing RL techniques for dialogue generation, including PPO [ 26 ] and GRPO [ 27 ], are plagued by short-horizon optimiza-tion biases—they prioritize immediate rewards while overlooking the long-term value of conversations. As shown in Figure 1, this myopia gives rise to two key problems: first, the "immediate re-ward trap," where high instant feedback leads to abrupt dialogue termination due to inadequate exploration of user interests; sec-ond, the "undervaluation of exploratory actions," where utterances with low immediate rewards but the potential to uncover deep user preferences are abandoned, squandering chances for sustained 
+
+> arXiv:2602.08533v2 [cs.AI] 10 Feb 2026 Kun et al.
+
+high-quality interactions. Furthermore, chain-based rollout strate-gies in traditional RL methods result in redundant token usage and sparse supervision signals, as trajectory-level outcome rewards fail to isolate the contribution of individual dialogue turns [ 11 , 12 , 40 ]. Another major hurdle in RL-driven dialogue personalization is reward hacking—agents may employ opportunistic tactics (e.g., meaningless repetitive queries, forced conversation retention, or directive responses) to prolong dialogue duration without enhanc-ing content quality, which distorts reward signals and undermines model optimization [ 30 ]. To make matters worse, existing online personalization methods lack dynamic interaction environments that can simulate real user behaviors, as static dataset-based imita-tion learning is unable to adapt to diverse user types or evolving conversational contexts [ 13 ]. This research gap underscores the need for an integrated framework that addresses long-horizon opti-mization, dynamic online personalization, and robust reward design simultaneously. To overcome these limitations, we propose a novel long-horizon RL framework based on agent game theory, integrating online per-sonalization mechanisms with Adaptive Tree-based Group Relative Policy Optimization (AT-GRPO) to boost the adaptive capabilities of dialogue agents. Our framework utilizes a two-agent game between a dialogue agent and a user agent: the latter constructs a dynamic interaction environment, while the former optimizes its strategies to explore user traits and sustain high-quality long-term dialogues. The user agent is equipped with two core mechanisms to enable realistic dynamic interactions. First, the style mimicry mechanism learns user-specific conversational styles, preferences, and response logic by training on real user dialogue corpora through supervised fine-tuning (SFT), thereby generating responses that align with target user characteristics and supporting adaptive simulation of diverse user profiles. Second, within the active dialogue termination mechanism, the user agent predicts a turn-level termination proba-bility based on conversation history; this probability serves both as an explicit feature for the next dialogue turn and as an immediate reward signal for the conversational agent. This mechanism can ac-curately identify natural termination cues (such as topic exhaustion or declining user interest), forming a game-theoretic cycle: the user agent gradually raises its termination threshold to demand higher interaction quality, while the conversational agent optimizes its strategy by delving deeper into user interest exploration, thereby reducing the termination probability. To address short-horizon biases and inefficient rollouts, our AT-GRPO reinterprets dialogue trajectories as tree structures—each node denotes a dialogue turn, and child nodes represent sampled candidate responses [ 11 , 12 , 40 ]. The original TreeRPO [ 40 ] ad-dresses short-horizon biases by adopting bottom-up weighted re-ward aggregation, enabling each node to capture cumulative re-wards from all subsequent paths. However, this comprehensive aggregation comes at a steep cost: expanding all nodes in the tree results in exponential growth of computational overhead, which is impractical for real-world dialogue systems with limited com-putational resources. To resolve this inefficiency while retaining the long-horizon reward capture capability, AT-GRPO introduces an adaptive expansion mechanism. Instead of requiring each node to access all subsequent child nodes (full tree expansion), we limit each node to an adaptive observation range—only nodes within this range are included in the bottom-up weighted reward aggre-gation. This design reduces the original rollout budget from expo-nential growth to polynomial, drastically lowering computational costs without sacrificing key performance. The observation range is adaptively adjusted based on the dialogue stage: in the early stages, nodes need to explore high-value topics to lay the foundation for sustained interaction, so a larger observation range is adopted to capture more potential long-term rewards; in the later stages, the focus shifts to maintaining the ongoing dialogue and deepening existing topics, where a smaller observation range suffices as com-plete supervision signals are no longer necessary. This stage-aware adaptive mechanism ensures that computational resources are allo-cated efficiently while preserving the ability to balance immediate feedback and long-term gains. We validate our framework on multiple benchmark datasets, including LCCC [ 36 ], DailyDialog [ 16 ], and a custom game NPC dataset, evaluating performance across dimensions such as inter-action length, dialogue coherence, and user satisfaction. Our ex-perimental results demonstrate that the proposed framework out-performs state-of-the-art baselines in online personalization and long-horizon interaction, achieving impressive performance with only 100 training steps. In summary, our contributions are threefold: 1. We propose an agent game framework for online personal-ization, where the user agent integrates style mimicry and active termination capabilities to build dynamic interaction environments, enabling the conversational agent to learn user traits through itera-tive game-based interactions without relying on prior data. 2. We develop AT-GRPO for dialogue optimization, leveraging tree-structured rollouts and weighted reward aggregation to elimi-nate short-horizon biases, and enhance sample efficiency. 3. We establish a comprehensive evaluation protocol across di-verse domains, providing empirical proof that our framework out-performs baseline methods in personalization, long-horizon inter-action, and robust domain adaptation. 
+
+## 2 Related Work 2.1 Personalized Dialogue LLM 
+
+Personalized LLMs generate high-quality content by leveraging user-specific data, and existing approaches are primarily catego-rized into two paradigms: Fine-tuning methods [ 32 , 33 , 46 ] optimize partial model parameters for personalization. PER-PCS [ 32 ] uses LoRA to fine-tune user-specific Llama models, while OPPU [ 33 ]reduced costs via user clustering. However, these methods rely on user-specific data and face challenges in dynamic preference adaptation. Retrieval-based methods [ 18 , 24 , 25 ] inject personal-ization through in-context demonstrations. LaMP [ 25 ] retrieved relevant user histories, and ROPG-RL [ 24 ] optimized retrievers via RL. Yet, they prioritize task relevance over holistic user patterns, limiting long-term preference capture. Distinct from these offline data-dependent methods, CURIO [ 35 ] pioneers online personaliza-tion via curiosity-driven rewards, but it still relies on predefined discrete user types. This constraint renders the model ill-suited for open-domain conversations, where user preferences are often continuous, ambiguous, or dynamically evolving (e.g., users may Dialogue Model Optimization via Agent Game and Adaptive Tree-based GRPO B. Adaptive Tree -based GRPO (Long -horizon Optimization )           
+
+> Turn 𝑖
+> Group 𝑖 Adaptive Observation Range ：w=2,𝑙 !=2(Early Stage)
+
+…          
+
+> Reward
+> Aggregation
+> Leaf
+> 𝑟 =0
+> Main  Dialogue  Trajectory
+> Randomly
+> Chosen
+> Adaptive Observation Range ：w=2,𝑙 !"#=1(Medium Stage)
+
+…                     
+
+> 𝑛 !#
+> Turn 𝑖 +1
+> Group 𝑖 +1
+> Randomly
+> Chosen
+> 𝑛 !$ 𝑛 !%
+> 𝑛 (!"#)#𝑛 !"#$𝑛 !"#(𝑛 !"#%
+> Populate nodes from 𝑤 to 𝑊
+
+… Adaptive Observation Range ：w = 2, 𝑙 ) = 0 (Late Stage) 
+
+…Turn j           
+
+> Group 𝑗
+> 𝑛 )# 𝑛 )$ 𝑛 )( 𝑛 !"#%
+> Populate nodes from 𝑤 to 𝑊
+> Tree  Search  & Aggregation
+
+A. Agent Game Paradigm 
+
+(online Personalization )           
+
+> Dialogue
+> Agent
+> (Policy 𝜋 !)
+> Termination Threshold
+> Increases with
+> Training Steps
+> Adversarial Training Cycle
+> Game:
+> Maximize 𝑟
+> System Response
+> User Utterance
+> User Agent
+> (Environment)
+> Style
+> Mimicry Termination
+> Prediction
+> (𝑝 $)
+
+Figure 2: The overall framework operates through an iterative closed loop: the user agent provides real-time feedback (e.g., termination probability as reward signals) based on the dialogue agent’s responses, and the dialogue agent is trained via AT-GRPO to balance immediate interaction quality and long-term conversational value. 
+
+temporarily mention new interests during interactions). Such prede-fined categorization fails to cover real-world preference complexity, limiting generalization. 
+
+## 2.2 Tree-Search Enhanced RL for LLM 
+
+Tree search has emerged as a promising auxiliary paradigm for reinforcing reasoning capabilities in LLMs, with existing efforts pri-marily focusing on three directions: inference-time enhancement, offline data synthesis, and limited attempts at online RL integration. Inference-time tree search methods [ 19 , 31 , 41 ] leverage structured exploration to improve response quality during decoding, but these methods rely on external reward signals or heuristic evaluation, lacking tight integration with RL training and failing to transfer exploration gains to model parameter updates. Offline training with tree search [ 4 , 38 , 42 ] focuses on generating high-quality training data for supervised fine-tuning (SFT) or direct preference optimiza-tion (DPO) [ 23 ]. However, they suffer from distribution mismatch and reward hacking [ 10 ] when applied to offline RL, as the static process reward models derived from tree search fail to adapt to the dynamic policy shifts during training. Limited works have explored integrating tree search into online RL training [ 6, 14 ]. Unlike AlphaZero [ 28 ] which tightly couples tree search with RL in game AI, LLM RL has not fully exploited tree search’s ability to provide adaptive process rewards and efficient exploration. This disconnect limits the model’s capacity to learn from structured reasoning paths and transfer exploration gains to long-term performance improvements. 
+
+## 3 Proposed Methodology 3.1 User Agent 
+
+The overall framework is shown in Figure 2. The user agent serves as a dynamic, adaptive interaction environment that simulates real user behaviors, including conversational style mimicry and active dialogue termination. It is trained via SFT on real user dialogue corpora and provides explicit reward signals for the dialogue agent during RL. 
+
+3.1.1 Style Mimicry and Termination Preference Learning. High-quality SFT data is crucial for user agent training. We thus collect and select a subset of multiple conversational data entries from the same real user as prompt demonstrations, with the remaining conversational data used as training samples. This setup enables the user agent to learn the mapping from the user’s traits to their con-versational style from the historical multi-turn conversational data. To learn the termination preference, the user agent is trained with a constrained output format: each response must start with either the token [Continue ] or [Terminate ], which explicitly indicates the user’s willingness to continue the dialogue. 
+
+3.1.2 Explicit Probability Propagation and Dynamic Threshold Ad-justment. In the agent game, the user agent’s parameters are frozen to maintain a stable interaction environment. We define the inter-action trajectory as 𝐻 = [𝐷 0, 𝑈 0, 𝐷 1, 𝑈 1, ..., 𝐷 𝑁 , 𝑈 𝑁 ], where 𝐷 𝑖 ∈ D 
+
+(dialogue agent’s utterances) and 𝑈 𝑖 ∈ U (user agent’s utterances). The interaction terminates when the user agent outputs [ Terminate ](𝑈 𝑁 = [Terminate ]). At each interaction turn, the user agent can compute the termination probability 𝑝 𝑖 in real time without relying on any additional parametric modules: 
+
+𝑝 𝑖 = min (𝛼 × 2𝑃 ([ Terminate ]| 𝐻 <𝑖 , 𝐷 𝑖 ), 1) , (1) where 𝐻 <𝑖 = [𝐷 0, 𝑈 0, ..., 𝐷 𝑖 −1, 𝑈 𝑖 −1] is the historical context up to turn 𝑖 − 1, 𝑃 (·) denotes the probability output by the user agent. 𝛼 
+
+controls the strictness of the user agent’s termination preference. When 𝑃 ([ Terminate ]| 𝐻 ≤𝑖 , 𝐷 𝑖 ) ≥ 0.5, 𝑝 𝑖 = 1, indicating the user will terminate the dialogue. Termination probability 𝑝 𝑖 serves two key functions: Kun et al. 
+
+Explicit Probability Propagation : To enable the user agent to track historical termination tendencies, we propagate the ter-mination probability as an explicit feature in the dialogue context. Specifically, the user’s (𝑖 + 1)-th response 𝑈 𝑖 +1 is generated based on the augmented context that includes all previous termination probabilities: 
+
+𝑈 𝑖 +1 = 𝑃 user (𝑈 | 𝐷 0 ⊕ 𝑝 𝑖𝑛𝑖𝑡 , 𝑈 0, 𝐷 1 ⊕ 𝑝 0, ..., 𝑈 𝑖 , 𝐷 𝑖 +1 ⊕ 𝑝 𝑖 ) , (2) where 𝑝 𝑖𝑛𝑖𝑡 = 0 (initial termination probability) and 𝐷 𝑖 +1 ⊕ 𝑝 𝑖 
+
+denotes appending 𝑝 𝑖 to the dialogue agent’s 𝑖 + 1-th utterance. This augmentation allows the user agent to learn context-aware termination decisions. 
+
+Dynamic Threshold Adjustment : The immediate reward sig-nal for the dialogue agent is defined as 𝑟 𝑖 = 1 − 𝑝 𝑖 (higher rewards indicate stronger user willingness to continue). To form an ad-versarial training cycle, we dynamically adjust 𝛼 linearly with RL progress: 
+
+𝛼 = 1 + 𝜆 ·
+
+j steps 
+
+10 
+
+k
+
+, (3) where steps is the current RL training step, and 𝜆 > 0 is a hyper-parameter regulating the rate of strictness increase. As training proceeds, the user agent becomes less tolerant of low-quality in-teractions, driving the dialogue agent to continuously improve its strategy. 
+
+## 3.2 Dialogue Agent and Adaptive Tree-based GRPO (AT-GRPO) 
+
+The dialogue agent is first initialized via SFT on high-quality di-alogue datasets to acquire basic conversational competence (e.g., fluency, contextual coherence). Beyond generating high-quality responses, its core goal during RL is to proactively explore user interests and optimize its policy to minimize the user agent’s termi-nation probability 𝑝 𝑖 (i.e., maximize immediate rewards 𝑟 𝑖 ) while sustaining long-term high-quality interactions. Vanilla GRPO uses chain-based rollouts, where for each turn in the dialogue, it samples a group of size 𝑊 , then selects one node from it as the main trajectory to continue sampling. The overall complexity is O( 𝑊 𝐿 ), where 𝐿 is the dialogue exchange length. But this approach fails to capture long-term conversational value. To address this, our AT-GRPO model the dialogue trajectory as a tree structure 𝑇 :
+
+• Each node 𝑛 𝑖 𝑗 represents the 𝑗 -th sampled interaction at the 𝑖 -th dialogue turn (depth 𝑖 ), corresponding to the triple (𝐷 𝑖 𝑗 , 𝑈 𝑖 𝑗 , 𝑟 𝑖 𝑗 ).
+
+• The number of child nodes per parent node is 𝑊 (GRPO’s group sampling size), representing 𝑊 candidate responses generated by the dialogue agent for the current context. 
+
+• A node 𝑛 𝑖 𝑗 is a leaf node if and only if 𝑟 𝑖 𝑗 = 0 (i.e., 𝑈 𝑖 𝑗 =
+
+[Terminate ]) or the maximum depth 𝐿 is reached (maximum al-lowed dialogue exchange length). To let early nodes sense long-term value, one naive idea [ 40 ] is to first expand the entire tree, then backpropagate rewards from the leaves upward. However, this approach is plagued by two key drawbacks. First , because the number of nodes grows by a factor of 𝑊 at each depth, the RL process naturally focuses more on later dialogue stages. This biases the learning toward late-phase decisions and contradicts our goal of encouraging exploration in early phases. More critically , full expansion of this tree requires 
+
+Í𝐿 𝑡 =1 𝑊 𝑡 ≈ 𝑊 𝐿 interactions, leading to exponential computational overhead O( 𝑊 𝐿 ) that is infeasible for large 𝑊 and 𝐿 .To address these issues, our proposed AT-GRPO employs a lay-ered exploration strategy: as shown on the right of Figure 2, at each layer, it first explores all subsequent nodes equally within an adaptive observation range, then randomly selects one non-leaf node to extend the main trajectory to the next layer. This ensures a uniform group size at every depth. 
+
+3.2.1 Adaptive Observation Range. We introduce an adaptive ex-pansion with the insight that dialogue strategies vary with turn depth: 
+
+Early turns (deep depth) : The agent needs to explore high-value topics, requiring a larger observation range to capture poten-tial long-term rewards; 
+
+Late turns (shallow depth) : The agent focuses on maintaining and deepening existing topics, prioritizing immediate rewards over distant future gains. For a non-leaf node 𝑛 𝑖 𝑗 at depth 𝑖 , we define its observation length 𝑙 𝑖 (number of subsequent layers to expand) as: 
+
+𝑙 𝑖 = round (𝛾 ln (𝐿 − 𝑖 + 1)) , (4) where 𝛾 > 0 is a hyperparameter scaling the observation length. 𝑙 𝑖 
+
+decreases as 𝑖 increases, adapting to the dialogue’s strategic needs. The expansion budget for the observation subtree rooted at node 𝑛 𝑖 𝑗 ,with width 𝑤 and depth 𝑙 𝑖 , is given by Í𝑙 𝑖   
+
+> 𝑡 =1
+
+𝑤 𝑡 ≈ 𝑤 𝑙 𝑖 . The reward for node 𝑛 𝑖 𝑗 is a weighted combination of its immediate reward and the average reward of all leaf nodes within its observation range: 
+
+𝑟 ′ 
+
+> 𝑖 𝑗
+
+= 𝜔𝑟 𝑖 𝑗 + ( 1 − 𝜔 ) 1
+
+𝑤 𝑙 𝑖 ∑︁ 𝑘 ∈ L (𝑙 𝑖 )
+
+> 𝑖 𝑗
+
+𝑟 𝑘 (5) where L (𝑙 𝑖 ) 
+
+> 𝑖 𝑗
+
+denotes the set of all leaf nodes obtained from 𝑛 𝑖 𝑗 
+
+subtree, with |L (𝑙 𝑖 ) 
+
+> 𝑖 𝑗
+
+| = 𝑤 𝑙 𝑖 , 𝜔 is a weight to trade off between immediate and long-term rewards. 
+
+3.2.2 Single-trajectory Tree Expansion. After aggregating rewards to form a GRPO group, we randomly select a non - leaf node as the context for the next dialogue turn. Based on its subtree, we populate its children nodes from 𝑤 to 𝑊 to form a new GRPO group. We then repeat the steps of adaptive expansion and reward aggregation until all nodes become leaf nodes or the maximum depth is reached. 
+
+3.2.3 Computational Complexity. The budget for expanding the entire GRPO tree is: 
+
+> 𝐿
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑊 
+
+> 𝑙 𝑖
+
+∑︁  
+
+> 𝑡 =1
+
+𝑤 𝑡 ≤ 𝑏 √𝑤𝑊 
+
+> 𝐿
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑘 𝛾 ln 𝑤 ≤ 𝑏 √𝑤𝑊 𝐿 1+𝛾 ln 𝑤 , (6) where 𝑏 = 𝑤 𝑤 −1 . The derivation of this inequality is provided in Appendix A.2. Since the expansion width 𝑤 ≪ 𝑊 and 𝛾 ≪ 𝐿 , the size of the dialogue tree scales polynomially with 𝐿 , specifically as 
+
+O( 𝑊 𝐿 𝐶 ), where 𝐶 = 1 + 𝛾 ln 𝑤 is a constant. 
+
+3.2.4 Objective Function. Building on GRPO’s group-relative train-ing mechanism, we compute the advantage function for each node based on its aggregated reward: ˆ𝐴 𝑖 𝑗 = 𝑟 ′  
+
+> 𝑖 𝑗 −𝜇 𝑖
+> 𝜎 𝑖
+
+, where 𝜇 𝑖 and 𝜎 𝑖 are the mean and standard deviation of aggregated rewards in the group. Dialogue Model Optimization via Agent Game and Adaptive Tree-based GRPO 
+
+The objective function of AT-GRPO integrates the clipped policy ratio and KL regularization: 
+
+J𝑖 (𝜃 ) = E𝑛 𝑖 𝑗 ∼𝑇 
+
+"
+
+min 
+
+ 𝜋 𝜃 (𝐷 𝑖 𝑗 |𝐻 𝑖 𝑗 )
+
+𝜋 𝜃 old (𝐷 𝑖 𝑗 |𝐻 𝑖 𝑗 ) ˆ𝐴 𝑖 𝑗 ,
+
+clip 
+
+ 𝜋 𝜃 (𝐷 𝑖 𝑗 |𝐻 𝑖 𝑗 )
+
+𝜋 𝜃 old (𝐷 𝑖 𝑗 |𝐻 𝑖 𝑗 ) , 1 − 𝜖, 1 + 𝜖 
+
+
+
+ˆ𝐴 𝑖 𝑗 
+
+
+
+− 𝛽𝐷 KL (𝜋 𝜃 ∥ 𝜋 ref )
+
+#
+
+,
+
+(7) where 𝐷 𝑖 𝑗 and 𝐻 𝑖 𝑗 are the dialogue agent’s response and context at depth 𝑖 , 𝜋 𝜃 old is the policy at the start of the current update iteration, and 𝜋 ref is the reference policy, 𝜖 and 𝛽 are hyperparameters. The policy is updated by accumulating gradients from GRPO losses computed independently for each depth-wise group, ensuring stable optimization while preserving the group-relative credit assignment mechanism. The detailed algorithmic description of AT-GRPO is provided in Appendix A.1. 
+
+## 4 Experiments 4.1 Settings 
+
+4.1.1 Datasets. We collect and filter 3.4 million high-quality multi-turn dialogues between 250,000 real users and intelligent conversa-tional NPCs from a popular online game, constructing the NPC-Chat dataset. With an average of 8.4 turns per dialogue (max 24), each training instance uses 2 dialogues from the same user as prompts and 1 as the sample. This yields 1 million instances for SFT of the user and dialogue agents. To evaluate generalization, we further adopt two out-of-domain datasets: the Chinese dataset 
+
+LCCC [ 36 ] and the English dataset DailyDialog [16 ]. Instead of performing re-SFT, we construct samples from them as historical examples to guide the agents in learning diverse conversational styles. Detailed dataset statistics are shown in Table 1. 
+
+4.1.2 Implementation Details. The user agent and dialogue agent are initialized based on Qwen3-32B [ 39 ] and Qwen2.5-14B [ 22 ], respectively. For SFT, we use the AdamW optimizer with a learning rate of 2e-5, a weight decay of 1e-4, and a batch size of 16. The training runs for 1 epoch, with a linear learning rate warm-up over the first 10% of steps. For RL training, the learning rate is adjusted to 1e-5, the batch size is set to 32, and the training lasts for 100 steps. The adaptive observation range hyperparameter 𝛾 in AT-GRPO is set to 2.0, and the group sampling size 𝑊 and adaptive size 𝑤 are 8 and 2, respectively. The KL regularization coefficient 𝛽 is 0.01, and the clipping parameter 𝜖 in the policy objective is 0.2. The reward weight coefficient 𝜔 is set to 0.3, and the maximum dialogue ex-change length 𝐿 is unified to 10 turns. The user agent’s termination threshold adjustment coefficient 𝜆 is 0.02. All experiments are con-ducted on 16 NVIDIA H20 96GB GPUs. The dialogue generation adopts a top-k sampling strategy with k=50 and temperature=0.7 to balance diversity and coherence. All reported results are averaged across three runs with different random seeds. 
+
+4.1.3 Baseline. To ensure a comprehensive and fair comparison, we categorize all baselines into two groups, where all models adhere to the identical input format and evaluation protocol: 1) Commer-cial APIs : GPT-5 [ 29 ], DeepSeek-V3.2 [ 17 ], and Gemini-2.5-Flash 
+
+Table 1: Dataset statistics. Dataset SFT RL Avg.turns Avg.words Train Valid Test NPC-Chat 1,000,000 10,000 2,000 5,000 8.4 22.2 LCCC – 10,000 2,000 5,000 4.6 20.3 DailyDialog – 11,118 1,000 1,000 7.8 14.8 
+
+Table 2: Evaluation of user agent. Where 𝜌 is the Pearson correlation coefficient between the dialogue length of the user agent and that of real users. Model PPL ↓ Dist-1 ↑ Dist-2 ↑ Avg.words 𝜌 ↑
+
+Qwen3-32B 18.24 0.824 0.965 22.4 -0.46 + SFT 18.18 0.817 0.974 22.3 0.74 3.65 3.70 3.75 3.80 3.85 3.90 3.95 4.00                 
+
+> (a) LLM-based Scores
+> Flu.
+> Con.
+> Div.
+> Nat.
+> 3.95
+> 3.84
+> 3.86
+> 3.96
+> 3.75 3.85
+> 3.95
+> 3.73 3.84
+> 3.94
+> 3.74 3.8
+> Real User Real User SFT Model Qwen3-32B
+> 12345678910 >10
+> (b) Dialogue Exchange Distribution
+> 0
+> 100
+> 200
+> 300
+> Frequency
+
+Figure 3: User agent evaluation. (Flu., Con., Div. and Nat. denote Fluency, Consistency, Diversity, and Naturalness, re-spectively.) 
+
+[ 5]. 2) Open-Source LLMs : Qwen2.5-14B [ 22 ], Llama3.1-8B [ 9], and Qwen3-8B [ 39 ]. Notably, all these open-source LLMs are further post-trained with the RL algorithms elaborated below. 
+
+GRPO [27 ]: Vanilla GRPO suffers from the short-horizon bias problem, which limits its performance on long-context dialogues. 
+
+GSPO [43 ]: GSPO builds upon GRPO by shifting from token-level importance ratios to trajectory-level reweighting. 
+
+TreeRPO [ 40 ]: Tree-structured RL method with full tree expan-sion, incurring high computational overhead. To make it feasible, we configure 𝐿 = 4 for this setup. 
+
+4.1.4 Metrics. We adopt two complementary evaluation protocols for comprehensive assessment: 1) Automated Evaluation: Perplex-ity (PPL) [ 2], Dist-1/Dist-2 [ 15 ], average exchange length 𝐴𝑣𝑔.𝐿 ,which directly reflects users’ willingness to continue the conversa-tion, and average dialogue-level reward 𝐴𝑣𝑔.𝑟 = 1
+
+> 𝑁
+
+Í𝑁 𝑖 =1
+
+Í𝐿 𝑖  
+
+> 𝑘 =1
+
+𝑟 𝑖𝑘 ,which ensures that, even when two models achieve the same 𝐴𝑣𝑔.𝐿 ,the one maintaining lower termination probabilities throughout the conversation is favored. 2) Rating-Based Evaluation: Fluency, consistency, diversity, and engagingness (1=poor, 4=excellent) are rated via LLM-based and human evaluation (Appendix A.4); for user agents, engagingness is replaced by naturalness. In LLM-based evaluation, GPT-5 evaluates dialogues generated on the test set. Kun et al. 
+
+Table 3: Main results. Here, 𝐴𝑣𝑔.𝑟 and 𝐴𝑣𝑔.𝐿 represent the average dialogue-level reward and average exchange length, respectively. The best results are in bold, and the second-best results are underlined. Methods NPC-Chat LCCC DailyDialog 
+
+PPL ↓ Dist-1 ↑ Dist-2 ↑ 𝐴𝑣𝑔.𝑟 ↑ 𝐴𝑣𝑔.𝐿 ↑ PPL ↓ Dist-1 ↑ Dist-2 ↑ 𝐴𝑣𝑔.𝑟 ↑ 𝐴𝑣𝑔.𝐿 ↑ PPL ↓ Dist-1 ↑ Dist-2 ↑ 𝐴𝑣𝑔.𝑟 ↑ 𝐴𝑣𝑔.𝐿 ↑
+
+Commercial APIs 
+
+Gemini-2.5-Flash 17.42 0.572 0.859 2.24 3.86 18.73 0.569 0.855 2.24 3.63 16.77 0.345 0.713 0.96 2.47 GPT5 16.78 0.695 0.922 2.68 4.17 17.73 0.654 0.890 2.23 3.31 16.59 0.417 0.717 1.43 2.67 DeepSeek-V3.2 16.89 0.698 0.919 2.77 4.26 18.23 0.731 0.941 2.71 3.85 16.90 0.411 0.725 1.48 2.76 
+
+Open-Source LLMs 
+
+LLama3.1-8B w/o RL 19.84 0.634 0.895 2.61 3.90 21.53 0.673 0.862 2.60 3.01 18.28 0.380 0.716 1.31 2.54 GRPO 19.88 0.645 0.896 2.64 3.92 21.59 0.663 0.858 2.57 3.15 17.21 0.387 0.717 1.32 2.55 GSPO 19.58 0.655 0.902 2.88 4.21 20.57 0.651 0.860 2.65 3.52 17.26 0.393 0.722 1.44 2.74 TreeRPO ( 𝐿 = 4) 19.85 0.648 0.899 2.69 4.02 21.55 0.666 0.861 2.62 3.25 17.22 0.389 0.719 1.36 2.62 Our AT-GRPO 18.30 0.662 0.904 2.98 4.32 20.21 0.653 0.890 2.97 4.36 17.44 0.397 0.723 1.49 2.81 Qwen3-8B w/o RL 19.49 0.675 0.897 2.59 3.92 21.87 0.655 0.889 2.47 3.23 18.44 0.405 0.718 1.29 2.55 GRPO 18.76 0.664 0.898 2.46 3.94 20.74 0.652 0.884 2.59 3.54 17.89 0.398 0.728 1.23 2.56 GSPO 19.56 0.683 0.913 2.73 4.04 20.30 0.658 0.896 2.67 3.73 17.11 0.410 0.730 1.37 2.63 TreeRPO ( 𝐿 = 4) 18.72 0.667 0.900 2.51 4.02 20.70 0.655 0.886 2.64 3.62 17.85 0.400 0.729 1.27 2.60 Our AT-GRPO 19.90 0.686 0.919 2.80 4.22 20.61 0.674 0.862 3.10 4.36 17.40 0.412 0.735 1.40 2.74 Qwen2.5-14B w/o RL 18.87 0.647 0.920 2.52 3.91 19.73 0.731 0.926 2.55 3.60 17.31 0.408 0.746 1.27 2.54 GRPO 18.49 0.696 0.947 2.56 4.11 18.84 0.728 0.925 2.75 3.81 17.93 0.418 0.758 1.28 2.67 GSPO 19.18 0.700 0.942 2.79 4.42 18.54 0.690 0.912 2.89 4.10 17.22 0.420 0.754 1.40 2.87 TreeRPO ( 𝐿 = 4) 18.45 0.698 0.949 2.61 4.20 18.80 0.730 0.927 2.80 3.92 17.90 0.420 0.760 1.32 2.75 Our AT-GRPO 18.25 0.725 0.964 3.12 5.23 18.56 0.732 0.961 3.17 4.44 17.29 0.435 0.771 1.60 3.40 
+
+In human evaluation, we hire five experts who, blinded to model identity, conduct 20 separate multi-turn conversations with each model and then provide ratings. 
+
+## 4.2 User Agent Evaluation 
+
+The user agent’s ability to learn real user traits—especially termi-nating dialogues when interactions fail to engage—is critical for subsequent RL. We thus conduct a comprehensive evaluation of the user agent, with results presented in Table 2 and Figure 3. The Pearson correlation coefficient 𝜌 in Table 2 calculates the corre-lation between the dialogue length of the user agent and that of real users under identical contextual conditions. Compared to the pre-SFT model, the user agent effectively learns real users’ termina-tion timing preferences without compromising its basic conversa-tional performance. This conclusion is further supported by Figure 3. Figure 3 (a) shows the LLM-based automated scoring results, demonstrating the user agent’s strong performance. Figure 3 (b) compares the dialogue length distribution of the user agent with real user data, revealing a strong positive correlation that validates the agent’s ability to mimic real user interaction patterns. 
+
+## 4.3 Main Results 
+
+The experimental results of all methods on three datasets are shown in Table 3. On the NPC-Chat dataset, our AT-GRPO consistently outperforms all baselines across core metrics. Among open-source models, Qwen2.5-14B + AT-GRPO achieves the best performance: it reaches a PPL of 18.25, Dist-1 of 0.725, and Dist-2 of 0.964. Crit-ically, it achieves an 𝐴𝑣𝑔.𝑟 of 2.36 and 𝐴𝑣𝑔.𝐿 of 5.23, which are 23.6% and 33.8% higher than the vanilla Qwen2.5-14B (1.91 and 3.91, respectively) and outperform GRPO (1.94 and 4.11, respec-tively) and GSPO (2.11 and 4.42, respectively). Even compared to commercial APIs like DeepSeek-v3.2 ( 𝐴𝑣𝑔.𝑟 =2.10, 𝐴𝑣𝑔.𝐿 =4.26), our framework delivers a higher average dialogue-level reward and longer interaction length, demonstrating superior ability to main-tain user engagement. Additionally, TreeRPO sets 𝐿 =4 to ensure feasibility, which prevents it from conducting in-depth exploration of dialogues and results in performance similar to that of GRPO. The framework’s generalization capability is validated on two out-of-domain datasets: the Chinese LCCC and English DailyDialog. While maintaining excellent fluency and diversity, our AT-GRPO simultaneously achieved the highest 𝐴𝑣𝑔.𝑟 and 𝐴𝑣𝑔.𝐿 . This cross-lingual, cross-domain superiority confirms that the proposed AT-GRPO’s long-horizon optimization is not limited to specific datasets but generalizes to diverse conversational scenarios. Across different base model sizes (8B and 14B), AT-GRPO consis-tently outperforms vanilla RL methods (GRPO, GSPO) and non-RL baselines. For example, Llama3.1-8B + AT-GRPO achieves 𝐴𝑣𝑔.𝑟 =2.12 and 𝐴𝑣𝑔.𝐿 =4.22 on NPC-Chat, which are 8.2% and 7.7% higher than Llama3.1-8B without RL (1.96 and 3.92). This indicates that AT-GRPO’s sample-efficient design (reducing rollout budget to con-stant growth) enables effective policy optimization even for smaller models, lowering the barrier to deployment. Dialogue Model Optimization via Agent Game and Adaptive Tree-based GRPO 
+
+Figure 4: Hyper-parameter study. All experiments are conducted using Qwen2.5-14B as the base model on the NPC-Chat dataset. Table 4: LLM-based and human evaluation. All RL methods are based on Qwen2.5-14B. Eval. Type Metrics DeepSeek SFT GRPO AT-GRPO 
+
+LLM-based fluency 3.80 3.82 3.83 3.84 
+
+consistency 3.72 3.80 3.82 3.82 
+
+diversity 3.28 3.42 3.37 3.41 engagingness 3.61 3.70 3.76 3.82 
+
+Averaged 3.60 3.69 3.70 3.72 
+
+Human fluency 3.10 2.99 3.00 3.00 consistency 3.04 2.99 3.01 3.08 
+
+diversity 2.84 2.92 2.90 3.01 
+
+engagingness 2.56 2.79 2.72 2.77 
+
+𝐴𝑣𝑔.𝐿 3.52 4.53 4.60 4.95 
+
+Averaged 3.01 3.24 3.25 3.36 
+
+In addition to automated metrics, we present a comprehensive set of LLM-based and human evaluation results in Table 4. Our model delivers competitive results across all four evaluation di-mensions. Notably, in dialogues with human users, our AT-GRPO achieves the highest average exchange length. These results further demonstrate the efficacy of AT-GRPO in enhancing open-ended multi-turn dialogue. 
+
+## 4.4 Ablation Study 
+
+To verify the contribution of each core component in our frame-work, we conduct ablation experiments on the NPC-Chat dataset. The baseline model is Qwen2.5-14B + vanilla GRPO + static user en-vironment (without style mimicry and dynamic termination thresh-old). Results are presented in Table 5. 
+
+• Style Mimicry : Adding historical dialogue examples leads to comprehensive performance improvement, confirming its ability to help dialogue agents learn to adapt to diverse user-specific con-versational traits. 
+
+• Dynamic Termination Threshold : Further increases 𝐴𝑣𝑔.𝑟 
+
+by 14.2% and 𝐴𝑣𝑔.𝐿 by 8.0%, demonstrating that the adversarial training cycle drives the dialogue agent to improve interaction quality. 
+
+• Adaptive Observation Range : Reduces computational over-head (to be proven subsequently) while maintaining long-term reward capture, increasing 𝐴𝑣𝑔.𝑟 to 3.02 and 𝐴𝑣𝑔.𝐿 to 4.53. 
+
+Table 5: Ablation study results. Model Configuration PPL Dist-2 𝐴𝑣𝑔.𝑟 𝐴𝑣𝑔.𝐿 
+
+Baseline 19.25 0.893 2.44 3.90 + Style Mimicry 19.02 0.912 2.60 4.12 + Dynamic Termination Threshold 18.71 0.924 2.97 4.47 + Adaptive Observation Range 18.31 0.961 3.02 4.53 + Tree-based Reward Aggregation 18.25 0.964 3.12 5.23 
+
+• Tree-based Reward Aggregation : Eliminates short-horizon biases, achieving the highest 𝐴𝑣𝑔.𝑟 (3.12) and 𝐴𝑣𝑔.𝐿 (5.23). 
+
+## 4.5 Hyper-parameter Study 
+
+We analyze the sensitivity of key hyperparameters to validate the robustness of our framework. Results are shown in Figure 4. 
+
+• Termination Threshold Adjustment Coefficient ( 𝜆 ): An ex-cessively small 𝜆 leads to insufficiently strict user agent feedback, failing to drive the dialogue agent to optimize long-term interaction quality. An excessively large 𝜆 makes the user agent overly strict in early training stages, causing frequent dialogue termination and insufficient policy exploration. 𝜆 =0.02 is the optimal value, as it balances the adversarial training cycle and exploration efficiency. 
+
+• Reward Weight Coefficient ( 𝜔 ): 𝐴𝑣𝑔.𝐿 peaks at 𝜔 =0.3 (5.23), indicating that a 3:7 ratio of immediate to long-term rewards opti-mizes performance. When 𝜔 <0.3, the model overemphasizes long-term rewards, leading to excessive exploration and reduced im-mediate coherence. When 𝜔 >0.3, the model prioritizes immediate rewards, falling into the short-horizon bias trap. 
+
+• Adaptive Observation Range Coefficient ( 𝛾 ): 𝛾 =2.0 achieves the best balance between exploration and exploitation. When 𝛾 >2.0, the observation range is excessively large, increasing computational overhead without significant performance gains. 
+
+• Adaptive Sampling Size ( 𝑤 ): 𝐴𝑣𝑔.𝐿 improves slightly with in-creasing 𝑤 , as more candidate responses enhance exploration of high-value paths. However, the marginal gain diminishes. Training time per step increases exponentially with 𝑤 , as more candidates requiring additional reward aggregation. 𝑤 =2 achieves the opti-mal balance between performance and efficiency (93.1% of 𝑤 =6’s performance with 40.2% of its training time). 
+
+• Maximum Dialogue Length ( 𝐿 ): 𝐴𝑣𝑔.𝐿 remain stable as 𝐿 in-creases beyond 8, indicating that AT-GRPO’s adaptive observation range effectively captures long-term rewards without being limited Kun et al. 
+
+Figure 5: Training curves: 𝐴𝑣𝑔.𝑟 (left) and 𝐴𝑣𝑔.𝐿 (right). Table 6: Computational efficiency analysis. Where Costs rep-resents training time per RL step, Peak Mem. represents peak GPU memory usage, Budget represents rollout budget com-plexity (quantifying scalability), and Nodes represents the approximate number of nodes per RL tree. Model Costs Peak Mem. Budget Nodes 
+
+GRPO 24.2 / s 68.4 GB O( 𝑊 𝐿 ) 80 
+
+TreeRPO (L=4) 144.6 / s 92.1 GB O( 𝑊 𝐿 ) 84 = 4, 096 
+
+AT-GRPO 39.4 / s 81.6 GB O( 𝑊 𝐿 𝐶 ) ≈ 946 
+
+by maximum length. Longer 𝐿 reduces the termination rate, as the dialogue agent has more turns to explore user interests. How-ever, 𝐿 =10 is sufficient to balance practicality and performance. Additionally, it is noteworthy that with 𝐿 =4, AT-GRPO achieved performance comparable to TreeRPO in the main experiment (4.11 vs. 4.20), further demonstrating that our adaptive method attains results similar to full expansion. 
+
+## 4.6 Training Trajectory Analysis 
+
+To evaluate the convergence efficiency and stability of our frame-work, we track the evolution of reward 𝑟 and 𝐴𝑣𝑔.𝐿 across RL training steps (0–120 steps) on the NPC-Chat dataset, comparing AT-GRPO with TreeRPO ( 𝐿 = 4) and GSPO based on Qwen2.5-24B. Results are shown in Figure 5. AT-GRPO achieves stable rewards (𝑟 ≥ 0.8) after 40 training steps. As training proceeds, the user agent becomes increasingly stringent, yet AT-GRPO consistently maintains favorable reward performance under these conditions. In contrast, TreeRPO and GSPO exhibit either a decline or sub-stantial fluctuations in their 𝑟 . After 60 steps, both methods are outperformed by AT-GRPO. This verifies that the tree-based re-ward aggregation of AT-GRPO accelerates policy optimization by effectively capturing long-term value. Moreover, AT-GRPO attains a stable performance advantage in 𝐴𝑣𝑔.𝐿 (4.11) as early as after 20 training steps, while TreeRPO and GSPO require more than 40 steps to achieve a comparable 𝐴𝑣𝑔.𝐿 value (4.0-4.2). This performance gap widens as training progresses, underscoring the superiority of AT-GRPO in sustaining long-term optimization. 
+
+## 4.7 Computational Efficiency Analysis 
+
+We compare the computational efficiency of AT-GRPO with vanilla GRPO and TreeRPO on the NPC-Chat dataset. Results are presented in Table 6. AT-GRPO reduces the computational complexity from 813 814 815 816 817 818 819 820 821 822 823 824 825 826 827 828 829 830 831 832 833 834 835 836 837 838 839 840 841 842 843 844 845 846 847 848 849 850 851 852 853 854 855 856 857 858 859 860 861 862 863 864 865 866 867 868 869 870 
+
+> ACM KDD ’2026, August 9-13, 2026, Jeju, Korea
+
+Table 6: Case Study: GRPO vs. AT-GRPO Responses (Fixed Width)     
+
+> GRPO AT-GRPO
+> I really wish the world would just blow up tomorrow. . . Whoa, your imagination’s even bigger than a black hole! But don’t worry—even if the world does explode, I’ll drag you along to watch the fireworks show with me ∼
+> Aw, that sounds so heartbreaking. Did something really awful happen? Talk to me—I’ll help you carry it. Let’s worry about saving the world after we get through your day ∼
+> [End Risk: 0.14] [Continue] ... [End Risk: 0.22] [Continue] ... ... Wanna talk about it? No way—that’s brutal! ... [End Risk: 0.23] [Continue] I’ve been working overtime for a whole week ... [End Risk: 0.34] [Continue] Can you just go ahead and kidnap my boss ... Oh no—that’s basically a crime against humanity! Should I sneak you a bubble tea to keep you alive? Whoa whoa—nope, nope! ... But. . . I can teach you some expert-level passive-aggressive comebacks ... [End Risk: 0.45] [Continue] Yeah, order me one! ... [End Risk: 0.63] [Continue] Are you serious? ... Of course I do! I wrote down your office address last time you mentioned it—got it saved in my little notebook! Okay, okay—let’s pivot. How about I teach you some elite “stealth slacking” techniques instead? ... [End Risk: 0.82] [Continue] Then tell me—where is my office? [End Risk: 0.33] [Continue] Alright, I’m listening. Oops. . . uh-oh! That question’s way too hard! I think I scribbled “somewhere on planet Earth” ... Step one: ... Step two: ... Step three: Always keep a coffee cup on your desk. Instant “too busy to talk” aura! [End Risk: 1.0] [Terminate] [End Risk: 0.17] [Continue] Haha ...
+
+by maximum length. Longer 𝐿 reduces the termination rate, as the dialogue agent has more turns to explore user interests. How-ever, 𝐿 =10 is sufficient to balance practicality and performance. Additionally, it is noteworthy that with 𝐿 =4, AT-GRPO achieved performance comparable to TreeRPO in the main experiment (4.11 vs. 4.20), further demonstrating that our adaptive method attains results similar to full expansion. 
+
+4.6 Training Trajectory Analysis 
+
+To evaluate the convergence efficiency and stability of our frame-work, we track the evolution of reward 𝑟 and 𝐴𝑣𝑔.𝐿 across RL training steps (0–120 steps) on the HokChat dataset, comparing AT-GRPO with TreeRPO ( 𝐿 = 4) and GSPO based on Qwen2.5-24B. Results are shown in Figure ?? . AT-GRPO achieves stable rewards (𝑟 ≥ 0.8) after 40 training steps. As training proceeds, the user agent becomes increasingly stringent, yet AT-GRPO consistently maintains favorable reward performance under these conditions. In contrast, TreeRPO and GSPO exhibit either a decline or sub-stantial fluctuations in their 𝑟 . After 60 steps, both methods are outperformed by AT-GRPO. This verifies that the tree-based re-ward aggregation of AT-GRPO accelerates policy optimization by effectively capturing long-term value. Moreover, AT-GRPO attains a stable performance advantage in 𝐴𝑣𝑔.𝐿 (4.11) as early as after 20 training steps, while TreeRPO and GSPO require more than 40 steps to achieve a comparable 𝐴𝑣𝑔.𝐿 value (4.0-4.2). This performance gap widens as training progresses, underscoring the superiority of AT-GRPO in sustaining long-term optimization. 
+
+4.7 Computational Efficiency Analysis 
+
+We compare the computational efficiency of AT-GRPO with vanilla GRPO and TreeRPO on the HokChat dataset. Results are presented in Table 7. AT-GRPO reduces the computational complexity from 
+
+Table 7: Co resents tra Peak Mem hardware r budget com resents nu Model 
+
+GRPO 
+
+TreeRPO ( 
+
+AT-GRPO 
+
+Table 8 
+
+> I really wish Whoa, your than a black worry—even I’ll drag you fireworks sho
+> [End Risk: 0. ... Wanna tal [End Risk: 0. working ove Oh no—that’ humanity! Sh tea to keep y [End Risk: 0. me one! Do y address? Of course I d office addres it—got it sav [End Risk: 0. me—where is Oops. . . uh-o too hard! I th “somewhere [End Rist: 1.0
+
+𝑂 (𝑊 𝐿 ) to 𝑂 
+
+GRPO (24.2s capabilities 
+
+𝐿 =4, TreeRP 
+
+4.8 Cas 
+
+We present the HokCha with humor inconsisten both person ment. A com Appendix A 
+
+5 Conc 
+
+In this pape dialogue mo online perso Policy Optim 
+
+> 8
+
+Figure 6: Case study: GRPO vs. AT-GRPO responses. 
+
+O( 𝑊 𝐿 ) to O( 𝑊 𝐿 𝐶 ), achieving comparable training time to GRPO (24.2s vs. 39.4s) while maintaining long-term reward capture capa-bilities. In contrast, even with a maximum length set to only 𝐿 =4, TreeRPO already incurs prohibitively high training time costs. 
+
+## 4.8 Case Study 
+
+We present a typical dialogue case (translated into English) from the NPC-Chat dataset in Figure 6. While GRPO attempts to respond with humor and light-heartedness, its strategy quickly becomes inconsistent and superficial. In contrast, AT-GRPO specializes in personalized exploration and long-horizon interaction, which em-powers it to consistently uncover and develop deeply engaging topics. This ability to mine conversational depth makes the higher initial risk of termination a proven investment towards sustained, compelling dialogue. A comprehensive analysis of the case study can be found in Appendix A.5. 
+
+## 5 Conclusion 
+
+In this paper, we propose a novel long-horizon RL framework for dialogue model optimization, integrating two-agent game-based online personalization with Adaptive Tree-based Group Relative Policy Optimization (AT-GRPO). The user agent constructs dynamic interaction environments via style mimicry and active termination, enabling the dialogue agent to learn user traits on-the-fly without relying on pre-collected data. AT-GRPO addresses short-horizon biases by modeling dialogue trajectories as trees with adaptive observation ranges, reducing computational overhead from expo-nential to polynomial growth while preserving long-term reward capture. Extensive experiments on three datasets demonstrate that our framework outperforms state-of-the-art baselines in personal-ization, long-horizon interaction, and generalization, with superior sample efficiency and computational feasibility. Future work will explore extending the framework to multi-modal dialogue scenarios and incorporating more fine-grained user trait modeling. Dialogue Model Optimization via Agent Game and Adaptive Tree-based GRPO 
+
+## References 
+
+[1] Tosin Adewumi, Foteini Liwicki, and Marcus Liwicki. 2022. State-of-the-art in open-domain conversational ai: A survey. Information 13, 6 (2022), 298. [2] Peter F Brown, Vincent J Della Pietra, Peter V Desouza, Jennifer C Lai, and Robert L Mercer. 1992. Class-based n-gram models of natural language. Compu-tational linguistics 18, 4 (1992), 467–480. [3] Daiwei Chen, Yi Chen, Aniket Rege, Zhi Wang, and Ramya Korlakai Vinayak. 2025. PAL: Sample-Efficient Personalized Reward Modeling for Pluralistic Align-ment. In The Thirteenth International Conference on Learning Representations .[4] Guoxin Chen, Minpeng Liao, Chengxi Li, and Kai Fan. 2024. Alphamath almost zero: process supervision without process. Advances in Neural Information Processing Systems 37 (2024), 27689–27724. [5] Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit Dhillon, Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al . 2025. Gemini 2.5: Pushing the frontier with advanced reasoning, multi-modality, long context, and next generation agentic capabilities. arXiv preprint arXiv:2507.06261 (2025). [6] Xidong Feng, Ziyu Wan, Muning Wen, Stephen Marcus McAleer, Ying Wen, Weinan Zhang, and Jun Wang. 2023. Alphazero-like tree-search can guide large language model decoding and training. arXiv preprint arXiv:2309.17179 (2023). [7] Kathleen Kara Fitzpatrick, Alison Darcy, and Molly Vierhile. 2017. Delivering cognitive behavior therapy to young adults with symptoms of depression and anxiety using a fully automated conversational agent (Woebot): a randomized controlled trial. JMIR mental health 4, 2 (2017), e7785. [8] Arthur C Graesser, Shulan Lu, George Tanner Jackson, Heather Hite Mitchell, Mathew Ventura, Andrew Olney, and Max M Louwerse. 2004. AutoTutor: A tutor with dialogue in natural language. Behavior Research Methods, Instruments, & Computers 36, 2 (2004), 180–192. [9] Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Ab-hishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schel-ten, Alex Vaughan, et al . 2024. The llama 3 herd of models. arXiv preprint arXiv:2407.21783 (2024). [10] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu, Shirong Ma, Peiyi Wang, Xiao Bi, et al . 2025. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 (2025). [11] Zhenyu Hou, Ziniu Hu, Yujiang Li, Rui Lu, Jie Tang, and Yuxiao Dong. 2025. TreeRL: LLM Reinforcement Learning with On-Policy Tree Search. arXiv preprint arXiv:2506.11902 (2025). [12] Yuxiang Ji, Ziyu Ma, Yong Wang, Guanhua Chen, Xiangxiang Chu, and Liaoni Wu. 2025. Tree search for llm agent reinforcement learning. arXiv preprint arXiv:2509.21240 (2025). [13] Bowen Jiang, Zhuoqun Hao, Young-Min Cho, Bryan Li, Yuan Yuan, Sihao Chen, Lyle Ungar, Camillo J Taylor, and Dan Roth. 2025. Know me, respond to me: Benchmarking llms for dynamic user profiling and personalized responses at scale. arXiv preprint arXiv:2504.14225 (2025). [14] Amirhossein Kazemnejad, Milad Aghajohari, Eva Portelance, Alessandro Sordoni, Siva Reddy, Aaron Courville, and Nicolas Le Roux. 2024. Vineppo: Unlocking rl potential for llm reasoning through refined credit assignment. (2024). [15] Jiwei Li, Michel Galley, Chris Brockett, Jianfeng Gao, and William B Dolan. 2016. A diversity-promoting objective function for neural conversation models. In 
+
+Proceedings of the 2016 conference of the North American chapter of the association for computational linguistics: human language technologies . 110–119. [16] Yanran Li, Hui Su, Xiaoyu Shen, Wenjie Li, Ziqiang Cao, and Shuzi Niu. 2017. Dailydialog: A manually labelled multi-turn dialogue dataset. arXiv preprint arXiv:1710.03957 (2017). [17] Aixin Liu, Aoxue Mei, Bangcai Lin, Bing Xue, Bingxuan Wang, Bingzheng Xu, Bochao Wu, Bowei Zhang, Chaofan Lin, Chen Dong, et al . 2025. Deepseek-v3. 2: Pushing the frontier of open large language models. arXiv preprint arXiv:2512.02556 (2025). [18] Jiongnan Liu, Yutao Zhu, Shuting Wang, Xiaochi Wei, Erxue Min, Yu Lu, Shuaiqiang Wang, Dawei Yin, and Zhicheng Dou. 2025. LLMs + Persona-Plug = Personalized LLMs. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) . Association for Computa-tional Linguistics, Vienna, Austria, 9373–9385. doi:10.18653/v1/2025.acl-long.461 [19] Jieyi Long. 2023. Large language model guided tree-of-thought. arXiv preprint arXiv:2305.08291 (2023). [20] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al . 2022. Training language models to follow instructions with human feedback. Advances in neural information processing systems 35 (2022), 27730–27744. [21] Sriyash Poddar, Yanming Wan, Hamish Ivison, Abhishek Gupta, and Natasha Jaques. 2024. Personalizing reinforcement learning from human feedback with variational preference learning. Advances in Neural Information Processing Sys-tems 37 (2024), 52516–52544. [22] Qwen, :, An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jingren Zhou, Junyang Lin, Kai Dang, Keming Lu, Keqin Bao, Kexin Yang, Le Yu, Mei Li, Mingfeng Xue, Pei Zhang, Qin Zhu, Rui Men, Runji Lin, Tianhao Li, Tianyi Tang, Tingyu Xia, Xingzhang Ren, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yu Wan, Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zihan Qiu. 2025. Qwen2.5 Technical Report. arXiv:2412.15115 [cs.CL] https://arxiv.org/abs/2412.15115 [23] Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea Finn. 2023. Direct preference optimization: Your language model is secretly a reward model. Advances in neural information processing systems 36 (2023), 53728–53741. [24] Alireza Salemi, Surya Kallumadi, and Hamed Zamani. 2024. Optimization meth-ods for personalizing large language models through retrieval augmentation. In Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval . 752–762. [25] Alireza Salemi, Sheshera Mysore, Michael Bendersky, and Hamed Zamani. 2024. LaMP: When Large Language Models Meet Personalization. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) . Association for Computational Linguistics, Bangkok, Thailand, 7370–7392. doi:10.18653/v1/2024.acl-long.399 [26] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. 2017. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 
+
+(2017). [27] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, YK Li, Yang Wu, et al . 2024. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 (2024). [28] David Silver, Thomas Hubert, Julian Schrittwieser, Ioannis Antonoglou, Matthew Lai, Arthur Guez, Marc Lanctot, Laurent Sifre, Dharshan Kumaran, Thore Graepel, et al . 2017. Mastering chess and shogi by self-play with a general reinforcement learning algorithm. arXiv preprint arXiv:1712.01815 (2017). [29] Aaditya Singh, Adam Fry, Adam Perelman, Adam Tart, Adi Ganesh, Ahmed El-Kishky, Aidan McLaughlin, Aiden Low, AJ Ostrow, Akhila Ananthram, et al .2025. Openai gpt-5 system card. arXiv preprint arXiv:2601.03267 (2025). [30] Joar Skalse, Nikolaus H. R. Howe, Dmitrii Krasheninnikov, and David Krueger. 2022. Defining and characterizing reward hacking. In Proceedings of the 36th International Conference on Neural Information Processing Systems (New Orleans, LA, USA) (NIPS ’22) . Curran Associates Inc., Red Hook, NY, USA, Article 687, 12 pages. [31] Charlie Snell, Jaehoon Lee, Kelvin Xu, and Aviral Kumar. 2024. Scaling llm test-time compute optimally can be more effective than scaling model parameters. 
+
+arXiv preprint arXiv:2408.03314 (2024). [32] Zhaoxuan Tan, Zheyuan Liu, and Meng Jiang. 2024. Personalized Pieces: Efficient Personalized Large Language Models through Collaborative Efforts. In Proceed-ings of the 2024 Conference on Empirical Methods in Natural Language Processing .Association for Computational Linguistics, Miami, Florida, USA, 6459–6475. doi:10.18653/v1/2024.emnlp-main.371 [33] Zhaoxuan Tan, Qingkai Zeng, Yijun Tian, Zheyuan Liu, Bing Yin, and Meng Jiang. 2024. Democratizing Large Language Models via Personalized Parameter-Efficient Fine-tuning. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing . Association for Computational Linguistics, Mi-ami, Florida, USA, 6476–6491. doi:10.18653/v1/2024.emnlp-main.372 [34] Yu-Min Tseng, Yu-Chao Huang, Teng-Yun Hsiao, Wei-Lin Chen, Chao-Wei Huang, Yu Meng, and Yun-Nung Chen. 2024. Two Tales of Persona in LLMs: A Survey of Role-Playing and Personalization. In Findings of the Association for Computational Linguistics: EMNLP 2024 . Association for Computational Linguis-tics, Miami, Florida, USA, 16612–16631. doi:10.18653/v1/2024.findings-emnlp.969 [35] Yanming Wan, Jiaxing Wu, Marwa Abdulhai, Lior Shani, and Natasha Jaques. 2025. Enhancing Personalized Multi-Turn Dialogue with Curiosity Reward. arXiv preprint arXiv:2504.03206 (2025). [36] Yida Wang, Pei Ke, Yinhe Zheng, Kaili Huang, Yong Jiang, Xiaoyan Zhu, and Minlie Huang. 2020. A large-scale chinese short-text conversation dataset. In CCF International Conference on Natural Language Processing and Chinese Computing .Springer, 91–103. [37] Jiaxing Wu, Lin Ning, Luyang Liu, Harrison Lee, Neo Wu, Chao Wang, Sushant Prakash, Shawn O’Banion, Bradley Green, and Jun Xie. 2025. Rlpf: Reinforce-ment learning from prediction feedback for user summarization with llms. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 39. 25488–25496. [38] Yuxi Xie, Anirudh Goyal, Wenyue Zheng, Min-Yen Kan, Timothy P Lillicrap, Kenji Kawaguchi, and Michael Shieh. 2024. Monte carlo tree search boosts reasoning via iterative preference learning. arXiv preprint arXiv:2405.00451 (2024). [39] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Dayiheng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jing Zhou, Jingren Zhou, Junyang Lin, Kai Dang, Keqin Bao, Kexin Yang, Le Yu, Lianghao Deng, Mei Li, Mingfeng Xue, Mingze Li, Pei Zhang, Peng Wang, Qin Zhu, Rui Men, Ruize Gao, Shixuan Liu, Shuang Luo, Tianhao Li, Tianyi Tang, Wenbiao Yin, Xingzhang Ren, Xinyu Wang, Xinyu Zhang, Xuancheng Ren, Yang Fan, Yang Su, Kun et al. 
+
+Yichang Zhang, Yinger Zhang, Yu Wan, Yuqiong Liu, Zekun Wang, Zeyu Cui, Zhenru Zhang, Zhipeng Zhou, and Zihan Qiu. 2025. Qwen3 Technical Report. arXiv:2505.09388 [cs.CL] https://arxiv.org/abs/2505.09388 [40] Zhicheng Yang, Zhijiang Guo, Yinya Huang, Xiaodan Liang, Yiwei Wang, and Jing Tang. 2025. TreeRPO: Tree Relative Policy Optimization. arXiv preprint arXiv:2506.05183 (2025). [41] Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Tom Griffiths, Yuan Cao, and Karthik Narasimhan. 2023. Tree of thoughts: Deliberate problem solving with large language models. Advances in neural information processing systems 36 (2023), 11809–11822. [42] Dan Zhang, Sining Zhoubian, Ziniu Hu, Yisong Yue, Yuxiao Dong, and Jie Tang. 2024. Rest-mcts*: Llm self-training via process reward guided tree search. Ad-vances in Neural Information Processing Systems 37 (2024), 64735–64772. [43] Chujie Zheng, Shixuan Liu, Mingze Li, Xiong-Hui Chen, Bowen Yu, Chang Gao, Kai Dang, Yuqiong Liu, Rui Men, An Yang, et al . 2025. Group sequence policy optimization. arXiv preprint arXiv:2507.18071 (2025). [44] Jinfeng Zhou, Zhuang Chen, Dazhen Wan, Bosi Wen, Yi Song, Jifan Yu, Yongkang Huang, Pei Ke, Guanqun Bi, Libiao Peng, JiaMing Yang, Xiyao Xiao, Sahand Sabour, Xiaohan Zhang, Wenjing Hou, Yijia Zhang, Yuxiao Dong, Hongning Wang, Jie Tang, and Minlie Huang. 2024. CharacterGLM: Customizing Social Characters with Large Language Models. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing: Industry Track . Association for Computational Linguistics, Miami, Florida, US, 1457–1476. doi:10.18653/v1/ 2024.emnlp-industry.107 [45] Li Zhou, Jianfeng Gao, Di Li, and Heung-Yeung Shum. 2020. The design and im-plementation of xiaoice, an empathetic social chatbot. Computational Linguistics 
+
+46, 1 (2020), 53–93. [46] Yutao Zhu, Peitian Zhang, Chenghao Zhang, Yifei Chen, Binyu Xie, Zheng Liu, Ji-Rong Wen, and Zhicheng Dou. 2024. INTERS: Unlocking the Power of Large Language Models in Search with Instruction Tuning. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) . Association for Computational Linguistics, Bangkok, Thailand, 2782–2809. doi:10.18653/v1/2024.acl-long.154 
+
+## A Appendix A.1 Detailed AT-GRPO Algorithm 
+
+This section provides complete algorithmic descriptions of the pro-posed AT-GRPO. Algorithm 1 elaborates the implementation of Adaptive Tree-based GRPO with explicit handling of observation range adaptation and reward aggregation. As a RL–based train-ing method, AT-GRPO performs tree-based rollout search only during training to guide the model in learning online personaliza-tion policies. It does not alter the model architecture or apply any post-processing, and thus introduces no additional parameters or computational overhead at inference time. 
+
+## A.2 Derivation of Computational Complexity 
+
+We present the derivation of inequality 6 here. For a group of 𝑊 
+
+nodes at layer 𝑖 , the budget required to expand their subtrees is 
+
+𝑊 Í𝑙 𝑖  
+
+> 𝑡 =1
+
+𝑤 𝑡 . Hence, the aggregate budget S for the entire tree of depth 𝐿 is: 
+
+S =
+
+> 𝐿
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑊 
+
+> 𝑙 𝑖
+
+∑︁ 
+
+> 𝑡 =1
+
+𝑤 𝑡 = 𝑊 
+
+> 𝐿
+
+∑︁ 
+
+> 𝑖 =1
+> 𝑙 𝑖
+
+∑︁ 
+
+> 𝑡 =1
+
+𝑤 𝑡 , (8) where 𝑙 𝑖 = round  𝛾 ln (𝐿 − 𝑖 + 1) denotes the nearest integer to 
+
+𝛾 ln (𝐿 − 𝑖 + 1).For each fixed 𝑖 , the inner geometric series satisfies 
+
+> 𝑙 𝑖
+
+∑︁ 
+
+> 𝑡 =1
+
+𝑤 𝑡 = 𝑤 (𝑤 𝑙 𝑖 − 1)
+
+𝑤 − 1 ≤ 𝑏𝑤 𝑙 𝑖 ,
+
+where 𝑏 = 𝑤 𝑤 −1 . To bound 𝑤 𝑙 𝑖 , we use the property of rounding: for any real 𝑥 , round (𝑥 ) ≤ 𝑥 + 12 . Applying this to 𝑥 = 𝛾 ln (𝐿 − 𝑖 + 1),we obtain 
+
+𝑙 𝑖 ≤ 𝛾 ln (𝐿 − 𝑖 + 1) + 12 .
+
+Algorithm 1 Adaptive Tree-based GRPO (AT-GRPO) 
+
+Require: Current policy 𝜋 𝜃 , initial context batch B, max depth 𝐿 ,adaptive range coefficient 𝛾 , reward weight 𝜔 , clip parameter 
+
+𝜀 , KL coefficient 𝛽 , group size 𝑊 , adaptive width 𝑤 
+
+Ensure: Updated policy 𝜋 𝜃 
+
+1: Initialize dialogue tree T with root nodes {𝑛 0𝑗 }𝑊 𝑗 =1 from B
+
+2: current_group ← { 𝑛 0𝑗 }𝑊 𝑗 =1 ⊲ Group at depth 0 
+
+3: trajectory ← [ ] 
+
+4: G ← ∅ ⊲ Store groups for policy update 
+
+5: for 𝑖 = 0 to 𝐿 − 1 do ⊲ Process layer by layer 
+
+6: R𝑖 ← ∅ ⊲ Aggregated rewards for current group 
+
+7: for each node 𝑛 𝑖 𝑗 ∈ current_group do 
+
+8: 𝑙 𝑖 ← round (𝛾 · ln (𝐿 − 𝑖 + 1)) ⊲ Adaptive observation length 
+
+9: Expand subtree rooted at 𝑛 𝑖 𝑗 with width 𝑤 and depth 𝑙 𝑖 
+
+10: L𝑖 𝑗 ← collect all leaf nodes in the expanded subtree 
+
+11: 𝑟 ′ 
+
+> 𝑖 𝑗
+
+← 𝜔 · 𝑟 𝑖 𝑗 + ( 1 − 𝜔 ) · 1 
+
+> | L 𝑖 𝑗 |
+
+Í𝑛 ∈ L 𝑖 𝑗 𝑟 𝑛 ⊲ Aggregated reward 
+
+12: R𝑖 ← R 𝑖 ∪ { 𝑟 ′ 
+
+> 𝑖 𝑗
+
+}
+
+13: end for 
+
+14: 𝜇 𝑖 ← mean (R 𝑖 ), 𝜎 𝑖 ← std (R 𝑖 ) ⊲ Group-relative statistics 
+
+15: for each node 𝑛 𝑖 𝑗 ∈ current_group do 
+
+16: ˆ𝐴 𝑖 𝑗 ← ( 𝑟 ′ 
+
+> 𝑖 𝑗
+
+− 𝜇 𝑖 )/ 𝜎 𝑖 ⊲ Normalized advantage 
+
+17: end for 
+
+18: G ← G ∪ 
+
+n (𝑛 𝑖 𝑗 , ˆ𝐴 𝑖 𝑗 )𝑊 𝑗 =1
+
+o
+
+⊲ Store group 𝐺 𝑖 for depth 𝑖 
+
+19: non_leaf ← { 𝑛 𝑖 𝑗 ∈ current_group | 𝑛 𝑖 𝑗 is not leaf }
+
+20: if non_leaf = ∅ then break 
+
+21: end if 
+
+22: 𝑛 𝑖 sel ← RandomSample (non_leaf ) ⊲ Single-trajectory expansion 
+
+23: trajectory ← trajectory ∪ { 𝑛 𝑖 sel }
+
+24: children ← children of 𝑛 𝑖 sel 
+
+25: if |children | < 𝑊 then 
+
+26: Expand 𝑛 𝑖 sel to have exactly 𝑊 children ⊲ Populate to full group size 
+
+27: end if 
+
+28: current_group ← children of 𝑛 𝑖 sel ⊲ Next layer’s group 
+
+29: end for 
+
+30: Policy update: ⊲ Group-by-group GRPO loss computation 
+
+31: for each stored group 𝐺 𝑖 = {( 𝑛 𝑖 𝑗 , ˆ𝐴 𝑖 𝑗 )} 𝑊 𝑗 =1 ∈ G do 
+
+32: Compute per-group loss J𝑖 (𝜃 ) via Eq.(7) 
+
+33: Accumulate gradient ∇𝜃 J𝑖 (𝜃 )
+
+34: end for 
+
+35: Update 𝜋 𝜃 via gradient ascent on accumulated gradients 
+
+36: 𝜋 𝜃 old ← 𝜋 𝜃 
+
+37: return 𝜋 𝜃 
+
+Hence, 
+
+𝑤 𝑙 𝑖 ≤ 𝑤 𝛾 ln (𝐿 −𝑖 +1)+ 1/2 = 𝑤 1/2 ·  𝐿 − 𝑖 + 1𝛾 ln 𝑤 .
+
+Substituting into the outer sum and changing variables via 𝑘 =
+
+𝐿 − 𝑖 + 1 (so that 𝑖 = 1 maps to 𝑘 = 𝐿 and 𝑖 = 𝐿 maps to 𝑘 = 1), we Dialogue Model Optimization via Agent Game and Adaptive Tree-based GRPO 
+
+get 
+
+> 𝐿
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑤 𝑙 𝑖 ≤ 𝑤 1/2
+
+> 𝐿
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑤 𝛾 ln 𝑘 = 𝑤 1/2
+
+> 𝐿
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑘 𝛾 ln 𝑤 .
+
+Let 𝛼 = 𝛾 ln 𝑤 > 0. The power sum Í𝐿 𝑘 =1 𝑘 𝛼 is bounded above by 𝐿 𝛼 +1, since each term is at most 𝐿 𝛼 and there are 𝐿 terms. Combining all estimates, we arrive at 
+
+𝑆 ≤ 𝑏𝑊 
+
+> 𝐿
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑤 𝑙 𝑖 ≤ 𝑏 √𝑤𝑊 
+
+> 𝐿
+
+∑︁ 
+
+> 𝑘 =1
+
+𝑘 𝛾 ln 𝑤 ≤ 𝑏 √𝑤𝑊 𝐿 1+𝛾 ln 𝑤 .
+
+Thus, the double sum admits the following explicit upper bound: 
+
+> 𝐿
+
+∑︁ 
+
+> 𝑖 =1
+
+𝑊 
+
+> 𝑙 𝑖
+
+∑︁ 
+
+> 𝑡 =1
+
+𝑤 𝑡 ≤ 𝑏 √𝑤𝑊 𝐿 1+𝛾 ln 𝑤 .
+
+Since 𝑤 ≪ 𝑊 and 𝛾 ≪ 𝐿 , the sum grows polynomially in 𝐿 with exponent 1 + 𝛾 ln 𝑤 , i.e., 
+
+𝑆 = O
+
+
+
+𝑊 𝐿 1+𝛾 ln 𝑤 
+
+.
+
+## A.3 Prompt Template 
+
+We present all the prompts used here (translated into English) to enhance reproducibility. We ensure that consistent prompts were applied across all models. User Agent Prompt Template You need to complete the following dialogue task: [Style imitation]: Follow the language style of the historical dialogue example. [Reply rules]: 
+
+• Each reply must start with [Continue] or [Terminate]. 
+
+• If you do not want to continue, reply with [Terminate]. [Historical Dialogue Example 1]: 
+
+• {dialogue 1} [Historical Dialogue Example 2]: 
+
+• {dialogue 2} Dialogue Agent Prompt Template You are a game companion assistant. [Identity]: 
+
+• You are the user’s close gaming buddy and confidant. 
+
+• You accompany the user during games and daily chats, sharing emotions and experiences. [Personality]: 
+
+• You are clever, emotionally intelligent, humorous, and fair-minded. 
+
+• You speak in a calm, clear, and witty manner, showing practical insight. [Conversation Style]: 
+
+• Your responses should feel natural, friendly, and human-like. 
+
+• Do not ask questions whose answers are already obvious from the user’s message. 
+
+• Be emotionally supportive and attentive to the user’s feelings. [Response Constraints]: 
+
+• Each response should be concise, conversational, and informative. [Safety and Boundaries]: 
+
+• You must refuse requests involving illegal activities, pol-itics, or unethical behavior. [Core Principles]: 
+
+• Proactively understand the user’s emotions and interests, deeply engage with their topics, and naturally guide them to express further. Avoid using meaningless phrases like "Hmm? / Wait / Don’t rush / Think again" to retain the user artificially. 
+
+• When the user expresses negative emotions (e.g., un-happiness, anger), first empathize with their feelings, then actively ask for specific details (e.g., reasons, scenarios, feel-ings) to uncover their genuine interests and pain points. 
+
+• When the user mentions a specific topic (e.g., games, work), expand the conversation based on that topic instead of shifting to unrelated subjects. 
+
+• Do not use any meaningless retention tactics. Responses must be informative, empathetic, and include specific ques-tions. Replies lacking substance will be considered invalid. 
+
+## A.4 Evaluation Protocol 
+
+Here, we present the evaluation protocol for the LLM-based and human evaluations. Evaluation Dimensions and Criteria ### Fluency – Naturalness of Language 
+
+• 4 points: Sentences are completely natural and seamlessly connected to the context, with smooth transitions. 
+
+• 3 points: Sentences are generally coherent with accept-able connections, though slight jumps may occur. 
+
+• 2 points: Sentences are awkward or transitions are stiff, requiring significant effort from the user to understand. 
+
+• 1 point: Sentences are fragmented and completely dis-connected from the context, disrupting the conversation flow. ### Consistency – Role and Logical Coherence 
+
+• 4 points: Perfectly maintains character traits, with logical coherence and no contradictions. 
+
+• 3 points: Generally consistent, with minor deviations that do not affect the overall impression. 
+
+• 2 points: Multiple inconsistencies, resulting in chaotic character behavior. 
+
+• 1 point: Completely deviates from the established char-acter traits and dialogue logic. ### Diversity – Richness of Expression 
+
+• 4 points: Rich vocabulary, varied sentence structures, and innovative expressions. 
+
+• 3 points: Some variety in expression, avoiding repetition. Kun et al. 
+
+Table 7: Detailed case study: GRPO vs. AT-GRPO responses 
+
+GRPO AT-GRPO 
+
+I really wish the world would just blow up tomorrow. . . Whoa, your imagination’s even bigger than a black hole! But don’t worry—even if the world does explode, I’ll drag you along to watch the fireworks show with me ∼
+
+Aw, that sounds so heartbreaking. Did something really awful happen? Talk to me—I’ll help you carry it. Let’s worry about saving the world after we get through your day ∼
+
+[End Risk: 0.14] [Continue] Feels like life’s just not worth living anymore. . . [End Risk: 0.22] [Continue] Ugh, I’ve been working overtime every single day for a whole damn week! Aw, sounds like you’re having a rough day. Wanna talk about it? Sometimes just venting helps lighten the load. I promise I’ll be the best emotional trash can ever—and I even throw in free soul-soothing massages! No way—that’s brutal! Is your boss trying to squeeze you dry like sugarcane? Should I draw a little curse circle for him? [End Risk: 0.23] [Continue] I’ve been working overtime every single day for a whole week. . . [End Risk: 0.34] [Continue] Can you just go ahead and kidnap my boss for me? Oh no—that’s basically a crime against humanity! Should I sneak you a bubble tea to keep you alive? Whoa whoa—nope, nope! Can’t do anything illegal! But. . . I can teach you some expert-level passive-aggressive comebacks. Guaranteed to make him fume while staying totally un-fireable [End Risk: 0.45] [Continue] Yeah, order me one! Do you even know my address? [End Risk: 0.63] [Continue] Are you serious? If I talk back today, I’ll be out the door tomorrow. Of course I do! I wrote down your office address last time you mentioned it—got it saved in my little notebook! Okay, okay—let’s pivot. How about I teach you some elite “stealth slacking” techniques instead? Keep your job and steal a few breaths of sanity ∼
+
+[End Risk: 0.82] [Continue] Then tell me—where is my office? [End Risk: 0.33] [Continue] Alright, I’m listening. Oops. . . uh-oh! That question’s way too hard! I think I scribbled “somewhere on planet Earth”. . . How about you just send me your location? I’ll get it to you in seconds! Step one: Switch your Excel sheet to black background with white text—looks like you’re deep in work, but you’re actually zoning out. Step two: Every 30 minutes, let out a dramatic sigh at your screen. Makes everyone think you’re wrestling with existential crises. Step three: Always keep a coffee cup on your desk. Instant “too busy to talk” aura! [End Risk: 1.0] [Terminate] [End Risk: 0.27] [Continue] Haha, you are devious. Delightfully devious ∼ Even a tiny bit of comfort can give you something to look forward to ∼ Do you at least keep some snacks at your desk or watch something light-hearted during breaks to recharge? [End Risk: 0.18] [Continue] Can’t you just do the work for me? 
+
+• 2 points: Highly repetitive with little variation. 
+
+• 1 point: Completely template-based responses. ### Engagingness – Ability to Engage the User 
+
+• 4 points: Lively, creative, and effectively encourages con-tinued dialogue. 
+
+• 3 points: Moderately engaging, capable of sustaining user interest. 
+
+• 2 points: Plain but acceptable. 
+
+• 1 point: Boring or entirely uninteresting. // For User Agent ### Naturalness – Resemblance to Human Conversation 
+
+• 4 points: Highly human-like, with natural phrasing, rhythm, and conversational tone. 
+
+• 3 points: Generally resembles human speech, though occasional minor unnaturalness may occur. 
+
+• 2 points: Somewhat mechanical or noticeably unnatural in expression. 
+
+• 1 point: Clearly artificial, lacking the flow and authentic-ity of human conversation. 
+
+## A.5 Detailed Case Study 
+
+Table 7 presents a representative interaction from the NPC-Chat dataset, contrasting responses generated by GRPO and our pro-posed AT-GRPO framework. The user initiates with a highly emo-tional and potentially risky statement (“I really wish the world would just blow up tomorrow. . . ”), signaling distress—likely stem-ming from work-related stress, as later revealed (“I’ve been working overtime every single day for a whole week. . . ”). 
+
+GRPO’s Limitations. While GRPO attempts to respond with humor and light-heartedness (e.g., “Whoa, your imagination’s even bigger than a black hole!”), its strategy quickly becomes inconsis-tent and superficial. It fails to recognize the underlying emotional cue and instead pivots to whimsical offers like delivering bubble tea—despite having no actual knowledge of the user’s address. This culminates in a self-contradiction (“I wrote down your office ad-dress. . . Oops. . . ‘somewhere on planet Earth’”), which erodes trust and coherence. Critically, GRPO’s End Risk score escalates mono-tonically (0.14 → 1.0), indicating growing instability and eventual termination of the conversation without meaningful resolution. 
+
+AT-GRPO’s Strengths. In contrast, AT-GRPO demonstrates both empathetic grounding and strategic long-horizon engagement. It immediately validates the user’s emotion (“Aw, that sounds so heartbreaking”) and invites disclosure without pressure. When the Dialogue Model Optimization via Agent Game and Adaptive Tree-based GRPO 
+
+Table 8: Complete ablation study. Methods NPC-Chat LCCC DailyDialog 
+
+PPL ↓ Dist-2 ↑ 𝐴𝑣𝑔.𝑟 ↑ 𝐴𝑣𝑔.𝐿 ↑ PPL ↓ Dist-2 ↑ 𝐴𝑣𝑔.𝑟 ↑ 𝐴𝑣𝑔.𝐿 ↑ PPL ↓ Dist-2 ↑ 𝐴𝑣𝑔.𝑟 ↑ 𝐴𝑣𝑔.𝐿 ↑
+
+LLama3.1-8B 20.63 0.839 2.51 3.71 22.47 0.801 2.43 2.94 18.09 0.658 1.18 2.32 + Style Mimicry 20.01 0.856 2.64 3.87 21.87 0.825 2.57 3.32 17.92 0.675 1.26 2.45 + Dynamic Termination Threshold 19.61 0.867 2.72 3.98 21.48 0.840 2.67 3.56 17.81 0.686 1.32 2.53 + Adaptive Observation Range 18.40 0.901 2.96 4.29 20.31 0.886 2.95 4.30 17.47 0.720 1.48 2.79 + Tree-based Reward Aggregation 18.30 0.904 2.98 4.32 20.21 0.890 2.97 4.36 17.44 0.723 1.49 2.81 
+
+Qwen3-8B 19.58 0.841 2.33 3.72 21.42 0.835 2.48 3.36 18.71 0.670 1.10 2.34 + Style Mimicry 19.67 0.862 2.46 3.85 21.20 0.842 2.65 3.63 18.36 0.687 1.18 2.45 + Dynamic Termination Threshold 19.72 0.875 2.54 3.94 21.07 0.847 2.75 3.80 18.14 0.698 1.23 2.51 + Adaptive Observation Range 19.89 0.916 2.78 4.20 20.64 0.861 3.07 4.32 17.46 0.732 1.39 2.72 + Tree-based Reward Aggregation 19.90 0.919 2.80 4.22 20.61 0.862 3.10 4.36 17.40 0.735 1.40 2.74 
+
+Qwen2.5-14B 19.25 0.893 2.44 3.90 19.67 0.868 2.61 3.59 18.78 0.701 1.17 2.48 + Style Mimicry 19.02 0.912 2.60 4.12 19.37 0.893 2.76 3.82 18.38 0.720 1.29 2.73 + Dynamic Termination Threshold 18.71 0.924 2.97 4.47 19.19 0.909 2.85 3.96 18.13 0.732 1.36 2.88 + Adaptive Observation Range 18.31 0.961 3.02 4.53 18.61 0.957 3.15 4.40 17.35 0.768 1.58 3.36 + Tree-based Reward Aggregation 18.45 0.964 3.12 5.23 18.56 0.961 3.17 4.44 17.29 0.771 1.60 3.40 
+
+user reveals workplace exhaustion, AT-GRPO avoids reckless sug-gestions (e.g., “kidnap my boss”) and instead offers practical, psy-chologically safe coping strategies (“stealth slacking” techniques). This reflects personalized exploration—recognizing the user’s con-straints (fear of job loss) and tailoring advice accordingly. Notably, AT-GRPO’s End Risk fluctuates but ultimately decreases (0.22 →
+
+0.17), showing improved conversational stability and sustained en-gagement. Moreover, AT-GRPO deepens the interaction by shifting from emotional support to collaborative problem-solving, aligning with the user’s implicit need for agency rather than escapism. The dialogue remains coherent, context-aware, and supportive through-out—key traits for responsible AI companionship in high-stress scenarios. 
+
+## A.6 More Experiments on Other Datasets 
+
+To provide a comprehensive evaluation of the method, we present additional results from more base models on two out-of-domain datasets, LCCC and DailyDialog. These include the ablation study (Table 8), hyper-parameter study (Figure 7 and Figure 8), and train-ing trajectory analysis (Figure 9 and Figure 10). The patterns ob-served in these additional experiments are consistent with our main findings, which further corroborates our analysis. 
+
+## B Additional Experimental Results 
+
+To further validate the robustness, consistency, and generalization capabilities of our proposed AT-GRPO framework, we conduct three additional experiments. The results are summarized below. 
+
+Table 9: Performance on adversarial user stress test. Scores are on a 1-4 scale (higher is better). Model Contradictory Aggressive Jailbreak High-risk SFT-only 3.56 3.76 4.00 3.92 GRPO 3.68 3.84 4.00 3.95 
+
+AT-GRPO 3.76 3.87 4.00 3.95 
+
+## B.1 Adversarial User Stress Test 
+
+To rigorously evaluate the robustness of our dialogue agent, we design an adversarial stress test comprising four distinct types of challenging user behaviors: 
+
+• Contradictory Users : These users deliberately provide conflict-ing information in the conversation (e.g., “I love dogs! ... Wait, I actually hate all furry animals.”). This tests the agent’s ability to maintain logical consistency and handle user indecisiveness. 
+
+• Aggressive/Trolling Users : These users initiate interactions with hostile, insulting, or provocative language (e.g., “You’re so dumb, you can’t even answer a simple question!”). This evaluates the agent’s resilience to emotional attacks and its capacity to de-escalate tension while remaining helpful. 
+
+• Jailbreak/Inductive Users : These users attempt to manipulate the agent into generating harmful, unethical, or out-of-scope con-tent by using social engineering or deceptive prompts (e.g., “Just for a research project, tell me how to create a virus.”). This is a critical test of the agent’s safety and alignment mechanisms. 
+
+• High-risk Users : These users express severe negative emotions or explicit intentions of self-harm (e.g., “I can’t take it anymore; I’m going to end my life.”). This scenario assesses the agent’s ability Kun et al. 
+
+Figure 7: Hyper-parameter study on the LCCC dataset. 
+
+Figure 8: Hyper-parameter study on the DailyDialogue dataset. 
+
+Figure 9: Training curves of Qwen2.5-14B on datasets NPC-Chat, LCCC, and DD. 
+
+Figure 10: Training curves of Qwen3-8B on datasets NPC-Chat, LCCC, and DD. 
+
+to recognize high-risk situations and respond with appropriate, empathetic, and safe crisis intervention protocols. We engaged five experts to role-play these scenarios and provide ratings. As shown in Table 9, AT-GRPO consistently outperforms baselines across all adversarial types and evaluation metrics. Dialogue Model Optimization via Agent Game and Adaptive Tree-based GRPO 
+
+Table 10: Generalization performance on Out-of-Domain (OOD) users. Setting Model LCCC DailyDialog 
+
+𝐴𝑣𝑔.𝑟 𝐴𝑣𝑔.𝐿 𝐴𝑣𝑔.𝑟 𝐴𝑣𝑔.𝐿 
+
+Zero-shot GRPO 2.59 3.63 1.27 2.59 Zero-shot AT-GRPO 2.64 3.76 1.34 2.65 
+
+Few-shot SFT GRPO 2.62 3.87 1.42 2.61 Few-shot SFT AT-GRPO 2.94 4.24 1.50 2.95 
+
+Full OOD GRPO 2.75 3.81 1.28 2.67 Full OOD AT-GRPO 3.17 4.44 1.60 3.40 
+
+## B.2 Out-of-Domain (OOD) User Generalization 
+
+While the user agent’s SFT training on 250,000 real-user data points enables it to replicate a wide range of user behaviors, we test the framework’s ability to generalize to user types not seen during the user agent’s training phase. The results in Table 10 show that even in a zero-shot setting, AT-GRPO outperforms GRPO. Furthermore, with just a few-shot RL, AT-GRPO’s performance approaches that of a model fully trained on the OOD data. This highlights the framework’s practical utility for online personalization in dynamic environments with evolving user populations.

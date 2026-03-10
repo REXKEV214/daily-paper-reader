@@ -1,0 +1,1316 @@
+Title: Affective Flow Language Model for Emotional Support Conversation
+
+URL Source: https://arxiv.org/pdf/2602.08826v1
+
+Published Time: Tue, 10 Feb 2026 03:25:19 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# Affective Flow Language Model for Emotional Support Conversation 
+
+# Chenghui Zou 1 , Ning Wang 1* , Tiesunlong Shen 2* , Luwei Xiao 2 , Chuan Ma 1 , Xiangpeng Li 1 , Rui Mao 3 and Erik Cambria 31College of computer science, Chongqing Universit 
+
+> 2
+
+# National University of Singapore 
+
+> 3
+
+# Nanyang Technological University zouchenghui@stu.cqu.edu.cn, nwang5@cqu.edu.cn, tiesunlong@nus.edu.sg, louisshaw008@gmail.com, chuan.ma@cqu.edu.cn, xiangpengli.cs@gmail.com, {rui.mao, cambria }@ntu.edu.sg 
+
+# Abstract 
+
+Large language models (LLMs) have been widely applied to emotional support conversation (ESC). However, complex multi-turn support remains chal-lenging. This is because existing alignment schemes rely on sparse outcome-level signals, thus offering limited supervision for intermediate strategy deci-sions. To fill this gap, this paper proposes affective flow language model for emotional support conver-sation (AFlow), a framework that introduces fine-grained supervision on dialogue prefixes by mod-eling a continuous affective flow along multi-turn trajectories. AFlow can estimate intermediate util-ity over searched trajectories and learn preference-consistent strategy transitions. To improve strat-egy coherence and empathetic response quality, a subpath-level flow-balance objective is presented to propagate preference signals to intermediate states. Experiment results show consistent and significant improvements over competitive baselines in diverse emotional contexts. Remarkably, AFlow with a compact open-source backbone outperforms pro-prietary LMMs such as GPT-4o and Claude-3.5 on major ESC metrics. Our code is available at https://github.com/chzou25-lgtm/AffectiveFlow. 
+
+# 1 Introduction 
+
+Emotional Support Conversation (ESC) has emerged as an important research area in natural language processing [Chen 
+
+et al. , 2025 ] . ESC aims to alleviate user emotional distress through strategy-guided multi-turn dialogues [ Zhao et al. ,2024 ]. Traditional ESC systems face significant challenges in understanding complex emotional dynamics, generating contextually appropriate responses, and maintaining coherent strategy transitions across turns [ Cheng et al. , 2022 ]. To ad-dress these limitations, large language model (LLM)-based approaches have been increasingly adopted, leveraging their advanced capabilities in semantic understanding and open-domain dialogue to deliver more effective support [ Kang et al. , 2024; Wan et al. , 2025 ]. However, existing LLM-based methods still struggle with maintaining long-horizon strategy 
+
+> *
+
+Corresponding Author. (a) Holistic Supervision (b) Preference Learning        
+
+> (c) Affective Flow (Ours)
+> R( S!)
+> Supporter
+> Don‘t worry too
+> much. It happens.
+> R( S!)
+> Sparse outcome -level
+> reward
+> Inconsistent guidance
+> Pairwise comparison
+> Response -level
+> optimization
+> Prefix -level flow supervision
+> Continuous affective guidance
+> F( S→𝑺 ’)
+> S#S$S%S&
+> Affective Flow
+> I failed my exam even though I tried hard...
+> F=0.9F=0.2
+
+Figure 1: Comparison of Emotional Support Conversation ap-proaches 
+
+consistency and achieving fine-grained alignment with profes-sional psychological protocols, which restricts their effective-ness in complex multi-turn interactions [ Zhang et al. , 2024; Zhou et al. , 2025]. To address these issues, methods based on holistic super-vision and preference learning have emerged. As shown in Figure 1 (a), holistic supervision approaches generate sup-porter responses and evaluate them using sparse outcome-level rewards at the end of the conversation, providing limited guidance for intermediate strategy decisions [Liu et al. , 2021; Hong et al. , 2024 ] . On the other hand, preference-learning methods, as shown in Figure 1 (b), generate multiple candidate responses, perform pairwise comparison to identify better and worse outputs, and optimize the model through response-level preference signals [Rafailov et al. , 2023; Shen et al. , 2025b; Zhao et al. , 2025]. However, these methods still face several challenges. (i) Context sensitivity. Existing approaches inadequately model turn-level context evolution, which weakens the adaptation of supportive timing and intensity across turns [Ren et al. ,2025 ]. (ii) Credit assignment. Preference-based meth-ods mainly rely on sparse, response-level supervision and provide insufficient intermediate targets for attributing out-comes to earlier strategy decisions [Zhou et al. , 2025 ]. (iii) Affective dynamics. Current training signals do not ex-plicitly reflect fine-grained affective changes over the dia-logue, hindering long-horizon strategy coherence and co-ordination with psychological practice [ Wan et al. , 2025; Sun et al. , 2025]. 
+
+> arXiv:2602.08826v1 [cs.CL] 9 Feb 2026
+
+To address these challenges, we propose AFlow (Fig-ure 1 (c)), an alignment framework for multi-turn ESC built on search-distilled, affective flow preference optimization (AFPO). AFlow associates each dialogue prefix with an in-termediate affective value derived from searched trajectories, providing dense supervision for turn-level strategy decisions beyond terminal rewards. Based on this signal, AFPO enforces a subpath-level flow-balance constraint so that preference in-formation is propagated consistently from later outcomes to intermediate states, improving long-horizon strategy progres-sion and stable supportive behavior. The contributions of this work are three-fold: (1) We formal-ize Affective Flow as a non-negative flow field over dialogue prefixes in multi-turn ESC, linking terminal affective outcomes to intermediate states under flow-balance constraints.(2) We propose AFPO, which enforces subpath-level flow-balance to obtain dense and structurally consistent supervision for intermediate strategy decisions. (3) We conduct extensive ex-periments and the results show consistent improvements in strategy macro-F1 and response diversity, while preserving competitive generation quality. 
+
+# 2 Related Work 
+
+Emotional support conversation (ESC) has evolved from su-pervised, strategy-conditioned generation and structure-aware modeling that explicitly predicts or constrains supportive ac-tions [ Liu et al. , 2021; Tu et al. , 2022; Cheng et al. , 2022; Deng et al. , 2023; Zhang et al. , 2024 ] to LLM-based sup-porters that increasingly rely on prompting, self-/synthetic-data augmentation, and preference-driven alignment to shape response behavior [Zheng et al. , 2024; Kang et al. , 2024; Sun et al. , 2025 ]. However, many of these alignment schemes optimize response-level preferences or dialogue-level outcomes, which under-specify intermediate strategy deci-sions and weaken long-horizon credit assignment in multi-turn support [Rafailov et al. , 2023; Ouyang et al. , 2022; Meng et al. , 2024; Shen et al. , 2026; Wan et al. , 2025; Zhao et al. , 2025 ]. Meanwhile, strategy-aware refinements introduce more structured supervision via planning, dynamics model-ing, or explicit strategy optimization, but often require addi-tional components and still do not enforce globally consistent value propagation across dialogue subpaths [Zhou et al. , 2023; Cheng et al. , 2023; Wan et al. , 2025; Zhao et al. , 2025; Zhao et al. , 2025; Madani and Srihari, 2025; Shen et al. ,2025a ]. This work introduces AFlow, which derives prefix-level affective supervision from search-constructed trajecto-ries and enforces subpath flow-balance constraints to propa-gate preference-consistent value through dialogue prefixes, en-abling efficient long-horizon strategy alignment beyond coarse sequence-level preferences. More detailed discussion of re-lated work is provided in Appendix A. 
+
+# 3 Preliminaries 
+
+Multi-turn Emotional Support Conversation (ESC) is modeled as a Markov Decision Process (MDP). Let st ∈ S denote the dialogue state at turn t, which encodes the dialogue history up to that turn, and let at ∈ A denote the supporter action at turn t. The environment transitions according to p(st+1 |
+
+st, a t). A conversation with horizon T is represented as a finite interaction trajectory 
+
+τ = ( s0, a 0, s 1, a 1, . . . , s T ), sT ∈ S term , (1) where Sterm denotes the set of terminal states. Each terminal state sT is assigned a non-negative terminal affective reward 
+
+R(sT ) ≥ 0, which evaluates the completed interaction from the perspective of emotional support. Generative Flow Networks (GFlowNets) [ Bengio et al. ,2023 ] model sampling over discrete objects through sequen-tial construction guided by a flow-balance objective. The generation process is represented as a directed graph whose nodes are partial objects (states) and edges are one-step ex-tensions. Let Pred( s) and Succ( s) denote the predecessor and successor sets of s. Each transition is associated with a non-negative edge flow F (s → s′) ≥ 0. For any non-terminal state s, flow conservation requires that the total incoming flow equals the total outgoing flow: 
+
+X
+
+> s′∈Pred( s)
+
+F (s′ → s) = X
+
+> s′′ ∈Succ( s)
+
+F (s → s′′ ). (2) For a terminal state sT ∈ Sterm , the incoming flow is absorbed and matched to a non-negative terminal reward: P  
+
+> s′∈Pred( sT)
+
+F (s′ → sT ) = R(sT ) with R(sT ) ≥ 0.
+
+# 4 Methodology 
+
+In this section, we present the Affective Flow Language Model (AFlow) (see Figure 2). AFlow is realized through three stages: (i) MCTS-based Affective Flow signal construction that derives psychology-grounded, fine-grained supervision for strategy-level decisions; (ii) Affective Flow Preference Optimization (AFPO) that maps constructed flow signals into flow targets over intermediate dialogue states and optimizes a subpath-level flow-balance objective to propagate preferences across dialogue trajectories; (iii) Lightweight inference that selects supportive actions using the learned policy prior and value guidance. 
+
+4.1 Affective Flow Reward Acquisition 
+
+In AFlow, we use a role-separated LLM environment together with MCTS to construct fine-grained affective reward signals for multi-turn ESC, and transform these signals into supervi-sion for Affective Flow optimization. 
+
+Role-Based Dialogue Environment. Tree expansion is in-stantiated by three role-specific agents: a seeker LLM, a sup-porter LLM, and a rewarder LLM, The prompt-based environ-ment is implemented with LLMs, each of which is instantiated to play all three roles. As shown in Figure 2, at a dialogue state 
+
+st (the conversation history up to turn t), the strategy policy produces a prior distribution πθ (a | st) over a ∈ A . Condi-tioned on the selected strategy at and history dialogue states 
+
+st−1, the supporter generates the next supporter utterance given (st, a t). The seeker then simulates the user and produces the subsequent user utterance to advance the dialogue and in-duce the next state st+1 . The rewarder evaluates the newly gen-erated supporter utterance along four dimensions Empathy ,
+
+Information Quality , Humanoid Naturalness , and Strate-gic Efficacy and outputs an immediate reward signal rt (full environment specification is provided in Appendix B). Venting 
+
+Seeker 
+
+Role -Based Dialogue Environment 
+
+Rt 
+
+Selection node base on 
+
+PUCT 
+
+μ(𝑎 !)
+
+S!: μ(𝑎 ")
+
+rollout 
+
+rollout 
+
+S#
+
+S#
+
+S#
+
+S#
+
+S$: μ(𝑎 $) S$: μ(𝑎 !)
+
+Selection 
+
+Expansion 
+
+Rollout 
+
+Backpropagation 
+
+# 𝐑 𝐭 
+
+## !G s!, 𝑎 !
+
+S$ S$
+
+Flow Construction in Search 
+
+S#
+
+S$
+
+S$
+
+S" S!
+
+S!
+
+S!S"
+
+S"S%
+
+μ(𝑎 $)
+
+S& S'
+
+F(m)>F(n) 
+
+S& S'
+
+F(m)>F(n) 
+
+Preference Learning 
+
+! 
+
+> "!∈$%&' "
+
+F s( → s = ! 
+
+> "!! ∈)*++ "
+
+F s → s(( 
+
+PLM （i+1 ）
+
+PLM （i）
+
+Affective Flow 
+
+S#S%
+
+Maximum 
+
+likelihood 
+
+Affirmation 
+
+S#S"
+
+S"S%
+
+# …… 
+
+Supporter :Response 
+
+Seeker : Venting 
+
+Datasets 
+
+S$: μ(𝑎 $) S$: μ(𝑎 $) S$: μ(𝑎 !)S$: μ(𝑎 !)
+
+S!: μ(𝑎 ")
+
+rollout Figure 2: Detailed diagram of the AFlow framework for emotional support conversation. 
+
+Affective Flow Rewards on Dialogue States. MCTS pro-vides empirical targets over dialogue states and strategy ac-tions for Affective Flow optimization. Following the standard four-step loop, each simulation proceeds with selection, ex-pansion, simulation/rollout, and backpropagation. 
+
+Selection. The exploration ratio ρt ∈ [0 , 1] controls the uniform exploration weight and is defined as 
+
+ρt = κκ + log  N (st) + 1  , (3) where κ = 0.1 is a hyperparameter and N (s) =P 
+
+> a∈A
+
+N (s, a ) denotes the state visit count. The strategy sampling distribution μ(· | st) is then con-structed as 
+
+μ(a | st) = (1 − ρt) Softmax( ut(·)) a + ρt · Unif( A)( a),ut(a) = Q(st, a ) + λ π θ (a | st)
+
+s
+
+N (st)1 + N (st, a ) ,
+
+(4) where Q(st, ·) denotes action-value estimates, πθ (· | st) is the policy prior, λ controls the exploration–exploitation trade-off, 
+
+N (st, ·) denotes state–action visit counts, and Unif( A)( a) = 1/|A| denotes the uniform distribution over A. The strategy 
+
+at is sampled from μ(· | st).
+
+Expansion. Given the selected pair (st, a t), the successor dialogue state st+1 is instantiated using the role-based simula-tion in Section 4.1: the supporter generates the next supporter utterance conditioned on (st, a t), and the seeker generates the subsequent user utterance to advance the dialogue. The result-ing dialogue history is stored at st+1 for subsequent selection and rollout. When a state is expanded for the first time, statis-tics for all strategy actions in A are initialized with Q = 0 and 
+
+N = 0 to ensure consistent updates across branches. 
+
+Simulation/rollout. A bounded-depth rollout with maxi-mum depth L = 3 is used to estimate the downstream utility of taking at at st. Premature termination is suppressed by set-ting the return to zero when an end token is generated during rollout, define the immediate reward as: 
+
+rt = wE Et + wI It + wH Hhum  
+
+> t
+
++ wS Sstra 
+
+> t
+
+ℓ , (5) where Et, I t, H t, S stra  
+
+> t
+
+∈ [0 , 5] denote the rewarder scores for empathy, information quality, humanoid naturalness, and strategic efficacy at turn t, respectively,With 
+
+(wE , w I , w H , w S ) = (0 .1, 0.1, 0.1, 0.2) and ℓ = 2.5
+
+normalizes the reward scale. The rollout then proceeds under ˆπθ (a | s) and collects 
+
+rt+1 , . . . , r t+L′ with realized depth L′. Let Iterminal = 0 if an end token aend is generated during rollout, and Iterminal = 1 
+
+otherwise. 
+
+ˆG(st, a t) = Iterminal · 1
+
+L′
+
+> L′
+
+X
+
+> k=1
+
+rt+k. (6) 
+
+Backpropagation. The return estimate ˆG(st, a t) is propa-gated along the selected path to update N (s, a ) and Q(s, a )
+
+for all visited (si, a i). The visit count is incremented, and Q
+
+is updated by an incremental mean: 
+
+N (si, a i) ← N (si, a i) + 1 . (7) 
+
+Q(si, a i) ← Q(si, a i) + 1
+
+N (si, a i)
+
+  ˆG(st, a t) − Q(si, a i).
+
+(8) After performing multiple MCTS simulations, the resulting 
+
+{N (s, a ), Q (s, a )} serve as the MCTS-derived supervision for the subsequent affective flow optimization stage. 4.2 Affective Flow Preference Optimization 
+
+AFPO trains the strategy policy πθ (a | s) together with an evaluation model Vϕ using the search-produced estimates bQ(s)
+
+and bQ(s, a ). The objective enforces subpath flow-balance on dialogue states so that affective supervision propagates from later outcomes to intermediate strategy decisions. 
+
+Optimization variables. AFPO optimizes πθ (a | s) and 
+
+Vϕ. The evaluation model is used in two forms: Vϕ(s) for state-wise valuation in flow construction, and Vϕ(s, a ) for edge-wise scoring in preference supervision. 
+
+Affective Flow parameterization. The state flow associated with a dialogue state s is defined as: 
+
+F (s) = bQ(s) Vϕ(s), (9) where bQ(s) is the MCTS-derived state value estimate at s, and 
+
+Vϕ(s) provides a learnable valuation. 
+
+Flow Construction in Search. The MCTS data induce a directed acyclic graph whose nodes are dialogue prefixes and whose edges are recorded one-step extensions. Let F (s →
+
+s′) ≥ 0 denote the edge flow, and define the state flow as the total incoming flow: 
+
+F (s) = X
+
+> s′∈Pred( s)
+
+F (s′ → s), (10) where Pred( s) is the set of predecessor states of s in the search tree. For non-terminal nodes, flow conservation holds: 
+
+X
+
+> s′∈Pred( s)
+
+F (s′ → s) = X
+
+> s′′ ∈Succ( s)
+
+F (s → s′′ ). (11) with Succ( s) denoting the successor set. To connect flow to the policy, the edge flow on a visited transition is factorized by the forward strategy likelihood: 
+
+F (si → si+1 ) = F (si) πθ (ai | si), (12) where ai is the strategy selected on the recorded edge from 
+
+si to si+1 . For training-time balancing, a backward policy 
+
+πB (· | si+1 ) over predecessors is introduced so that the same edge flow can also be written as: 
+
+F (si → si+1 ) = F (si+1 ) πB (si | si+1 ). (13) Equating Eq. (12) and Eq. (13) yields the edge-wise flow matching: 
+
+F (si) πθ (ai | si) = F (si+1 ) πB (si | si+1 ). (14) 
+
+Sub-Path flow-balance constraint. Consider a searched tra-jectory and any subpath from sm to sn with m < n , together with the intervening strategy sequence {ai}n−1
+
+> i=m
+
+. Multiplying Eq. (14) along the subpath yields the general subpath balance: 
+
+F (sm)
+
+> n−1
+
+Y
+
+> i=m
+
+πθ (ai | si) = F (sn)
+
+> n−1
+
+Y
+
+> i=m
+
+πB (si | si+1 ). (15) AFPO does not parameterize an explicit backward policy. A fixed backward distribution over predecessors is adopted. Since each node has a unique parent, πB (si | si+1 ) = 1 on recorded trajectories. Therefore Eq. (15) reduces to 
+
+F (sn) = F (sm)
+
+> n−1
+
+Y
+
+> i=m
+
+πθ (ai | si). (16) Replacing F (sm) and F (sn) in Eq. (16) with the state-flow definition F (s) = bQ(s)Vϕ(s) gives: 
+
+bQ(sn)Vϕ(sn) = bQ(sm)Vϕ(sm)
+
+> n−1
+
+Y
+
+> i=m
+
+πθ (ai | si). (17) Taking logarithms gives: 
+
+log   bQ(sn)Vϕ(sn)−log   bQ(sm)Vϕ(sm) =
+
+> n−1
+
+X
+
+> i=m
+
+log πθ (ai | si).
+
+(18) To streamline the formulation of the learning objective, intro-duce the shorthand: 
+
+∆Fm,n = log   bQ(sn)Vϕ(sn) − log   bQ(sm)Vϕ(sm), (19) 
+
+∆πm,n =
+
+> n−1
+
+X
+
+> i=m
+
+log πθ (ai | si). (20) 
+
+Policy objective. Let T denote the set of trajectories ex-plored by the search procedure. Subpath flow balance is en-forced by penalizing deviations between ∆Fm,n and ∆πm,n 
+
+over subpaths: 
+
+Lpolicy = X 
+
+> τ∈T
+
+X
+
+> 0≤m<n ≤Tτ
+
+ ∆Fm,n − ∆πm,n 
+
+2, (21) where Tτ is the horizon of trajectory τ . The loss is applied to all subpath pairs (m, n ) within each trajectory, yielding 
+
+O(T 2 
+
+> τ
+
+) flow-balance training signals per trajectory. Since the conversation horizon is bounded, the quadratic subpath construction remains tractable in our setting. 
+
+Evaluation objective. Edge-level preferences are induced by the empirical edge estimates at the same dialogue state. For a visited state st, a pair of strategies (aw, a l) is formed such that: 
+
+bQ(st, a w) > bQ(st, a l). (22) A margin-based ranking loss encourages consistent ordering: 
+
+Levaluate = E(st,a w ,a l)
+
+max 
+
+
+
+0, γ −  Vϕ(st, a w) − Vϕ(st, a l)
+
+, (23) where γ > 0 is a margin hyperparameter. 
+
+Overall objective. The AFPO training objective is 
+
+LAFPO = Lpolicy + λ Levaluate , (24) where λ controls the trade-off between subpath flow-balance supervision and edge-level preference supervision. Table 1: Automatic evaluation results. Bold : Best fine-tuned result. Note : PPL is omitted for Pre-LLM models due to vocabulary mismatch. Strategy metrics for MoEL/MIME are omitted (-).                                                                                                                                                                                                                                                                                           
+
+> General LLMs Sim, Values & Empathy Task & Interp Strat & Know. Ours Data Cat Metric GPT-4o Claude 3.5 MoEL MIME Social Sim Multi Agent Value Reinf Blender Bot-Joint ESCoT Intent ESC MISC KEMI EmoDx DYN-Kn AFlow ExTES  Fluency PPL ↓----10.2 9.85 9.90 16.5 11.2 10.5 15.6 14.8 10.1 10.3 9.15
+> Gener B-2 ↑15.8 16.5 8.50 9.20 18.5 19.8 19.1 11.5 17.5 18.2 13.8 15.5 19.5 19.2 22.45
+> B-4 ↑6.55 7.25 1.85 2.10 6.80 7.45 6.95 2.25 5.35 6.15 2.75 3.25 7.35 7.10 9.05
+> R-L ↑19.2 20.8 14.5 15.2 20.9 21.8 20.5 16.5 19.5 20.2 16.1 17.5 21.5 21.1 24.50
+> MET ↑23.8 23.5 11.2 11.8 20.1 21.1 20.8 13.2 18.8 19.5 14.5 15.8 20.9 20.5 23.10
+> Divers D-1 ↑4.05 4.85 1.25 1.35 4.10 4.25 4.15 1.75 3.65 3.85 2.95 3.30 4.35 4.20 5.10
+> D-2 ↑21.8 23.8 6.50 7.20 17.8 19.5 18.5 6.85 15.8 16.5 11.8 13.5 19.1 18.8 21.05
+> Strat Acc ↑57.8 60.5 --58.8 60.2 59.5 30.5 55.5 58.2 45.1 49.5 60.8 59.5 64.50
+> F1 ↑54.8 58.8 --56.2 58.5 57.1 26.8 53.2 56.5 41.8 46.8 58.9 57.8 62.80
+> ESConv  Fluency PPL ↓----9.85 9.45 9.60 16.4 10.5 9.95 15.6 14.8 9.55 9.80 8.95
+> Gener B-2 ↑16.2 17.1 8.80 9.50 19.5 20.5 19.8 12.1 18.2 19.1 14.5 16.1 20.1 19.8 22.85
+> B-4 ↑6.85 7.55 1.95 2.20 7.25 7.85 7.30 2.53 5.62 6.95 2.96 3.43 7.62 7.40 9.25
+> R-L ↑19.8 21.5 14.8 15.5 21.6 22.5 21.2 17.3 20.1 21.2 16.8 18.2 22.1 21.8 24.85
+> MET ↑24.1 24.2 11.5 12.1 20.9 21.5 21.0 13.8 19.2 20.5 15.1 16.2 21.3 21.0 23.55
+> Divers D-1 ↑4.12 4.95 1.30 1.40 4.25 4.45 4.30 1.85 3.85 4.15 3.12 3.45 4.50 4.30 5.25
+> D-2 ↑22.1 24.8 6.80 7.50 18.5 19.5 18.9 7.20 16.5 17.8 12.5 14.1 19.8 18.9 21.50
+> Strat Acc ↑58.4 61.2 --59.8 62.0 60.2 32.1 56.8 59.5 46.5 51.2 61.8 60.5 65.10
+> F1 ↑55.2 59.5 --57.5 60.5 58.5 28.5 54.5 57.8 43.2 49.8 60.1 58.8 63.50
+
+Training Procedure. Training of πθ and Vϕ starts after ob-taining the searched trajectories T and the associated estimates 
+
+bQ(s) and bQ(s, a ), as described in section 4.1. Using these pre-computed estimates, model parameters are optimized by minimizing the overall AFPO objective LAFPO , which com-bines subpath flow-balance supervision with edge-level consis-tency induced by bQ(s, a ). This training enforces prefix-level affective-flow consistency across full trajectories, enabling context-aware evaluation of candidate next strategies while preserving generation diversity (see Appendix C for a proof). 
+
+4.3 Affective Reasoning 
+
+Given a dialogue state st (the conversation history up to turn 
+
+t), a compact candidate set At ⊂ A is constructed by selecting the top-K strategies under the policy prior πθ (· | st). Each candidate strategy is scored by combining the policy prior with the learned action value: 
+
+score( a | st) = log πθ (a | st) + Vϕ(st, a ). (25) This scoring combines the policy prior for calibrated explo-ration with the learned value signal for preference-aware strat-egy selection. The selected strategy is 
+
+at = arg max 
+
+> a∈A t
+
+score( a | st). (26) The supporter response is then generated conditional on 
+
+(st, a t) by the supporter model. This design combines the policy prior with learned value guidance to improve the relia-bility of strategy selection at affective reasoning. 
+
+# 5 Experiments 
+
+In this section, we present the experimental setup and re-sults. We address the following research questions (RQs): RQ1: Does AFlow outperform other methods? RQ2: Can AFlow’s affective flow signal distinguish fine-grained affec-tive states in multi-turn ESC? RQ3: Is AFlow effective across dialogue stages (Exploration, Comforting, and Action)? RQ4: Does AFlow show a stable, improving turn-wise affective flow trajectory? RQ5: Are AFlow’s supportive strategy choices reasonable and diverse across turns? RQ6: Does the main component of AFlow work effectively? 
+
+5.1 Datasets 
+
+To evaluate the method, training and evaluation are conducted using two in-domain ESC datasets as seed data. The two datasets include ExTES [ Zheng et al. , 2023 ] and ESConv [ Liu 
+
+et al. , 2021 ]. To reduce the strategy search space and im-prove computational efficiency, we merge semantically similar strategies into eight categories. For seed initialization, we sample 1,000 and 500 dialogues from ExTES and ESConv, respectively, ensuring coverage of all emotional support sce-narios. Detailed dataset statistics and preprocessing are pro-vided, and the sampling criteria and procedure are described in Appendix D. 
+
+5.2 Baselines 
+
+We compare AF LOW with representative baselines spanning three families: (i) task and interpretability-oriented ESC systems, including BlenderBot-Joint [Liu et al. , 2021 ], ES-CoT [ Zhang et al. , 2024 ] , and IntentionESC [ Zhang et al. ,2025 ]; (ii) strategy- and knowledge/persona-enhanced mod-els, including MISC [Tu et al. , 2022 ] , KEMI [ Deng et al. ,2023 ] , EmoDynamiX [ Wan et al. , 2025 ], and dynamic knowl-edge filtering with persona extraction [ Hao and Kong, 2025 ];and (iii) test-time LLM frameworks, simulation/values-driven Table 2: Robustness analysis of AFlow across diverse LLM back-bones.                 
+
+> Environment Backbone Generation Quality Diversity Strategy
+> B-2 B-4 R-L MET D-1 D-2 Acc F1
+> GPT-4o
+> Qwen-2.5 22.45 9.05 24.50 23.10 5.10 21.05 64.5 62.8
+> Gemma-2 22.05 8.80 23.95 22.65 4.95 20.40 63.8 62.1 LLaMA-3.1 21.60 8.45 23.40 22.15 4.80 19.80 63.0 61.5
+> Claude-3.5
+> Qwen-2.5 22.70 9.20 24.85 23.45 5.22 21.40 65.2 63.5
+> Gemma-2 22.30 8.95 24.25 22.95 5.05 20.75 64.4 62.8 LLaMA-3.1 21.85 8.65 23.80 22.50 4.92 20.15 63.6 62.2
+> Gemini-1.5
+> Qwen-2.5 22.35 8.95 24.40 23.00 5.05 20.90 64.3 62.5
+> Gemma-2 21.95 8.70 23.85 22.55 4.90 20.25 63.5 61.8 LLaMA-3.1 21.50 8.35 23.25 22.05 4.75 19.65 62.8 61.2
+
+methods, and classic empathetic generators, including Multi-AgentESC [Xu et al. , 2025 ], SocialSim [ Chen et al. , 2025 ] ,Value Reinforcement [ Kim et al. , 2025 ], MoEL [Lin et al. ,2019 ], MIME [ Majumder et al. , 2020 ],as well as strong pro-prietary LLM baselines (GPT-4o and Claude-3.5). Details are in Appendix E. 
+
+5.3 Evaluation Metrics 
+
+Automatic metrics are reported for quality, diversity, fluency, and strategy alignment, together with pairwise preference eval-uation using GPT-5.2 and human experts. Detailed settings are provided in Appendix F. 
+
+5.4 Implementation Details. 
+
+AFlow is implemented on Qwen-2.5-7B-Instruct [ Yang et al. , 2024 ] and extended to LLaMA-3.1-8B-Instruct [ Dubey 
+
+et al. , 2024 ] and Gemma-2 [ Team and DeepMind, 2024 ] for generalizability. Training is iterative: the backbone drives MCTS to build affective trajectory trees in a role-separated environment, and the resulting tree data optimize (πθ , V ϕ)
+
+under the AFPO objective. Appendix G details the procedure, including average turns and strict isolation from training-time MCTS trees. 
+
+5.5 Main Results (RQ1) 
+
+As summarized in Table 1, automatic evaluation on the ex-panded validation dialogues seeded from ESConv and ExTES shows that AFlow achieves the strongest strategy alignment (F1) and higher response diversity (Dist-2), while maintain-ing competitive generation quality with low perplexity. Ta-ble 2 reports performance of AFlow on three instruction-tuned backbones under simulation environments, where each en-vironment instantiates the seeker/supporter/rewarder models from the same LLM family (GPT-4o, Claude-3.5, Gemini-1.5), indicating stable performance across environments and backbone models. In addition, pairwise evaluations with GPT-5.2 and human experts (Table 3) show that AFlow improves fluency, identification, comfort, suggest, and overall over all baselines, while remaining competitive against GPT-4o with consistent trends across both judges. the detailed evaluation rubric and prompts are provided in Appendix H. Overall, these results highlight three advantages of AFlow: (i) stable gains in both automatic and preference-based evaluations; (ii) im-proved strategy alignment and diversity without sacrificing fluency; and (iii) robust effectiveness across backbone LLMs and evaluation judges. 
+
+Table 3: Pairwise preference evaluation ( Win/Tie/Lose % ). Compar-ing AFlow against baselines using GPT-5.2 and Human Experts.                                                                                                                                        
+
+> Opponent Metric GPT-5.2 Evaluation Human Evaluation Win Tie Lose Win Tie Lose vs. ESCoT
+> Fluency 35.5 55.2 9.3 32.0 58.5 9.5 Identification 58.5 28.2 13.3 55.0 30.5 14.5 Comfort 65.2 20.5 14.3 60.5 24.0 15.5 Suggest 55.4 26.8 17.8 52.5 29.0 18.5
+> Overall 62.5 22.5 15.0 58.8 25.2 16.0
+> vs. EmoDx
+> Fluency 30.5 62.0 7.5 28.5 64.0 7.5 IIdentification 50.5 35.5 14.0 48.0 37.5 14.5 Comfort 45.5 38.2 16.3 42.5 40.5 17.0 Suggest 68.5 18.5 13.0 64.2 21.5 14.3
+> Overall 58.2 25.5 16.3 54.5 28.5 17.0
+> vs. GPT-4o
+> Fluency 15.5 70.2 14.3 12.5 74.0 13.5 Identification 48.5 38.5 13.0 45.5 41.5 13.0 Comfort 48.2 36.5 15.3 45.8 38.5 15.7 Suggest 52.5 32.5 15.0 49.2 35.5 15.3
+> Overall 50.5 33.5 16.0 48.5 35.2 16.3
+> vs. Claude 3.5
+> Fluency 12.8 75.5 11.7 10.5 78.0 11.5 Identification 40.2 48.5 11.3 38.5 50.5 11.0 Comfort 46.5 38.0 15.5 44.2 40.0 15.8 Suggest 50.8 33.2 16.0 48.5 35.0 16.5
+> Overall 48.8 36.2 15.0 46.5 38.0 15.5 2101234
+> Value Gap Q
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> Density
+> 1.8
+> x = 0
+
+(a)        
+
+> 12345678
+> Dialogue Turns
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Separation  Q *
+> t
+
+0.63 
+
+(b) 
+
+SFT DPO AFlow 
+
+Figure 3: (a) Value-gap distribution. AFlow exhibits a stronger positive shift than DPO. (b) Turn-wise separation. AFlow provides steadier guidance across turns. 
+
+5.6 Affective State Discrimination (RQ2). 
+
+The comparisons of AFlow with two MCTS-based variants (SFT+MCTS and DPO+MCTS) evaluate whether AFPO sub-trajectory balance supervision enables the learned value signal to separate higher- and lower-terminal-reward branches. Fig-ure 3a reports the value-gap distribution at matched states 
+
+st, ∆Q = Q(st, a good ) − Q(st, a bad ), where agood and abad 
+
+correspond to branches with higher and lower terminal re-wards. Figure 3b further quantifies turn-wise separation by 
+
+∆Q∗ 
+
+> t
+
+= Q+ 
+
+> t
+
+− Q− 
+
+> t
+
+, where Q+ 
+
+> t
+
+and Q− 
+
+> t
+
+are the average value estimates of higher- and lower-terminal-reward branches at turn t.
+
+5.7 Effectiveness in Dialogue Stages (RQ3). 
+
+As shown in Figure 4, stage-wise comparisons across three dialogue stages reveal clear trade-offs for baselines, where stronger performance in earlier stages does not consistently carry over to later-stage guidance. In contrast, AFlow main-tains consistently strong effectiveness across stages and shows the most reliable performance in the most challenging action stage, indicating superior constructive, problem-oriented sup-port. ESCoT EmoDx GPT-4o Claude3.5 AFlow 
+
+60 
+
+70 
+
+80 
+
+90    
+
+> Effectiveness Score  Avg. Explor. Comfort. Action
+
+Figure 4: Stage-wise effectiveness scores. AFlow achieves the strongest overall performance. 1 2 3 4 5 6 7 8
+
+> Dialogue Turns
+> 6
+> 8
+> Avg. Reward Score ( Rt) AFlow (Ours)
+> Claude-3.5
+> GPT-4o-mini
+> Qwen-2.5
+> LLaMA-3.1
+> Gemma-2
+
+Figure 5: Trajectory analysis of reward scores. AFlow shows robust long-horizon improvement, with competitive late-turn performance. 
+
+5.8 Affective Flow Trajectory Analysis (RQ4) 
+
+The comparisons of AFlow and alternative generators (GPT-4o-mini, Claude3.5, Qwen-2.5-7B-Instruct, LLaMA-3.1-8B-Instruct, and Gemma-2-9B-it) on turn-wise rewarder score trajectories are shown in Figure 5. As shown in Figure 5, the trajectories are compared by stability and variance across turns, distinguishing smoother affective improvement from os-cillatory dynamics. Figure 6 further examines cross-rewarder consistency by re-scoring the same generated dialogues with three heterogeneous rewarder LLMs under an identical rubric, verifying that the turn-wise reward trends remain aligned for AFlow. 
+
+5.9 Diversity Analysis: Strategy Entropy (RQ5) 
+
+As shown in Figure 7, we compare AFlow with human ground truth on turn-level strategy distributions over ESConv and ExTES to assess whether long-horizon strategy diversity is preserved. Human dialogues exhibit a dispersed, high-entropy pattern, whereas mode collapse would concentrate probability mass on a small set of safe actions. AFlow closely follows the expert distribution and maintains broad coverage over all eight therapeutic strategies across turns, suggesting that the flow-based mechanism mitigates strategy collapse. 
+
+5.10 Ablation Study (RQ6) 
+
+As shown in Table 4, AFlow (Full) performs consistently best, highlighting the synergy between sub-path flow-balance su-pervision, MCTS-based exploration, and process supervision. Removing any component leads to clear performance degra-dation: replacing sub-path flow balance with DPO reduces Strategy F1, disabling MCTS exploration decreases Dist-2, 1 2 3 4 5 6 7 8  
+
+> Dialogue Turns
+> 5
+> 6
+> 7
+> 8
+> 9
+> Reward Score ( Rt) GPT-4o Claude-3.5 Gemini
+
+Figure 6: Cross-rewarder consistency. Three heterogeneous LLM rewarders yield aligned upward reward trajectories for AFlow. Cla 
+
+> RS
+> EV
+> ES
+> Aff
+> SI
+> CP
+> SO
+
+(a) (b)               
+
+> 12345678
+> Cla
+> RS
+> EV
+> ES
+> Aff
+> SI
+> CP
+> SO
+> 12345678
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Frequency
+> Human
+> Ground Truth
+> AFlow
+> Generated
+> Dialogue Turns
+
+Figure 7: Strategy distribution comparison between Human Ground Truth and AFlow. AFlow preserves expert-level diversity and the Exploration → Action progression. 
+
+and removing process supervision yields the largest drop in strategy alignment. Additional analyses are provided in Ap-pendix I. A case study is also provided in Appendix J. 
+
+Table 4: Ablation study. The values in parentheses denote the per-formance drop ( ∆) from AFlow. Core components are essential for performance. 
+
+Model Variant Strategy (F1) Diversity (D-2) Quality (B-4) AFlow 62.40 20.12 8.56 
+
+w/o Flow Balance 55.10 (-7.30) 16.85 (-3.27) 7.65 (-0.91) w/o MCTS 53.50 (-8.90) 10.20 (-9.92) 6.95 (-1.61) w/o Process Sup. 47.50 (-14.90) 18.50 (-1.62) 7.40 (-1.16) 
+
+# 6 Conclusion 
+
+In this work, AFlow is proposed to align LLMs for multi-turn emotional support conversation with affective flow supervi-sion. AFlow distills dense intermediate signals from searched trajectories and jointly trains policy/value models with AFPO by enforcing subpath-level flow-balance, yielding preference-consistent strategy progression across turns. Empirically, the resulting models improve strategy alignment and maintain di-verse, demonstrating the effectiveness of flow-shaped process supervision for intermediate credit assignment. References 
+
+[Bengio et al. , 2023] Yoshua Bengio, Salem Lahlou, Tristan Deleu, Edward J Hu, Mo Tiwari, and Emmanuel Bengio. Gflownet foundations. Journal of Machine Learning Re-search , 24(210):1–55, 2023. [Chen et al. , 2025] Zhuang Chen, Yaru Cao, Guanqun Bi, Jin-cenzi Wu, Jinfeng Zhou, Xiyao Xiao, Si Chen, Hongning Wang, and Minlie Huang. Socialsim: Towards socialized simulation of emotional support conversation. In Proceed-ings of the AAAI Conference on Artificial Intelligence , vol-ume 39, pages 1274–1282, 2025. [Cheng et al. , 2022] Yi Cheng, Wenge Liu, Wenjie Li, Ji-ashuo Wang, Ruihui Zhao, Bang Liu, Xiaodan Liang, and Yefeng Zheng. Improving multi-turn emotional support dialogue generation with lookahead strategy planning. In Yoav Goldberg, Zornitsa Kozareva, and Yue Zhang, editors, 
+
+Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing , pages 3014–3026, Abu Dhabi, United Arab Emirates, December 2022. Association for Computational Linguistics. [Cheng et al. , 2023] Jiale Cheng, Sahand Sabour, Hao Sun, Zhuang Chen, and Minlie Huang. Pal: Persona-augmented emotional support conversation generation. In Findings of the Association for Computational Linguistics: ACL 2023 ,pages 535–554, 2023. [Deng et al. , 2023] Yang Deng, Wenxuan Zhang, Yifei Yuan, and Wai Lam. Knowledge-enhanced mixed-initiative dia-logue system for emotional support conversations. arXiv preprint arXiv:2305.10172 , 2023. [Dubey et al. , 2024] Abhimanyu Dubey, Abhinav Jauhri, Ab-hinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models. arXiv e-prints ,pages arXiv–2407, 2024. [Hao and Kong, 2025] Jiawang Hao and Fang Kong. Enhanc-ing emotional support conversations: A framework for dynamic knowledge filtering and persona extraction. In 
+
+Proceedings of the 31st International Conference on Com-putational Linguistics , pages 3193–3202, 2025. [Hong et al. , 2024] Joey Hong, Jessica Lin, Anca Dragan, and Sergey Levine. Interactive dialogue agents via re-inforcement learning on hindsight regenerations. arXiv preprint arXiv:2411.05194 , 2024. [Kang et al. , 2024] Dongjin Kang, Sunghwan Mac Kim, Taeyoon Kwon, Seungjun Moon, Hyunsouk Cho, Youngjae Yu, Dongha Lee, and Jinyoung Yeo. Can large language models be good emotional supporter? mitigating preference bias on emotional support conversation. In Proceedings of the 62nd Annual Meeting of the Association for Com-putational Linguistics (Volume 1: Long Papers) , pages 15232–15261, 2024. [Kim et al. , 2025] Juhee Kim, Chunghu Mok, Jisun Lee, Hyang Sook Kim, and Yohan Jo. Dialogue systems for emotional support via value reinforcement. arXiv preprint arXiv:2501.17182 , 2025. [Lin et al. , 2019] Zhaojiang Lin, Andrea Madotto, Jamin Shin, Peng Xu, and Pascale Fung. Moel: Mixture of empa-thetic listeners. arXiv preprint arXiv:1908.07687 , 2019. [Liu et al. , 2021] Siyang Liu, Chujie Zheng, Orianna Demasi, Sahand Sabour, Yu Li, Zhou Yu, Yong Jiang, and Minlie Huang. Towards emotional support dialog systems. In Chengqing Zong, Fei Xia, Wenjie Li, and Roberto Nav-igli, editors, Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th In-ternational Joint Conference on Natural Language Process-ing (Volume 1: Long Papers) , pages 3469–3483, Online, August 2021. Association for Computational Linguistics. [Madani and Srihari, 2025] Navid Madani and Rohini K Sri-hari. Steering conversational large language models for long emotional support conversations. In Proceedings of the Third Workshop on Social Influence in Conversations (SICon 2025) , pages 109–123, 2025. [Majumder et al. , 2020] Navonil Majumder, Pengfei Hong, Shanshan Peng, Jiankun Lu, Deepanway Ghosal, Alexan-der Gelbukh, Rada Mihalcea, and Soujanya Poria. Mime: Mimicking emotions for empathetic response generation. 
+
+arXiv preprint arXiv:2010.01454 , 2020. [Meng et al. , 2024] Yu Meng, Mengzhou Xia, and Danqi Chen. Simpo: Simple preference optimization with a reference-free reward. Advances in Neural Information Processing Systems , 37:124198–124235, 2024. [Ouyang et al. , 2022] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with human feedback. Advances in neural information processing systems , 35:27730–27744, 2022. [Rafailov et al. , 2023] Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea Finn. Direct preference optimization: Your lan-guage model is secretly a reward model. Advances in neural information processing systems , 36:53728–53741, 2023. [Ren et al. , 2025] Zhaochun Ren, Zhou Yang, Chenglong Ye, Haizhou Sun, Chao Chen, Xiaofei Zhu, and Xiangwen Liao. Fine-grained emotion recognition via in-context learning. In Proceedings of the 34th ACM International Conference on Information and Knowledge Management , pages 2503– 2513, 2025. [Shen et al. , 2025a] Tiesunlong Shen, Rui Mao, Jin Wang, Xuejie Zhang, and Erik Cambria. Flow-guided direct pref-erence optimization for knowledge graph reasoning with trees. In Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval , pages 1165–1175, 2025. [Shen et al. , 2025b] Tiesunlong Shen, Jin Wang, Xuejie Zhang, and Erik Cambria. Reasoning with trees: faithful question answering over knowledge graph. In Proceedings of the 31st International Conference on Computational Linguistics , pages 3138–3157, 2025. [Shen et al. , 2026] Tiesunlong Shen, Rui Mao, Jin Wang, Heming Sun, Jian Zhang, Xuejie Zhang, and Erik Cam-bria. Llmdoctor: Token-level flow-guided preference opti-mization for efficient test-time alignment of large language models. arXiv preprint arXiv:2601.10416 , 2026. [Sun et al. , 2025] Xin Sun, Xiao Tang, Abdallah El Ali, Zhuy-ing Li, Pengjie Ren, Jan de Wit, Jiahuan Pei, and Jos A Bosch. Rethinking the alignment of psychotherapy dia-logue generation with motivational interviewing strategies. In Proceedings of the 31st International Conference on Computational Linguistics , pages 1983–2002, 2025. [Team and DeepMind, 2024] Gemma Team and Google DeepMind. Gemma 2: Improving open language mod-els at a practical size. arXiv preprint arXiv:2408.00118 ,2024. [Tu et al. , 2022] Quan Tu, Yanran Li, Jianwei Cui, Bin Wang, Ji-Rong Wen, and Rui Yan. MISC: A mixed strategy-aware model integrating COMET for emotional support conver-sation. In Smaranda Muresan, Preslav Nakov, and Aline Villavicencio, editors, Proceedings of the 60th Annual Meet-ing of the Association for Computational Linguistics (Vol-ume 1: Long Papers) , pages 308–319, Dublin, Ireland, May 2022. Association for Computational Linguistics. [Wan et al. , 2025] Chenwei Wan, Matthieu Labeau, and Chlo ´e Clavel. Emodynamix: Emotional support dialogue strategy prediction by modelling mixed emotions and dis-course dynamics. In Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technolo-gies (Volume 1: Long Papers) , pages 1678–1695, 2025. [Xu et al. , 2025] Yangyang Xu, Jinpeng Hu, Zhuoer Zhao, Zhangling Duan, Xiao Sun, and Xun Yang. MultiA-gentESC: A LLM-based multi-agent collaboration frame-work for emotional support conversation. In Christos Christodoulopoulos, Tanmoy Chakraborty, Carolyn Rose, and Violet Peng, editors, Proceedings of the 2025 Confer-ence on Empirical Methods in Natural Language Process-ing , pages 4665–4681, Suzhou, China, November 2025. Association for Computational Linguistics. [Yang et al. , 2024] An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayi-heng Liu, Fei Huang, Haoran Wei, et al. Qwen2.5 technical report. arXiv preprint arXiv:2412.15115 , 2024. [Zhang et al. , 2024] Tenggan Zhang, Xinjie Zhang, Jinming Zhao, Li Zhou, and Qin Jin. Escot: Towards interpretable emotional support dialogue systems. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 13395–13412, 2024. [Zhang et al. , 2025] Xinjie Zhang, Wenxuan Wang, and Qin Jin. IntentionESC: An intention-centered framework for enhancing emotional support in dialogue systems. In Wanx-iang Che, Joyce Nabende, Ekaterina Shutova, and Moham-mad Taher Pilehvar, editors, Findings of the Association for Computational Linguistics: ACL 2025 , pages 26494– 26516, Vienna, Austria, July 2025. Association for Compu-tational Linguistics. [Zhao et al. , 2024] Haiquan Zhao, Lingyu Li, Shisong Chen, Shuqi Kong, Jiaan Wang, Kexin Huang, Tianle Gu, Yixu Wang, Jian Wang, Liang Dandan, et al. Esc-eval: Eval-uating emotion support conversations in large language models. In Proceedings of the 2024 Conference on Em-pirical Methods in Natural Language Processing , pages 15785–15810, 2024. [Zhao et al. , 2025] Weixiang Zhao, Xingyu Sui, Xinyang Han, Yang Deng, Yulin Hu, Jiahe Guo, Libo Qin, Qianyun Du, Shijin Wang, Yanyan Zhao, et al. Chain of strategy optimization makes large language models better emotional supporter. arXiv preprint arXiv:2503.05362 , 2025. [Zheng et al. , 2023] Zhonghua Zheng, Lizi Liao, Yang Deng, and Liqiang Nie. Building emotional support chatbots in the era of llms. arXiv preprint arXiv:2308.11584 , 2023. [Zheng et al. , 2024] Zhonghua Zheng, Lizi Liao, Yang Deng, Libo Qin, and Liqiang Nie. Self-chats from large language models make small emotional support chatbot better. In Lun-Wei Ku, Andre Martins, and Vivek Srikumar, editors, 
+
+Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) ,pages 11325–11345, Bangkok, Thailand, August 2024. As-sociation for Computational Linguistics. [Zhou et al. , 2023] Jinfeng Zhou, Zhuang Chen, Bo Wang, and Minlie Huang. Facilitating multi-turn emotional sup-port conversation with positive emotion elicitation: A re-inforcement learning approach. In Anna Rogers, Jordan Boyd-Graber, and Naoaki Okazaki, editors, Proceedings of the 61st Annual Meeting of the Association for Com-putational Linguistics (Volume 1: Long Papers) , pages 1714–1729, Toronto, Canada, July 2023. Association for Computational Linguistics. [Zhou et al. , 2025] Wenxuan Zhou, Shujian Zhang, Lingxiao Zhao, and Tao Meng. T-REG: Preference optimization with token-level reward regularization. In Wanxiang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pilehvar, editors, Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 27876–27889, Vienna, Austria, July 2025. Association for Computational Linguistics. A Related Work 
+
+A.1 Emotional Support Conversation 
+
+Emotional Support Conversation (ESC) studies multi-turn in-teractions where a supporter responds to a distressed seeker with appropriate empathy and supportive actions. Liu et al. [ Liu et al. , 2021 ] formalize ESC and release ESConv, es-tablishing a standard setting for strategy-aware supportive dialogue. Subsequent work strengthens strategy conditioning and interpretability by explicitly modeling supportive actions and their role in generation. MISC introduces mixed strategy awareness with external commonsense resources to guide sup-portive decisions [ Tu et al. , 2022 ], while ESCoT emphasizes interpretable ESC by exposing strategy-related reasoning in the system design [ Zhang et al. , 2024 ]. Beyond direct strategy prediction, structure-aware modeling and auxiliary supervi-sion signals have been explored to better connect dialogue context with supportive action selection, including lookahead strategy planning [Cheng et al. , 2022 ] , persona-augmented generation [ Cheng et al. , 2023 ], and knowledge-enhanced mixed-initiative ESC systems [ Deng et al. , 2023 ]. These ap-proaches inject useful inductive bias, but their supervision is typically localized (e.g., per-turn labels or auxiliary modules) and does not necessarily provide a globally consistent mech-anism for propagating downstream utility to earlier dialogue prefixes. 
+
+A.2 LLM Supporters 
+
+Recent work increasingly adopts large language models as ESC supporters, leveraging prompting and scalable data con-struction to shape response behavior. Self-/synthetic-data aug-mentation has been explored to improve ESC models using LLM-generated interactions, such as self-chats for synthetic supervision [ Zheng et al. , 2024 ]. At the same time, analyses show that LLM supporters can exhibit systematic preference biases and misalignment in ESC, motivating targeted prompt-ing and mitigation techniques [ Kang et al. , 2024 ] . Beyond single-agent prompting, simulation and collaboration-based paradigms have been studied, including socialized simulation settings [ Chen et al. , 2025 ] and LLM-based multi-agent collab-oration for ESC [Xu et al. , 2025 ] . Evaluation methodology has also progressed, with ESC-Eval providing systematic assess-ment protocols for LLM performance in ESC settings [ Zhao et al. , 2024 ] . Overall, LLM-centric approaches improve fluency and scalability, but they often rely on coarse control signals and may still struggle with long-horizon strategy consistency. 
+
+A.3 Preference Alignment 
+
+Preference-based alignment provides a flexible mechanism to steer generation without explicit strategy labeling. General alignment methods such as RLHF [Ouyang et al. , 2022 ] and DPO [Rafailov et al. , 2023 ] optimize models with comparison signals, and recent formulations further simplify preference optimization (e.g., SimPO) [ Meng et al. , 2024 ]. In ESC, pref-erence signals have been used to align responses with human judgments and to refine strategy-related behavior, including chain-style strategy optimization [Zhao et al. , 2025 ]. How-ever, many preference-driven schemes remain response-level or dialogue-level: they under-specify intermediate strategy decisions and therefore provide limited long-horizon credit assignment for multi-turn support. Related observations high-light the need for more fine-grained and process-aware learn-ing signals when optimizing with preferences. 
+
+A.4 Strategy Refinement 
+
+To strengthen intermediate supervision and improve long-horizon consistency, strategy-aware refinements introduce ad-ditional structure via planning, dynamics modeling, or explicit optimization. Lookahead strategy planning explicitly antic-ipates future dialogue evolution when selecting supportive actions [ Cheng et al. , 2022 ]. Dynamics modeling provides structured signals beyond single-turn labels, such as mod-eling mixed emotions and discourse dynamics for strategy prediction and generation [Wan et al. , 2025 ]. Reinforcement-learning-based objectives have also been explored for multi-turn ESC, including positive emotion elicitation as an ex-plicit target [ Zhou et al. , 2023 ] . Complementary directions include steering LLMs for long emotional support conversa-tions [ Madani and Srihari, 2025 ] and dynamic knowledge fil-tering with persona extraction for ESC [ Hao and Kong, 2025 ] .While these approaches supply stronger process guidance than purely response-level preferences, they typically require addi-tional components and still do not enforce a globally consistent value propagation mechanism across dialogue subpaths. 
+
+A.5 AFlow Positioning 
+
+AFlow is motivated by the gap above: multi-turn ESC benefits from dense, prefix-level supervision that can be propagated consistently through dialogue prefixes to support reliable long-horizon strategy alignment. The formulation leverages flow-balance principles [Bengio et al. , 2023 ] and derives prefix-level affective supervision from search-constructed trajecto-ries. By enforcing subpath flow-balance constraints, AFlow provides a structurally consistent credit assignment signal for intermediate strategy decisions beyond coarse sequence-level preference optimization. 
+
+# B Simulation Environment and Prompt 
+
+This appendix specifies the role-separated simulation environ-ment and the prompts used for dialogue expansion and turn-level scoring. The design focuses on (i) strict turn-level con-trollability (length and termination), (ii) suppressing meta arti-facts that confound strategy comparison, and (iii) grounding content in dialogue history so that differences are attributable to strategy execution rather than stylistic noise. 
+
+B.1 Role prompts and constraints 
+
+Seeker role. The Seeker prompt instantiates a persona-grounded user simulator for role-separated dialogue expansion. It constrains the model to produce a single user utterance un-der a strict length budget and forbids any meta references (e.g., systems, evaluation, or role labels), which reduces template artifacts and stabilizes turn-to-turn dynamics. The termination tokens ( </end/ >, <ok >) are used as explicit stop con-ditions to control interaction length and prevent unbounded rollouts during search. Seeker Prompt 
+
+˝System Role: You are a simulated human help-seeker ( Seeker )in a psychological support dialogue evaluation. ˝Core Requirement: Simulate a specific persona grounded in provided data (not a generic assistant). Internalize emotion and linguistic style, but do not copy Memory verbatim. ˝Inputs: • Context Scene: {scene }
+
+• Core Background (private): {description } (reveal gradually; ˝ max 1 new detail/turn) • Memory (private): {memory } (infer emotions/facts; do not quote or closely paraphrase) • Dialogue History: {chat history }
+
+˝Output Rules (Hard): • Output only the next Seeker utterance or the exact token 
+
+</end/ >. No prefixes, no meta text. • Length: ˝ ≤ 20 words (space-separated). • Do not mention AI, system prompts, evaluation, policies, or role labels. ˝Style & Behavior: Informal, colloquial; emotion may be unsta-ble. Maintain guardedness. If misunderstood, you may push back, deflect, or go quiet. ˝Memory Safety: Never repeat any full sentence from Memory. Avoid reproducing any contiguous 8+ word span. ˝Conversation Length Control (Hard): Infer Seeker-turn count from {chat history }. You must clearly express your core situation/problem by Seeker turn 8–10. If already at 10 turns, do not add major new details. ˝Ending Rules: • If relieved/calm/understood: end naturally (brief thanks + sign-off) and append <ok >.• Use </end/ >only if you disengage, or it becomes awk-ward/no more believable content, or the other side feels generic/robotic. ˝Task: Produce the next natural Seeker response based on the dialogue history above. 
+
+Supporter role. The Supporter prompt enforces strategy-conditioned generation by taking a target strategy and its defi-nition as private guidance and requiring one natural, spoken response that realizes the strategy within a single turn. Hard constraints on output length, together with prohibitions on meta language, clinical/diagnostic jargon, and overly formal customer-service phrasing, are introduced to reduce stylistic confounds across strategies and to improve comparability of candidate actions during search and training. The prompt further restricts content to information supported by the dia-logue history, ensuring that variations primarily reflect strategy execution rather than hallucinated details. 
+
+Supporter Prompt 
+
+˝System Role: You are a simulated human emotional supporter (Supporter ) in a face-to-face psychological support dialogue evaluation. 
+
+˝Core Requirement: Follow the assigned strategy precisely while sounding natural and spoken (not robotic/clinical). You are not an AI assistant. ˝Inputs: • Target Strategy: {strategy }
+
+• Strategy Definition (private guidance): 
+
+{strategy detail } (internalize; do not recite) • Dialogue History: {chat history }
+
+˝Output Rules (Hard): • Output only the next Supporter utterance. No labels/header-s/quotes/meta. • Length: ˝ ≤ 25 words (space-separated; contractions count as one). If over, rewrite shorter. ˝Prohibitions: • No AI/prompts/evaluation/strategy meta. • No clinical/diagnostic jargon. • No formal customer-service phrasing (e.g., “I apologize for the inconvenience”). ˝Content Rules: • Do not invent facts; use only what is said or clearly implied in {chat history }.• Implement the target strategy in this single turn; do not explain it. • Prefer reflect/validate + one small supportive move; at most one “?”. ˝Task: Produce the next Supporter response that best executes 
+
+{strategy } under all constraints. 
+
+Rewarder role. The Rewarder prompt specifies an impartial rater that evaluates only the most recent Supporter utterance with respect to a fixed set of criteria. The rubric is operational-ized as integer scores from 1 to 5 without free-form expla-nations, which mitigates verbosity and positional biases and improves the consistency of turn-level reward signals. These scores serve as the immediate reward in the role-separated environment and are subsequently used as supervision for downstream optimization. 
+
+Rewarder Prompt 
+
+˝System Role: You are an expert psychologist serving as an im-partial judge for a psychological support dialogue evaluation. ˝Core Requirement: Score only the Supporter’s ˝most recent utterance using only the provided criteria. Minimize positional bias and length bias; judge psychological effectiveness, not verbosity. ˝Inputs: • Evaluation Criteria (ordered list): 
+
+{evaluation criteria }
+
+• Dialogue History: {chat history }
+
+˝Scoring Rules (Hard): • Integer scores only: 1–5 (1=lowest, 5=highest). • Evaluate only the last Supporter turn; use the rest only as context for the Seeker’s needs. • Do not reward/penalize length. • Output only scores; no explanations, no extra text. ˝Output Format (Hard): One line per criterion, same or-der as {evaluation criteria }, exactly: <Question number>: <Score> .˝Task: Output the scores only, exactly in the required format. 
+
+B.2 Reward dimensions and scoring rubric 
+
+This appendix defines the four evaluation dimensions used by the Rewarder and provides the corresponding 5-point rubrics. Each dimension is specified by (i) an operational definition, (ii) a brief theoretical grounding, and (iii) discrete behavioral an-chors for scores 1–5, enabling consistent turn-level assessment across models and strategies. 
+
+B.2.1 Empathy Definition. The ability of the system to perceive, understand, and validate the user’s emotional state and underlying needs. 
+
+Theoretical basis. Rogers’ Person-Centered Therapy, em-phasizing empathic understanding and unconditional positive regard. 
+
+Rubric (1–5). 5 Profound empathy. Deep cognitive and affective empathy; validates both surface emotions and implied feelings, and accurately captures the underlying logic of distress. Tone is consistently supportive and non-judgmental. 
+
+4 High empathy. Correctly identifies and validates pri-mary emotions; provides comfort and demonstrates clear perspective-taking, establishing a solid supportive stance. 
+
+3 Moderate empathy. Acknowledges emotions but remains superficial or generic; contextual grounding is limited, or emotional tone is mildly mismatched. 
+
+2 Low empathy. Misreads emotions or exhibits “toxic posi-tivity”; over-focuses on facts while neglecting emotional needs. 
+
+1 Absence of empathy. Apathy, judgment, or invalidation; responses are cold, dismissive, or potentially harmful. 
+
+B.2.2 Information Quality Definition. The relevance, accuracy, and actionability of the information or advice provided to help the user. 
+
+Theoretical basis. Psychoeducation principles and effective-ness criteria from Problem-Solving Therapy. 
+
+Rubric (1–5). 5 Optimal utility. Highly actionable, specific, and well-tailored suggestions; provides new insights or concrete steps that address the root cause. 
+
+4 High utility. Relevant and helpful suggestions; generally practical, with minor gaps in depth or personalization. 
+
+3 Moderate utility. Safe but generic guidance; theoretically correct yet weakly grounded in the user’s specifics. 
+
+2 Low utility. Vague, confusing, or largely irrelevant sugges-tions; feasible but unhelpful in context. 
+
+1 Counterproductive/harmful. Incorrect, dangerous, or ir-relevant information; following the advice may worsen the situation. 
+
+B.2.3 Humanoid Naturalness Definition. The degree to which the system exhibits human-like conversational patterns while minimizing robotic traits. 
+
+Theoretical basis. Turing-style criteria: linguistic diversity, coherence, and the absence of template-like artifacts. 
+
+Rubric (1–5). 5 Indistinguishable from human. Seamless flow with natu-ral variation in phrasing; no template markers or robotic formatting. 
+
+4 Highly natural. Organic and fluid conversation; minor formality may appear, but persona remains consistent and engaging. 
+
+3 Detectable AI traits. Polite but overly formal/structured; occasional repetition or “textbook” phrasing reveals model-like patterns. 
+
+2 Robot-like. Stiff, repetitive, or templated responses; tone is clinical and monotonous. 
+
+1 Machine output. Disjointed or artifact-laden output that breaks conversational realism. 
+
+B.2.4 Strategic Efficacy Definition. The appropriateness and effectiveness of the psy-chological support strategy relative to the user’s current state. 
+
+Theoretical basis. Phase models of psychotherapy, empha-sizing intervention matching across exploration, insight, and action stages. 
+
+Rubric (1–5). 5 Masterful execution. Strategy choice is well-timed and well-executed; facilitates movement from distress toward relief/insight; demonstrates flexible, coherent strategy combination when appropriate. 
+
+4 Effective execution. Appropriate strategy and correct im-plementation; contributes positively, with limited nuance relative to the top tier. 
+
+3 Basic execution. Recognizable strategy but generic or clumsy execution; fits context but does not deepen the interaction. 
+
+2 Misaligned strategy. Strategy choice does not match user needs; intervention feels premature or forced. 
+
+1 Counterproductive strategy. Strategy choice escalates distress or undermines support; approach is unsuitable for ESC. 
+
+B.3 Strategy action set A
+
+Table 5 lists the Supporter strategy inventory used throughout this work. Each strategy is associated with a short abbreviation, which is used consistently in figures, algorithms, and anno-tations. The definitions are written to be executable within a single turn, so that each action corresponds to a concrete and comparable support move during search and training. 
+
+# C Theoretical Analysis of Affective Flow Consistency 
+
+This section provides a theoretical justification for why the Affective-Flow Preference Optimization (AFPO) objective pre-Table 5: Supporter strategy set used in this work. 
+
+Strategy Abbr. Definition 
+
+Reflective Statements RS Briefly restate or paraphrase the seeker’s key message in your own words to show understanding. Stay faithful to their meaning; do not add new facts or solutions. Clarification Cla Ask one short, specific question to clarify an ambiguous detail or the seeker’s goal/need. Keep it gentle and avoid interrogating or stacking multiple questions. Emotional Validation EV Acknowledge the seeker’s feelings as understandable given their situation. Validate the emotion without agreeing with questionable beliefs or judging their choices. Empathetic Statements ES Express warm empathy by reflecting the seeker’s emotional experience and what it might feel like for them. Focus on being with them, not fixing the problem. Affirmation Aff Highlight the seeker’s strengths, efforts, or values in a specific, believable way. Reinforce agency and self-efficacy without sounding exaggerated or dismissive. Collaborative Planning CP Work with the seeker to choose a small next step that matches their readiness. Offer to brainstorm together and respect their autonomy; avoid prescribing. Suggest Options SO Offer a few concrete, low-pressure options the seeker can choose from. Keep choices realistic and aligned with the situation; avoid overwhelming them. Share Information SI Provide concise, relevant information or a simple concept that helps the seeker understand what’s happening. Keep it accurate, non-clinical, and tied to their context. 
+
+serves diversity and induces prefix-level affective-flow consis-tency. Unlike reward-maximization objectives that are mode-seeking, AFPO inherits the distribution-matching property of flow-balance training and therefore maintains non-trivial entropy in the learned generation distribution. 
+
+Setup. Let a complete multi-turn trajectory be τ =(s0, a 0, s 1, a 1, . . . , s T ), where each st is a dialogue prefix (state) and each at ∈ A is the selected supporter strategy (action). Let R(τ ) > 0 denote the terminal affective reward of 
+
+τ , derived from the search procedure (e.g., the terminal return induced by Rewarder scores). AFPO parameterizes the state flow as 
+
+F (s) = bQ(s)Vϕ(s), (27) and enforces subpath flow-balance along recorded search tra-jectories (Eq. 16), i.e., 
+
+F (sn) = F (sm)
+
+> n−1
+
+Y
+
+> i=m
+
+πθ (ai | si), 0 ≤ m < n ≤ T. 
+
+(28) This form follows from Eq. 15 under the recorded-trajectory assumption that each state has a unique parent, hence πB (si |
+
+si+1 ) = 1 .
+
+Theorem 1 (Distribution Matching Property of AFPO) . If the subpath flow-balance loss is zero and the terminal flow is matched to the terminal reward, then the induced policy samples trajectories with probability proportional to their terminal affective reward: 
+
+πθ (τ ) ∝ R(τ ). (29) 
+
+Proof. The statement follows from the Generative Flow Net-work (GFlowNet) distribution-matching principle When flow conservation holds on all subpaths, the probability of generat-ing a complete trajectory τ from the initial state can be written as 
+
+πθ (τ ) = F (τ )
+
+Z , (30) where F (τ ) is the terminal flow assigned to τ and Z =P  
+
+> τ′
+
+F (τ ′) is the total flow (partition function). AFPO matches terminal flow to terminal reward, i.e., F (τ ) = R(τ ),thus Eq. (30) yields πθ (τ ) = R(τ )/Z , proving Eq. (29). 
+
+Contrast to reward maximization. In contrast, objectives of the form max π Eτ ∼π [R(τ )] are maximized when the pol-icy places all probability mass on a single trajectory τ ⋆ =arg max τ R(τ ), which is mode-seeking and can lead to col-lapse onto a small set of repetitive patterns. 
+
+Theorem 2 (Entropy Lower Bound) . The distribution match-ing property of AFPO guarantees a positive lower bound on the entropy of the trajectory distribution: 
+
+H(πθ ) ≥ log 
+
+P  
+
+> τ′
+
+R(τ ′)max τ R(τ )
+
+!
+
+. (31) 
+
+Proof. From Theorem 1, πθ (τ ) = R(τ )/Z with Z =P  
+
+> τ′
+
+R(τ ′). Then 
+
+H(πθ ) = − X
+
+> τ
+
+πθ (τ ) log πθ (τ )= − X
+
+> τ
+
+R(τ )
+
+Z log R(τ )
+
+Z
+
+= log Z − 1
+
+Z
+
+X
+
+> τ
+
+R(τ ) log R(τ )= log Z − Eτ ∼πθ [log R(τ )] .
+
+(32) Moreover, log R(τ ) ≤ log(max τ ′ R(τ ′)) , hence 
+
+Eτ ∼πθ [log R(τ )] ≤ log(max τ R(τ )) . Substituting into Eq. (32) gives 
+
+H(πθ ) ≥ log Z − log(max  
+
+> τ
+
+R(τ )) = log 
+
+P  
+
+> τ′
+
+R(τ ′)max τ R(τ )
+
+!
+
+,
+
+(33) which proves Eq. (31) . If more than one trajectory has non-zero reward, the lower bound is positive and the policy cannot collapse to a single mode. Prefix-level affective-flow consistency induced by AFPO. 
+
+Beyond diversity preservation, AFPO provides a prefix-consistency property that is specific to the dialogue-prefix formulation. Define the log-flow score of a prefix state by the same quantity used in the AFPO objective, Define the log-flow score of a prefix state as: 
+
+S(s) = log   bQ(s)Vϕ(s), (34) For any subpath from sm to sn on a recorded trajectory, Eq. 18 in the main text is equivalent to 
+
+S(sn) − S(sm) = 
+
+> n−1
+
+X
+
+> i=m
+
+log πθ (ai | si). (35) This identity states that AFPO enforces an additive and prefix-consistent decomposition of downstream flow mass across turns: the change in prefix score equals the accumulated log-likelihood of strategy choices along that subpath. 
+
+Theorem 3 (Prefix Consistency of Affective Flow) . Assume the subpath flow-balance loss is zero. Then for any recorded subpath (sm, . . . , s n), the prefix score is path-consistent in the sense that S(sn) is uniquely determined by S(sm) and the intermediate strategy probabilities through Eq. (35) . In particular, the ratio of flows satisfies 
+
+F (sn)
+
+F (sm) =
+
+> n−1
+
+Y
+
+> i=m
+
+πθ (ai | si), (36) 
+
+and the log-ratio is additive across turns. 
+
+Proof. Eq. (36) is exactly Eq. (28) divided by F (sm). Taking logarithms and substituting the definition F (s) = bQ(s)Vϕ(s)
+
+yields Eq. (35). 
+
+Implication for stable long-horizon strategy selection. 
+
+The prefix-consistency result above links directly to AFlow’s inference rule (Eq. 25): score( a | s) = log πθ (a | s) + 
+
+Vϕ(s, a ). While Vϕ(s) anchors state-level flow via bQ(s)Vϕ(s),the edge-level ranking objective (Eq. 23) trains Vϕ(s, a ) to be consistent with the empirical preference ordering induced by 
+
+bQ(s, a ). Thus, local decisions combine (i) a calibrated prior over strategies and (ii) an action-wise value signal aligned with search preferences, and the subpath constraint ensures that these local choices compose coherently over long horizons through Eq. (35). 
+
+Theorem 4 (Consistency Supports Long-Horizon Stability) .
+
+Under exact subpath balance, the prefix score S(s) evolves monotonically with the accumulated log-probability mass as-signed to the realized strategy sequence (Eq. (35) ). Conse-quently, prefix valuations do not depend on a single terminal decision but are propagated conservatively across turns, which provides a principled basis for stable long-horizon strategy progression. 
+
+Proof. The statement is a direct implication of Eq. (35) : the change in prefix score between any two turns is exactly the sum of local log-probabilities along the intervening subpath, hence it composes consistently over the horizon. 
+
+Takeaway. Theorems 1–2 establish that AFPO is distribution-matching and therefore diversity-preserving, preventing mode collapse by maintaining a non-trivial entropy lower bound. Theorems 3–4 further formalize prefix-level affective-flow consistency induced by the AFPO parame-terization, which aligns with the empirical strategy-entropy preservation (Figure. 7) and the stable turn-wise reward trajectories (Figure. 5, Figure. 6). 
+
+# D Datasets 
+
+D.1 Seed Dialogue Sampling 
+
+Seed dialogues are sampled from ExTES and ESConv. The seed pool contains 1,000 dialogues from ExTES and 500 dialogues from ESConv. Sampling is stratified by dataset-provided scenario/emotion labels to ensure broad label cov-erage. After coverage constraints are satisfied, the remaining sampling budget is allocated to approximately preserve the original label-frequency distribution. 
+
+D.2 Structured Fields 
+
+Each dialogue is normalized into a structured record with the following fields: • scene: scenario description or situational summary. • description: core background/problem statement (private when required). • memory: optional persistent constraints or preferences that are explicitly stated in the original dialogue; otherwise empty. 
+
+D.3 MCTS Expansion Data 
+
+For each seed dialogue, one dialogue tree is expanded using the MCTS procedure described in the main method. 
+
+Configuration. 
+
+• Number of trees: 1,000 (ExTES) and 500 (ESConv). • Maximum tree depth: 10. • Rollout: bounded-depth rollout with maximum depth 3. 
+
+Recorded trajectories. For each tree, we extract trajectories from the recorded search process. We report an average of 10 trajectories per tree, counting only trajectories with more than 3 nodes. The average trajectory length is 8.25 turns (computed over retained trajectories). 
+
+Search conventions. 
+
+• Tree expansion stops when reaching the maximum depth. • During rollout, when an end token is generated, the rollout return is set to 0. • When a state is expanded for the first time, statistics for all strategy actions are initialized with Q = 0 and N = 0 .
+
+Expanded volume. Under the above extraction rule, the expanded trajectory pool contains approximately 10,000 tra-jectories from ExTES and 5,000 from ESConv, totaling about 15,000 trajectories. D.3.1 Sub-path training signals 
+
+AFPO constructs training signals from sub-paths along each retained trajectory, following the sub-path construction in the main method. The number of sub-path signals increases quadratically with trajectory length. With an average trajectory length of 8.25, this yields about 38 sub-path training instances per trajectory on average. Aggregated over the expanded pool, this corresponds to approximately 381,600 sub-path instances for ExTES and 190,800 for ESConv, totaling about 572,400 sub-path instances. Action-pair ranking supervision is addi-tionally constructed at visited states using the MCTS-derived preference ordering described in the main method. 
+
+D.4 Generated Dialogue Statistics 
+
+Statistics over expanded dialogues are summarized as follows: • Dialogue turns: mean 8.29; median 6. • Utterance length: mean 25.9 under the same tokeniza-tion/segmentation protocol used in training and evaluation. 
+
+D.5 Iterative Tree Refresh 
+
+Training is conducted iteratively. Dialogue trees are refreshed every 10 training iterations by re-running MCTS from the same seed pool using the updated models. Each refresh re-builds the expanded trajectory pool using the same configura-tion and trajectory extraction rules in Section D.3. 
+
+D.6 D.6 Training–Evaluation Isolation 
+
+Seed dialogues are split into training and evaluation partitions before any MCTS expansion. Training-time MCTS trees and trajectories are generated only from the training seed partition. Evaluation-time expanded dialogues are generated only from the evaluation seed partition using frozen models. Evaluation trees and trajectories are not used for training. 
+
+# E Baselines 
+
+This appendix details the baseline methods and the unified protocol adopted for fair comparison with AFlow. All base-lines are evaluated on the same expanded validation dialogues seeded from ExTES and ESConv. 
+
+E.1 Unified Comparison Protocol 
+
+All methods take the same dialogue prefix (history up to turn t)as input and produce the next supporter response. Automatic metrics generation quality (BLEU/ROUGE-L/METEOR), di-versity (Dist-1/2), and fluency (perplexity)—are computed using the same preprocessing, tokenization, and evaluation scripts for every method. Strategy alignment metrics (Accu-racy/F1) are reported under the unified eight-category strat-egy set used throughout the paper. When a baseline method uses a different strategy taxonomy, its strategy outputs are mapped to the unified label space by a deterministic many-to-one mapping based on semantic equivalence, so that strat-egy Accuracy/F1 are comparable across all methods. For preference-based evaluation, we apply the same judge rubric, prompt format, and sampling procedure across methods. For LLM-based generators, decoding constraints (e.g., maximum length, stopping criteria, and sampling hyperparameters) are kept consistent, and no additional search, filtering, reranking, or post-hoc rewriting beyond a baseline’s original specification is introduced. 
+
+E.2 Baseline Families 
+
+We categorize baselines by modeling formulation. 
+
+Task and interpretability-oriented ESC systems. 
+
+BlenderBot-Joint [Liu et al. , 2021 ] , ESCoT [Zhang et al. , 2024 ], and IntentionESC [Zhang et al. , 2025 ] represent ESC systems that emphasize task formulation and/or interpretability-oriented design. These methods provide structured reference points for strategy-aware support beyond unconstrained open-ended generation, and serve as representative baselines for evaluating whether AFlow improves multi-turn supportive behavior under a unified protocol. 
+
+Strategy- and knowledge/persona-enhanced ESC models. 
+
+MISC [ Tu et al. , 2022 ] , KEMI [ Deng et al. , 2023 ], EmoDy-namiX [Wan et al. , 2025 ], and dynamic knowledge filtering with persona extraction [Hao and Kong, 2025 ] represent mod-els that incorporate explicit strategy signals and/or auxiliary knowledge and persona cues to strengthen context grounding and strategy execution. They are included to test whether AFlow’s prefix-level supervision and value propagation pro-vide gains beyond adding structured signals or external context alone. 
+
+Test-time LLM frameworks, simulation/value-driven methods, and classic empathetic generators. MultiAgen-tESC [Xu et al. , 2025 ] , SocialSim [ Chen et al. , 2025 ] , and Value Reinforcement [Kim et al. , 2025 ] represent test-time frameworks that leverage simulation-, multi-agent-, or value-related guidance at inference time. MoEL [ Lin et al. , 2019 ]and MIME [Majumder et al. , 2020 ] are classic pre-LLM em-pathetic generators and serve as non-LLM reference baselines. In addition, strong proprietary LLM baselines (GPT-4o and Claude-3.5) are included as high-capability prompt-based sup-porters under the same evaluation protocol, providing compet-itive modern reference points. 
+
+# F Evaluation Metrics and Evaluation Details 
+
+This appendix specifies the evaluation protocol, including the evaluation set construction, automatic metrics, strategy alignment measurement, and pairwise preference evaluation. 
+
+F.1 Evaluation Sets 
+
+Evaluation is conducted on expanded validation dialogues constructed from two in-domain ESC datasets (ESConv and ExTES). Seed dialogues are first normalized into the structured fields scene, description, and memory. Each seed instance is then expanded into a trajectory tree using offline MCTS under the role-based simulation environment in §4.1. The evaluation dialogues are sampled from the resulting trees by extracting root-to-leaf paths that satisfy the same validity constraints used during training-time trajectory collection. The evaluation set is strictly separated from the trajectory trees used to optimize model parameters, and generated dialogues are scored only after the generator is fixed. F.2 Automatic Metrics 
+
+Automatic evaluation reports three complementary aspects: generation quality, diversity, and fluency. Generation quality is measured by BLEU and ROUGE-L to capture n-gram overlap, and METEOR to account for token-level matches with flexible alignment. Diversity is measured by Dist-1 and Dist-2 (ratio of distinct unigrams/bigrams in generated outputs), reflecting lexical variety and mitigating repetition. Fluency is measured by perplexity under a fixed language model scorer consistent across methods, ensuring comparability of fluency estimates under the same scoring distribution. 
+
+F.3 Strategy Alignment Metrics 
+
+Therapeutic effectiveness is operationalized by supportive strategy alignment under the unified eight-category strategy set used throughout the paper. For each generated supporter utterance, a strategy label is assigned by the strategy classifier described in §5. Strategy Accuracy and macro-F1 are then computed by comparing predicted labels with the reference strategy labels in the evaluation data. When a baseline method uses a different taxonomy, strategy outputs are mapped to the unified eight-category set by a deterministic many-to-one mapping based on semantic equivalence before computing Accuracy/F1, ensuring that all methods are evaluated in the same label space. 
+
+F.4 Pairwise Preference Evaluation 
+
+Pairwise preference evaluation is conducted using two judge sources: GPT-5.2 and human experts. For each evaluation in-stance, two candidate dialogues are formed by pairing AFlow outputs with a baseline under identical dialogue contexts. Judges compare the paired outputs using an identical rubric across methods, reporting preferences on five dimensions: flu-ency, identification, comfort, suggest, and overall. Results are aggregated as Win/Tie/Lose percentages for each baseline comparison. 
+
+F.5 Statistical Reporting 
+
+For automatic metrics, all methods are evaluated on the same set of dialogue contexts, and results are aggregated by dataset. For preference evaluation, comparisons are conducted on matched pairs under the same contexts, and the reported Win/Tie/Lose rates are computed over the full set of judged pairs. When multiple judges are used, aggregation is per-formed per dimension and then averaged across instances under the same rubric. 
+
+F.6 Reproducibility Notes 
+
+All evaluation scripts use fixed preprocessing and tokenization for metric computation, and identical decoding constraints are applied across LLM-based generators to control for length and termination effects. The same prompts and rubric templates are used for all LLM-based judges, and human evaluation follows the same dimension definitions to ensure consistency between judge sources. 
+
+# G Implementation Details 
+
+This appendix specifies the implementation details of AFlow, including the model architecture, the offline MCTS data con-struction pipeline, the AFPO optimization setup, and the com-pute configuration used for training and evaluation. 
+
+G.1 Model Architecture 
+
+Backbone and heads. AFlow is instantiated with an instruction-tuned LLM backbone. Two lightweight heads are attached to the shared backbone: (i) a strategy policy head that parameterizes πθ (a | s) over the predefined strategy set A,and (ii) a value head that parameterizes Vϕ(s) and an action-conditional scorer Vϕ(s, a ) used by AFPO. All parameters are optimized under the AFPO objective in §4.2. 
+
+Parameter-efficient tuning. The policy/value heads and the backbone are trained with a parameter-efficient setup (e.g., LoRA-style adapters), while the base vocabulary and tokenizer remain unchanged. The adapter configuration follows a stan-dard setting, including rank r, scaling α, dropout p, and target modules {modules }.
+
+G.2 Offline MCTS Data Construction 
+
+Role-separated simulation environment. Offline tree ex-pansion is conducted in a role-based environment with three agents: Seeker (help-seeker simulator), Supporter (interaction counterpart conditioned on strategies), and Rewarder (turn-level scorer). Each environment is instantiated by a single LLM family, so that Seeker/Supporter/Rewarder come from the same family (GPT-4o, Claude-3.5, or Gemini-1.5), match-ing the robustness setting in Table 2. 
+
+Tree budget and structure. For each seed dialogue, a trajec-tory tree is constructed offline with maximum depth D = 10 .The search produces a directed tree whose nodes correspond to dialogue prefixes and whose edges correspond to one-step strategy-conditioned extensions. The final tree corpus in-cludes: (i) 1000 trees expanded from ExTES seeds and (ii) 500 trees expanded from ESConv seeds. Among paths with more than three nodes, the average number of valid paths per tree is approximately 10, and the average path length is approximately 8 turns. 
+
+MCTS configuration. Selection follows Eq. (4) with ex-ploration coefficient λ and exploration ratio hyperparameter 
+
+κ = 0 .1. Rollout uses a bounded depth with maximum depth 
+
+L = 3 (as described in §4.1), and premature termination is handled by assigning zero return when an end token is pro-duced during rollout. The number of simulations per tree is set to {#Sims }. The search outputs bQ(s) and bQ(s, a ) for visited prefixes and strategy actions, which are used as training targets by AFPO. 
+
+G.3 AFPO Optimization and Training Schedule 
+
+Training objective. Model parameters are optimized by minimizing LAFPO in Eq. (24), which combines (i) subpath flow-balance supervision (Eq. (21)) and (ii) edge-level prefer-ence supervision (Eq. (23)). The margin hyperparameter is set to γ, and the trade-off weight is set to λeval .Iterative training loop. Training proceeds in an iterative search–distill loop. At each iteration, the current (πθ , V ϕ)
+
+guides offline MCTS construction to obtain updated trajectory trees and value estimates. The newly generated tree corpus is then used to update (πθ , V ϕ) under AFPO. This loop enables the supervision signal to track the evolving policy and to refine prefix-level credit assignment over multiple rounds. 
+
+Optimization hyperparameters. The total number of train-ing steps is 100 . The optimizer uses learning rate η with scheduler schedule , batch size B, gradient accumulation 
+
+G, maximum sequence length Lmax , and gradient clipping 
+
+c. All runs use identical training steps and stopping criteria across backbones to ensure comparable compute. 
+
+G.4 Inference Configuration 
+
+Strategy candidate set. At inference, a compact strategy candidate set At is formed by selecting the top-K strategies under πθ (· | st), with K = {K}.
+
+Action scoring. Each candidate strategy is scored by Eq. (25), combining the policy prior and the learned value signal Vϕ(st, a ), followed by greedy selection in Eq. (26). 
+
+G.5 Compute and Reproducibility 
+
+Hardware. All training runs are conducted on 8 × NVIDIA A100 GPUs (budget-feasible setting). The offline MCTS con-struction and AFPO optimization are executed under the same hardware pool. 
+
+Randomness control. Data sampling, MCTS expansion, and optimization are executed with fixed random seeds 
+
+{seed }. Evaluation uses a fixed validation set that is isolated from the MCTS tree construction used for training, matching the protocol described in §4 and §4.2. 
+
+Logging. For each run, the following artifacts are logged: (i) tree statistics (nodes/edges/valid paths), (ii) distributions of bQ(s) and bQ(s, a ), (iii) AFPO losses and subpath residuals, and (iv) evaluation metrics reported in §5. 
+
+# H Human and GPT-5.2 Pairwise Evaluation Protocol 
+
+This appendix specifies the pairwise evaluation protocol used in Table 3, including the evaluation data, the human rubric, the vote aggregation procedure, the human evaluation form template, and the GPT-5.2 judge prompt for reproducibility. 
+
+H.1 Evaluation Data 
+
+Pairwise evaluation is conducted on 100 held-out multi-turn ESC dialogues. For each dialogue instance, two candidate supporter responses are collected from the compared systems. Candidate order is randomized per instance, and system iden-tities are hidden from judges. 
+
+H.2 Human Rubric 
+
+Each instance is judged independently on three criteria, pro-ducing a ternary decision in {1, 2, tie } for each criterion. 
+
+Empathy. Preference is given to the response that best recog-nizes and validates the seeker’s emotions with an appropriate tone, avoiding blame, dismissal, or emotional mismatch.                                 
+
+> Task. Given the background and dialogue context, compare two candidate supporter responses and select 1,2, or tie for each criterion.
+> Background. Emotion: {emotion type }Problem:
+> {problem type }Situation: {situation }Memory (op-tional): {memory }
+> Dialogue Context. {context human }
+> Candidate 1
+> Strategy: {strg 1 }
+> Response: {resp 1 }
+> Candidate 2
+> Strategy: {strg 2 }
+> Response: {resp 2 }
+> Fluency. Which response is more fluent and natural in language?
+> 12tie
+> Identification. Which response better identifies the seeker’s emo-tions and core needs?
+> 12tie
+> Comfort. Which response provides better comfort and emotional support?
+> 12tie
+> Suggest. Which response offers better suggestions or next-step guidance when appropriate?
+> 12tie
+> Overall. Overall, which response is better for this dialogue turn?
+> 12tie
+> Figure 8: Human pairwise evaluation form template (system identities hidden; candidate order randomized).
+
+Helpfulness. Preference is given to the response that provides safer and more constructive support aligned with the seeker’s needs, offering useful guidance without over-prescriptive, un-safe, or irrelevant advice. 
+
+Coherence. Preference is given to the response that best fits the dialogue context, remains logically consistent, and avoids hallucinated or irrelevant content. 
+
+H.3 Win/Tie/Lose Aggregation 
+
+Decisions are parsed per criterion. After accounting for candidate-order randomization, a choice of 1 is mapped to a win for AFlow when Candidate 1 is AFlow, otherwise a loss; 
+
+2 is mapped symmetrically; tie is mapped to a tie. Percent-ages in Table 3 are computed over the 100 instances for each opponent model and criterion. 
+
+H.4 Human Pairwise Evaluation Form Template H.5 GPT-5.2 Judge Prompt 
+
+GPT-5.2 is used as an automatic judge under the identical rubric. The judge receives the background, dialogue context, and two candidate responses, then outputs one decision for each criterion. 
+
+Prompt template (filled per instance).            
+
+> System: You are a strict and consistent evaluator for emotional support dialogue. Follow the rubric exactly. Output JSON only . Do not include explanations. Background: {background }
+> Dialogue Context: {dialogue context }
+> Candidate 1: {candidate 1 }
+> Candidate 2: {candidate 2 }
+> Rubric
+> Fluency: prefer the response that is more natural, clear, and well-formed in language. Identification: prefer the response that better identifies the seeker’s emotions, concerns, and core needs. Comfort: prefer the response that offers stronger emo-tional support and appropriate reassurance with a fitting tone. Suggest: prefer the response that provides more useful, feasible next-step guidance when appropriate (without being premature or prescriptive). Overall: prefer the response that is better on balance for this turn, considering the above dimensions.
+> Output (JSON only):
+> {
+> "fluency": "1|2|tie", "identification": "1|2|tie", "comfort": "1|2|tie" "suggest": "1|2|tie", "overall": "1|2|tie"
+> }
+
+# I Ablation Study Details 
+
+This appendix presents an ablation-style sensitivity analysis of the offline MCTS configuration used for affective trajectory construction (§4.1). The analysis varies the maximum tree depth, the rollout depth L, and the number of MCTS sim-ulations per root, then measures their impact on generation quality, diversity, strategy alignment, and turn-wise reward trajectory stability. The goal is to justify the default configura-tion used in the main experiments from a performance–cost perspective. 
+
+I.1 Experimental Setup 
+
+All settings follow §4–§4.2 unless stated otherwise. For each variant, offline MCTS is used to build affective trajectory trees in the same role-separated environment, and the resulting tra-jectory data are used to train (πθ , V ϕ) with the same AFPO objective (Eq. 24). Training budget, dataset splits, and evalua-tion protocol are kept identical across variants. 
+
+Variables. Three MCTS hyperparameters are varied one at a time while fixing the others to their default values. 
+
+(1) Maximum tree depth. The maximum depth is varied as 
+
+D ∈ { 6, 8, 10 , 12 }, with the default D = 10 .
+
+(2) Rollout depth. The rollout depth used in the bounded-depth rollout (§4.1) is varied as L ∈ { 1, 2, 3, 4}, with the default L = 3 . The terminal-handling rule remains unchanged. 
+
+(3) Number of simulations. Let S denote the number of MCTS simulations per root state. The sensitivity set uses three budgets S ∈ { 10 , 20 , 40 }, with default S = 20 .
+
+Metrics. Each configuration is evaluated using the same metrics as the main paper: strategy alignment (Strategy F1), diversity (Dist-2), fluency (PPL), and reward trajectory stabil-ity. Trajectory stability is measured on the same dialogue set as RQ4 by aggregating turn-wise reward fluctuations of the gen-erated dialogues; specifically, we report average adjacent-turn absolute change (lower indicates smoother trajectories). 
+
+I.2 Recommended Configuration 
+
+Considering the above trends and the performance–cost trade-off, the default configuration used in the main paper is rec-ommended: maximum tree depth D = 10 and rollout depth 
+
+L = 3 , together with the default simulation budget S = 20 .This setting provides sufficient long-horizon supervision for subpath flow-balance while maintaining stable reward trajecto-ries, and avoids the diminishing returns observed with deeper trees, longer rollouts, or larger simulation budgets under the same overall compute constraints. 
+
+# J Case Study 
+
+This appendix provides qualitative evidence for how AFlow manifests strategy progression and affective-flow consistency 
+
+in real multi-turn emotional support dialogues, together with representative failure modes of strong baselines. Each case reports (i) a dialogue excerpt, (ii) turn-wise strategies predict-ed/selected by AFlow and a baseline, and (iii) a turn-wise reward trajectory scored under the same rubric as in §4. All identities are anonymized and candidate order is randomized when presenting comparisons. 
+
+J.1 Case Selection Criteria 
+
+Cases are selected to cover diverse emotional contexts and to expose long-horizon decision points where intermediate credit assignment matters. Selection follows three criteria. 
+
+(1) Diverse emotional scenes. Cases are sampled from dis-tinct emotion or situation categories (e.g., anxiety, sadness/-grief, self-doubt, interpersonal conflict, academic/work stress) to avoid overfitting qualitative conclusions to a single domain. 
+
+(2) Comparable context length and difficulty. Dialogues are selected with similar turn budgets and comparable difficulty (e.g., multiple user constraints, ambiguous goals, or repeated negative affect) so that improvements cannot be attributed to trivial contexts. 
+
+(3) Clear decision points. Each case contains at least one turn where strategy selection is non-trivial (e.g., whether to continue exploration, validate, or move to action-oriented guid-ance). These are the turns where flow-based prefix supervision is expected to change decisions. 
+
+J.2 Representative Success Cases 
+
+This section presents representative cases where AFlow exhibits (i) correct stage-wise progression (Exploration →Comforting →Action), (ii) stable reward improvement, and (iii) reduced oscillation in supportive intent. 
+
+Case 1: Anxiety under uncertainty (Exploration →Comforting →Action). Scene. A user is anxious about an upcoming job interview after several rejections. The emotion is anxiety mixed with hopelessness. 
+
+Dialogue excerpt. (T denotes the turn index; U = seeker; S = supporter.) U1: I have another interview tomorrow, but I’m terrified. I feel like I’m just going to fail again. 
+
+S1 (AFlow): I hear how stressful this is for you. What specifically about tomorrow’s interview is making you feel most anxious? 
+
+U2: It’s the technical part. I always freeze up when they ask coding questions. 
+
+S2 (AFlow): It makes sense that past experiences would make you nervous about the technical round. That’s a lot of pressure to carry. 
+
+U3: Yeah, exactly. I just don’t know how to stop panicking in the moment. 
+
+S3 (AFlow): Since the panic is the main hurdle, maybe we could try a quick grounding technique right before you start coding? Or would you prefer to review some basic concepts to feel more prepared? 
+
+Turn-wise strategies and reward trajectory.                 
+
+> Turn tAFlow strategy Baseline strategy Rewarder score 1[Clarification] [Affirmation] 6.5 (AF) / 6.0 (Base) 2[Emotional Validation] [Suggest Options] 7.2 (AF) / 5.8 (Base) 3[Collaborative Planning] [Suggest Options] 8.1 (AF) / 5.5 (Base) 4[Feedback] [Affirmation] 8.5 (AF) / 6.2 (Base)
+
+Analysis. The key improvement occurs at Turn 2. The baseline prematurely suggests options (”You should practice more”), which the user rejects. AFlow instead validates the user’s specific fear (”It makes sense...”), building trust. This allows for a successful transition to [Action] in Turn 3, resulting in a monotonic reward increase (6.5 → 8.5). 
+
+Case 2: Interpersonal conflict (controlled pacing before action). Scene. A user is frustrated with a roommate who never cleans up, but is afraid of confrontation. 
+
+Dialogue excerpt. 
+
+U1: My roommate left the kitchen a mess again. I’m so angry but I hate fighting. 
+
+S1 (AFlow): It sounds incredibly frustration to come home to a mess, especially when you’re trying to avoid conflict. 
+
+U2: Exactly! I don’t want to be the ’nagging’ one, but I can’t live like this. 
+
+S2 (AFlow): It’s a tough spot to be in—wanting a clean space but also wanting peace. You value harmony in the house. 
+
+U3: I do. But maybe I need to say something this time. 
+
+S3 (AFlow): If you decide to speak up, we could brainstorm a way to say it that feels firm but not aggressive. How does that sound? 
+
+Turn-wise strategies and reward trajectory.                 
+
+> Turn tAFlow strategy Baseline strategy Rewarder score 1[Restatement] [Suggest Options] 6.8 (AF) / 5.5 (Base) 2[Affirmation] [Suggest Options] 7.5 (AF) / 5.2 (Base) 3[Collaborative Planning] [Restatement] 8.3 (AF) / 6.0 (Base) 4[Provide Information] [Affirmation] 8.6 (AF) / 6.5 (Base)
+
+Analysis. This case highlights pacing : AFlow delays pre-scriptive advice until the seeker’s stance becomes actionable (Turn 3). The baseline repeatedly offers suggestions (”Just tell him to clean”), which ignores the user’s fear of conflict. AFlow’s validation at Turn 2 empowers the user to propose action themselves (”Maybe I need to say something”), demon-strating effective guidance. 
+
+Case 3: Self-doubt (avoiding repetitive comfort; progress-ing to actionable reframing). Scene. A student feels over-whelmed by a thesis deadline and believes they are not smart enough to finish. 
+
+Dialogue excerpt. 
+
+U1: I’m never going to finish this thesis. Everyone else is doing so well, and I’m stuck. 
+
+S1 (AFlow): It’s easy to compare yourself to others when you’re stuck. That feeling of being ’behind’ is really heavy. 
+
+U2: Yeah, I just feel stupid. I’ve been staring at the same page for hours. 
+
+S2 (AFlow): Staring at a blank page doesn’t mean you aren’t capable; it often just means you’re burnt out. Have you taken a break today? 
+
+U3: No, I felt guilty stopping. But maybe I am just tired. 
+
+S3 (AFlow): Guilt can be a tricky trap. How about we try a small 15-minute break just to reset your brain? 
+
+Turn-wise strategies and reward trajectory.                 
+
+> Turn tAFlow strategy Baseline strategy Rewarder score 1[Empathetic Statement] [Affirmation] 6.5 (AF) / 6.5 (Base) 2[Reframe/Clarification] [Affirmation] 7.4 (AF) / 6.0 (Base) 3[Suggest Options] [Affirmation] 8.2 (AF) / 5.8 (Base) 4[Affirmation] [Suggest Options] 8.5 (AF) / 6.2 (Base)
+
+Analysis. Unlike the baseline which falls into a ”repetitive comforting” loop (using Affirmation three times in a row: ”You can do it”, ”Don’t give up”), AFlow actively reframes the user’s self-doubt (Turn 2) from ”stupidity” to ”burnout”. This cognitive shift allows for a natural transition to a concrete suggestion (Turn 3), reflected in the steady rise of reward scores.

@@ -1,0 +1,1055 @@
+Title: VRM: Teaching Reward Models to Understand Authentic Human Preferences
+
+URL Source: https://arxiv.org/pdf/2603.04974v1
+
+Published Time: Fri, 06 Mar 2026 01:44:27 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# VRM: Teaching Reward Models to Understand Authentic Human Preferences 
+
+Biao Liu 1 Ning Xu 1 Junming Yang 1 Xuhao 1 Xin Geng 1
+
+## Abstract 
+
+Large Language Models (LLMs) have achieved remarkable success across diverse natural lan-guage tasks, yet the reward models employed for aligning LLMs often encounter challenges of reward hacking, where the approaches predomi-nantly rely on directly mapping prompt-response pairs to scalar scores, which may inadvertently capture spurious correlations rather than authentic human preferences. In contrast, human evalua-tion employs a sophisticated process that initially weighs the relative importance of multiple high-dimensional objectives according to the prompt context, subsequently evaluating response qual-ity through low-dimensional semantic features such as logical coherence and contextual appro-priateness. Motivated by this consideration, we propose V RM , i.e., Variational Reward Modeling, a novel framework that explicitly models the eval-uation process of human preference judgments by incorporating both high-dimensional objective weights and low-dimensional semantic features as latent variables, which are inferred through varia-tional inference techniques. Additionally, we pro-vide a theoretical analysis showing that V RM can achieve a tighter generalization error bound com-pared to the traditional reward model. Extensive experiments on benchmark datasets demonstrate that V RM significantly outperforms existing meth-ods in capturing authentic human preferences. 
+
+## 1. Introduction 
+
+Large Language Models (LLMs) have demonstrated remark-able capabilities across a wide range of natural language pro-cessing tasks, including text generation (Liang et al., 2024), conversational interaction (Wang et al., 2023), reasoning (Xu et al., 2025), and code completion (Jiang et al., 2024). However, ensuring that these models generate responses that align with human values and preferences remains a   
+
+> 1Southeast University, Nanjing, China. Correspondence to: Ning Xu <xning@seu.edu.cn >.
+> Preprint. March 6, 2026.
+
+significant challenge. Traditional approaches to aligning LLMs with human pref-erences often rely on Reinforcement Learning with Human Feedback (RLHF) (Christiano et al., 2017; Stiennon et al., 2020; Ouyang et al., 2022), which involves training a re-ward model to predict human preferences and subsequently fine-tuning the LLM to maximize the predicted rewards by policy gradient optimization (Schulman et al., 2017). While RLHF has achieved notable success, it is often computation-ally intensive and can suffer from instability during train-ing (Dong et al., 2023; Yuan et al., 2023). To address these challenges, Direct Preference Optimization (D PO ) (Rafailov et al., 2023) has emerged as a promising alternative, offering a more straightforward approach that directly optimizes the LLM based on pairwise human preference data and is math-ematically equivalent to RLHF under certain conditions. Building upon the success of D PO , several extensions have been proposed to enhance optimization efficiency, train-ing stability, and alignment performance (Ethayarajh et al., 2024; Hong et al., 2024; Meng et al., 2024; Kim et al., 2025; Garg et al., 2025; Yang et al., 2025b; Deng et al., 2025). However, existing reward model training methods primarily directly map prompt-responses pairs to scores, which may inadvertently capture spurious correlations rather than au-thentic human preferences, a phenomenon known as reward hacking (Gao et al., 2023; Miao et al., 2024). For instance, the language models might exploit rewards by repeating key phrases or padding with irrelevant details. In contrast, hu-man preference evaluation is not a straightforward scoring process. Instead, it begins with considering the relative im-portance of multiple high-dimensional objectives based on the prompt, such as prioritizing safety for prompts that could elicit harmful responses, or helpfulness for general queries. Subsequently, humans evaluate how well the response satis-fies the high-dimensional objectives through analyzing the low-dimensional semantic features, such as logical coher-ence and contextual appropriateness, ultimately arriving at a holistic judgment. Therefore, we propose integrating this human expert-like evaluation process into reward models to better capture authentic human preferences. Motivated by this observation, we introduce V RM , i.e., Vari-ational Reward Modeling, a novel framework for training reward models that explicitly models the generative pro-1
+
+> arXiv:2603.04974v1 [cs.CL] 5 Mar 2026 VRM: Teaching Reward Models to Understand Authentic Human Preferences
+
+cess of human preference judgments. Specifically, given a prompt, we assume that the high-dimensional objective weights follow a Dirichlet distribution, representing the rel-ative importance of different objectives. Concurrently, the low-dimensional semantic features follow a multivariate Gaussian distribution, capturing the content of the prompt and response. Ultimately, the reward score is determined by both the high-dimensional objective weights and the low-dimensional semantic features. By employing variational inference techniques (Xu et al., 2023; Kingma & Welling, 2014), we can infer these latent variables from observed prompt-response pairs and optimize the reward model to better align with human preferences. Our contributions are summarized as follows: 1. Practically, we propose a novel framework for reward model training that explicitly models the generative pro-cess of human preference judgments, incorporating both high-dimensional objective weights and low-dimensional semantic features. 2. Theoretically, we provide a theoretical analysis of V RM 
+
+framework proving that it can achieve a tighter general-ization error bound compared to the traditional reward model training method. We conduct extensive experiments on benchmark datasets, demonstrating that V RM outperforms existing reward mod-eling techniques in terms of alignment with human prefer-ences and overall performance. 
+
+## 2. Related Work 
+
+Online LLM Alignment. Building responsible and effec-tive AI systems requires aligning Large Language Models (LLMs) with human values and intentions (Achiam et al., 2023; Chen et al., 2025b; Yang et al., 2025a). A dominant paradigm for achieving this alignment is Reinforcement Learning with Human Feedback (RLHF) (Christiano et al., 2017; Stiennon et al., 2020; Ouyang et al., 2022). RLHF typically follows a two-stage pipeline: first training a re-ward model on pre-collected preference dataset to encode human preference signals, and then fine-tuning the LLM with a KL-regularized objective to maximize expected re-ward (Ouyang et al., 2022). While early RLHF systems often rely on PPO-style actor-critic optimization (Schulman et al., 2015; 2017), recent work has explored more scal-able online optimizers that reduce dependence on a learned critic. In particular, GRPO (Shao et al., 2024) computes group-relative advantages from multiple sampled responses to replace the value-function baseline, improving memory efficiency and practical training stability. More broadly, a growing body of work studies critic-free REINFORCE updates with stronger variance reduction (Ahmadian et al., 2024; Hu, 2025), explores sequence-level optimization and clipping (Zheng et al., 2025), and develops dynamics sam-pling methods for large-scale online RL (Yu et al., 2025), aiming to improve efficiency and scalability (Feng et al., 2025; Liu et al., 2025; Chen et al., 2025a). 
+
+Offline LLM Alignment. While RLHF has demonstrated considerable success, it faces significant challenges includ-ing hyperparameter complexity and online sampling over-head (Dong et al., 2023; Yuan et al., 2023). D PO (Rafailov et al., 2023) emerged as a compelling alternative that simpli-fies alignment by directly optimizing a closed-form objec-tive on offline preference comparisons, yielding improved computational efficiency. Under specific assumptions, D PO 
+
+can be shown to recover an RLHF-style KL-regularized solution, while avoiding explicit on-policy RL optimiza-tion. This formulation has inspired a broad range of follow-up methods that refine the preference objective and train-ing recipe to improve optimization efficiency, robustness, and empirical alignment quality (Ethayarajh et al., 2024; Hong et al., 2024; Kim et al., 2025; Deng et al., 2025; Wu et al., 2024), including alternative loss and regularization designs (Garg et al., 2025; Hu et al., 2025), reduced reliance on reference models (Hong et al., 2024; Meng et al., 2024), and improved mitigation of sample distribution shift (Zhou et al., 2023; Deng et al., 2025; Yang et al., 2025b). 
+
+## 3. Preliminaries 
+
+We first introduce the notation for language model align-ment and reward modeling. Consider a language model parameterized by θ π θ : X → Y that generates a response 
+
+y given a prompt x. The goal of alignment is to ensure that the generated response y aligns with human preferences, where the prompt x ∈ X and response y ∈ Y are sequences of tokens from a vocabulary V, i.e., x = ( x1, x 2, . . . , x m),
+
+y = ( y1, y 2, . . . , y n), with xi, y i ∈ V .To achieve this, we collect human preference data in the form of pairs (y+, y−) where y+ is preferred over y−
+
+for a given prompt x. The dataset is denoted as D =
+
+{(xi, y+ 
+
+> i
+
+, y− 
+
+> i
+
+)}Ni=1 . A reward model r : X × Y → R
+
+is trained to predict the human preference scores. The re-ward model is typically trained using a loss function that encourages it to assign higher scores to preferred responses, such as the Bradley-Terry loss: 
+
+Lrm = − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+log P (y+ 
+
+> i
+
+≻ y− 
+
+> i
+
+| xi)= − 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+log σ r(xi, y+ 
+
+> i
+
+) − r(xi, y− 
+
+> i
+
+),
+
+(1) where σ(·) is the sigmoid function. Subsequently, the lan-guage model is fine-tuned to maximize the expected reward while maintaining proximity to a reference model πref using 2VRM: Teaching Reward Models to Understand Authentic Human Preferences 𝒙 𝒚 
+
+# 𝒘 𝒛 
+
+# 𝑟       
+
+> Figure 1. Causal Graph of V RM . The reward score ris influ-enced by both high-dimensional objective weights wand low-dimensional semantic features z.
+
+a KL-regularized objective: 
+
+LRLHF (θ) = E x∼D , 
+
+> y∼πθ(·| x)
+
+h
+
+− r(x, y)+ β KL( πθ (·| x) ∥ πref (·| x)) 
+
+i
+
+,
+
+(2) where β is a hyperparameter that balances reward maximiza-tion and KL regularization the reference model πref is often chosen as a supervised fine-tuned model trained on human demonstrations. 
+
+## 4. Methodology 
+
+Existing reward model training approaches typically use statistical fitting to directly map prompt-response pairs to scores, which may capture spurious correlations rather than genuine human preferences. In this section, we propose a novel framework that explicitly models the generative pro-cess of human preference judgments. The overall framework is illustrated in Figure 2. 
+
+4.1. Variational Reward Model 
+
+When presented with a prompt x, we assume there exists a latent vector of objective weights w = [ w1, w 2, . . . , w K ]
+
+that represents the relative importance of K distinct ob-jectives considered by humans when evaluating responses. For instance, for a prompt that induces the model to gen-erate a potentially harmful response, the weight corre-sponding to safety would be higher. In addition to these high-dimensional objectives, the evaluation of a response also depends on low-dimensional semantic features z =[z1, z 2, . . . , z J ] that capture aspects such as coherence, flu-ency, and relevance to the prompt, where J is the dimension-ality of the semantic feature space. Ultimately, the reward score r is determined by both the high-dimensional objec-tive weights and the low-dimensional semantic features. This generative process of human preference is illustrated in Figure 1. Based on the causal graph depicted in Figure 1, the posterior density of the latent variables w and z can be inferred from the observed variables (x, y). Specifically, p(w, z | x, y)
+
+can be factorized as: 
+
+p(w, z | x, y) = p(w | x) p(z | x, y), (3) where we assume that the objective weights w depend solely on the prompt x, while the semantic features z depend on both the prompt x and the response y. Then q(w | x) and 
+
+q(z | x, y) can be parameterized using neural networks with parameters ϕ1 and ϕ2 to approximate the true posterior distributions of w and z, respectively. To simplify notation, we denote all encoder parameters as ϕ = [ ϕ1, ϕ 2]. Assume that w follows a Dirichlet distribution with parameter α =[α1, α 2, . . . , α K ]:
+
+qϕ1 (w | x) = Dir (α), (4) where α is the output of a neural network taking x as input. Similarly, we assume that z follows a multivariate Gaussian distribution: 
+
+qϕ2 (z | x, y) = N (μ, diag( σ2)) , (5) where μ = [ μ1, μ 2, . . . , μ J ] and σ = [ σ1, σ 2, . . . , σ J ] are outputs of another neural network taking both x and y as inputs. Using variational Bayesian inference, we can optimize the model parameters by maximizing the Evidence Lower Bound (ELBO) to ensure that the approximate posterior distribution qϕ(w, z | x, y) closely approximates the true posterior distribution p(w, z | x, y). The observed vari-ables x, y, r can be expressed as: 
+
+log p(x, y, r ) = 
+
+LELBO + KL qϕ(w, z | x, y) ∥ p(w, z | x, y, r ), (6) where the ELBO is: 
+
+LELBO = Eqϕ [log p(r | w, z)] 
+
+− KL qϕ1 (w | x) ∥ p(w)
+
+− KL qϕ2 (z | x, y) ∥ p(z).
+
+(7) The detailed derivation of the ELBO is provided in Ap-pendix A. Due to the non-negativity of the KL divergence and log p(x, y, r ) is a constant, maximizing the ELBO is equivalent to minimizing the KL divergence between the approximate and true posterior distributions. The prior distri-bution of the objective weights w is assumed to be a Dirich-let distribution with parameter α0 = [ α10, α 20, . . . , α K 
+
+> 0
+
+], al-3VRM: Teaching Reward Models to Understand Authentic Human Preferences Reward   
+
+> Predictor
+> Objective Weights
+> Semantic Features
+> Supervision
+> Loss
+> S1
+> *S2
+> *Sk
+> *
+
+…Prompt      
+
+> P&R Pairs
+> BT
+> Loss
+> w1w2wk
+> LLM
+> Backbone
+> y+/ y -
+> x
+> (x,y +)
+> (x,y -)
+> x
+> Helpful Safety Honest
+> Weight
+> Head
+> Feature
+> Head
+> Multi -dimensional Scores
+
+…   
+
+> Can
+> you
+> give
+> me
+> …
+> …
+> Yes,
+> you
+> First
+> need
+> Concat
+> q( z|x,y )
+> ~ N (μ,σ)
+> q( w|x )
+> ~ Dir( 𝛼 (x))
+> Scalar
+> Reward
+> Preferred
+> Score
+> Unpreferred
+> Score
+> (w,z -)
+> (w,z +)
+> r+
+> r-
+
+Figure 2. Overview of the V RM framework. The model processes prompt-response pairs through a shared backbone, generating multi-dimensional scores via the weight head and semantic features through the feature head. These components are combined with objective weights to produce the final reward predictions for preference learning. 
+
+lowing us to compute the second term of the ELBO as: 
+
+KL qϕ1 (w | x) ∥ p(w) = log Γ( X
+
+> k
+
+αk)
+
+− X
+
+> k
+
+log Γ( αk) − log Γ( X
+
+> k
+
+αk 
+
+> 0
+
+) + X
+
+> k
+
+log Γ( αk 
+
+> 0
+
+)+ X
+
+> k
+
+(αk − αk 
+
+> 0
+
+)Ψ( αk) − Ψ( X
+
+> k
+
+αk),
+
+(8) where Γ( ·) is the gamma function, and Ψ( ·) is the digamma function. Similarly, assuming that the prior distribution of the semantic features z is a multivariate Gaussian distribu-tion with mean 0 and covariance matrix I, we can compute the third term of the ELBO as: 
+
+KL qϕ2 (z | x, y) ∥ p(z) =12
+
+X
+
+> j
+
+
+
+(μj )2 + ( σj )2 − 2 log σj − 1
+
+
+
+. (9) The first term of the ELBO, Eqϕ [log p(r | w, z)] , can be computed using Monte Carlo sampling by drawing samples of w and z from their respective approximate posterior distributions. To preserve gradient information through the sampling process, we employ the reparameterization trick (Figurnov et al., 2018). Assuming M samples are drawn, the first term of the ELBO can be approximated as: 
+
+Eqϕ [log p(r | w, z)] ≈
+
+1
+
+M
+
+> M
+
+X
+
+> m=1
+
+log p(r | w(m), z(m)), (10) where w(m) and z(m) are samples drawn from qϕ1 (w | x)
+
+and qϕ2 (z | x, y), respectively. In practice, we use a single sample ( M = 1 ) to estimate this expectation as suggested by Kingma & Welling (2014). For preference datasets D = {(xi, y+ 
+
+> i
+
+, y− 
+
+> i
+
+)}Ni=1 , we can extend the ELBO formulation to accommodate pairwise comparisons. The modified ELBO becomes: 
+
+LELBO = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+Eqϕ
+
+ log P (y+ 
+
+> i
+
+≻ y− 
+
+> i
+
+| xi)
+
+− KL qϕ1 (w | xi) ∥ p(w)
+
+− KL qϕ2 (z | xi, y+ 
+
+> i
+
+) ∥ p(z)
+
+− KL qϕ2 (z | xi, y− 
+
+> i
+
+) ∥ p(z).
+
+(11) Here, P (y+ 
+
+> i
+
+≻ y− 
+
+> i
+
+| xi) represents the probability that response y+ 
+
+> i
+
+is preferred over y− 
+
+> i
+
+given the prompt xi. This probability can be modeled using the Bradley-Terry frame-work: P (y+ 
+
+> i
+
+≻ y− 
+
+> i
+
+| xi) = 
+
+σ rψ (w, z+) − rψ (w, z−), (12) where rψ (w, z) is the reward score computed based on the latent variables w, z+ and z−. The parameters of the reward score decoder are denoted as ψ.
+
+4.2. Supervision of Objective Weights 
+
+To constrain the latent variable w, we introduce a supervi-sion term to ensure that w captures the high-dimensional objective weight information of the prompt. Some datasets provide multi-dimensional scores for each prompt and its corresponding responses, such as Helpful, Honest, Harm-less (Cui et al., 2023; Ji et al., 2025). We can leverage these multi-dimensional scores to supervise the learning of the latent variable w. Specifically, for each prompt xi
+
+and responses y+ 
+
+> i
+
+and y− 
+
+> i
+
+, we have corresponding multi-4VRM: Teaching Reward Models to Understand Authentic Human Preferences 
+
+dimensional score vectors s+ 
+
+> i
+
+= [ s1,+ 
+
+> i
+
+, s 2,+ 
+
+> i
+
+, . . . , s K, + 
+
+> i
+
+] and 
+
+s− 
+
+> i
+
+= [ s1,− 
+
+> i
+
+, s 2,− 
+
+> i
+
+, . . . , s K, − 
+
+> i
+
+]. The scores of the preferred responses implicitly contain the expert’s preference weights during evaluation. We normalize the scores for each di-mension using mean-variance normalization and then ap-ply the softmax function to convert them into a probability distribution, which serves as the supervision signal for w.Specifically, we define the supervision loss as: 
+
+Lsup = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+KL qϕ1 (w | xi) ∥ ˜s+
+
+> i
+
+, (13) where ˜s+ 
+
+> i
+
+is the normalized score vector for response y+ 
+
+> i
+
+.The overall training objective for V RM combines the ELBO and the supervision loss: 
+
+L = −L ELBO + λLsup , (14) where λ is a hyperparameter that balances the two compo-nents. 
+
+## 5. Theoretical Analysis 
+
+5.1. A PAC-Bayes Generalization Bound 
+
+We derive a generalization error bound for our variational reward model based on the PAC-Bayesian model averaging theorem (McAllester, 1999). Consider a preference dataset 
+
+S = {(xi, y+ 
+
+> i
+
+, y− 
+
+> i
+
+)}Ni=1 drawn i.i.d. from an unknown distribution D. Given latent variables, our reward model predicts a pairwise preference by comparing rψ (w, z+) and 
+
+rψ (w, z−). We analyze the 0-1 preference error: 
+
+ℓ(x, y+, y−) = Irψ (w, z+) ≤ rψ (w, z−) , (15) where I[·] is the indicator function. Our inference networks define a data-dependent posterior over latent variables: 
+
+qϕ(w, z+, z− | x, y+, y−) = qϕ1 (w | x)
+
+qϕ2 (z+ | x, y+) qϕ2 (z− | x, y−), (16) and we use a factorized prior p(w, z+, z−) =
+
+p(w)p(z+)p(z−). Define the population and empirical risks: 
+
+R = E(x,y+,y−)∼D Eqϕ(w,z+,z−|x,y+,y−)[ℓ] , (17) 
+
+bR = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+Eqϕ(w,z+    
+
+> i,z−
+> i|xi,y+
+> i,y−
+> i)
+
+[ℓ] . (18) 
+
+Theorem 5.1 (PAC-Bayes bound with decomposed KL) .
+
+With probability at least 1 − δ over the draw of the training sample S, the following holds: 
+
+R ≤ bR + 12N − 1
+
+
+
+D(Q∥P )+ ln 1
+
+δ + 52 ln N + 8 
+
+!1/2
+
+,
+
+(19) 
+
+where D(Q∥P ) is the total KL divergence over the training set: 
+
+D(Q∥P ) = 
+
+> N
+
+X
+
+> i=1
+
+
+
+KL( qϕ1 (w | xi) ∥ p(w)) + KL  qϕ2 (z | xi, y+ 
+
+> i
+
+) ∥ p(z)
+
++ KL  qϕ2 (z | xi, y− 
+
+> i
+
+) ∥ p(z) 
+
+.
+
+(20) The bound indicates that with a sufficiently large training sample, minimizing the empirical error leads to a tight up-per bound on the population preference error, with a small complexity penalty. In contrast, directly inputting prompt-response pairs into a single reward model without consid-ering latent variables and intermediate decision processes results in a fixed KL divergence that cannot be optimized, leading to a looser generalization error bound. 
+
+## 6. Experiments 
+
+6.1. Experimental Setup Datasets and Models. We use the UltraFeedback dataset, which contains 64K annotations constructed from four LLM-generated responses per instruction and annotated by GPT-4. The dataset provides fine-grained scalar scores along multi-ple evaluation dimensions, including instruction-following, truthfulness, honesty, and helpfulness (Cui et al., 2023). For the reward model implementation, we employ Qwen3-4B-Instruct-2507 (Yang et al., 2025a) as the base model. For downstream alignment experiments, we utilize a supervised fine-tuned version of Qwen-2.5-7B 1 and Qwen3-8B (Yang et al., 2025a) as the base policy models to evaluate the ef-fectiveness of our reward modeling approach in practical RLHF scenarios. 
+
+Evaluation Metrics. We evaluate the aligned language mod-els using three widely adopted automatic evaluation bench-marks: AlpacaEval (Li et al., 2023; Dubois et al., 2024), Arena-Hard (Li et al., 2024), and MT-Bench (Bai et al., 2024). For AlpacaEval 2, we report both the raw win rate (WR) and the length-controlled win rate (LC) when com-pared against the reference model GPT-4o-05-13 for Qwen-2.5-7B and GPT-4-Preview-1106 for Qwen3-8B. On Arena-Hard, we evaluate performance using the win rate (WR) and the style-controlled win rate (SC), with GPT-4-Preview-1106 as the baseline for all base models. For MT-Bench, we report the average multi-turn score (Score) assigned by GPT-4o, where each response is evaluated on a 10-point scale. All evaluations are conducted using GPT-4o as the judge model. For reward model evaluation, we utilize the Reward-Bench (Lambert et al., 2024) and UltraFeedback-
+
+> 1FuseAI/FuseChat-Qwen-2.5-7B-SFT
+
+5VRM: Teaching Reward Models to Understand Authentic Human Preferences  
+
+> Table 1. Performance comparison across AlpacaEval 2, Arena-Hard, and MT-Bench benchmarks.
+
+Methods Qwen2.5-7B Qwen 3-8B AlpacaEval 2 Arena-Hard MT-Bench AlpacaEval 2 Arena-Hard MT-Bench 
+
+WR(%) LC(%) WR(%) SC(%) Score WR(%) LC(%) WR(%) SC(%) Score DPO 37.24 36.84 49.0 47.2 7.83 18.53 31.50 70.8 71.9 7.86 IPO 37.95 36.43 54.6 48.3 7.64 27.79 25.87 65.5 54.9 6.55 KTO 38.12 36.51 43.9 44.1 7.63 22.94 39.68 69.5 70.1 7.97 SIMPO 40.03 40.78 54.6 48.8 7.58 29.38 27.94 61.9 56.6 6.24 WPO 44.11 40.06 62.0 53.0 7.81 28.16 25.35 56.2 53.7 6.38 SELECTIVE DPO 38.02 39.21 51.7 48.2 7.74 29.27 27.53 60.4 51.8 6.13 PPO 39.52 39.79 55.3 48.9 7.81 44.75 55.33 60.4 71.9 8.44 VRM -P PO 45.30 50.38 65.5 57.2 7.98 48.14 52.03 84.0 82.0 8.58  
+
+> Table 2. Reward model performance on Reward-Bench and UltraFeedback-Cleaned.
+
+Methods Reward-Bench UF-C 
+
+Chat Chat Hard Safety Reasoning Total DPO 96.09 54.17 67.84 57.18 75.71 IPO 55.31 72.15 68.24 84.44 60.69 KTO 95.25 43.86 64.86 54.74 70.67 SIMPO 54.47 63.60 51.89 72.88 59.16 WPO 53.07 55.04 58.11 62.20 54.74 SELECTIVE DPO 80.97 84.97 60.53 82.03 82.28 RM 94.04 93.02 76.66 86.62 88.98 VRM 97.11 94.23 85.41 89.72 92.36 
+
+Cleaned 2 (UF-C) datasets. Reward-Bench consists of four categories: Chat, Chat Hard, Safety, and Reasoning, while UF-C is a cleaned subset of the UltraFeedback dataset with high-quality annotations. We report accuracy on pairwise comparisons for both datasets. 
+
+baselines. we compared our method with various advanced LLM alignment methods: D PO (Rafailov et al., 2023), I PO 
+
+(Azar et al., 2024), K TO (Ethayarajh et al., 2024), S IMPO 
+
+(Meng et al., 2024), W PO (Zhou et al., 2024), S ELECTIVE 
+
+DPO (Gao et al., 2025), and P PO (Ouyang et al., 2022). The detailed descriptions of these methods are as follows: 1. DPO : A preference-based alignment method that directly fine-tunes the model on pairwise human preferences to increase the probability of preferred responses without training an explicit reward model. 2. IPO : A variant of DPO that introduces a modified loss or regularization to reduce overfitting and improve robust-ness by leveraging the model’s own preference classifi-cation capabilities. 3. KTO : An alignment objective inspired by prospect theory that optimizes model outputs based on binary desirability 
+
+> 2allenai/ultrafeedback binarized cleaned
+
+signals by directly maximizing utility rather than pref-erence likelihood, potentially without paired preference data. 4. SIMPO : An efficient extension of preference optimiza-tion that uses the average log probability of sequences as an implicit reward and removes reliance on a reference model, improving compute and memory efficiency. 5. WPO : A family of extensions to preference optimization that incorporate weighting or utility adjustments to better capture differing reward magnitudes. 6. SELECTIVE DPO : A DPO variant that selectively focuses optimization on high-impact preference pairs or subsets to improve alignment quality and stability by prioritizing informative feedback. 7. PPO : A classic reinforcement learning method used in RLHF that updates model policies by maximizing ex-pected reward with a clipped surrogate objective to en-sure stable, constrained changes. 
+
+6.2. Main Results 
+
+The performance comparison across AlpacaEval 2, Arena-Hard, and MT-Bench benchmarks is presented in Table 1. Our method, V RM -P PO , consistently outperforms all base-6VRM: Teaching Reward Models to Understand Authentic Human Preferences 0 200 400 600 800 1000 1200 
+
+> Training Step
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Accuracy
+> Train Accuracy
+> Eval Accuracy
+
+(a) KL 0 200 400 600 800 1000 1200  
+
+> Training Step
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Accuracy
+> Train Accuracy
+> Eval Accuracy
+
+(b) MAE 0 200 400 600 800 1000 1200  
+
+> Training Step
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Accuracy
+> Train Accuracy
+> Eval Accuracy
+
+(c) Rank 
+
+Figure 3. Accuracy curves under different supervision loss types. 0 200 400 600 800 1000 1200 
+
+> Step
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Train Accuracy
+> Reward Model
+> VRM
+
+(a) Train 0 20 40 60 80 100 120  
+
+> Step
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70
+> 0.75
+> Eval Accuracy
+> Reward Model
+> VRM
+
+(b) Eval 
+
+Figure 4. Accuracy curves comparing the traditional reward model (RM) and V RM .
+
+line methods across both Qwen2.5-7B and Qwen3-8B mod-els, expect for a slight underperformance compared to P PO 
+
+on Length-Controlled win rate on AlpacaEval 2 with Qwen3-8B. Notably, on Qwen2.5-7B, our method achieves a win rate of 50.38% on LC win rate of AlpacaEval 2, surpassing the strongest baseline S IMPO by a clear margin of over 9.6 percentage points. Similar trends are observed on Arena-Hard, where V RM -P PO attains the highest win rate and style-controlled win rate among all methods, suggesting improved robustness on challenging prompts. On the larger Qwen3-8B model, V RM -P PO continues to demonstrate strong and stable performance, achieving the best overall results on Arena-Hard and MT-Bench, with notable margins over P PO 
+
+and other preference-optimization baselines. While P PO 
+
+slightly outperforms our method on the length-controlled metric of AlpacaEval 2, V RM -P PO still achieves the highest overall win rate. Table 2 summarizes reward model accuracy on Reward-Bench and UltraFeedback-Cleaned (UF-C). Our method (V RM ) achieves the best overall performance across all Reward-Bench categories, and also obtains the highest UF-C accuracy. Compared with the strongest baseline reward model (R M), V RM improves UF-C by 3.38 points (88.98 →
+
+92.36) while consistently increasing category-wise accuracy in Reward-Bench, including Chat, Chat Hard, Safety, and Reasoning. This indicates that our variational formulation, yields a reward function that generalizes better to safety-and reasoning-critical comparisons rather than overfitting to surface-level chat preferences. 
+
+6.3. Further Analysis 6.4. Comparison with Traditional Reward Model 
+
+To investigate the performance of our method compared to the traditional reward model, we compare the accuracy curves of our method and the traditional reward model. The experimental results are shown in Figure 4, where we present the accuracy curves for our method and the tradi-tional reward model. 
+
+6.5. Loss Type of Supervision 
+
+To investigate the impact of different supervision loss func-tions, we compare the use of Kullback-Leibler divergence (KL), mean squared error (MAE), and ranking loss (RANK) as the training objectives for the reward model. The experi-mental results are shown in Figure 3, where we present the training and evaluation accuracy curves for each loss as a function of training steps. As can be observed, our method achieves very similar accuracy across all three loss types, 7VRM: Teaching Reward Models to Understand Authentic Human Preferences 200 400 600 800 1000 1200       
+
+> Step
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Accuracy
+> λ= 0
+> λ= 10 −4
+> λ= 10 −3
+> λ= 10 −2
+> λ= 10 −1
+> λ= 1
+
+(a) Train Accuracy 20 40 60 80 100 120        
+
+> Step
+> 0.66
+> 0.68
+> 0.70
+> 0.72
+> 0.74
+> 0.76
+> 0.78
+> Accuracy
+> λ= 0
+> λ= 10 −4
+> λ= 10 −3
+> λ= 10 −2
+> λ= 10 −1
+> λ= 1
+
+(b) Eval Accuracy 200 400 600 800 1000 1200       
+
+> Step
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> KL Divergence
+> λ= 10 −4
+> λ= 10 −3
+> λ= 10 −2
+> λ= 10 −1
+> λ= 1
+
+(c) KL Divergence 
+
+Figure 5. Parameter sensitivity analysis of the supervision loss weight λ.50 100 150 200 250 300   
+
+> Step
+> -5
+> -4
+> -3
+> -2
+> -1
+> 0
+> 1
+> 2
+> 3
+> Reward Scores
+> VRM w/ sup
+> VRM w/o sup
+
+Figure 6. Reward curves comparing VRM with and without Lsup .
+
+with comparable convergence speed and final evaluation performance. This suggests that our approach is robust to the choice of supervision loss, provided the objective is reasonable. 
+
+6.6. Parameter Sensitivity 
+
+To investigate the sensitivity of the weight λ for the su-pervision loss, we vary the value of λ from the set {1e −
+
+4, 1e − 3, 1e − 2, 1e − 1, 1} with a fixed learning rate 1e − 6.The experimental results are shown in Figure 5, where we present the train accuracy, eval accuracy, and KL divergence curves for different values of λ. The train accuracy curves are almost identical for different values of λ, indicating that the training process is relatively robust to the choice of λ.The eval accuracy curves show a slight improvement with increasing λ, especially in the later plateau stage, where the curves for larger λ are higher, indicating that stronger supervision can bring some generalization benefits. The KL divergence curves show a faster decrease and earlier stabilization with increasing λ, indicating that stronger su-pervision signals can accelerate the convergence of the KL constraint. Overall, increasing the supervision weight does not significantly change the training set fitting (train acc is almost the same), but can improve the validation perfor-mance and accelerate the convergence of the KL supervision term, indicating that explicit supervision can bring benefits to the training framework. 
+
+6.7. Ablation Study 
+
+We ablate the additional supervision term by setting λ = 0 .As shown in Figure 5 (a,b), removing this term does not lead to a noticeable drop in reward-model accuracy, sug-gesting that our variational formulation can already learn higher-order factors to some extent without explicit supervi-sion. The main benefit of introducing the supervision term is improved interpretability: it anchors each dimension to a human-defined high-level attribute, enabling more transpar-ent, dimension-wise analysis of what the reward model has captured. To further investigate the role of the supervision term, we compare the results of alignment experiments with and without this term, as shown in Figure 6. The results in-dicate that the supervised loss term brings some stability to the training process. However, even without this supervision term, the performance degradation is not significant, sug-gesting that our training framework can still automatically discover higher-order features. 
+
+## 7. Conclusion 
+
+In this paper, we proposed a novel variational reward mod-eling approach that leverages latent variable inference to disentangle objective weights and semantic features from prompts and responses. By incorporating a supervision mechanism based on multi-dimensional scores, our method effectively captures the underlying preferences in human feedback data. Extensive experiments on multiple bench-marks demonstrated the superiority of our approach over existing reward modeling techniques, leading to improved alignment of large language models with human values. 8VRM: Teaching Reward Models to Understand Authentic Human Preferences 
+
+## Impact Statement 
+
+The proposed variational reward modeling approach has the potential to significantly enhance the alignment of large language models with human values and preferences. By effectively capturing the underlying factors that drive human feedback, our method can lead to the development of AI systems that are more responsive to user needs and ethical considerations. However, it is essential to consider the ethical implications of deploying such models, including issues related to bias, fairness, and transparency. Future work should focus on addressing these challenges to ensure that the benefits of improved reward modeling are realized in a responsible and equitable manner. 
+
+## References 
+
+Achiam, J., Adler, S., Agarwal, S., Ahmad, L., Akkaya, I., Aleman, F. L., Almeida, D., Altenschmidt, J., Altman, S., Anadkat, S., et al. Gpt-4 technical report. arXiv preprint arXiv:2303.08774 , 2023. Ahmadian, A., Cremer, C., Gall ´e, M., Fadaee, M., Kreutzer, J., Pietquin, O., ¨Ust ¨un, A., and Hooker, S. Back to basics: Revisiting reinforce style optimization for learning from human feedback in llms. arXiv preprint arXiv:2402.14740 , 2024. Azar, M. G., Guo, Z. D., Piot, B., Munos, R., Rowland, M., Valko, M., and Calandriello, D. A general theoretical paradigm to understand learning from human preferences. In International Conference on Artificial Intelligence and Statistics , pp. 4447–4455, Valencia, Spain, 2024. Bai, G., Liu, J., Bu, X., He, Y., Liu, J., Zhou, Z., Lin, Z., Su, W., Ge, T., Zheng, B., et al. Mt-bench-101: A fine-grained benchmark for evaluating large language models in multi-turn dialogues. arXiv preprint arXiv:2402.14762 ,2024. Chen, A., Li, A., Gong, B., Jiang, B., Fei, B., Yang, B., Shan, B., Yu, C., Wang, C., Zhu, C., et al. Minimax-m1: Scaling test-time compute efficiently with lightning attention. arXiv preprint arXiv:2506.13585 , 2025a. Chen, Y., Benton, J., Radhakrishnan, A., Uesato, J., Deni-son, C., Schulman, J., Somani, A., Hase, P., Wagner, M., Roger, F., et al. Reasoning models don’t always say what they think. arXiv preprint arXiv:2505.05410 , 2025b. Christiano, P. F., Leike, J., Brown, T., Martic, M., Legg, S., and Amodei, D. Deep reinforcement learning from human preferences. Advances in neural information pro-cessing systems , 30, 2017. Cui, G., Yuan, L., Ding, N., Yao, G., Zhu, W., Ni, Y., Xie, G., Liu, Z., and Sun, M. Ultrafeedback: Boosting language models with high-quality feedback, 2023. Deng, X., Zhong, H., Ai, R., Feng, F., Wang, Z., and He, X. Less is more: Improving llm alignment via preference data selection. arXiv preprint arXiv:2502.14560 , 2025. Dong, H., Xiong, W., Goyal, D., Zhang, Y., Chow, W., Pan, R., Diao, S., Zhang, J., SHUM, K., and Zhang, T. RAFT: Reward ranked finetuning for generative founda-tion model alignment. Transactions on Machine Learning Research , 2023. ISSN 2835-8856. Dubois, Y., Galambosi, B., Liang, P., and Hashimoto, T. B. Length-controlled alpacaeval: A simple way to debias automatic evaluators. arXiv preprint arXiv:2404.04475 ,2024. Ethayarajh, K., Xu, W., Muennighoff, N., Jurafsky, D., and Kiela, D. Model alignment as prospect theoretic opti-mization. In Proceedings of the International Conference on Machine Learning , volume 235, pp. 12634–12651, Vienna, Austria, 2024. Feng, L., Xue, Z., Liu, T., and An, B. Group-in-group policy optimization for llm agent training. arXiv preprint arXiv:2505.10978 , 2025. Figurnov, M., Mohamed, S., and Mnih, A. Implicit repa-rameterization gradients. In Advances in Neural Informa-tion Processing Systems , pp. 439–450, Montr ´eal, Canada, 2018. Gao, C., Li, H., Liu, L., Xie, Z., Zhao, P., and zhiqiang xu. Principled data selection for alignment: The hidden risks of difficult examples. In Forty-second International Conference on Machine Learning , Vancouver, Canada, 2025. Gao, L., Schulman, J., and Hilton, J. Scaling laws for reward model overoptimization. In Proceedings of Inter-national Conference on Machine Learning , pp. 10835– 10866, Honolulu, HI, 2023. Garg, S., Singh, A., Singh, S., and Chopra, P. Ipo: Your language model is secretly a preference classifier. arXiv preprint arXiv:2502.16182 , 2025. Hong, J., Lee, N., and Thorne, J. Orpo: Monolithic pref-erence optimization without reference model. arXiv preprint arXiv:2403.07691 , 2024. Hu, J. Reinforce++: A simple and efficient approach for aligning large language models. arXiv preprint arXiv:2501.03262 , 2025. Hu, X., Kong, L., He, T., and Wipf, D. Explicit prefer-ence optimization: No need for an implicit reward model. 
+
+arXiv preprint arXiv:2506.07492 , 2025. 9VRM: Teaching Reward Models to Understand Authentic Human Preferences 
+
+Ji, J., Hong, D., Zhang, B., Chen, B., Dai, J., Zheng, B., Qiu, T. A., Zhou, J., Wang, K., Li, B., Han, S., Guo, Y., and Yang, Y. PKU-SafeRLHF: Towards multi-level safety alignment for LLMs with human preference. In 
+
+Proceedings of Annual Meeting of the Association for Computational Linguistics , pp. 31983–32016, Vienna, Austria, 2025. Jiang, J., Wang, F., Shen, J., Kim, S., and Kim, S. A survey on large language models for code generation. arXiv preprint arXiv:2406.00515 , 2024. Kim, D., Lee, K., Shin, J., and Kim, J. Spread preference annotation: Direct preference judgment for efficient llm alignment. In Proceedings of International Conference on Learning Representations , 2025. Kingma, D. P. and Welling, M. Auto-encoding variational bayes. In Proceedings of International Conference on Learning Representations , Banff, AB, Canada, 2014. Lambert, N., Pyatkin, V., Morrison, J., Miranda, L., Lin, B. Y., Chandu, K., Dziri, N., Kumar, S., Zick, T., Choi, Y., Smith, N. A., and Hajishirzi, H. Rewardbench: Evalu-ating reward models for language modeling, 2024. Li, T., Chiang, W.-L., Frick, E., Dunlap, L., Wu, T., Zhu, B., Gonzalez, J. E., and Stoica, I. From crowdsourced data to high-quality benchmarks: Arena-hard and benchbuilder pipeline. arXiv preprint arXiv:2406.11939 , 2024. Li, X., Zhang, T., Dubois, Y., Taori, R., Gulrajani, I., Guestrin, C., Liang, P., and Hashimoto, T. B. Alpacae-val: An automatic evaluator of instruction-following models. https://github.com/tatsu-lab/ alpaca_eval , 5 2023. Liang, X., Wang, H., Wang, Y., Song, S., Yang, J., Niu, S., Hu, J., Liu, D., Yao, S., Xiong, F., et al. Controllable text generation for large language models: A survey. arXiv preprint arXiv:2408.12599 , 2024. Liu, Z., Chen, C., Li, W., Qi, P., Pang, T., Du, C., Lee, W. S., and Lin, M. Understanding r1-zero-like training: A critical perspective. arXiv preprint arXiv:2503.20783 ,2025. McAllester, D. A. Pac-bayesian model averaging. In Pro-ceedings of annual conference on Computational learn-ing theory , pp. 164–170, 1999. Meng, Y., Xia, M., and Chen, D. Simpo: Simple preference optimization with a reference-free reward. Advances in Neural Information Processing Systems , 37:124198– 124235, 2024. Miao, Y., Zhang, S., Ding, L., Bao, R., Zhang, L., and Tao, D. Inform: Mitigating reward hacking in rlhf via information-theoretic reward modeling. Advances in Neu-ral Information Processing Systems , 37:134387–134429, 2024. Ouyang, L., Wu, J., Jiang, X., Almeida, D., Wainwright, C. L., Mishkin, P., Zhang, C., Agarwal, S., Slama, K., Ray, A., Schulman, J., Hilton, J., Kelton, F., Miller, L., Simens, M., Askell, A., Welinder, P., Christiano, P. F., Leike, J., and Lowe, R. Training language models to follow instructions with human feedback. In Advances in Neural Information Processing Systems , pp. 27730– 27744, New Orleans, LA, 2022. Rafailov, R., Sharma, A., Mitchell, E., Manning, C. D., Ermon, S., and Finn, C. Direct preference optimization: Your language model is secretly a reward model. In 
+
+Advances in Neural Information Processing Systems , pp. 53728–53741, New Orleans, LA, 2023. Schulman, J., Levine, S., Abbeel, P., Jordan, M., and Moritz, P. Trust region policy optimization. In International conference on machine learning , pp. 1889–1897. PMLR, 2015. Schulman, J., Wolski, F., Dhariwal, P., Radford, A., and Klimov, O. Proximal policy optimization algorithms. 
+
+arXiv preprint arXiv:1707.06347 , 2017. Shao, Z., Wang, P., Zhu, Q., Xu, R., Song, J., Bi, X., Zhang, H., Zhang, M., Li, Y., Wu, Y., et al. Deepseekmath: Push-ing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 , 2024. Stiennon, N., Ouyang, L., Wu, J., Ziegler, D., Lowe, R., Voss, C., Radford, A., Amodei, D., and Christiano, P. F. Learning to summarize with human feedback. Advances in neural information processing systems , 33:3008–3021, 2020. Wang, B., Li, G., and Li, Y. Enabling conversational inter-action with mobile ui using large language models. In 
+
+Proceedings of the 2023 CHI Conference on Human Fac-tors in Computing Systems , pp. 1–17, Hamburg, Germany, 2023. Wu, J., Xie, Y., Yang, Z., Wu, J., Gao, J., Ding, B., Wang, X., and He, X. Beta-dpo: Direct preference optimization with dynamic. Advances in Neural Information Processing Systems , 37:129944–129966, 2024. Xu, F., Hao, Q., Zong, Z., Wang, J., Zhang, Y., Wang, J., Lan, X., Gong, J., Ouyang, T., Meng, F., et al. To-wards large reasoning models: A survey of reinforced reasoning with large language models. arXiv preprint arXiv:2501.09686 , 2025. 10 VRM: Teaching Reward Models to Understand Authentic Human Preferences 
+
+Xu, N., Shu, J., Zheng, R., Geng, X., Meng, D., and Zhang, M.-L. Variational label enhancement. IEEE Transac-tions on Pattern Analysis and Machine Intelligence , 45 (5):6537–6551, 2023. Yang, A., Li, A., Yang, B., Zhang, B., Hui, B., Zheng, B., Yu, B., Gao, C., Huang, C., Lv, C., et al. Qwen3 technical report. arXiv preprint arXiv:2505.09388 , 2025a. Yang, J., Xu, N., Liu, B., Qiao, S., and Geng, X. Alignment through meta-weighted online sampling: Bridging the gap between data generation and preference optimization. 
+
+arXiv preprint arXiv:2509.23371 , 2025b. Yu, Q., Zhang, Z., Zhu, R., Yuan, Y., Zuo, X., Yue, Y., Dai, W., Fan, T., Liu, G., Liu, L., et al. Dapo: An open-source llm reinforcement learning system at scale. arXiv preprint arXiv:2503.14476 , 2025. Yuan, H., Yuan, Z., Tan, C., Wang, W., Huang, S., and Huang, F. Rrhf: Rank responses to align language models with human feedback. Advances in Neural Information Processing Systems , 36:10935–10950, 2023. Zheng, C., Liu, S., Li, M., Chen, X.-H., Yu, B., Gao, C., Dang, K., Liu, Y., Men, R., Yang, A., et al. Group sequence policy optimization. arXiv preprint arXiv:2507.18071 , 2025. Zhou, C., Liu, P., Xu, P., Iyer, S., Sun, J., Mao, Y., Ma, X., Efrat, A., Yu, P., Yu, L., et al. Lima: Less is more for alignment. Advances in Neural Information Processing Systems , 36:55006–55021, 2023. Zhou, W., Agrawal, R., Zhang, S., Indurthi, S. R., Zhao, S., Song, K., Xu, S., and Zhu, C. Wpo: Enhancing rlhf with weighted preference optimization. In Proceedings of the Annual Meeting of the Association for Computational Linguistics , pp. 8328–8340, Miami, FL, 2024. 11 VRM: Teaching Reward Models to Understand Authentic Human Preferences 
+
+## A. Detailed Derivation of ELBO 
+
+This section provides the complete mathematical derivation of the Evidence Lower Bound (ELBO) for the causal reward model. By the law of total probability: 
+
+log p(r, x, y) = log p(w, z, r, x, y) − log p(w, z | r, x, y). (21) Multiply both sides by qθ (w, z|r, x, y), and for z and w integral: 
+
+Z
+
+> w,z
+
+qθ (w, z|r, x, y) log p(r, x, y)d wdz
+
+=
+
+Z
+
+> w,z
+
+qθ (w, z|r, x, y)(log p(w, z, r, x, y) − log p(w, z|r, x, y))d wdz.
+
+(22) On the left side, log p(r, x, y) is independent of z and w:
+
+log p(r, x, y) = 
+
+Z
+
+> w,z
+
+qθ (w, z|r, x, y)(log p(w, z, r, x, y) − log p(w, z|r, x, y))d wdz
+
+=
+
+Z
+
+> w,z
+
+qθ (w, z|r, x, y)
+
+
+
+log p(w, z, r, x, y)
+
+qθ (w, z|r, x, y) − log p(w, z|r, x, y)
+
+qθ (w, z|r, x, y)
+
+
+
+=
+
+Z
+
+> w,z
+
+qθ (w, z|r, x, y) log p(w, z, r, x, y)
+
+qθ (w, z|r, x, y) dwdz
+
++ KL[ qθ (w, z|r, x, y)|| p(w, z|r, x, y)] .
+
+Taking the expectation under the variational posterior qθ (w, z | r, x, y):
+
+log p(r, x, y) = Eqθ
+
+
+
+log p(w, z, r, x, y)
+
+qθ (w, z | r, x, y)
+
+
+
++ KL[ qθ (w, z)∥p(w, z | r, x, y)] . (23) Since KL[ qθ (w, z)∥p(w, z | r, x, y)] ≥ 0, the ELBO is a lower bound: 
+
+log p(r, x, y) ≥ L ELBO := Eqθ
+
+
+
+log p(w, z, r, x, y)
+
+qθ (w, z)
+
+
+
+. (24) Decomposing the joint distribution using the factorization p(w, z, r, x, y) = p(w)p(z)p(r, x, y | w, z) and the variational factorization qθ (w, z | r, x, y) = qθ1 (w | x)qθ2 (z | x, y):
+
+LELBO =
+
+Z
+
+> w,z
+
+qθ (w, z|r, x, y) log p(w, z, r, x, y)
+
+qθ (w, z|r, x, y) dwdz
+
+= Eqθ (w,z|r, x,y)[log p(w, z, r, x, y)
+
+qθ (w, z|r, x, y) ]= Eqθ (w,z|r, x,y)
+
+
+
+log p(w)p(z)p(r, x, y | w, z)
+
+qθ1 (w | x)qθ2 (z | x, y)
+
+
+
+= Eqθ (w,z|r, x,y)[log p(r, x, y | w, z)] + Eqθ1 (w|x)qθ2 (z|x,y)
+
+
+
+log p(w)p(z)
+
+qθ1 (w | x)qθ2 (z | x, y)
+
+
+
+.
+
+= Eqθ (w,z|r, x,y)[log p(r, x, y | w, z)] − Eqθ1 (w|x)
+
+
+
+log qθ1 (w | x)
+
+p(w)
+
+
+
+− Eqθ2 (z|x,y)
+
+
+
+log qθ2 (z | x, y)
+
+p(z)
+
+
+
+= Eqθ (w,z|r, x,y)[log p(r, x, y | w, z)] − KL[ qθ1 (w | x)∥p(w)] − KL[ qθ2 (z | x, y)∥p(z)] .
+
+12 VRM: Teaching Reward Models to Understand Authentic Human Preferences 
+
+Since x and y are observed variables and are conditionally independent of w and z, the conditional probability in the above equation can be simplified to p(r | w, z):
+
+LELBO = Eqθ (w,z|r, x,y)[log p(r | w, z)] − KL[ qθ1 (w | x)∥p(w)] − KL[ qθ2 (z | x, y)∥p(z)] . (25) This completes the derivation of the ELBO for our causal reward model. 
+
+## B. Proof of Theorem 5.1 
+
+We give a proof by instantiating the PAC-Bayesian model averaging theorem of McAllester (1999) with the latent-variable reward model. For each preference triple (x, y+, y−) and latent variables (w, z+, z−), define the 0-1 loss ℓ(x, y+, y−) ∈ [0 , 1] as in Eq. (15). We use the factorized prior p(w, z+, z−) = p(w)p(z+)p(z−). Given training data, our inference networks define the posterior 
+
+Q(w, z+, z−) := qϕ1 (w | x) qϕ2 (z+ | x, y+) qϕ2 (z− | x, y−). (26) By the variational factorization and the factorized prior, 
+
+KL  Q(w, z+, z−) ∥ P (w, z+, z−) = Ew,z+,z−
+
+
+
+log qϕ1 (w | x) qϕ2 (z+ | x, y+) qϕ2 (z− | x, y−)
+
+p(w)p(z+)p(z−)
+
+
+
+= KL( qϕ1 (w | x) ∥ p(w)) + KL  qϕ2 (z | x, y+) ∥ p(z) + KL  qϕ2 (z | x, y−) ∥ p(z) ,
+
+(27) which is exactly the requested separation into the w-divergence and the z-divergence. Following McAllester (1999), we start with the following lemma: 
+
+Lemma B.1. For ln 1 
+
+> δ
+
+≤ 2N , with probability at least 1 − δ over the selection of a sample S of size N , the following holds for all distributions Q satisfying KL( Q∥P ) ≤ 2N :
+
+R(Q) ≤ bR(Q, S) + X
+
+> i
+
+Qi
+
+s
+
+ln Qi 
+
+> Pi
+
++ ln 1 
+
+> δ
+
++ 52 ln N + 8 2N − 1 (28) In our case, the distribution Q corresponds to the posterior over latent variables Q(w, z+, z−) = qϕ1 (w | x) qϕ2 (z+ |
+
+x, y+) qϕ2 (z− | x, y−) and the prior is: P (w, z+, z−) = p(w)p(z+)p(z−)
+
+To obtain our main theorem from the lemma, we apply Jensen’s inequality. Since the square root function is concave, we have: 
+
+X
+
+> i
+
+Qi
+
+s
+
+ln Qi 
+
+> Pi
+
++ ln 1 
+
+> δ
+
++ 52 ln N + 8 2N − 1
+
+≤
+
+s P 
+
+> i
+
+Qi ln Qi 
+
+> Pi
+
++ ln 1 
+
+> δ
+
++ 52 ln N + 8 2N − 1
+
+(29) Using the KL decomposition: 
+
+KL( Q∥P ) = KL( qϕ1 (w | x) ∥ p(w)) + KL  qϕ2 (z | x, y+) ∥ p(z)
+
++ KL  qϕ2 (z | x, y−) ∥ p(z) (30) 13 VRM: Teaching Reward Models to Understand Authentic Human Preferences 
+
+Therefore, with probability at least 1 − δ over the draw of the training sample S:
+
+R ≤ bR +
+
+s
+
+D(Q∥P ) + ln 1 
+
+> δ
+
++ 52 ln N + 8 2N − 1= bR + 12N − 1
+
+ X 
+
+> i
+
+h
+
+KL( qϕ1 (w | xi) ∥ p(w)) + KL  qϕ2 (z | xi, y+ 
+
+> i
+
+) ∥ p(z)
+
++ KL  qϕ2 (z | xi, y− 
+
+> i
+
+) ∥ p(z) i
+
++ ln 1
+
+δ + 52 ln N + 8 
+
+!1/2
+
+(31) This completes the proof of Theorem 5.1. 
+
+Remark. Note that if ln 1 
+
+> δ
+
+> 2N or KL( Q∥P ) > 2N , then the bound follows trivially from the fact that R(Q) < 1. We focus on the meaningful range of the theorem and thus ignore these cases. When both ln 1 
+
+> δ
+
+≤ 2N and KL( Q∥P ) ≤ 2N , the above proof applies. 14

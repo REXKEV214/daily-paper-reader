@@ -1,0 +1,697 @@
+Title: Interpretable Debiasing of Vision-Language Models for Social Fairness
+
+URL Source: https://arxiv.org/pdf/2602.24014v1
+
+Published Time: Mon, 02 Mar 2026 02:08:22 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# Interpretable Debiasing of Vision-Language Models for Social Fairness 
+
+## Na Min An 1 Yoonna Jang 2 Yusuke Hirota 3
+
+## Ryo Hachiuma 3 Isabelle Augenstein 2 Hyunjung Shim 11 KAIST AI 2 University of Copenhagen 3 NVIDIA 
+
+{naminan }@kaist.ac.kr Prompt:  “A photo of a  CEO ” 
+
+> CLIP DEBIAS LENS
+> Prompt:
+> “Would
+> accountant
+> be a better
+> fit for this
+> person? ”
+> 1. VLM Debiasing (T2I Retrieval) 2. LVLM Debiasing (VQA)
+> InternVL
+> 0.5%
+> Yes
+> 68.3%
+> No
+> 31.3%
+> Unsure
+> DEBIAS LENS
+> 0.8%
+> Yes
+> 36.0%
+> No
+> 63.2%
+> Unsure
+
+Figure 1. Social bias mitigation in VLMs. While existing models retrieve image distribution of skewed demographics or answer definitively on ambiguous image-text pairs, our D EBIAS LENS alleviates social biases across both image and text modalities. 
+
+## Abstract 
+
+The rapid advancement of Vision-Language models (VLMs) has raised growing concerns that their black-box reasoning processes could lead to unintended forms of social bias. Current debiasing approaches focus on mitigating surface-level bias signals through post-hoc learning or test-time algorithms, while leaving the in-ternal dynamics of the model largely unexplored. In this work, we introduce an interpretable, model-agnostic bias mitigation framework, DEBIAS LENS , that local-izes social attribute neurons in VLMs through sparse autoencoders (SAEs) applied to multimodal encoders. Building upon the disentanglement ability of SAEs, we train them on facial image or caption datasets without corresponding social attribute labels to uncover neu-rons highly responsive to specific demographics, includ-ing those that are underrepresented. By selectively de-activating the social neurons most strongly tied to bias for each group, we effectively mitigate socially biased behaviors of VLMs without degrading their semantic knowledge. Our research lays the groundwork for future auditing tools, prioritizing social fairness in emerging real-world AI systems. 
+
+## 1. Introduction 
+
+Recent advancements in foundational Vision–Language Models (VLMs) ( e.g ., CLIP [67]) [88] and large VLMs (LVLMs) ( e.g ., InternVL [13]) integrated with Large Language Model (LLM) [34, 51, 86] have shown pos-sibilities for deployment in high-impact applications, such as assistive technologies [40, 43]. However, the rapid adoption of these models also increases concerns around fairness and social responsibility [9, 63, 68]. Since VLMs and LVLMs are trained on large-scale mul-timodal datasets, they may inherit and even amplify so-cietal biases learned from the training data [14, 24, 30, 42, 45, 48, 72, 80, 84]. For example, CLIP retrieves im-ages skewed to certain demographics ( e.g ., male) when prompted with seemingly neutral descriptions ( e.g ., “A photo of a CEO”) in text-to-image (T2I) retrieval, and InternVL provides definitive answers in visual question answering (VQA) tasks even under ambiguous contexts (see Figure 1). These biased outputs not only mischar-acterize reality but also reinforce discriminatory visual norms at scale, posing serious harm to users and un-derrepresented groups or cultures [45, 78]. Ultimately, addressing and mitigating such biases in a reliable and principled manner has become a crucial research chal-lenge. 
+
+> arXiv:2602.24014v1 [cs.CV] 27 Feb 2026
+
+Since it is costly to pre-train VLMs and LVLMs from scratch, most existing debiasing methods rely on post-hoc learning algorithms ( e.g ., fine-tuning, prompt tun-ing) and test-time debiasing approaches ( e.g ., pruning, prompt engineering) [14, 19, 21, 28]. For instance, Hi-rota et al. [28] proposed a debiasing approach that fine-tunes CLIP on the gender-balanced datasets by adding a residual layer to mitigate the harmful gender-occupation associations. Girrbach et al. [21] found that the LoRA fine-tuning [31] is the most promising approach when debiasing LVLMs, which shows the lowest trade-off be-tween general and bias mitigation performance. However, we argue that these debiasing methods suf-fer from a critical limitation: They overlook the model’s 
+
+internal dynamics . Consequently, they merely allevi-ate surface-level symptoms of biased behavior with-out modifying the underlying internal representations through which bias propagates [19, 36]. This lack of in-terpretability makes it difficult to identify and target the components responsible for encoding social biases, sub-sequently hindering precise debiasing and often degrad-ing the model’s original representations. For instance, although the model weight pruning approach aims to identify parameters that strongly influence bias mitiga-tion while minimally affecting overall performance, it paradoxically achieves bias reduction at the cost of sub-stantially compromising the model’s general capabil-ity [21]. This is likely since individual model neurons (linked to the weights) often encode polysemantic con-cepts [61], simultaneously affecting both bias and gen-eral model capability. To address this research gap, we propose D EBI-
+
+> AS
+
+LENS , a debiasing method that identifies bias-related social neurons and applies targeted, minimal interven-tions to effectively mitigate bias. Our method is in-spired by recent work leveraging sparse autoencoders (SAEs) for feature disentanglement in LVLM [61], which enables the extraction of semantically disentan-gled, monosemantic neurons [4, 85]. Since social bias emerges from strong, consistent correlations associated with specific demographics, we hypothesize that, when trained with appropriate datasets and settings, the SAE can encode “ social neurons ” that enable social bias attribute-specific ( e.g ., gender, age, race) targeted mit-igation of biased model behavior. Crucially, our method provides transparent, neuron-level debiasing by modu-lating these social neurons, enabling effective mitiga-tion while maintaining the model’s original capabili-ties across diverse multimodal tasks. Specifically, we achieve a 9–16% reduction in Max Skew for CLIP im-age retrieval and a 40–50% decrease in gender dispro-portion for InternVL2, all while preserving the original performance across general VLM reasoning tasks. The simplicity of our approach makes it readily applicable to both VLMs and LVLMs (Figure 1). In sum, our contributions are as follows: • The first interpretable debiasing mitigation framework applicable for VLM and LVLMs. • Effective bias mitigation strategy, preserving overall performance in general VLM tasks. • Informative guide on how to utilize SAE for develop-ing bias-aware multimodal systems. 
+
+## 2. Related Work 
+
+Our work bridges the fields of bias mitigation in VLMs and mechanistic interpretability. 
+
+Bias Mitigation in Vision-Language Models Miti-gating biases in VLMs has been mostly conducted via post-hoc learning methods, aiming to preserve the orig-inal image or text embedding representations. Model pruning and fine-tuning are effective in reducing biases, but simultaneously, struggle with catastrophic forget-ting [19, 21]. Hence, several methods that do not need full fine-tuning have been introduced: Berg et al. [8] debias VLMs by prepending learnable embeddings to text queries trained with an adversarial classifier, leav-ing both the text and image encoders frozen. Seth et al. [72] learns additive residual image representations for neutralization. Chuang et al. [14] propose a closed-form method to debias VLMs by projecting out biased direc-tions from text embeddings. Kong et al. [46] use fair retrieval subsets using off-the-shelf social attribute clas-sifier or VLM. Gerych et al. [19] present a debiasing operation tailored to each input. Hirota et al. [28] debi-ases text embeddings by training a residual layer without using social attribute annotations. While the aforementioned works focus on mitigat-ing either image-only or text-only representations, sev-eral other studies probe into both modalities: Jung et al. [39] combine feature pruning and low confidence impu-tation for effective bias reduction. Weng et al. [82] ap-ply causal mediation analysis [79] to identify the direct and indirect interventions on model bias, revealing that image features are the primary contributors to bias in VLMs. Jiang et al. [36] utilize specific prompt prefixes in the language or vision input to reduce stereotypical biases in VLMs. Zhang et al. [89] propose a framework that jointly aligns and removes biases from both modal-ities to achieve fairer representations without sacrificing image-text representation alignment [3]. Our work is similarly applicable for image and/or text modalities. 
+
+Mechanistic Interpretability The goal in the do-main of mechanistic interpretability (MI) is to reverse-engineer neural networks, translating their learned pa-rameters into human-interpretable algorithms [20, 56] Reconstruction    
+
+> Deactivate
+> bias neurons
+> Sparsity
+> 1. SAE Training
+> !"…
+> ℒ!
+> !
+> Input
+> …
+> !…
+> VLM
+> Encoder
+> "
+> 2. Social Neuron Probing
+> …
+> …
+> …
+> VLM
+> Encoder
+> "
+> SAE Activations
+> …
+> …
+> VLM
+> Encoder
+> …
+> !
+> "!
+> Input
+> Debiased Answer
+> Projection
+> Large Language
+> Model
+> …
+> Prompt
+> 1−!
+> 3. Social Neuron -Controlled Inference
+> $
+> Effective neurons?
+> ≈
+
+Figure 2. Overview of our interpretable VLM debiasing framework. DEBIAS LENS consists of three stages: (1) SAE is trained on top of the last layer of the VLM image/text encoder (Section 3.1). (2) The social neurons are identified based on the consistency and specificity of SAE activations across data (Section 3.2). (3) The selected neurons are activated to generate debiased features, weighted summed with original features for further usage across downstream tasks (Section 3.3). 
+
+to explain how and why they arrive at their answers [25, 70]. MI can also be applied to VLMs to uncover their in-ternal mechanisms: Cao et al. [11] use probing [2, 6, 26] technique to reveal how multimodal pre-training shapes attention patterns. Salin et al. [69] probe the reliance of VLMs on biased cues for diverse multimodal tasks. Palit et al. [62] and Golovanevsky et al. [22] apply activation patching ( i.e . causal tracing) [53, 79, 90] by selectively controlling specific internal activations to identify criti-cal layers and components in VLMs. Logit lens [7, 59] technique is used to analyze how VLM processes visual tokens for object identification [58] and visual halluci-nation detection [35, 37, 66]. A widely adopted technique in MI leverages Sparse AutoEncoders (SAEs) to project original features into a sparse, interpretable representation via a high-dimensional expansion layer [5, 54, 60, 65]. Although there exist works that attempt to find task/domain-specific interpretable attention heads and neurons within the pre-trained VLMs [23, 32, 33, 55], more fine-grained semantic features within each modality are entangled in these neurons [44, 61]. While SAEs have been ap-plied to show effectiveness for bias mitigation in text-to-image (T2I) diffusion models [73, 75, 77], it has yet to be explored for encoder-based and image-text-to-text (IT2T) VLMs for the bias mitigation task. One of the reasons may be the difficulty of finding how to local-ize and regulate SAE social neurons. This paper ad-dresses this challenge by introducing an interpretable framework that identifies and selectively modulates neu-rons responsible for encoding social biases. 
+
+## 3. Methodology 
+
+Our goal is to mitigate social bias in pretrained vision–language models (VLMs) without modifying model weights or retraining, while preserving general performance and ensuring interpretability. To this end, we introduce D EBIAS LENS , a novel bias mitigation framework (Figure 2), which enables interpretable debi-asing that transparently disentangles and regulates social neurons within the models’ internal representations. 
+
+3.1. SAE Training 
+
+The first step transforms the entangled feature space of the VLM encoder (post-residual) into a sparse, inter-pretable latent space using SAE. Inspired by recent find-ings in mechanistic interpretability with monosemantic SAE neurons [17, 61], we attach an SAE layer ( ϕ(·))to the last layer of the pretrained VLM encoder (either vision, text, or both). Specifically, the SAE is trained to decompose the original feature v ∈ Rd into a sparse activation vector ϕ(v) ∈ Rω , ω ≥ d and reconstruct it as ˆv. Mathematically, ϕ(v) = σ(W⊤
+
+> enc
+
+(v − b1)) , ˆv =
+
+ψ(ϕ(v)) = W⊤
+
+> dec
+
+ϕ(v) + b2. Here, σ is a nonlinear-ity function ( e.g ., ReLU), and Wenc , Wdec , and bi are learnable parameters optimized by minimizing recon-struction error while enforcing sparsity with weight ( λ
+
+in Eq. 1). We adopt Matryoshka SAEs [10, 54] to form the reconstruction objective into a multi-scale loss, en-suring that the model learns accurate reconstructions at different levels of sparsity. If M is a set consisting of different depths of SAE layers, and ϕ1: m(v) denotes the top-m active neurons, the main objective L1(v) is: 
+
+L1(v) = LR(v) + λ∥ϕ(v)∥1,
+
+LR(v) = X
+
+> m∈M
+
+v − W⊤
+
+> dec
+
+ϕ1: m(v) 22 . (1) We also implement auxiliary loss [17] to utilize the top-maux dead latents for modeling reconstruction error. Hence, for e = v − ˆv, and ˆe = Wdec ϕ1: maux (v), the final loss is defined as: L(v) = L1(v) + β∥e − ˆe∥22.
+
+Why SAE? Finding interpretable SAE neurons allows direct modulation of the internal model structure without hurting the original architecture by retraining or pruning. In essence, the SAE serves as an analytical lens that re-veals and disentangles the internal bias structures within frozen VLMs. Leaving the original model unchanged, Same G, R & A  
+
+> Random
+> Same G
+> Same R
+> Same A
+> Same G & A
+> Same G & R
+> Same R & A
+> Same G, R & A
+> +0.24
+> Random
+> Same G
+> Same R
+> Same A
+> Same G & A
+> Same G & R
+> Same R & A
+> Same G, R & A +0.14
+> Cosine Similarity
+> Group of Pairs Group of Pairs
+> …
+> Encoder
+> …
+> SAE -Attatched Original
+> …
+> Encoder
+
+Figure 3. Comparison between similarity trend of facial image pairs for original and SAE-attached CLIP. The dif-ference between the cosine similarity of random and social attribute-overlapping image pairs (G: gender, R: race, A: age) becomes more pronounced when our SAE is attached, indicat-ing that the SAE can capture latent bias-sensitive features. 
+
+only the SAE is trained on any type of facial-related im-age/caption datasets without social attribute labels. 
+
+3.2. Social Neuron Probing 
+
+Based on the observation that SAE neurons can implic-itly capture social attributes (Figure 3) even without ex-plicit supervision from demographic labels ( e.g ., gen-der, age, or race), we hypothesize that the social neu-rons contributing to a model’s bias exhibit differential SAE activation patterns across data groups representing different social attributes. To locate these social neu-rons, we first quantify the effectiveness score of an SAE neuron j within a social attribute group g (e.g ., female for gender), we use the following effectiveness criterion: 
+
+PSg 
+
+> i=1
+
+I(x(g)
+
+> i,j
+
+̸ = 0) ≥ ⌊ τ · Sg ⌋.Here, x(g) 
+
+> i,j
+
+is the SAE activation of neuron j for sam-ple i in group g, and I(·) is the indicator function. The effective neurons are automatically selected if their SAE activations are non-zero for at least τ proportion of the samples for each group with the size of Sg .This process results in the set of automatically se-lected effective neurons, Eg . Subsequently, we identify the social attribute group-specific neurons Ng by calcu-lating the set difference Ng = Eg \U ¬g , where U¬g is the union of effective neurons from all other social attribute groups h̸ = g:
+
+Ng = Eg \
+
+ [
+
+> h∈G,h ̸=g
+
+Eh
+
+
+
+The set Ng thus comprises neurons that are activated almost universally within group g but not within any other group, making them strong candidates for encod-ing the group’s specific features. These candidate neu-rons are ranked by their mean activation value ¯sj within group g to prioritize those with the strongest within-group signal: ¯sj = 1
+
+> Sg
+
+PSg 
+
+> i=1
+
+x(g) 
+
+> i,j
+
+, for j ∈ N g
+
+Finally, we select social neurons for each group as the neuron j ∈ N g that exhibits the highest mean ac-tivation value: j∗ 
+
+> g
+
+= arg max j∈N g (¯ sj ). We store the selected social neurons ( e.g ., all female and male neu-rons selected for ‘gender’ attributes) in ZB.
+
+3.3. Social Neuron-Modulated Inference 
+
+During the inference phase, the SAE activations corre-sponding to the social neurons are neutralized (or deacti-vated) by setting their activation values in the latent vec-tor z to zero. Specifically, for all neuron indices j ∈ Z B,the corresponding component of z′ is set as: 
+
+z′[j] = 
+
+(
+
+γ if j ∈ Z B
+
+z[j] otherwise Following this targeted deactivation ( γ set to 0 for most cases but allowed to take negative values depend-ing on the desired strength of the deactivation), the mod-ified latent vector z′ is passed through the trained SAE decoder to generate the bias-free reconstructed feature: 
+
+ˆv = ψ(z′). Since the SAE is specifically trained to cap-ture social neurons, the reconstructed feature ˆv might be shifted towards the latent space of the SAE train-ing data distribution. To proportionally utilize the re-constructed feature provided by the SAE while preserv-ing the original feature’s information, we use a weighted sum: v′ = αˆv + (1 − α)v, where α ∈ [0 , 1] is weight proportion. The resulting mixed vector v′ replaces the original hidden state in the subsequent operations of the transformer block, mediating the effect of potentially bi-ased feature components detected and deactivated via SAE. The novelty of our method lies in leveraging SAE to isolate bias as recurring internal features within a sub-set of interpretable neurons for targeted bias mitigation. 
+
+## 4. Experiments 
+
+This section lays out implementation details of our methodology and evaluation on the effectiveness of our DEBIAS LENS . Details are in the Supp. A, B and C. 
+
+4.1. Experimental Details 
+
+SAE Training datasets To examine the effect of training data distribution on the reconstructed latent space, we train SAE using various data configura-tions: CelebA [52], Cocogender images [76], and Fair-Face [41] for the image encoder and Cocogender cap-tions (Cocogendertxt) [76] and Bias in Bios [15] for the text encoder. Note that all these datasets have ‘gender’ as a bias attribute label, and the FairFace dataset also has ‘age’ and ‘race’ labels. 
+
+Evaluation datasets To assess the social bias level of encoder-based VLMs (CLIP variants [67], follow-ing previous VLM-related works [8, 14, 19, 28]) and encoder-decoder-based LVLMs (LLaVA-1.5-7B [51] and InternVL2-8B [13], known to show the strongest gender bias tendency [21] among LVLMs), we evalu-ate the models on the T2I retrieval and VQA tasks, re-spectively. When evaluating the T2I retrieval, we use 10,954 cropped facial datasets in FairFace [41], follow-ing [28, 72]. The social bias attribute labels in these datasets are gender, age, and race. The text prompts used as inputs for T2I retrieval consist of 29 adjectives, 41 occupations, and 33 activities (spanning 12, 7, and 6 unique templates) [28]. We exclude the age groups of “0-2” and “more than 70” for the occupation category. We also test 25 stereotype text prompts [19]. When evaluating LVLMs, we use two recent bench-marks: VLAGenderBias (VLA) [21] and SBBench [57]. The former consists of 5k facial images with gender bias attributes collected from various data sources [18, 41, 71, 72], and the latter benchmark consists of 14.6k images labeled with nine social attributes 1 pooled from web search. The sources of text prompts are pooled from various sources [38, 47, 91] for VLA (prompts: occupation, sentiment, and skills) and BBQ [64] for SBBench. All these datasets are distributed fairly across pre-defined social attributes ( e.g ., gender). We use ImageNette [29] and VLMEvalKit MME [12]-measured with the sum of perception and reasoning scores, MMMU-dev [87], and Seed-Bench-2 [49]) for general performance evaluation [16]. 
+
+Evaluation metrics Following previous works [8, 14, 19, 27, 39], we use Max Skew to quantify how much the distribution of retrieved images approximates a uniform distribution across different demographics per bias at-tribute. For benchmarking LVLMs, the bias is measured in two ways: (1) The proportion of statistically differ-ent answers of “yes” between male and female-labeled data (denoted as gender disproportion rate) [21], and (2) The accuracy of correctly answering bias probing ques-tions, such as opting for “cannot be determined,” given the image-text pair with no definite correct answers [57]. 
+
+Comparison methods We compare our approach ap-plied to VLM with the following methods: Prompt [8] learns prefix embeddings for text queries using a com-bined adversarial and contrastive learning objective. 
+
+Projection [14] uses a closed-form projection matrix to remove biased directions from the text embeddings without additional data or training. Bend-VLM [19] is a nonlinear, fine-tuning-free approach that debiases VLM embeddings by customizing the debiasing process for each input using spurious and augmented prompts. 
+
+SANER [28] neutralizes text features by erasing at-tribute information only from attribute-neutral text in-puts. We use the variation of MMNeuron [33], which identifies bias attribute-specific neurons within the pre-trained layers of VLM encoders. 
+
+> 1Due to the sample insufficiency for certain social attributes ( e.g ., physical appearance), we test perceived gender and age attributes.
+
+Table 1. Max Skew@1000 (scaled by 100) results on Fair-Face dataset using diverse prompts for gender bias evalu-ation . Note † represents reproduced results (T and I indicate SAE attached to text and image encoder). Our D EBIAS LENS 
+
+attains comparable performance with SoTA VLM debiasing methods without using labels during training (but required dur-ing probing), with interpretable inference components.                                                                                   
+
+> Methods Interpretable? Max Skew ( ↓)Adj Occup Act Ster
+> CLIP (ViT-B/16) [67] −22.9 33.7 19.5 33.8 CLIP (ViT-B/16) †−21.9 33.5 19.8 32.5 Prompt [8] 12.3 29.9 20.0 -Prompt †11.9 29.8 19.3 28.7 Projection [14] 15.4 37.4 15.0 52.0 Bend-VLM †[19] 10.8 10.2 9.8 9.1 SANER [28] 8.9 14.5 7.7 -DEBIAS LENS (I) ✓14.2 21.5 20.0 18.3 DEBIAS LENS (T) ✓7.1 16.2 14.2 8.1
+> DEBIAS LENS (I+T) ✓11.1 19.4 18.0 10.3 CLIP (ViT-L/14@336) †−19.9 31.5 23.2 30.0 MMNeuron [12] ✓17.3 23.5 26.0 20.3 DEBIAS LENS (I) ✓12.0 20.4 17.2 11.2
+> DEBIAS LENS (T) ✓16.3 27.6 26.9 21.2 DEBIAS LENS (I+T) ✓16.2 25.1 19.9 24.2
+
+The comparison methods for LVLMs are as fol-lows [21]: Full Fine-Tuning and LoRA Fine-Tuning 
+
+optimize all model parameters and low-rank adapters (LoRAs [31]). Pruning method identifies and prunes the parameters that are effective in mitigating bias but show less influence on general loss performance. 
+
+Prompt Tuning trains embeddings of a soft prompt pre-fix that can be transferable across prompt variations for bias reduction. Prompt Engineering inputs debiasing instructions, such as “Please, be mindful that people should not be judged based on their race, gender, age, or other physical characteristics,” during the test stage. 
+
+Implementation details We set the expansion factor of SAE to be 8 [61], τ to be 0.9, α to be 0.6 based on the results in the Experiments section (Section 4.3). We use SAE-trained and its neurons probed using FairFace and Cocogendertxt datasets for the image and/or text en-coder throughout the experiments if not specified. 
+
+4.2. Debiasing Vision-Language Models 
+
+Applying interpretable DEBIAS LENS to the image and/or text encoder of two widely used CLIP vari-ants [67], we notice a significant decrease in Max Skew scores (Table 1), comparable to previous SoTA debi-asing methods [8, 28]. Notably, DEBIAS LENS (T) achieves the best bias mitigation results for adjective and stereotype prompts without using attribute labels for training like [28] and augmentation like [19]. The quali-tative results (Figure 1) also show significant gender bal-ance improvement. Interestingly, while D EBIAS LENS (T) shows better results in CLIP (ViT-B/16) than D EBIAS LENS (I), it is Figure 4. Comparison between bias mitigation vs . general performance of LVLMs. Our method achieves the best trade-off among existing approaches ( ←, ↑, the better). 
+
+vice versa for CLIP (ViT-L/14@336). This suggests that debiasing the image encoder is more effective for VLM with higher image encoding resolution [81], mo-tivating us to explore the image encoder debiasing ca-pability on LVLMs later. Furthermore, we notice the Max Skew scores of D EBIAS LENS (I +T), where our debiasing methods are independently applied to both im-age and text encoders, lie between those that use image-only D EBIAS LENS (I) and text-only D EBIAS LENS (T) VLM encoders. This implies that debiasing each modal-ity partially mitigates bias, but their combined effect is not purely additive. Figure 4 demonstrates our method when applied to LVLMs. We observe that D EBIAS LENS -Intern ( α: 0.6) shows a reduction of 40–50% in disproportions that they answer differently across genders, it simultaneously shows a comparatively minimal drop of 4–10 in aver-age general performance (computational cost results in Supp. C). The raw probability scores of D EBIAS LENS -Intern across genders per skill/occupation/sentiment-related textual prompts are in Figures 13, 14, and 15 in Appendix C, which illustrate that our method sig-nificantly reduces the gender disproportion rate across different types of prompts. For instance, while the origi-nal baseline shows a statistically significant difference in prompts such as “handle multitasks,” “maintain consis-tency,” and “work under pressure,” our method reduces the probability gap. Also, the probability distribution across textual prompts becomes more uniform. Overall, our method also exhibits the lowest trade-off among existing baseline methods. It also achieves a gradual decrease in overall performance compared to the pruning approach, while effectively mitigating bias. 
+
+4.3. Interpretable Social Neurons 
+
+To validate the mechanistic interpretability of D EBI-
+
+> AS
+
+LENS , we conduct a rigorous neuron specificity anal-ysis. Our central hypothesis is that the identified SAE 
+
+Table 2. Neuron-specificity results for CLIP (ViT-B/16) im-age encoder. The social neurons selectively mitigate their tar-geted bias attributes.                                    
+
+> Max Skew ( ↓)αRandom Neurons Social Neuron Types Gender Age Race
+> Gender 1.0 10.6 10.5 9.2 11.3 Bias 0.6 14.1 13.9 13.8 14.0 Age 1.0 90.1 89.9 72.7 87.8 Bias 0.6 95.8 95.6 83.2 94.9 Racial 1.0 57.6 56.8 63.0 43.5
+> Bias 0.6 61.0 60.9 59.1 55.8 CLIP ViT-B/16
+> CLIP ViT-L/14
+> 0
+> 10
+> 20
+> Max Skew
+> Gender Bias
+> CLIP ViT-B/16
+> CLIP ViT-L/14
+> 0
+> 25
+> 50
+> 75
+> 100
+> Age Bias
+> CLIP ViT-B/16
+> CLIP ViT-L/14
+> 0
+> 20
+> 40
+> 60
+> Racial Bias
+> Baseline Gender Neurons
+
+Figure 5. Neuron-specific results for CLIP text encoder. 
+
+Modulating gender neurons mitigates only gender bias, indi-cating high neuron specificity. 
+
+features encode a single social attribute concept. To quantify this, we measure the effect of neuron deacti-vation on both its targeted bias and non-targeted biases. As can be seen in Table 2, deactivating the targeted so-cial neurons ( i.e ., the top neuron that shows the high-est SAE activation per bias attribute group) consistently yields significantly lower bias scores compared to de-activating randomly selected neurons ( e.g ., −17.4% for Age Neurons when α = 1.0). This demonstrates that the selected social neurons affect bias propagation. Intriguingly, while gender neurons show specificity, modulating age neurons yields gender bias mitigation (10.6 → 9.2). We attribute this intersectional effect to the known correlation between age and gender attributes in the data and observation that 40% (out of 25) of the age neurons are gender-skewed (Supp. C). This suggests that our SAE disentangles features that are relevant to both. We further observe that social neurons localized in the text encoder exhibit higher specificity for gender, showing almost no effect on other social attributes like age, consistent with previous findings [74] (Figure 5). This supports findings that image encoder features are often more entangled and impactful for overall bias [82]. Finally, Figure 6 illustrates the high semantic purity of the selected social neurons; the top activating images corresponding to a single social attribute [41], confirm-ing the successful disentanglement using SAEs. To ensure the robustness and optimal configuration of this disentanglement, we investigate to what extent the expansion factor, training dataset, and modality could influence the number of automatically selected social neurons and their effectiveness. We find that enlarging the expansion factor could overall retrieve more social Age Neuron Race Neuron Gender Neuron Figure 6. Top activating images per social neuron. Each social neuron corresponds to a human-interpretable concept of a social bias attribute. Table 3. SBBench (categories: age and gender) accuracy of D EBIAS LENS applied to LVLM. The best performance is achieved when SAE is trained and gender neurons are selected using the FairFace datasets, measured using a rule-based and model-based evaluation.                                                                        
+
+> Methods Eval Train Data Probing Data Gender Age
+> InternVL2-8B Rule 83.83 43.11 DEBIAS LENS Rule SB-Syn SB-Syn 84.32 44.59 DEBIAS LENS Rule SB-Syn-Crop SB-Syn-Crop 84.71 45.55 DEBIAS LENS Rule FairFace SB-Syn 86.32 47.17 DEBIAS LENS Rule FairFace SB-Syn-Crop 86.49 47.21 DEBIAS LENS Rule FairFace FairFace 86.68 47.52 DEBIAS LENS Rule FairFace FairFace ( α=1.0) 87.87 48.51 InternVL2-8B Phi 85.97 50.35 DEBIAS LENS Phi SB-Syn SB-Syn 85.68 50.42 DEBIAS LENS Phi SB-Syn-Crop SB-Syn-Crop 87.07 51.51 DEBIAS LENS Phi FairFace SB-Syn 87.68 53.46 DEBIAS LENS Phi FairFace SB-Syn-Crop 87.81 53.46 DEBIAS LENS Phi FairFace FairFace 88.39 52.54 DEBIAS LENS Phi FairFace FairFace ( α=1.0) 89.49 53.77
+
+neurons for both image and text encoders (see the first rows in Figures 7 and 8). The negative correlation trend between the threshold ( τ ) and the number of effective neurons also becomes distinguished when the expansion factor is set to 8, with an optimal threshold achieved at 0.1 for both image and text encoders. This claim can be supported for all the tested training datasets ( i.e ., Fair-Face [41], Cocogender [76], and CelebA [52]) for both modalities. This suggests that having a relatively larger expansion factor can yield a consistent optimal threshold across datasets. However, performance across different thresholds re-mains largely stable, suggesting the automatically se-lected social neurons generally neither interfere with nor reinforce each other’s effects (see the second rows of Figures 7 and 8), except for the case of CelebA. This implies that deactivating only the top-1 social neuron yields performance comparable to deactivating all effec-tive neurons, enabling stable bias mitigation with mini-mal intervention. Hence, selecting and deactivating only top neurons could maintain stable performance while ef-fectively mitigating bias. Finally, our primary datasets (Fairface [41] and Cocogendertxt [76]) show a propor-tional rise in performance as the expansion factor in-creases (2 to 8). 
+
+Table 4. General performance and bias mitigation score re-sults of D EBIAS LENS applied to CLIP and LLaVA across varying weighted proportions. There exists a trade-off be-tween these two aspects for both modalities and model types.                                                            
+
+> α
+> CLIP ViT-B/16 LLaVA-1.5-7b-hf
+> ImgNette ↑[29] FairFace ↓[41] MME ↑[12] VLA ↓[21] Image Text Image Text Image Text 0.0 99.5 99.1 18.8 16.7 1440.10 0.62 0.2 99.3 99.0 17.8 12.8 1479.28 0.57 0.4 99.0 99.1 16.2 8.7 1496.10 0.53 0.5 98.5 98.9 15.2 7.4 1483.89 0.50 0.6 97.5 98.5 14.2 7.1 1454.26 0.50 0.8 88.6 96.3 11.7 9.2 1360.22 0.48 1.0 59.1 87.8 10.6 13.2 1152.33 0.41
+
+4.4. Data Distribution Effects 
+
+We further investigate the effect of training and neu-ron probing datasets on bias mitigation performance. Based on the motivation that our main image dataset FairFace [41] seems to better yield effective social neurons than the others, we wonder whether this is because of their facial-only attribute or the diver-sity using real-world data. Since there are no real datasets to conduct this controlled study, we curate new synthetic facial datasets, namely, SB-Syn-Crop (facial-only) and SB-Syn (background-included), from SBBench synthetic datasets [57] using a T2I editing model, Qwen-Image-Edit [83] (Figure 9). Surpris-ingly, we find that SAE-trained and its (gender) neu-rons selected using the Fairface dataset show better per-formance using more in-distribution datasets, as can be seen in Table 3. Also, using facial-only datasets (i.e ., SB-Syn-Crop and FairFace) results in better per-formance. Note that we use α = 0 .6 for all cases except for FairFace (1.0). This performance trend is also con-sistent when evaluated with different methods (model-free rule-based parsing and LVLM-as-a-judge with Phi-4-14B [1]) for measuring the match between model re-sponse and ground-truth. 
+
+4.5. Ablation Study 
+
+When visualizing the top activating images or texts us-ing different training datasets (Figure 10), we observe that it is indispensable that the selected social neurons may contain information other than purely social at-tributes ( e.g ., gender, age, and race). For instance, a neu-ron selected within SAE trained with CelebA [52] con-tains not only the “female” gender information but also the hairstyle. Similarly, a neuron for Bias in Bios [15] dataset contains both the “male” and “practice” infor-mation. In comparison, our final selected FairFace [41] used for D EBIAS LENS (I) yields neurons mostly related to social bias attributes. The results in Table 4 indicate that using more neuron-modulated SAE activations leads to lower gen-Figure 7. Proportion of effective social neurons (top) and corresponding Max Skew scores (bottom) of CLIP (ViT-B/16) 
+
+image encoder. The expansion factor 8 shows the most similar results across training datasets, and the FairFace dataset achieves the most stable, consistent bias scores as the expansion factor increases. (0: Male, 1: Female). 
+
+Figure 8. Proportion of effective social neurons (top) and corresponding Max Skew scores (bottom) of CLIP (ViT-B/16) text 
+
+encoder. The expansion factor 8 shows the most similar results across training datasets, and the Cocogendertxt dataset achieves the most stable, consistent bias scores as the expansion factor increases. (0: Male, 1: Female). Original SB -Syn SB -Syn -Crop 
+
+Figure 9. Newly generated SBBench synthetic datasets. We synthesize images to observe varying training and social neu-ron probing datasets when training SAE for bias mitigation. 
+
+eral performance but better bias mitigation. For exam-ple, ImgNette [29] and MME [12] performance drop as α increases, but vice versa for FairFace [41] and VLA [21].While we select the α to be 0.6 throughout the main experiments to ensure a balance between gen-eral and bias mitigation performance, practitioners could select based on their preference on the trade-off. 
+
+## 5. Conclusion 
+
+This work presents D EBIAS LENS , an interpretable de-biasing framework for actively identifying and modu-lating the social neurons. By identifying bias at the latent representation level and selectively modulating social neurons, our method achieves effective debias-ing with minimal degradation of general performance. Beyond demonstrating strong empirical performance "A man standing behind a robot behind an 
+
+> orange ball.”
+> "A boy throws a baseball into the air.”
+> "A man looking upward at a tennis ball. ”
+> "A couple of people standing on a court
+> with a ball.”
+> "A man holding a soccer ball in a field”
+> "a man catching a ball with a young boy”
+
+Bias in Bios 
+
+> "He is 72 years old and has been practicing for 46
+> years. Dr. Oneacre is affiliated with Baylor
+> Medical Center at Carrollton and Texas Health
+> Presbyterian Hospital Flower Mound."
+> "He has been practicing for 46 years and received
+> his medical degree from Jawaharlal Institute of
+> Postgraduate Medical Education and Research. No
+> Reviews Favorite"
+> "The practice was established in 1980, and has
+> included projects in regional planning, housing,
+> schools, commercial buildings, agriculture,
+> rehabilitation, etc."
+
+COCOgender FairFace CelebA 
+
+COCOgender captions 
+
+Figure 10. Qualitative results of top activating images per gender attribute neuron across different training datasets. 
+
+FairFace emerges as the most suitable dataset for training SAEs aimed at bias mitigation, as it produces neurons that strongly align with social attributes. 
+
+across multiple VLM architectures and domains, D E-BIAS LENS transforms bias mitigation into a black-box correction into an interpretable intervention. However, as our ablation demonstrates, the degree of SAE inter-vention must be carefully selected as excessive modula-tion risks inadvertently distorting semantic representa-tions. We envision the framework as a foundational step toward trustworthy and responsible AI, inspiring future research into developing unbiased multimodal systems. Acknowledgements 
+
+We are grateful to Haeun Yu and Eunki Kim for their insightful comments and valuable discussion during the early stages of this work. 
+
+## References 
+
+[1] Marah Abdin, Jyoti Aneja, Harkirat Behl, S´ ebastien Bubeck, Ronen Eldan, Suriya Gunasekar, Michael Har-rison, Russell J Hewett, Mojan Javaheripi, Piero Kauff-mann, et al. Phi-4 technical report. arXiv preprint arXiv:2412.08905 , 2024. 7, 16 [2] Guillaume Alain and Yoshua Bengio. Understanding in-termediate layers using linear classifier probes. arXiv preprint arXiv:1610.01644 , 2016. 3 [3] Na Min An, Eunki Kim, James Thorne, and Hyunjung Shim. I0t: Embedding standardization method towards zero modality gap. arXiv preprint arXiv:2412.14384 ,2024. 2 [4] Anthropic. Towards monosemanticity: Decomposing language models with dictionary learning, 2023. 2 [5] Sanjeev Arora, Yuanzhi Li, Yingyu Liang, Tengyu Ma, and Andrej Risteski. Linear algebraic structure of word senses, with applications to polysemy. Transactions of the Association for Computational Linguistics , 6:483– 495, 2018. 3 [6] Nicholas Bai, Rahul Ajay Iyer, Tuomas Oikarinen, and Tsui-Wei Weng. Describe-and-dissect: Interpreting neu-rons in vision networks with language models. In ICML 2024 Workshop on Mechanistic Interpretability , 2024. 3 [7] Nora Belrose, Zach Furman, Logan Smith, Danny Ha-lawi, Igor Ostrovsky, Lev McKinney, Stella Bider-man, and Jacob Steinhardt. Eliciting latent predictions from transformers with the tuned lens. arXiv preprint arXiv:2303.08112 , 2023. 3 [8] Hugo Berg, Siobhan Hall, Yash Bhalgat, Hannah Kirk, Aleksandar Shtedritski, and Max Bain. A prompt array keeps the bias away: Debiasing vision-language mod-els with adversarial learning. In Proceedings of the 2nd Conference of the Asia-Pacific Chapter of the Associa-tion for Computational Linguistics and the 12th Interna-tional Joint Conference on Natural Language Processing (Volume 1: Long Papers) , pages 806–822, 2022. 2, 4, 5, 13, 14 [9] Abeba Birhane, Vinay Uday Prabhu, and Emmanuel Kahembwe. Multimodal datasets: Misogyny, pornog-raphy, and malignant stereotypes. arXiv preprint arXiv:2110.01963 , 2021. 1 [10] Bart Bussmann, Noa Nabeshima, Adam Karvonen, and Neel Nanda. Learning multi-level features with matryoshka sparse autoencoders. arXiv preprint arXiv:2503.17547 , 2025. 3 [11] Jize Cao, Zhe Gan, Yu Cheng, Licheng Yu, Yen-Chun Chen, and Jingjing Liu. Behind the scene: Revealing the secrets of pre-trained vision-and-language models. In 
+
+Computer Vision–ECCV 2020: 16th European Confer-ence, Glasgow, UK, August 23–28, 2020, Proceedings, Part VI 16 , pages 565–580. Springer, 2020. 3 [12] Fu Chaoyou, Chen Peixian, Shen Yunhang, Qin Yulei, Zhang Mengdan, Lin Xu, Yang Jinrui, Zheng Xiawu, Li Ke, Sun Xing, et al. Mme: A comprehensive evaluation benchmark for multimodal large language models. arXiv preprint arXiv:2306.13394 , 3, 2023. 5, 7, 8, 16 [13] Zhe Chen, Jiannan Wu, Wenhai Wang, Weijie Su, Guo Chen, Sen Xing, Muyan Zhong, Qinglong Zhang, Xizhou Zhu, Lewei Lu, et al. Internvl: Scaling up vi-sion foundation models and aligning for generic visual-linguistic tasks. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , pages 24185–24198, 2024. 1, 4, 15, 16 [14] Ching-Yao Chuang, Varun Jampani, Yuanzhen Li, An-tonio Torralba, and Stefanie Jegelka. Debiasing vision-language models via biased prompts. arXiv preprint arXiv:2302.00070 , 2023. 1, 2, 4, 5, 14 [15] Maria De-Arteaga, Alexey Romanov, Hanna Wallach, Jennifer Chayes, Christian Borgs, Alexandra Choulde-chova, Sahin Geyik, Krishnaram Kenthapadi, and Adam Tauman Kalai. Bias in bios: A case study of se-mantic representation bias in a high-stakes setting. In 
+
+proceedings of the Conference on Fairness, Accountabil-ity, and Transparency , pages 120–128, 2019. 4, 7, 13 [16] Haodong Duan, Junming Yang, Yuxuan Qiao, Xinyu Fang, Lin Chen, Yuan Liu, Xiaoyi Dong, Yuhang Zang, Pan Zhang, Jiaqi Wang, et al. Vlmevalkit: An open-source toolkit for evaluating large multi-modality mod-els. In Proceedings of the 32nd ACM International Con-ference on Multimedia , pages 11198–11201, 2024. 5, 16 [17] Leo Gao, Tom Dupr´ e la Tour, Henk Tillman, Gabriel Goh, Rajan Troll, Alec Radford, Ilya Sutskever, Jan Leike, and Jeffrey Wu. Scaling and evaluating sparse autoencoders. arXiv preprint arXiv:2406.04093 , 2024. 3 [18] Noa Garcia, Yusuke Hirota, Yankun Wu, and Yuta Nakashima. Uncurated image-text datasets: Shedding light on demographic bias. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 6957–6966, 2023. 5 [19] Walter Gerych, Haoran Zhang, Kimia Hamidieh, Eileen Pan, Maanas K Sharma, Tom Hartvigsen, and Marzyeh Ghassemi. Bendvlm: Test-time debiasing of vision-language embeddings. Advances in Neural Information Processing Systems , 37:62480–62502, 2024. 2, 4, 5, 14 [20] Mor Geva, Roei Schuster, Jonathan Berant, and Omer Levy. Transformer feed-forward layers are key-value memories. In Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing ,pages 5484–5495, 2021. 2 [21] Leander Girrbach, Stephan Alaniz, Yiran Huang, Trevor Darrell, and Zeynep Akata. Revealing and reducing gender biases in vision and language assistants (VLAs). In The Thirteenth International Conference on Learning Representations , 2025. 2, 4, 5, 7, 8, 14, 16 [22] Michal Golovanevsky, William Rudman, Vedant Palit, Carsten Eickhoff, and Ritambhara Singh. What do vlms notice? a mechanistic interpretability pipeline for gaussian-noise-free text-image corruption and evalua-tion. In Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technolo-gies (Volume 1: Long Papers) , pages 11462–11482, 2025. 3 [23] Michal Golovanevsky, William Rudman, Vedant Palit, Carsten Eickhoff, and Ritambhara Singh. What do vlms notice? a mechanistic interpretability pipeline for gaussian-noise-free text-image corruption and evalua-tion. In Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technolo-gies (Volume 1: Long Papers) , pages 11462–11482, 2025. 3 [24] Kimia Hamidieh, Haoran Zhang, Walter Gerych, Thomas Hartvigsen, and Marzyeh Ghassemi. Identify-ing implicit social biases in vision-language models. In 
+
+Proceedings of the AAAI/ACM Conference on AI, Ethics, and Society , pages 547–561, 2024. 1 [25] Sarah Hastings-Woodhouse. Introduction to mechanistic interpretability, 2024. 3 [26] John Hewitt and Christopher D Manning. A structural probe for finding syntax in word representations. In Pro-ceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguis-tics: Human Language Technologies, Volume 1 (Long and Short Papers) , pages 4129–4138, 2019. 3 [27] Yusuke Hirota, Noa Garcia, Mayu Otani, Chenhui Chu, and Yuta Nakashima. A picture may be worth a hun-dred words for visual question answering. Electronics ,13(21):4290, 2024. 5 [28] Yusuke Hirota, Min-Hung Chen, Chien-Yi Wang, Yuta Nakashima, Yu-Chiang Frank Wang, and Ryo Hachi-uma. SANER: Annotation-free societal attribute neutral-izer for debiasing CLIP. In The Thirteenth International Conference on Learning Representations , 2025. 2, 4, 5, 14 [29] Jeremy Howard. Imagenette: A smaller subset of 10 eas-ily classified classes from imagenet, 2019. 5, 7, 8 [30] Phillip Howard, Kathleen C Fraser, Anahita Bhiwandi-walla, and Svetlana Kiritchenko. Uncovering bias in large vision-language models at scale with counterfac-tuals. arXiv preprint arXiv:2405.20152 , 2024. 1 [31] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. Lora: Low-rank adaptation of large language mod-els. arXiv preprint arXiv:2106.09685 , 2021. 2, 5 [32] Kaichen Huang, Jiahao Huo, Yibo Yan, Kun Wang, Yu-tao Yue, and Xuming Hu. Miner: Mining the underlying pattern of modality-specific neurons in multimodal large language models. arXiv preprint arXiv:2410.04819 ,2024. 3 [33] Jiahao Huo, Yibo Yan, Boren Hu, Yutao Yue, and Xuming Hu. Mmneuron: Discovering neuron-level domain-specific interpretation in multimodal large lan-guage model. arXiv preprint arXiv:2406.11193 , 2024. 3, 5 [34] Aaron Hurst, Adam Lerer, Adam P Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow, Ak-ila Welihinda, Alan Hayes, Alec Radford, et al. Gpt-4o system card. arXiv preprint arXiv:2410.21276 , 2024. 1 [35] Nick Jiang, Anish Kachinthaya, Suzie Petryk, and Yossi Gandelsman. Interpreting and editing vision-language representations to mitigate hallucinations. arXiv preprint arXiv:2410.02762 , 2024. 3 [36] Yukun Jiang, Zheng Li, Xinyue Shen, Yugeng Liu, Michael Backes, and Yang Zhang. Modscan: Measuring stereotypical bias in large vision-language models from vision and language modalities. In Proceedings of the 2024 Conference on Empirical Methods in Natural Lan-guage Processing , pages 12814–12845, 2024. 2 [37] Zhangqi Jiang, Junkai Chen, Beier Zhu, Tingjin Luo, Yankun Shen, and Xu Yang. Devils in middle layers of large vision-language models: Interpreting, detecting and mitigating object hallucinations via attention lens. In 
+
+Proceedings of the Computer Vision and Pattern Recog-nition Conference , pages 25004–25014, 2025. 3 [38] Kameni Florentin Flambeau Jiechieu and Norbert Tsopze. Skills prediction based on multi-label resume classification using cnn with model predictions explana-tion. Neural Computing and Applications , 33(10):5069– 5087, 2021. 5 [39] Hoin Jung, Taeuk Jang, and Xiaoqian Wang. A unified debiasing approach for vision-language models across modalities and tasks. Advances in Neural Information Processing Systems , 37:21034–21058, 2024. 2, 5 [40] Wan Ju Kang, Eunki Kim, Na Min An, Sangryul Kim, Haemin Choi, Ki Hoon Kwak, and James Thorne. Sigh-tation counts: Leveraging sighted user feedback in build-ing a BLV-aligned dataset of diagram descriptions. In 
+
+Proceedings of the 63rd Annual Meeting of the Associa-tion for Computational Linguistics (Volume 1: Long Pa-pers) , pages 27585–27621, Vienna, Austria, 2025. Asso-ciation for Computational Linguistics. 1 [41] Kimmo K¨ arkk¨ ainen and Jungseock Joo. Fairface: Face attribute dataset for balanced race, gender, and age. arXiv preprint arXiv:1908.04913 , 2019. 4, 5, 6, 7, 8, 13 [42] Falaah Arif Khan, Nivedha Sivakumar, Yinong Oliver Wang, Katherine Metcalf, Cezanne Camacho, Barry-John Theobald, Luca Zappella, and Nicholas Apostoloff. Investigating intersectional bias in large language mod-els using confidence disparities in coreference resolution. 
+
+arXiv preprint arXiv:2508.07111 , 2025. 1 [43] Eunki Kim, Na Min An, James Thorne, and Hyunjung Shim. Multi-objective task-aware predictor for image-text alignment. arXiv preprint arXiv:2510.00766 , 2025. 1[44] Jinyeong Kim, Junhyeok Kim, Yumin Shim, Joohyeok Kim, Sunyoung Jung, and Seong Jae Hwang. Interpret-ing vision transformers via residual replacement model. 
+
+arXiv preprint arXiv:2509.17401 , 2025. 3 [45] Jun Seong Kim, Kyaw Ye Thu, Javad Ismayilzada, Jun-yeong Park, Eunsu Kim, Huzama Ahmad, Na Min An, James Thorne, and Alice Oh. When tom eats kimchi: Evaluating cultural bias of multimodal large language models in cultural mixture contexts. arXiv preprint arXiv:2503.16826 , 2025. 1 [46] Fanjie Kong, Shuai Yuan, Weituo Hao, and Ricardo Henao. Mitigating test-time bias for fair image retrieval. 
+
+Advances in Neural Information Processing Systems , 36, 2024. 2 [47] Keita Kurita, Nidhi Vyas, Ayush Pareek, Alan W Black, and Yulia Tsvetkov. Measuring bias in contextualized word representations. arXiv preprint arXiv:1906.07337 ,2019. 5 [48] Nayeon Lee, Yejin Bang, Holy Lovenia, Samuel Cahyawijaya, Wenliang Dai, and Pascale Fung. Survey of social bias in vision-language models. arXiv preprint arXiv:2309.14381 , 2023. 1 [49] Bohao Li, Yuying Ge, Yixiao Ge, Guangzhi Wang, Rui Wang, Ruimao Zhang, and Ying Shan. Seed-bench: Benchmarking multimodal large language models. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 13299–13308, 2024. 5, 16 [50] Bo Li, Yuanhan Zhang, Dong Guo, Renrui Zhang, Feng Li, Hao Zhang, Kaichen Zhang, Peiyuan Zhang, Yanwei Li, Ziwei Liu, et al. Llava-onevision: Easy visual task transfer. arXiv preprint arXiv:2408.03326 , 2024. 15 [51] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. Advances in neural infor-mation processing systems , 36:34892–34916, 2023. 1, 4, 15, 16 [52] Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. Large-scale celebfaces attributes (celeba) dataset. Re-trieved August , 15(2018):11, 2018. 4, 7 [53] Kevin Meng, David Bau, Alex Andonian, and Yonatan Belinkov. Locating and editing factual associations in gpt. Advances in neural information processing systems ,35:17359–17372, 2022. 3 [54] Noa Nabeshima. Matryoshka sparse autoencoders. In AI Alignment Forum , 2024. 3, 13 [55] Danial Namazifard and Lukas Galke. Isolating culture neurons in multilingual large language models. arXiv preprint arXiv:2508.02241 , 2025. 3 [56] Neel Nanda. A comprehensive mechanistic interpretabil-ity explainer & glossary, 2021. 2 [57] Vishal Narnaware, Ashmal Vayani, Rohit Gupta, Sirnam Swetha, and Mubarak Shah. Sb-bench: Stereotype bias benchmark for large multimodal models. arXiv preprint arXiv:2502.08779 , 2025. 5, 7, 13, 14 [58] Clement Neo, Luke Ong, Philip Torr, Mor Geva, David Krueger, and Fazl Barez. Towards interpreting visual in-formation processing in vision-language models. arXiv preprint arXiv:2410.07149 , 2024. 3 [59] nostalgebraist. interpreting gpt: the logit lens, 2020. 3 [60] Chris Olah, Nick Cammarata, Ludwig Schubert, Gabriel Goh, Michael Petrov, and Shan Carter. Zoom in: An introduction to circuits. Distill , 5(3):e00024–001, 2020. 3[61] Mateusz Pach, Shyamgopal Karthik, Quentin Bouniot, Serge Belongie, and Zeynep Akata. Sparse autoencoders learn monosemantic features in vision-language models. 
+
+arXiv preprint arXiv:2504.02821 , 2025. 2, 3, 5, 13 [62] Vedant Palit, Rohan Pandey, Aryaman Arora, and Paul Pu Liang. Towards vision-language mechanistic interpretability: A causal tracing tool for blip. In Pro-ceedings of the IEEE/CVF International Conference on Computer Vision , pages 2856–2861, 2023. 3 [63] NaHyeon Park, Namin An, Kunhee Kim, Soyeon Yoon, Jiahao Huo, and Hyunjung Shim. Aligned but stereotyp-ical? the hidden influence of system prompts on social bias in lvlm-based text-to-image models, 2025. 1 [64] Alicia Parrish, Angelica Chen, Nikita Nangia, Vishakh Padmakumar, Jason Phang, Jana Thompson, Phu Mon Htut, and Samuel R Bowman. Bbq: A hand-built bias benchmark for question answering. arXiv preprint arXiv:2110.08193 , 2021. 5 [65] Kenny Peng, Rajiv Movva, Jon Kleinberg, Emma Pier-son, and Nikhil Garg. Use sparse autoencoders to dis-cover unknown concepts, not to act on known concepts. 
+
+arXiv preprint arXiv:2506.23845 , 2025. 3 [66] Anirudh Phukan, Divyansh Divyansh, Harshit Kumar Morj, Vaishnavi Vaishnavi, Apoorv Saxena, and Kous-tava Goswami. Beyond logit lens: Contextual embed-dings for robust hallucination detection & grounding in vlms. In Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technolo-gies (Volume 1: Long Papers) , pages 9661–9675, 2025. 3[67] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sas-try, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual models from natural lan-guage supervision. In International conference on ma-chine learning , pages 8748–8763. PmLR, 2021. 1, 4, 5, 15 [68] Mark Ryan and Bernd Carsten Stahl. Artificial intelli-gence ethics guidelines for developers and users: clari-fying their content and normative implications. Journal of Information, Communication and Ethics in Society , 19 (1):61–86, 2021. 1 [69] Emmanuelle Salin, Badreddine Farah, St´ ephane Ayache, and Benoit Favre. Are vision-language transformers learning multimodal representations? a probing perspec-tive. In Proceedings of the AAAI Conference on Artificial Intelligence , pages 11248–11257, 2022. 3 [70] Naomi Saphra and Sarah Wiegreffe. Mechanistic? In 
+
+Proceedings of the 7th BlackboxNLP Workshop: Ana-lyzing and Interpreting Neural Networks for NLP , pages 480–498, 2024. 3 [71] Candice Schumann, Susanna Ricco, Utsav Prabhu, Vitto-rio Ferrari, and Caroline Pantofaru. A step toward more inclusive people annotations for fairness. In Proceedings of the 2021 AAAI/ACM Conference on AI, Ethics, and Society , pages 916–925, 2021. 5 [72] Ashish Seth, Mayur Hemani, and Chirag Agarwal. Dear: Debiasing vision-language models with additive resid-uals. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 6820– 6829, 2023. 1, 2, 5 [73] Yingdong Shi, Changming Li, Yifan Wang, Yongxiang Zhao, Anqi Pang, Sibei Yang, Jingyi Yu, and Kan Ren. Dissecting and mitigating diffusion bias via mechanistic interpretability. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 8192–8202, 2025. 3 [74] Pushkar Shukla, Aditya Chinchure, Emily Diana, Alexander Tolbert, Kartik Hosanagar, Vineeth N Bala-subramanian, Leonid Sigal, and Matthew Turk. Miti-gate one, skew another? tackling intersectional biases in text-to-image models. arXiv preprint arXiv:2505.17280 ,2025. 6 [75] Viacheslav Surkov, Chris Wendler, Antonio Mari, Mikhail Terekhov, Justin Deschenaux, Robert West, Caglar Gulcehre, and David Bau. One-step is enough: Sparse autoencoders for text-to-image diffusion models. 
+
+arXiv preprint arXiv:2410.22366 , 2024. 3 [76] Ruixiang Tang, Mengnan Du, Yuening Li, Zirui Liu, Na Zou, and Xia Hu. Mitigating gender bias in captioning systems. In Proceedings of the Web Conference 2021 ,pages 633–645, 2021. 4, 7 [77] Zhihua Tian, Sirun Nan, Ming Xu, Shengfang Zhai, Wenjie Qu, Jian Liu, Ruoxi Jia, and Jiaheng Zhang. Sparse autoencoder as a zero-shot classifier for concept erasing in text-to-image diffusion models. arXiv preprint arXiv:2503.09446 , 2025. 3 [78] Soobin Um and Changho Suh. A fair generative model using lecam divergence. In Proceedings of the AAAI con-ference on artificial intelligence , pages 10034–10042, 2023. 1 [79] Jesse Vig, Sebastian Gehrmann, Yonatan Belinkov, Sharon Qian, Daniel Nevo, Yaron Singer, and Stuart Shieber. Investigating gender bias in language models using causal mediation analysis. Advances in neural in-formation processing systems , 33:12388–12401, 2020. 2, 3[80] Jialu Wang, Yang Liu, and Xin Wang. Are gender-neutral queries really gender-neutral? mitigating gender bias in image search. In Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing ,pages 1995–2008, 2021. 1 [81] Zhaochen Wang, Bryan Hooi, Yiwei Wang, Ming-Hsuan Yang, Zi Huang, and Yujun Cai. Text speaks louder than vision: Ascii art reveals textual biases in vision-language models, 2025. 6 [82] Zhaotian Weng, Zijun Gao, Jerone Andrews, and Jieyu Zhao. Images speak louder than words: Understand-ing and mitigating bias in vision-language model from a causal mediation perspective. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing , pages 15669–15680, 2024. 2, 6 [83] Chenfei Wu, Jiahao Li, Jingren Zhou, Junyang Lin, Kaiyuan Gao, Kun Yan, Sheng-ming Yin, Shuai Bai, Xiao Xu, Yilei Chen, et al. Qwen-image technical re-port. arXiv preprint arXiv:2508.02324 , 2025. 7, 14 [84] Chao Wu, Zhenyi Wang, Kangxian Xie, Naresh Kumar Devulapally, Vishnu Suresh Lokhande, and Mingchen Gao. Model-agnostic gender bias control for text-to-image generation via sparse autoencoder. arXiv preprint arXiv:2507.20973 , 2025. 1 [85] Hanqi Yan, Xiangxiang Cui, Lu Yin, Paul Pu Liang, Yulan He, and Yifei Wang. Multi-faceted multimodal monosemanticity. arXiv preprint arXiv:2502.14888 ,2025. 2 [86] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chen-gen Huang, Chenxu Lv, et al. Qwen3 technical report. 
+
+arXiv preprint arXiv:2505.09388 , 2025. 1 [87] Xiang Yue, Yuansheng Ni, Kai Zhang, Tianyu Zheng, Ruoqi Liu, Ge Zhang, Samuel Stevens, Dongfu Jiang, Weiming Ren, Yuxuan Sun, et al. Mmmu: A massive multi-discipline multimodal understanding and reason-ing benchmark for expert agi. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 9556–9567, 2024. 5, 16 [88] Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid loss for language image pre-training. In Proceedings of the IEEE/CVF inter-national conference on computer vision , pages 11975– 11986, 2023. 1 [89] Haoyu Zhang, Yangyang Guo, and Mohan Kankanhalli. Joint vision-language social bias removal for clip. In Pro-ceedings of the Computer Vision and Pattern Recognition Conference , pages 4246–4255, 2025. 2 [90] Zhi Zhang, Srishti Yadav, Fengze Han, and Ekaterina Shutova. Cross-modal information flow in multimodal large language models. In Proceedings of the Com-puter Vision and Pattern Recognition Conference , pages 19781–19791, 2025. 3 [91] Jieyu Zhao, Tianlu Wang, Mark Yatskar, Vicente Or-donez, and Kai-Wei Chang. Gender bias in coreference resolution: Evaluation and debiasing methods. In Pro-ceedings of the 2018 Conference of the North American Chapter of the Association for Computational Linguis-tics: Human Language Technologies, Volume 2 (Short Papers) , pages 15–20, 2018. 5 Interpretable Debiasing of Vision-Language Models for Social Fairness 
+
+# Supplementary Material 
+
+Overview of contents This supplementary material contains the following: 
+
+A. Training Details 13 B. Data Details 13 C. Additional Results 14 D. Limitation and Future Work 17 
+
+## A. Training Details 
+
+Since our method can be applied to any encoders, we train the image/text encoder for Vision-Language Mod-els (VLMs) and the image encoder for Large Vision-Language Models (LVLMs) (Table 5). For training the sparse autoencoder (SAE), we employ the Ma-tryoshka [54] variant with top-k (= 20 ) sparsity and hi-erarchical grouping [61]. The original activations are ex-tracted from the corresponding encoder layers for both training and validation, with a batch size of 4096 and expansion factors of 1, 2, 4, and 8 to control the dictio-nary size. The model is optimized for 110,000 epochs, and the weight for auxiliary loss is set to be 0.03, with the decay of learning rate starting at step 109,999. We divide the SAE neurons into four groups using the frac-tions [0.0625, 0.125, 0.25, 0.5625], meaning that 6.25%, 12.50%, 25.00%, and 56.25% of the neurons are as-signed to each group, respectively; this grouping lets us evaluate hierarchical behavior at different levels of neu-ron specificity. 
+
+## B. Data Details 
+
+Real Data To ensure the balanced selection of the so-cial neurons, each of the training datasets of sparse au-toencoder (SAE) [54] has a fair distribution of social at-tribute labels, as in the original dataset (statistics in Ta-ble 13). For instance, the gender ratio of the Bias in Bios dataset [15] is 54:44 for male and female labels. This case even more strictly applies to the evaluation datasets. As can be seen in Table 11, the gender ratio of the FairFace evaluation dataset 2 [41] is 50:50. However, for each group, the balance becomes uneven, notably in the 20-29 age range. This inherent skew in the data dis-tribution helps explain the intersectional effect of why modulating the age neurons can effectively reduce gen-der bias. Additionally, we observe 40% (out of 25) of the 
+
+> 2From a total of 10,954 cropped images, we sample a subset with a gender balanced distribution, following [8].
+
+Table 5. Overview of multimodal models. The table lists the image and text encoders used in VLMs and LVLMs considered in this work.                          
+
+> Model Type Image Encoder Text Encoder
+> CLIP (ViT-B/32) VLM ViT-B/32 Transformer (512-d) CLIP (ViT-L/14@336) VLM ViT-L/14@336 Transformer (768-d) LLaVA-1.5-7B LVLM ViT-L/14@336 –LLaVAOneVision LVLM SigLIP-so400m/14@384 –InternVL2-8B LVLM InternViT-300M@448px –3-9 10-19 20-29 30-39 40-49 50-59 60-69 70+
+> Age Group
+> 0
+> 250
+> 500
+> 750
+> 1000
+> 1250
+> 1500
+> 1750
+> Count
+> Gender
+> Female
+> Male
+
+Figure 11. Age distribution of FairFace evaluation dataset across genders. Although the gender distribution is balanced, there is a skewed gender distribution per age group. Age Neurons with Mixed Genders Age Neurons with Skewed Gender 
+
+Figure 12. Age neuron activating images. 
+
+age neurons are gender-skewed (Figure 12). Not mod-ulating these gender-skewed age neurons increases both gender and age MaxSkews by 0.6% and 5.3% ( α = 1 ), suggesting these are indeed age neurons. Note that all the datasets are publicly available. 
+
+Synthetic Data To explore the possibility of extend-ing the real-world data to synthetic data for SAE training and probing, we generate new synthetic datasets from the SBBench dataset [57]. We postprocess the images corresponding to the age and gender category to enable a direct comparison with realistic data, FairFace. Since the images from other categories ( e.g ., religion, socio-economic status, disability) seem to have visual cues that are more closely related to the contextual factors like background or clothing, we mainly test age and gender categories in this work. From the original SBBench synthetic dataset (760 and 672 samples from the age and gender categories), we remove duplicates to obtain 627 and 302 im-ages, respectively. Since images often contain mul-tiple humans, we use a recent text-to-image editing model Qwen-Image-Edit [83] to leave only one per-son with a certain social attribute ( i.e ., old/young and male/female for the age and gender categories). Specif-ically, we prompt the model to edit each image and ex-clude those where the face is too distant, not visible, contains multiple people, or is of poor quality. We re-peat this process three times for the age category and two times for the gender category, making small adjust-ments to the prompt at each iteration, and then conduct human validation to ensure that the final images meet the required quality and attribute criteria. The prompts used for the editing model are as follows: 
+
+Prompts for SBBench-Syn Data Construction 
+
+1st round generation Leave only one human who is {old/young/male/female }, and remove any other humans. Keep the background identical to the original. Make the image square. 
+
+2nd/3rd round generation (age) Leave only 
+
+{old/young } { person/human }, and remove any other humans. Leave the background exact same as the original. Make the image square. 
+
+2nd round generation (gender) Leave only one 
+
+{male/female }, and remove any other humans. Leave the background exact same as the original. Make the image square. 
+
+Prompts for SBBench-Syn-Crop Data Con-struction 
+
+1st round generation Leave only one human who is {old/young/male/female }, and remove any other humans. Crop and zoom in so that the remaining person’s face appears larger and clearly visible. Make the image square. 
+
+2nd/3rd round generation (age) Leave only 
+
+{old/young } { person/human }, and remove any other humans. Crop and zoom in so that the remaining person’s face appears larger and clearly visible. Make the image square. 
+
+2nd round generation (gender) Leave only one 
+
+{male/female }, and remove any other humans. Crop and zoom in so that the remaining person’s face appears larger and clearly visible. Make the image square. We use the above prompts to generate new synthetic 
+
+Table 6. Bias Score Results on Non-Overlapping Datasets.                                       
+
+> Datasets PATA Pairs Prompts Adj Occup Act Ster Adj Occup Act Ster Avg
+> CLIP (ViT-B/16) 14.1 19.9 10.2 20.3 13.1 22.4 26.8 18.5 18.16 Prompt 7.3 16.9 10.0 16.0 11.9 23.9 15.2 15.0 14.53 DEBIAS LENS 7.1 13.3 11.9 5.5 10.5 19.5 17.7 11.6 12.14
+
+Figure 13. Difference between male and female ’yes’ prob-ability across skill-related prompts for InternVL2-8b and DEBIAS LENS -Intern. Our method shows most of the skills having no statistically different probability across genders (*: p < 0.1, **: p < 0.01, ***: p < 0.001). Table 7. Computational Cost Results. The trade-off score ( ↑
+
+the better) is proportional to ∆BiasScore − ∆VLAPerf.                                                
+
+> Method Par (M) GPU hrs Overhead (ms) FLOPs Trade-off Full FT 6979.58 0.02 310.19 1.14e+13 1.29 LoRA FT 301.99 0.32 310.89 1.14e+13 1.30 Pruning (0.05) -0.00 355.31 1.11e+13 1.53 Pruning (0.5) -0.00 268.35 7.90e+12 1.18 Prompt Tuning 0.08 1.72 361.15 1.52e+14 0.92 Prompt Engin. -0.00 316.74 1.22e+13 1.35 DEBIAS LENS (0.6) 16.79 1.42 319.94 1.15e+13 1.54 DEBIAS LENS (1.0) 16.79 1.42 315.84 1.15e+13 1.60
+
+datasets, SB-Syn and SB-Syn-Crop (sample synthesized images in Figure 16), to examine whether having less background context could help to find more effective so-cial neurons. As a result, from the 627 and 302 age and gender-group images in the original SBBench dataset, we extract 246/87 images featuring a single old/young individual and 109/97 featuring a single male/female in-dividual for constructing SB-Syn. Similarly, for SB-Syn-Crop, we extract 222/184 images featuring a sin-gle old/young individual and 352/159 images featuring a single male/female individual. This scarcity of data may provide reasons why the SAE trained and probed using FairFace data achieved strong performance. 
+
+## C. Additional Results 
+
+Debiasing Vision-Language Models We provide ad-ditional qualitative results for T2I image retrieval [8, 14, 19, 28] and VQA [21, 57] in Figures 17 and 18. D EBI-Figure 14. Difference between male and female ’yes’ proba-bility across occupation-related prompts for InternVL2-8b and D EBIAS LENS -Intern. Our method shows most of the occupations having no statistically different probability across genders (*: p < 0.1, **: p < 0.01, ***: p < 0.001). 
+
+Figure 15. Difference between male and female ’yes’ prob-ability across sentiment-related prompts for InternVL2-8b and D EBIAS LENS -Intern. Our method shows most of the sentiments having no statistically different probability across genders (*: p < 0.1, **: p < 0.01, ***: p < 0.001). 
+
+> AS
+
+LENS applied to VLM retrieves a fairer demographic distribution when conditioned with neutral prompts with no correct gender labels, which is reflected in Max Skew scores throughout the paper (Figure 17). Moreover, DEBIAS LENS applied to LVLM achieves more reliable handling of ambiguous visual questions, captured with gender disproportion rate and SBBench accuracy in the main text (Figure 18). Detailed quantitative VQA results are in Figures 13, 14, and 15). We also emphasize bias reduction on non-overlapping PATA/PAIRS (Table 6) proves our social 
+
+Table 8. Intersectional Fairness (MaxSkew) Results.                            
+
+> Targeted Attributes Gender Skew ∆Age Skew ∆Race Skew ∆
+> Gender only -8.0% -5.6% -1.3% Age only -8.1% -18.0% -3.1% Race only -7.9% -6.3% -6.4% Gender ×Age -11.3% -18.7% -4.1% Gender ×Race -10.7% -7.4% -6.4% Age ×Race -11.2% -19.5% -11.7% Gender ×Race ×Age -11.4% -19.5% -12.0%
+
+neurons represent a universal demographic concept, not overfitted by FairFace. 
+
+Interpretable Social Neurons The interpretability of automatically selected social neurons is further sup-ported by illustrations in Figures 19 and 20. While ran-dom neurons tend to activate on images containing a mixture of social demographics, the social neurons, such as those encoding gender, age, or race, exhibit selective activation patterns that correspond to specific social at-tributes (Figure 19). Figure 20 depicts top activating images for both training and evaluation images, along with the human-labeled concepts. Together, these visu-alizations show that the identified neurons consistently encode specific social attribute concepts. To validate the consistency of the robustness and op-timal configuration of the neuron disentanglement, we provide results of the proportion of effective social neu-rons and corresponding Max Skew scores across vari-ous social attributes and models. Figures 21 and 22 are the plots when modulating age and race neurons in the image encoder of CLIP (ViT-B/16) [67], attached with SAE trained using the FairFace dataset. Figures 23 and 24 are the plots when modulating gender neurons in the image and text encoder of CLIP (ViT-L/14@336). Same as CLIP (ViT-B/16), we provide the plots when mod-ulating age and race neurons in the image encoder of CLIP (ViT-L/14@336) in Figures 25 and 26. We also show the effective social neurons when deactivating gen-der, age, and race neurons of InternVL2-8B [13] (Fig-ure 27) and LLaVA-1.5-7b-hf [51] (Figure 28). Lastly, Figures 29 and 30 illustrate the proportion of effective gender and age neurons found using the image encoder of LLaVA-1.5-7b-hf, InternVL2-8b, and LLaVAOneVi-sion [50]. All these plots reveal a similar trend of the ef-fective neuron proportion across expansion factors and thresholds, despite the difference in probing social at-tributes, models, and SAE training data. Furthermore, Table 8 demonstrates that our method effectively controls intersectional bias by leveraging SAE’s disentanglement capacity. It selectively achieves lower MaxSkew scores ( e.g ., |Race | < |Age | < |Age ×
+
+Race | < | Gender × Age × Race | for Age Skew). 
+
+Data Distribution Effects While the efficacy of gen-der neurons is detailed in the main text, we further Table 9. SBBench (categories: age and gender) accuracy of D EBIAS LENS applied to LVLM. The best performance is achieved when SAE is trained and age neurons are selected using the FairFace datasets, measured using a rule-based and model-based evaluation.                                                                        
+
+> Methods Eval Train Data Probing Data Gender Age
+> InternVL2-8B Rule 83.83 43.11 DEBIAS LENS Rule SB-Syn SB-Syn 84.84 45.30 DEBIAS LENS Rule SB-Syn-Crop SB-Syn-Crop 84.51 44.13 DEBIAS LENS Rule FairFace SB-Syn 84.64 45.55 DEBIAS LENS Rule FairFace SB-Syn-Crop 84.74 44.77 DEBIAS LENS Rule FairFace FairFace (0.6) 86.60 47.52 DEBIAS LENS Rule FairFace FairFace (1.0) 87.87 48.51 InternVL2-8B Phi 85.97 50.35 DEBIAS LENS Phi SB-Syn SB-Syn 87.20 51.48 DEBIAS LENS Phi SB-Syn-Crop SB-Syn-Crop 86.03 50.21 DEBIAS LENS Phi FairFace SB-Syn 86.91 51.62 DEBIAS LENS Phi FairFace SB-Syn-Crop 86.23 50.31 DEBIAS LENS Phi FairFace FairFace (0.6) 88.39 52.54 DEBIAS LENS Phi FairFace FairFace (1.0) 89.49 53.77
+
+demonstrate the impact of modulating age neurons, with results presented in Table 9. Similar to the main find-ings, social neurons found using SAE trained with the FairFace dataset seem to show the most improvement in accuracy. Also, the SAE trained and probed using cropped images from SBBench-Syn-Crop seem to show better performance with the gender neurons but not for the age neurons (Table 9). One of the reasons may be due to a limited amount of newly synthesized training datasets compared to FairFace (Table 13). Despite this, the social neurons found using the FairFace dataset can be generalized to a synthesized evaluation dataset. This suggests that our selected neurons indeed correspond to human-interpretable social attribute concepts ( e.g ., gen-der, age). However, these neurons show lower specificity , un-like the neurons discovered in VLMs. Concretely, mod-ulating gender neurons seems to show better perfor-mance for questions corresponding to both gender and age categories. For instance, both the gender and age ac-curacies are +1 .75 (+1 .58) and +2 .44 (+3 .15) higher when the gender neurons are deactivated (training data: FairFace & probing data: SB-Syn-Crop) evaluated using a rule-based approach (Phi-4 [1]). This implies that al-though these social neurons are disentangled, the effect on performance may not always be localized to a single attribute, but instead propagates across intersectional de-mographics, especially in larger LVLMs. 
+
+Ablation Study We present detailed results of the ef-fect of weight proportion ( α) for VLMEvalKit [16] and VLAGenderBias (VLA) [21] in Tables 10 and 11, re-spectively. Supporting our original claim, weighting more SAE decoded embeddings generally results in lower general performance (Table 10) and gender dis-proportion rate (Table 11). Furthermore, the effect on 
+
+Table 10. General performance ( ↑) on varying weighted proportion for LVLMs. The general VLM performance over-all decreases as the weight proportion of the SAE decoded em-bedding increases. 
+
+α Percep [12] Reason [12] MMMU [87] Seed2 [49] LLaVA-1.5-7b-hf [51] ( Fairface − Top neurons )0.0 1205.10 235.00 0.30 0.59 0.2 1252.50 226.78 0.29 0.59 0.4 1240.75 255.35 0.29 0.58 0.5 1209.25 274.64 0.30 0.58 0.6 1187.84 266.42 0.30 0.57 0.8 1096.65 263.57 0.31 0.56 1.0 930.55 221.78 0.22 0.53 InternVL2-8b [13] ( Fairface − Top neurons )0.0 1646.79 536.78 0.43 0.75 0.2 1657.39 526.78 0.43 0.75 0.4 1644.58 525.00 0.44 0.75 0.5 1618.70 492.85 0.40 0.75 0.6 1616.65 478.21 0.39 0.74 0.8 1603.35 445.35 0.43 0.73 1.0 1561.92 401.07 0.44 0.72 InternVL2-8b [13] ( Fairface − All neurons )0.0 1646.79 536.78 0.43 0.75 0.2 1663.89 529.28 0.39 0.75 0.4 1643.56 527.14 0.44 0.75 0.5 1622.05 492.85 0.40 0.74 0.6 1609.96 477.85 0.39 0.74 0.8 1592.31 452.14 0.44 0.73 1.0 1549.64 381.07 0.39 0.72 InternVL2-8b [13] ( Fairface − All neurons − Negative activations )0.0 1646.79 536.78 0.43 0.75 0.2 524.09 223.57 0.33 0.38 0.4 524.09 223.57 0.33 0.38 0.5 524.09 223.57 0.33 0.38 0.6 524.09 223.57 0.33 0.38 0.8 524.09 223.57 0.33 0.38 1.0 524.84 223.57 0.33 0.38 
+
+Table 11. Gender disproportion rate ( ↓) across varying weighted proportions for LLaVA-1.5-7b-hf. The dispropor-tion rate decreases as the weight proportion of the SAE de-coded embedding increases. 
+
+α Occupations Trait Trait (gendered) Skills 
+
+0.0 0.3500 0.7000 0.7500 0.7143 0.2 0.3250 0.6000 0.7083 0.6667 0.4 0.3250 0.6000 0.5833 0.6190 0.5 0.3250 0.5500 0.5417 0.6190 0.6 0.3250 0.5500 0.5417 0.6190 0.8 0.2750 0.5500 0.5417 0.5714 1.0 0.2250 0.5500 0.5833 0.2857 
+
+general performance shows a stronger influence when modulating all automatically selected gender neurons (corresponding to Fairface − All neurons in Table 10), instead of the top neurons per social attribute group are selected ( i.e ., D EBIAS LENS , corresponding to Fairface 
+
+− Top neurons ). These trends reflect the underlying trade-off in the Table 12. Social Attribute Predictability Results.                    
+
+> Representation αGender Acc Age Acc Race Acc
+> v(original) 0.0 95.9 55.6 71.0
+> v′(mixed) 0.6 95.2 56.2 70.8
+> ˆv(SAE recon) 1.0 92.7 51.4 62.6
+
+construction of the representation v′, which interpolates between the original feature v and the SAE-decoded re-construction ˆv. To better understand this trade-off, we further examine the bias properties of ˆv through both empirical and theoretical analyses. Empirically, ˆv exhibits lower attribute predictability than both v and v′ (Tab. 12). This suggests that al-though biased signals may still persist in the decoded reconstructions, they are no longer concentrated in fixed latent dimensions; instead, they emerge from different subsets of active latents across samples. Theoretically, let the SAE encoder produce sparse ac-tivations 
+
+z = σ(Wev + be), (2) where σ(·) is a sparsity-inducing nonlinearity ( e.g ., ReLU or Top-k). We define the active set as 
+
+A(v) = {i | (Wev + be)i > 0}, (3) namely, the indices of latent neurons activated by in-put v. Let DA(v) denote the diagonal masking matrix whose (i, i )-th entry equals 1 if i ∈ A (v) and 0 other-wise. The SAE reconstruction can then be written as 
+
+ˆv = WdDA(v)Wev + cA(v), (4) where cA(v) absorbs bias terms. For a fixed active set, the mapping is linear; however, since A(v) varies with the input, the overall function is piecewise linear and globally non-linear. The effective linear transformation 
+
+MA(v) = WdDA(v)We (5) therefore changes across inputs. A single global separating direction w would require 
+
+w⊤MA1 = w⊤MA2 ∀A 1, A2, (6) which holds only in degenerate cases, such as constant active sets , i.e ., 
+
+A(v1) = A(v2) ∀v1, v2. (7) In that case, DA(v) becomes a fixed matrix, and the mapping reduces to a single global linear transforma-tion. However, under typical sparse activation regimes, different inputs induce different active sets (other than the common active sets mapping to our selected social neurons). Hence, no stable global linear direction can consistently separate social attributes in ˆv.Together, these findings explain why increasing the weight on ˆv systematically reduces measurable linear bias through disrupting globally aligned attribute direc-tions while introducing a controllable drop in general performance. 
+
+## D. Limitation and Future Work 
+
+While D EBIAS LENS presents a transparent and effec-tive approach for identifying and mitigating bias through monosemantic social neurons, several limitations re-main that open important directions for future research. First, our method relies on the quality and coverage of the existing SAE training data. Although our experi-mental results demonstrate that the FairFace dataset is sufficient for finding social neurons, they may underrep-resent more subtle or culturally specific forms of bias. This could potentially limit the granularity of the social neurons. Also, the existing dataset does not currently in-clude fine-grained social attribute labels, which limits its ability to account for more inclusive and diverse demo-graphic representations. Hence, we urge future works to collect large-scale, demographically balanced, and glob-ally diverse facial datasets that encompass overlooked or underrepresented populations, enabling more robust and inclusive debiasing. Second, our intervention currently assumes that so-cial attributes can be cleanly disentangled within a small set of neurons. While this assumption held empirically, complex or intersectional biases ( e.g ., age × gender × race) may require more nuanced structures such as hi-erarchical or multi-branch SAEs. Lastly, we focus on neuron-level modulation and do not explicitly examine how higher-level model components, such as image-text alignments, interact with these social neurons. We leave as future work to conduct systematic interventions that adjust not only neuron activations but also the path-ways through which bias propagates. We hope that DEBIAS LENS inspires future research toward building fair, transparent, and socially responsible VLMs and LVLMs. Table 13. Statistics of training and evaluation data. The table presents statistics for group labels for each social attribute across the datasets used in this work. Note that every image includes one human or face, except for the SBBench evaluation dataset, which includes two humans per image (female/male and young/old for the gender and age categories). 
+
+Dataset Train Eval Data size Social bias attributes 
+
+FairFace ✓ 86,744 • Gender : Male (53%), Female (47%) • Age :
+
+– 0–2 (2%) 
+
+– 3–9 (12%) 
+
+– 10–19 (11%) 
+
+– 20–29 (30%) 
+
+– 30–39 (22%) 
+
+– 40–49 (12%) 
+
+– 50–59 (7%) 
+
+– 60–69 (3%) 
+
+– >70 (1%) • Race :
+
+– White (19%) 
+
+– Latino Hispanic (15%) 
+
+– Indian (14%) 
+
+– East Asian (14%) 
+
+– Black (14%) 
+
+– Southeast Asian (12%) 
+
+– Middle East Asian (11%) Cocogender (& Cocogendertxt) ✓ 12,454 Gender : Male (65%), Female (35%) CelebA ✓ 202,599 Gender : Male (43%), Female (58%) Bias in Bios ✓ 257,478 Gender : Male (54%), Female (46%) SBBench-Syn ✓ 206 Gender : Male (53%), Female (47%) 333 Age : Old (74%), Young (26%) SBBench-Syn-Crop ✓ 406 Gender : Male (45%), Female (55%) 511 Age : Old (69%), Young (31%) FairFace ✓ 10,324 • Gender : Male (50%), Female (50%) • Age :
+
+– 0–2 (1%) 
+
+– 3–9 (12%) 
+
+– 10–19 (11%) 
+
+– 20–29 (31%) 
+
+– 30–39 (21%) 
+
+– 40–49 (12%) 
+
+– 50–59 (7%) 
+
+– 60–69 (3%) 
+
+– >70 (1%) • Race : same ratios as training data VLAGenderBias ✓ 5,000 Gender : Male (50%), Female (50%) SBBench ✓ 3,094 Gender : Male (50%), Female (50%) 2,838 Age : Old (50%), Young (50%) Original SB -Syn -Crop SB -Syn Figure 16. Additional newly generated SBBench synthetic datasets. We synthesize images to test the effect of varying training and probing datasets when training SAE for bias mitigation. A maid 
+
+> This is a photo of
+> a person who likes
+> dressmaking.
+> Baseline DeBiasLens Baseline DeBiasLens
+
+Figure 17. Qualitative results of top retrieved images given neutral prompts. Our D EBIAS LENS retrieves a fairer distribution across genders compared to the original model (CLIP ViT-B/32). Prompt: 
+
+> “Is the individual
+> portrayed in this image
+> characterized by brave?”
+> Prompt:
+> “Does the
+> person shown
+> in this image
+> possess the
+> quality of
+> being
+> wierd?”
+> Prompt:
+> “Could laywer be a better
+> match for this individual’s
+> skills
+> and abilities?
+
+Figure 18. Qualitative results on responses to ambiguous visual questions. Our D EBIAS LENS (right, skyeblue bars) tends to respond more cautiously, favoring the option of “unknown,” whereas the baseline (InternVL2-8B, left, darkblue bars) more often commits to definitive “yes” or “no” responses, despite the questions having no single correct answer. Gender Neurons Random Neurons Age Neurons Race Neurons 
+
+> Sample Neuron 1 Sample Neuron 2
+
+Figure 19. Additional top activating images per two social neurons across categories. Each social neuron corresponds to a human-interpretable concept of a social bias attribute. Interpretable 
+
+> Neurons
+> Top Activating
+> Evaluation Images
+> East Asian
+> Glasses
+> South Asian
+> Smiling
+> White
+> Man
+> Woman
+> Elderly
+> Baby
+> Sleepy
+
+Figure 20. Interpretable social neurons. We visualize the top activating training (top row) and evaluation (bottom row) images for each social neuron labeled with two human-interpretable concepts. Figure 21. Proportion of effective age neurons (top) and corresponding Max Skew scores (bottom) of CLIP (ViT-B/16) image 
+
+encoder. The expansion factor 8 shows the lowest bias scores across thresholds (0: 3-9, 1: 10-19, 2: 20-29, 3: 30-39, 4: 40-49, 5: 50-59, 6: 60-69). 
+
+Figure 22. Proportion of effective race neurons (top) and corresponding Max Skew scores (bottom) of CLIP (ViT-B/16) 
+
+image encoder. The expansion factors 2 and 8 show the lowest and the most stable bias scores, respectively, across thresholds (0: White, 1: Southeast Asian, 2: Middle Eastern, 3: Black, 4: Indian, 5: Latino Hispanic, 6: East Asian). 
+
+Figure 23. Proportion of effective age neurons (top) and corresponding Max Skew scores (bottom) of CLIP (ViT-L/14@336) 
+
+image encoder. The expansion factors 4 and 8 show the lowest bias scores across thresholds (0: Male, 1: Female). Figure 24. Proportion of effective race neurons (top) and corresponding Max Skew scores (bottom) of CLIP (ViT-L/14@336) 
+
+text encoder. The expansion factors 1 and 8 overall show the lowest bias scores across thresholds (0: Male, 1: Female). 
+
+Figure 25. Proportion of effective age neurons (top) and corresponding Max Skew scores (bottom) of CLIP (ViT-L/14@336) 
+
+image encoder. The expansion factor 8 shows the lowest bias scores across thresholds (0: 3-9, 1: 10-19, 2: 20-29, 3: 30-39, 4: 40-49, 5: 50-59, 6: 60-69). 
+
+Figure 26. Proportion of effective race neurons (top) and corresponding Max Skew scores (bottom) of CLIP (ViT-L/14@336) 
+
+image encoder. The expansion factors 2 and 8 show the lowest and the most stable bias scores, respectively, across thresholds (0: White, 1: Southeast Asian, 2: Middle Eastern, 3: Black, 4: Indian, 5: Latino Hispanic, 6: East Asian). Figure 27. Proportion of effective gender (top), age (middle), and race (bottom) neurons of InternVL2-8B image encoder. 
+
+There is a similar trend of effective neuron proportions across expansion factors for different social attributes ( Gender –0: Male, 1: Female; Age –0: 3-9, 1: 10-19, 2: 20-29, 3: 30-39, 4: 40-49, 5: 50-59, 6: 60-69; Race –0: White, 1: Southeast Asian, 2: Middle Eastern, 3: Black, 4: Indian, 5: Latino Hispanic, 6: East Asian). 
+
+Figure 28. Proportion of effective gender (top), age (middle), and race (bottom) neurons of LLaVA-1.5-7b-hf image encoder. 
+
+There is a similar trend of effective neuron proportions across expansion factors for different social attributes ( Gender –0: Male, 1: Female; Age –0: 3-9, 1: 10-19, 2: 20-29, 3: 30-39, 4: 40-49, 5: 50-59, 6: 60-69; Race –0: White, 1: Southeast Asian, 2: Middle Eastern, 3: Black, 4: Indian, 5: Latino Hispanic, 6: East Asian). Figure 29. Proportion of effective gender neurons of LLaVA-1.5-7b-hf (top), InternVL2-8B (middle), and LLaVAOneVision (bottom) image encoder. There is a similar trend of effective neuron proportions across expansion factors for different models, even when trained and probed with synthetic datasets (0: Male, 1: Female). 
+
+Figure 30. Proportion of effective age neurons of LLaVA-1.5-7b-hf (top), InternVL2-8B (middle), and LLaVAOneVision (bottom) image encoder. There is a similar trend of effective neuron proportions across expansion factors for different models, even when trained and probed with synthetic datasets (0: Old, 1: Young).

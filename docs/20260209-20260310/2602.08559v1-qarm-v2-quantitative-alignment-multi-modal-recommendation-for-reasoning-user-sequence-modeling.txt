@@ -1,0 +1,335 @@
+Title: QARM V2: Quantitative Alignment Multi-Modal Recommendation for Reasoning User Sequence Modeling
+
+URL Source: https://arxiv.org/pdf/2602.08559v1
+
+Published Time: Tue, 10 Feb 2026 03:30:01 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# QARM V2: Quantitative Alignment Multi-Modal Recommendation for Reasoning User Sequence Modeling 
+
+# Tian Xia*, Jiaqi Zhang*, Yueyang Liu*, Hongjian Dou*, Tingya Yin*, Jiangxia Cao ★, Xulei Liang, Tianlu Xie, Lihao Liu, Xiang Chen, Shen Wang, Changxin Lao, Haixiang Gan, Jinkai Yu, Keting Cen, Lu Hao, Xu Zhang, Qiqiang Zhong, Zhongbo Sun, Yiyu Wang, Shuang Yang, Mingxin Wen, Xiangyu Wu, Shaoguo Liu, Tingting Gao, Zhaojie Liu, Han Li, Kun Gai 
+
+Kuaishou Technology, Beijing, China {xiatian06, zhangjiaqi15, liuyueyang05, douhongjian, yintingya, caojiangxia, liangxulei, xietianlu, liulihao, chenxiang08, wangshen, laochangxin, ganhaixiang03, yujinkai, cenketing03, luhao, zhangxu20, lifan11, liming28, liubin21, yangshuang08, wenmingxing, wuxiangyu06, liushaoguo, lisize, zhaotianxing, lihan08}@kuaishou.com, gai.kun@qq.com 
+
+## Abstract 
+
+With the evolution of large language models (LLMs), there is grow-ing interest in leveraging their rich semantic understanding to enhance industrial recommendation systems (RecSys). Traditional RecSys relies on ID-based embeddings for user sequence model-ing in the General Search Unit (GSU) and Exact Search Unit (ESU) paradigm, which suffers from low information density, knowledge isolation, and weak generalization ability. While LLMs offer comple-mentary strengths with dense semantic representations and strong generalization, directly applying LLM embeddings to RecSys faces critical challenges: representation unmatch with business objec-tives and representation unlearning end-to-end with downstream tasks. In this paper, we present QARM V2, a unified framework that bridges LLM semantic understanding with RecSys business requirements for user sequence modeling. At the GSU side, we introduce a reasoning-based item alignment mechanism that gener-ates business-aligned LLM embeddings, enabling semantic-aware retrieval of relevant historical subsequences. At the ESU side, we propose Res-KmeansFSQ, a hybrid quantization method that com-bines Residual K-means with Finite Scalar Quantization to produce multi-level Semantic IDs (SIDs) with minimal code conflicts. These SIDs serve as learnable discrete features that can be optimized end-to-end with the ranking model. Extensive offline experiments and online A/B tests on Kuaishou’s short-video and live-streaming plat-forms demonstrate significant improvements over existing methods, validating its effectiveness. 
+
+## 1 Introduction 
+
+Kuaishou, as the leading short-video and live-streaming distribution platform in China, attracts more than 400 million daily active users who share their lifestyles, interact with fans, and buy/sell products, providing a vibrant economic ecosystem. Among Kuaishou, tens of millions of fresh new items are uploaded every day (e.g., short-videos, live-streams, products, etc.), making it crucial to discover the right items that match our users’ interests. To achieve this goal, a powerful industrial Recommendation System (RecSys) [ 8, 12 , 22 ]is a vital engine that drives user engagement and revenue growth to support our business. In broader sense, user sequence modeling [ 10 , 28 ] is one of the most important components in industrial RecSys, which is a crucial                                                    
+
+> * Equal Contributions, Jiangxia Cao is the corresponding author. Uid1 UidY Uid3 Iid1 …… IidX
+> X,Y >1e9, ID number increasing along time
+> Tid1 Tid2 Tid3 Tid4 TidZ ……
+> Zis about 1e5, afixed number with LLM
+> Stacked Transformer (40+ layers)
+> Knowledge saved in
+> Deeper Transformer
+> Cross -Transformer (always 1layer)
+> Knowledge saved in
+> ID embedding
+> Pxtr
+> Stop
+> Training
+> Offline
+> Trained CKPT
+> ID embedding of RecSys Model needs
+> to be real -time training
+> Online Performance
+> History Item Sequence
+> Semantic Token Sequence
+> Real -Time
+> Training
+> Release Download Long -term
+> Stable Inference
+> Vocabulary
+> Information  Units
+> Knowledge
+> Storage
+> Generalization
+> Ability
+> Next Item
+> Candidate
+
+Figure 1: ID-based RecSys Model and LLM Differences. 
+
+scaling direction [ 4] to capture the user’s dynamic preferences and behaviors, contributing convincing gains in real businesses services. On our platform, the accumulated interaction sequence exceeds 100,000 for each active user, which strongly reflects the user’s long-term interest evolution and short-term interest shifts. However, directly inputting the entire 100,000 user sequence to a RecSys model in a streaming training setting will introduce massive offline computation pressure, making it hard to afford such training resources. To alleviate computation, existing methods typically adopt a two-stage strategy to revisit the user interaction sequence and for each next target item candidate [16, 17]: 
+
+• Given one item candidate, we first use a simple (not optimized directly) General Search Unit (GSU) to review users’ lifelong history and then filter top-K related item subsequences.  
+
+> arXiv:2602.08559v1 [cs.IR] 9 Feb 2026 Conference’17, July 2017, Washington, DC, USA Kuaishou Reco et al.
+
+Figure 2: LLM understanding reasoning ability is necessary to filter the noise item pairs behind RecSys model: find the unrelated hot-popular biased item pairs from Item2Item model, and identify the different but relevant item pairs from User2Item model. 
+
+• According to the subsequences, we next use a complex (optimized end-to-end) Exact Search Unit (ESU) to compress subsequence information and obtain fine-grained user interests. Although the above GSU/ESU paradigm successfully extends the boundary of RecSys, but the latest efforts are rely on the user/item ID embeddings to support both GSU/ESU similarity calculation, e.g., TWIN [ 5 ], TWIN V2 [ 20 ]. This reliance on ID embeddings introduces inherent barriers, resulting in the following trade-offs: 
+
+• Low Information Units : user preferences and item properties are learned via user-item interaction logs, which could capture coarse semantics (e.g., item tags), but suffer from the long-tail problem (e.g., new item hard to beat old hot items) and limited fine-grained semantic expressiveness (e.g., what the item means). 
+
+• Knowledge Isolation : the collaborative signals are saved in billion-scale item embeddings separately; once an item is no longer distributed, its knowledge will be discarded completely. 
+
+• Weak Generalization Ability : industrial RecSys models are de-sired to chase the latest interaction data; once they stop streaming training, online performance will drop sharply. With those inherent weaknesses in ID-based information units, it is reasonable to incorporate multi-modal language models [ 21 , 25 ], hoping the learned transferring world-knowledge semantics could enable more precise GSU/ESU calculations. Indeed, the LLM [ 1, 2]actually has desired characteristics, as shown in Figure 1: 
+
+• Dense Information Units : different from massive user/item IDs in RecSys, the LLM only utilizes fewer than 20,000 token IDs vocabulary to express world knowledge in human society. 
+
+• Knowledge Integrated : With deeper and larger Transformer parameters that store knowledge, LLMs can understand token sequence semantics accurately. 
+
+• High Generalization Ability : Once an LLM is trained, it can provide long-term stable inference; for any token sequence, it can be accurately understood to explain for us. As discussed above, LLMs can effectively complement the defi-ciencies of ID-based features by providing ideal auxiliary informa-tion for GSU/ESU [ 23 ]. To our knowledge, a widely used approach 
+
+Figure 3: The K-means algorithm is a distribution-dependent quantification method that is highly affected by the training data; the distribution-edge points will be pulled closer to the distribution-dense area. FSQ is a distribution-independent quantification method that keeps each data point’s position. 
+
+in industrial companies is to first use LLMs to generate representa-tions for each item, and then utilize these cached embeddings as additional features for both GSU and ESU. In practice, its ceiling performance is limited if the LLM is not tuned alignment task with downstream RecSys. In other words, directly adding pre-trained multimodal embeddings as additional item features brings very limited gains, since our goal is not to recommend lookslike simi-lar items our users have already seen, but rather to discover new items of interest expanded from their historical behaviors. For this phenomenon, the common wisdom holds the following perspective: 
+
+• Representation Unmatch (LLM generated embedding not match RecSys demand): The objectives of pre-trained LLMs (such as image captioning and question answering) are inconsistent with RecSys objectives (image and text matching vs. user click predic-tion). The representations provided by LLMs may not be what downstream businesses need. For example, toothpaste and oint-ment may appear similar due to their tubular packaging, but serve completely different usage scenarios. 
+
+• Representation Unlearning (Freezing LLM embeddings is hard to adopt in dynamic RecSys): Pre-trained representations cannot be learned end-to-end, stop being updated through gradients to adapt to downstream tasks, making them prone to incompatibility and limiting their flexibility. Can we find a way that fully unleashes the LLM potential in lifelong user interest modeling? That LLM-generated item embed-dings could reflect appropriate business semantics on the GSU side, and enable friendly learning for better adaptation on the ESU side? In this paper, we present QARM V2 to provide RecSys business-aligned LLM embeddings and fine-grained Semantic IDs [ 9, 19 ], especially designed for lifelong sequence modeling. In summary, at the GSU side, our QARM V2 introduces a more comprehensive reasoning item alignment mechanism to enhance representation consistency in both business and world knowledge. At the ESU side, we propose the Res-KmeansFSQ quantitative code mechanism to generate learnable Semantic IDs with minor code conflict for more accurate optimization. QARM V2 Conference’17, July 2017, Washington, DC, USA 
+
+Reasoning Item Alignment Mechanism : To alleviate the Representation-Unmatch problem, we consider fine-tuning a pre-trained LLM to understand the similarity logic in business scenarios. To reach this goal, the previous effort QARM [ 14 ] proposes a naive item alignment mechanism, which exports the learned high similar-ity (trigger Item, target Item) pairs from RecSys model as contrastive supervision signals: 
+
+• Item2Item Swing retrieval model exported item pairs describe the stable exploitable item relationships that have been accumulated in our RecSys (most users clicked product A and product B)[ 26 ]. 
+
+• User2Item Two-Tower retrieval model exported item pairs express unstable exploring item relationships (the current user clicked product A and product B). We acknowledge those item pairs are vital to reflect the exploration-exploitation character in our platform business environment; how-ever, we also find some item pairs are noisy or biased and should be further filtered. As shown in Figure 2, the Item2Item retrieval model easily provides biased hot-popular item pairs, such as the (soy sauce, laundry detergent) pair; they are highly affected by exposure bias but have no underlying logic between the products themselves. Besides, the item pairs exported by the User2Item re-trieval model are highly flexible. Some may be totally unrelated in terms of modal content and underlying logic, but some share similar usage scenarios and underlying connections, e.g., toothpaste and dental floss. In QARM V2, we argue that it is necessary to apply LLMs to filter the generated item pairs provided by RecSys mod-els, rejecting noisy samples. Based on our observations, we deploy the latest pre-trained reasoning LLMs to judge whether the item pairs are closely related in world knowledge. Thereby we could obtain the more comprehensive item alignment data that actually happen on our platform, to balance exploration and exploitation with deeper underlying real-world logic. Besides, to not hurt the LLM pre-training paradigm to much, we devise a three-segment trick to conduct the item pair contrastive and the question-answer generation at same time, further enhanc-ing training stability to transform GPTs as an embedding generator. 
+
+Res-KmeansFSQ Quantitative Code Mechanism : To over-come the Representation-Unlearning problem, the previous QARM proposes a Res-Kmeans algorithm to quantify LLM embeddings into multi-level residual Semantic IDs, thereby the downstream RecSys model can assign additional embeddings for end-to-end optimization [ 13 , 27 ], e.g., three-level codes with size 4096. How-ever, in our findings, the naive Res-Kmeans method has a higher risk of codebook collision, where more than 30% of Semantic IDs have multiple item candidates in the Shopping scenario. We think the reason is that our system item environment follows a long-tail distribution, thus item representations are typically unevenly dis-tributed in high-dimensional space (for example, there are dense and sparse regions). As a result, the codebook centroids learned by K-means will be located in the data-dense regions, resulting in an uneven distribution of the codebook in space since K-means only minimizes the average intra-cluster distance to centroids, without considering inter-cluster distances, as shown in Figure 3(a). Ac-tually, we find that the first two-layer Res-Kmeans Code IDs are enough to identify an item’s major category and usage; the latter quantization layer should reflect item-specific characteristics to reduce code collisions. To balance fitting the real distribution and modeling item-specific characteristics, we introduce Finite Scalar Quantization (FSQ) [ 15 ] to replace the last Res-Kmeans step. Unlike K-means, FSQ uses a predefined uniform quantization grid that is independent of the training item distribution, as shown in Fig-ure 3(b). In this way, we can utilize the Res-Kmeans ‘layer-by-layer approximation’ advantage to capture the core distribution, and use the FSQ ‘rule-based quantization’ advantage to ensure fine-grained item semantics and reduce conflicts for more precise quantification. Based on the reasoning item alignment and Res-KmeansFSQ quantization mechanisms, QARM V2 can generate accurate item LLM embeddings with appropriate business semantics to support GSU, while generalized and learnable Semantic IDs provide fine-grained interest modeling at the ESU side. Overall, our contributions are as follows: 
+
+• We present QARM V2 to produce more powerful LLM-based em-beddings and Semantic IDs for user interest sequence modeling. Its embedding-enhanced GSU and Semantic-ID-enhanced ESU paradigm is verified in shopping, advertising, and live-streaming scenarios at Kuaishou. 
+
+• We propose a reasoning item alignment mechanism to reduce exposure noise and enhance underlying logical correlations in real-world business knowledge, alleviating the representation-unmatching problem. We also propose the Res-KmeansFSQ quan-titative code mechanism to trade off between the unbalanced real-world long-tail distribution of Res-Kmeans and the balanced rule-based distribution of FSQ to avoid code conflicts. 
+
+• Our QARM V2 has been widely deployed on multiple services, supporting 400 million active users daily. 
+
+## 2 Methodology 
+
+In this section, we introduce: (1) how the reasoning item alignment mechanism adapts the LLM to business knowledge; (2) how the Res-KmeansFSQ quantitative code mechanism produces the Semantic IDs; (3) how LLM embeddings enhance GSU and Semantic IDs enhance ESU to support users’ interest sequence modeling. 
+
+## 2.1 Reasoning Item Alignment 
+
+Utilizing multimodal information to enhance RecSys performance is a long-term hot topic in both academic and industry communities. Nowadays, the common consensus and experiments demonstrate that straightforwardly adding pre-trained multimodal embeddings as additional features brings very limited gains to RecSys, e.g., CLIP for image/frame compression [ 18 ], BERT for item ASR/OCR/title compression [ 18 ]. The reason is that early methods always uti-lize multiple ‘expert’ pre-trained models (BERT,CLIP) to establish item relationships through visual-textual similarity, which can only identify low-level look-alike resemblance, failing to capture the underlying semantic differences between items. Another reason is that there is a lack of efficient training objectives to bridge the gap between LLM and RecSys. Previous approaches typically adopt contrastive learning between the image and text of the same item, or contrastive learning with the corresponding learned RecSys-ID embedding. These methods are not only inefficient but also fail to generalize: our RecSys mission is not to recommend similar items our users have already seen, but rather to discover new items of Conference’17, July 2017, Washington, DC, USA Kuaishou Reco et al. Decoder -Only LLM 
+
+# Mean 
+
+Projector 
+
+…
+
+ViT               
+
+> Item Title, OCR,
+> Attributes
+> Q: What is this?
+> A: Cartoon quilt.
+> Three -Segment Attention Mask
+> Input segment
+> Compression segment
+> QA segment
+> <EMB> <EMB> <EMB>
+> In -Batch
+> Contrastive
+> Loss
+> Generative
+> Loss
+
+# LLM Fine -Tuning Pipeline 
+
+# Reasoning Data Pipeline       
+
+> Item2Item Swing
+> export item Pairs
+> User2Item Two -Tower
+> export item Pairs
+> ………
+> ………
+
+Qwen3 -0.6B 
+
+Qwen3 -8B       
+
+> Reasoning Item Pair
+> Filtering prompt: filter out
+> relevant pairs
+> ………
+> ………
+
+Qwen2.5 -VL -72B                      
+
+> Reasoning Item
+> Understanding prompt:
+> generate QA pairs of
+> the item
+> Q1: What is the item category? A1: Spicy food
+> Q2 :What is the item name? A2: 亲嘴烧
+> ………
+
+## 🔥 
+
+## 🔥 
+
+## ❄
+
+Figure 4: For the data pipeline, we first utilize the latest LLM to identify the item pairs relevance via their title, and then generating the corresponding question-answering pair based on each item’s visual/text data. In LLM fine-tuning, we modify the attention mask to split the input token sequence as three segment, and then conduct contrastive and generation task to fine-tuning the LLM backbone to obtain the item semantic embedding with appropriate business knowledge. 
+
+interest expanded from their historical behaviors. That is the de-sired role of LLMs in RecSys: to provide business-specific world knowledge signals that RecSys models are hard to capture. In this section, we provide a detailed high-quality data construc-tion pipeline, model backbone, and efficient training objectives to fulfill the gap between LLM and RecSys. 
+
+2.1.1 Reasoning Supervision Data Pipeline. In QARM V2, we have two categories of data: Item2Item contrastive data and item under-standing data. For the Item2Item contrastive data, we also choose to export them from our online serving retrieval models as the seed: 
+
+• Exploitation Item2Item statistic retrieval model: directly export stable higher similarity item pairs from statistic Swing methods. 
+
+• Exploration User2Item Two-Tower retrieval model: for each posi-tive item, from the recent positive items set select the most similar item in ID space. In this way, we could collect a large-scale Item2Item data corpus; however, some of them are noisy supervision signals: the statistic Item2Item methods provide item pairs that are easily affected by hot-popular exposure bias, and the two-tower User2Item methods provide item pairs that are totally unrelated in terms of multi-modal content and underlying logic. To reject low-quality noisy samples and filter more comprehensive and high-quality item pairs, we utilize the pre-trained reasoning model to judge whether item pairs are truly highly connected. The prompt is: Reasoning Prompt in Item Pair Filtering 
+
+Item-1 information: #Title, #Attributions, ...; Item-2 information: #Title, #Attribution, ...; Please analyze the potential correlation between two Items, such as semantic correlation (e.g., similar concepts or uses), complementary purchasing relationships (often purchased simultaneously or used together). Examples: (1) (Fishing rod, parasol): Highly related usage scenarios; (2) (Fishing rod, outdoor jacket): Shared outdoor activity scenario; If the product pair correlation is strong, reply: ‘<an-swer>Yes</answer>‘. Otherwise, reply: ‘<answer>No</answer>‘. 
+
+Specifically, we deploy the latest reasoning models [ 24 ] to filter the item pair corpus, and only utilize the item’s title and attributions as reasoning input. We use a smaller Qwen3-0.6B for exploitation Item2Item Swing item pairs and a larger Qwen3-8B for exploration QARM V2 Conference’17, July 2017, Washington, DC, USA 
+
+User2Item two-tower item pairs to balance inference cost. Overall, we reject 10%+ Item2Item exported training samples and 70%+ User2Item item pairs. Instead of contrastive item-pair supervision, we also construct question-answering pairs for deeper item understanding, especially for complex short-video and live-streaming media. To obtain high-quality question-answering pairs, we feed more fine-grained visual and text input to larger LLMs, such as Gemini [ 7 ] and Qwen2.5-VL-72B [3]. The prompt is: Reasoning Prompt in Item Understanding 
+
+> Item information: #Title #Attributes #Images, #OCR, #ASR, ...; Please generate ten instruction questions as diverse as possible. These questions are about facts or an understanding and evalua-tion of relevant content. Do not ask any questions that cannot be answered confidently. You need to return the result in the following form: 1. {"Question":..., "Answer":...} 2. {"Question":..., "Answer":...}
+
+By running this data generation pipeline, we could collect a large number of instruction question-answering pairs according to our provided prompt guidelines and item information. 
+
+2.1.2 Decoder-Only GPT Embedding Generator. As we know, the (current) SOTA LLMs all follow the decoder-only GPT paradigm; they aim to predict the next token according to the history token sequence, not a compressed summary embedding [ 1, 11 ]. As a result, there exists an unfriendly setting: it is better to provide a compressed embedding to represent the given visual-text token semantics in a downstream RecSys model. How can we transform a decoder-only GPT paradigm LLM into a promising embedding generator? To our knowledge, the most widely used method is to insert a special token as a single hint (e.g., <EMB> ), and then use its last-layer hidden state as the ‘compressed embedding’. Nevertheless, it severely modifies the generation-style NTP pre-training task into embedding compression, thus a question is raised: can we unify embedding compression and NTP at the same time? In QARM V2, we give a three-segment trick to achieve the goal. Specifically, we split the token input as: 
+
+• Input Segment : the given item’s title, images, OCR and others. 
+
+• Compression Segment : multiple special tokens <EMB> as compres-sion units, which can attend to the input segment tokens only. 
+
+• QA Segment : the last question-answer tokens, which can attend to the former segments only. In this setting, the Input Segment can be seen as an information provider, the Compression Segment plays the role of compressing all inputs to generate embeddings, while the last QA Segment ensures that all fine-grained information can be extracted. As shown in Figure 4, the LLM can be optimized with the NTP generation task and embedding contrastive task at the same time. In practice, we utilize the gradient cache technique to train the LLM in a large batch size environment, and a warm-start technique to anneal the output segment attention area (for the Output Segment, all Input/Query Segments can be seen at the training beginning, while reducing the Input Segment attention weight to zero step by step, for stable training). Based on our contrastive item pair and generated item understanding data pipeline, and the three-segment LLM design, we can fine-tune the LLM as a stable embedding generator. For the sake of better understanding, we do not show the formulation in this section; the overall workflow is shown in Figure 4. 
+
+## 2.2 Res-KmeansFSQ Quantitative Code 
+
+Up to now, we have introduced how to fine-tune a pre-trained LLM to align with our business demands; next we show how it gener-ates the Semantic IDs. First of all, we denote the item embedding inference process as follows:    
+
+> m=LLM (Item_Text_Vision_Tokens ),(1)
+
+where the m ∈ R𝑑 denotes the item semantic embedding that will be used in the downstream RecSys model 1. In this paper, we focus on the QARM Res-Kmeans [ 14 ] quantification technique to enhance code ID quality and alleviate the code conflict problem (one Semantic ID mapping multiple real items). In our system, the item distribution is always an uneven long-tail distribution (for example, there are dense and sparse regions), and the K-means optimization objective minimizes the average intra-cluster distance to centroids without considering inter-cluster distances, causing the naive three-level Res-Kmeans to show higher code conflict. Actually, in our observation, we find that the first two-layer Res-Kmeans Code IDs are enough to identify an item’s major cat-egory and usage. This phenomenon motivates us to let the last layer quantization identify item-specific characteristics rather than model the real item distribution. To this end, we introduce a hybrid quantization strategy that combines Res-Kmeans and Finite Scalar Quantization (FSQ). We retain Res-Kmeans for the first two layers to capture the coarse-grained item category and usage patterns, while replacing the last layer with FSQ to provide uniformly distributed codes for fine-grained item distinction. This hybrid design allows us to leverage the advantages of both techniques: Res-Kmeans excels at learning data-adaptive centroids that reflect the natural clustering structure of item embeddings, while FSQ provides a deterministic and collision-free code assignment that effectively alleviates the code conflict problem in the tail region of the item distribution. Particularly, the Res-Kmeans method has the following steps: (1) Data collection : Collecting a larger item embedding set M ∈
+
+R𝑁 ×𝑑 sampled from the real distribution (e.g., 𝑁 > 10 , 000 , 000 ). (2) Initialized Two-layer Residual codebook training : According to the training source M, we first train the codebook with K-means as follows: 
+
+C1 = Kmeans (M,𝐾 ), M1 = M − NearestRep (M, C1)
+
+C2 = Kmeans (M1, 𝐾 ) (2) where the NearestRep denotes the nearest K-means centroid representation, 𝐾 indicates the cluster hyper-parameter (e.g., 8192), and C1, C2 are the two-layer centroid representations. (3) Last-layer FSQ training : According to the residual representa-tion, we further train the last layer FSQ as follows: 
+
+M2 = M1 − NearestRep (M1, C2)
+
+Z = FSQ (M2) = ⌊𝐿 · 𝜎 (M2W)⌉ (3)  
+
+> 1The LLM side embedding always has a large dimension, such as 3,000+. Conference’17, July 2017, Washington, DC, USA Kuaishou Reco et al.
+
+Table 1: Performance comparison (%) at Amazon Book. 
+
+Baselines DIN SIM-hard SIM-soft QARM V2 AUC 67.69 67.15 69.57 70.33 where M2 denotes the final residual after two-layer quantization, 
+
+W ∈ R𝑑 ×13 is a learnable projection matrix, 𝜎 (·) is the sigmoid function that normalizes values to [0, 1], 𝐿 is the number of quantization levels per dimension (e.g., 𝐿 = 2), and ⌊·⌉ denotes rounding to the nearest integer, and Z ∈ R𝑛 indicates the FSQ code. 
+
+## 2.3 Semantic Enhanced GSU/ESU Workflow 
+
+In this section, we dive into the RecSys model to describe how the generated Semantic embeddings and Semantic IDs are utilized in GSU and ESU enhancement. 
+
+2.3.1 GSU Enhancement. In the GSU (General Selection Unit) stage, we directly leverage the LLM embedding m from Equation 1 for efficient candidate retrieval. Specifically, we store all item LLM embeddings in a long-term embedding storage 2. Given the target item representation m and a user’s historical interaction sequence 
+
+{𝑖 1, 𝑖 2, . . . , 𝑖 𝑇 } with corresponding LLM embeddings {m1, m2, . . . , m𝑇 },we retrieve the top-𝑘 most relevant historical items via inner prod-uct similarity: 
+
+{m1, m2, . . . , m𝑘 } = Top-K-GSU ({ m1, m2, . . . , m𝑇 }, m, 𝑘 ) (4) where the Top-K GSU operator selects the 𝑘 historical items with highest ⟨m𝑖 , m⟩ scores. This semantic-aware retrieval captures deep item understanding from the LLM, enabling more effective subse-quence selection compared to ID-based or rule-based methods. 
+
+2.3.2 ESU Enhancement. In the ESU (Exact Selection Unit) stage, we utilize the multi-level Semantic IDs (SIDs) obtained from ResKmeans-FSQ as learnable discrete features. Each item is represented by its original ItemID together with the three-level SIDs {𝑐 1, 𝑐 2, 𝑐 3 }, which are mapped to learnable embeddings via lookup tables. The ESU then performs target-attention over the retrieved subsequence:                       
+
+> ESU =TargetAttention ( ( I,c1,c2,c3),
+> { ( I1,c11,c21,c31), . . . , (I𝑘 ,c1
+> 𝑘 ,c2
+> 𝑘 ,c3
+> 𝑘 ) } ) ,
+> ˆ𝑦 ctr ,ˆ𝑦 cvr ,· · · ← MoE (ESU ,Others )
+> (5)
+
+where the target item features (I, c1, c2, c3) serve as the query, and the historical subsequence features serve as keys and values. The attended representation is then fed into a multi-task MoE module for CTR/CVR prediction [ 6]. The entire model is optimized end-to-end with the multi-task binary cross-entropy loss: 
+
+L = −∑︁  
+
+> xtr ∈ { ctr ,cvr ,... }
+
+ 𝑦 xtr log ( ˆ𝑦 xtr )+( 1−𝑦 xtr ) log (1 − ˆ𝑦 xtr ) (6) Through this end-to-end optimization, the SID embeddings are jointly learned with the ranking model, allowing the hierarchical semantic structure encoded in SIDs to directly benefit the down-stream prediction tasks. 
+
+> 2Typically, we perform PCA dimensionality reduction to avoid storage pressure.
+
+## 3 Experiments 
+
+To valid our reasoning item alignment and ResKmeansFSQ effective-ness, we conduct extensive experiments in Advertising, Shopping and Live-streaming services, and Amazon public dataset. 
+
+## 3.1 Offline Performance 
+
+Academic Datasets. To validate the generalization of QARM V2, we first conduct experiments on the public Amazon dataset. Specif-ically, we preprocess the data as follows: (1) samples with rating 
+
+≥ 4 are labeled as positive, otherwise negative; (2) we maintain users with sequence length ≥ 20; each user contributes one positive and one negative sample, and 15% of users are randomly split into the test set. In model training, we retrieve top-50 items for the last item to support ESU calculation. As shown in Table 1, QARM V2 achieves the best AUC of 70.33%, outperforming all baselines in-cluding DIN (67.69%, using users’ latest interaction items), SIM hard (67.15%, searching items with the same tag), and SIM soft (69.57%, searching top-𝑘 related items by learnable item ID embedding). This demonstrates that our reasoning-based item alignment and Res-KmeansFSQ quantization can effectively enhance GSU search accuracy and ESU end-to-end optimization. 
+
+Industry Datasets. We further evaluate QARM V2 on large-scale industrial datasets from Kuaishou, covering Advertising, Shop-ping, and Live-streaming services. Empirically, AUC/UAUC/GAUC are the vital offline metrics for evaluating model performance; on average, about 0.1% improvement is enough to contribute business gains. As shown in Table 2, Table 3, and Table 4, QARM V2 consis-tently improves over the baseline across all scenarios and metrics. In Advertising, GAUC improves by +1.10% (63.06% →64.16%). In Shop-ping#1, the CTCVR GAUC gains +0.40% (74.97% →75.37%). In Live-streaming, Long View GAUC achieves the largest improvement of +0.50% (67.26% →67.76%). These results confirm the effectiveness of QARM V2 in enhancing both GSU retrieval and ESU ranking across diverse industrial recommendation scenarios. A valuable but not directly observable phenomenon is that all our experiments are conducted without sequence deduplication, as we observe that deduplicated sequences consistently yield lower offline AUC than non-deduplicated ones. For example, in Live-streaming, out of top-100 interactions, there are only 23 unique authors on average. The non-deduplicated sequence captures users’ repeated engagement patterns on the same author, such as viewing duration variations and time-of-day preferences, which provide valuable signals for preference modeling. 
+
+## 3.2 Online Performance 
+
+We deployed QARM V2 in production across multiple business sce-narios and conducted multi-week online A/B testing. As reported in Table 5, Table 6, and Table 7 3, our QARM V2 consistently de-livered significant online gains across our main-stream scenarios. In Advertising services, Revenue increased by +4.873% with Cost improved by +3.942%. In Shopping services, Shopping#2 achieved the most substantial gains with GMV +5.612% and Order +4.834%, while Shopping#1 and Shopping#3 also demonstrated consistent improvements across all metrics. These results validate that our  
+
+> 3Our experiments conduct at main-traffic Ads/shop/live-streaming scenarios. QARM V2 Conference’17, July 2017, Washington, DC, USA
+
+Table 2: Offline results(%) in terms of AUC, UAUC and GAUC on Advertising/Shopping#1 at Kuaishou. 
+
+Model Variants Advertising Shopping#1 CTCVR CTR CVR CTCVR AUC UAUC GAUC AUC UAUC GAUC AUC UAUC GAUC AUC UAUC GAUC Baseline Model 87.02 62.98 63.06 81.70 70.67 71.45 89.52 71.61 72.50 90.39 74.99 74.97 +QARM V2 87.43 63.97 64.16 81.79 70.85 71.63 89.69 71.83 72.76 90.59 75.34 75.37 
+
+Table 3: Offline results(%) in terms of AUC, UAUC and GAUC on Shopping services at Kuaishou. 
+
+Model Variants Shopping#2 Shopping#3 CTR CVR CTR CVR AUC UAUC WUAUC AUC UAUC GAUC AUC UAUC GAUC AUC UAUC GAUC Baseline Model 85.95 65.75 65.97 87.29 69.5 69.18 86.77 64.96 66.41 89.41 65.38 67.54 +QARM V2 86.10 65.94 66.18 87.38 69.58 69.34 86.82 65.08 66.53 89.46 65.44 67.59 
+
+Table 4: Offline results(%) in terms of AUC, UAUC and GAUC on Live-streaming services at Kuaishou. 
+
+Model Variants Live-streaming Click Gift Long View Follow AUC UAUC GAUC AUC UAUC GAUC AUC UAUC GAUC AUC UAUC GAUC Baseline Model 82.68 63.48 63.61 97.65 70.02 70.33 83.70 67.28 67.26 83.70 66.83 66.82 +QARM V2 82.78 63.60 63.87 97.69 70.11 70.55 83.80 67.60 67.76 83.76 66.94 67.10 
+
+Table 5: Online A/B testing at Advertising Scenario. 
+
+Scenarios Advertising Metrics Exposure Cost Revenue Advertising +1.321% +3.942% +4.873% reasoning-based item alignment and Res-KmeansFSQ quantization effectively enhance both GSU retrieval quality and ESU ranking. 
+
+## 3.3 Reasoning Item Alignment Analysis 
+
+To evaluate the GSU retrieval capability of our reasoning-based LLM embeddings, we deploy an item-to-item retrieval service that uses users’ real-time clicks and orders as ground truth. Specifi-cally, for each user, we use the last 10 historically clicked trigger items to retrieve 50 candidates per item trigger (totaling up to 500 candidates), and compute the hit rate against the user’s actual inter-actions (clicks and orders). As shown in Table 8, QARM-V2 achieves substantial improvements over QARM across all metrics. For click prediction, HR@200 improves from 7.77% to 12.5% (+60.9% relative), and HR@500 improves from 9.7% to 15.4% (+58.8% relative). For order prediction, HR@200 improves from 11.3% to 20.0% (+77.0% relative), and HR@500 improves from 20.0% to 23.0%. Notably, the significant gains at HR@200 indicate that QARM-V2 produces more reasonable similarity scores, ranking truly relevant items higher rather than requiring deeper retrieval to achieve hits. These results 
+
+Table 6: Online A/B testing results at Shopping services. 
+
+Scenarios Shopping Metrics GMV Order Exposure Shopping#1 +3.208% +1.919% +0.427% Shopping#2 +5.612% +4.834% +3.739% Shopping#3 +1.037% +1.221% +1.487% validate that our reasoning-based item alignment could filter the noise item pairs to generate LLM embeddings that better capture user behavioral preferences. 
+
+## 3.4 Res-KmeansFSQ Code Conflict Analysis 
+
+To evaluate the effectiveness of our Res-KmeansFSQ in reducing code conflicts, we deploy a KGNN (a graph edge storage engine at Kuaishou) service that hashes SID sequences into hash IDs and maintains (hash_id, item_id) edges from the online sample stream. For QARM V2-Res-Kmeans training, the MSE loss (per element) is about 0.37 at the first level, 0.26 at the second level, and 0.20 at the third level (FSQ training loss is much higher than K-means). Based on these, we first obtain the SID for a given query item, then perform reverse lookup in KGNN to retrieve candidate item IDs. We measure: (1) Collision : the percentage of items sharing the same SID with others; (2) EdgeNum : the average number of item IDs returned per SID query; (3) HR@K : the Hit Rate of retrieving the correct Conference’17, July 2017, Washington, DC, USA Kuaishou Reco et al. 
+
+Table 7: Online A/B testing results at Live-streaming services, at the largest live-stream traffic. 
+
+Scenarios Item Group Core Metrics Interact Metrics Click Watch Time Watch Count Gift Count Like Comment Follow Live-streaming#1 Cold-start +3.231% +2.961% +1.609% +1.807% – – –Others +0.611% +0.753% +0.489% +2.917% +3.215% +1.184% +1.158% Live-streaming#2 Cold-start +0.890% +0.998% +0.998% +0.918% – – –Others +0.304% +0.482% +0.434% +2.917% +0.464% +0.826% +0.418% 
+
+Table 8: Reasoning Item Alignment Improvement. 
+
+Method Click Order HR@200 HR@500 HR@200 HR@500 QARM 7.77% 9.7% 11.3% 13.0% QARM V2 12.5% 15.4% 20.0% 23.0% 
+
+Table 9: Code Conflict Component Analysis. 
+
+Methods Collision EdgeNum HR@1 HR@10 QARM ResKmeans 77.92% 129.33 80.3% 97.79% QARM V2 ResKmeans 52.25% 8.41 91.9% 99.75% QARM V2 ResKmeansFSQ 32.39% 2.5 95.2% 99.9% item within top-K results. As shown in Table 9, higher collision rates lead to more items sharing the same SID, making it harder to retrieve the correct item, thus requiring larger K to ensure a hit. Specifically, compared to QARM-ResKmeans (3 * 4096), our QARM-V2-ResKmeans (3 * 4096) reduces the collision rate from 77.92% to 52.25% and EdgeNum from 129.33% to 8.41%, improving HR@1 from 80.3% to 91.9%, verifying our reasoning item alignment mechanism. By further incorporating FSQ at the last layer, QARM-V2-ResKmeansFSQ (3 * 4096) achieves the lowest collision rate of 32.39 and EdgeNum of only 2.5, with HR@1 reaching 95.2%. These results validate that our hybrid quantization strategy effectively alleviates code conflicts, enabling precise item retrieval. 
+
+## 3.5 GSU Case Analysis 
+
+To intuitively evaluate the retrieval quality within the General Search Unit (GSU) stage, Table 10 and Figure 5 present a com-parative visualization of retrieval results between our proposed QARM-V2 and the baseline SIM model. The exclusive retrieval rate measures items that are uniquely recalled by QARM-V2 but not by the baseline GSU. We report this metric in Table 10 to quan-tify the ability to expand candidate sets beyond repeated exposure. These exclusive items are often semantically related yet visually dissimilar, indicating that QARM-V2 can expand users’ interests beyond repeated exposure and discover novel but relevant can-didates. In Figure 5, we show some cases of trigger items across diverse categories. As observed in the figure, the baseline End2End ID-based SIM frequently retrieves "hard negative" items that are irrelevant to the trigger item in both category and semantics (e.g., retrieving unrelated jewelry for a phone accessory target). In con-trast, QARM-V2 demonstrates superior semantic alignment and 
+
+Figure 5: Visualization of exclusive retrieved items. Table 10: QARM V2 GSU exclusive retrieve rate. 
+
+Sequence Click(Top50) Order(Top30) Exposure(Top30) Exclusive Rate 63.6% 57.9% 65.1% robustness. Across all presented cases, the candidate sets retrieved by our method maintain high categorical consistency and semantic relevance to the target items. Whether in scenarios requiring visual discrimination or fine-grained semantic understanding, QARM-V2 accurately identifies and retrieves reasonable items that align with the user’s underlying interests. These results confirm that QARM-V2 significantly enhances the relevance of user sequence modeling. 
+
+## 4 Conclusions 
+
+In this paper, we present QARM V2, a unified framework that leverages LLM semantic understanding to enhance lifelong user sequence modeling in industrial RecSys. Our approach introduces reasoning-based item alignment from both Item-to-Item and User-to-Item perspectives, generating business-aligned LLM embeddings for GSU retrieval. Further, we provide a three-segment LLM fine-tuning paradigm to transform a decoder-only LLM into an embed-ding generator with contrastive and generation tasks simultane-ously. For ESU, we propose Res-KmeansFSQ, a hybrid quantization method that combines Residual K-means with Finite Scalar Quanti-zation, producing multi-level Semantic IDs with significantly lower code collision rates. Extensive experiments on Kuaishou’s short-video and live-streaming platforms demonstrate that QARM V2 achieves significant improvements in both GSU and ESU capabili-ties, delivering substantial gains across multiple business scenarios. Moreover, we conduct detailed ablation studies to highlight the LLM reasoning reject sampling is necessary to keep business dis-tribution with world knowledge. In future work, we will explore finer-grained, longer parallel VQ codes, which can be diffused to the original modality. QARM V2 Conference’17, July 2017, Washington, DC, USA 
+
+## References 
+
+[1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Floren-cia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. 2023. Gpt-4 technical report. arXiv (2023). [2] Jinze Bai, Shuai Bai, Yunfei Chu, Zeyu Cui, Kai Dang, Xiaodong Deng, Yang Fan, Wenbin Ge, Yu Han, Fei Huang, et al . 2023. Qwen technical report. arXiv preprint arXiv:2309.16609 (2023). [3] Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Sibo Song, Kai Dang, Peng Wang, Shijie Wang, Jun Tang, et al . 2025. Qwen2. 5-vl technical report. arXiv preprint arXiv:2502.13923 (2025). [4] Zheng Chai, Qin Ren, Xijun Xiao, Huizhi Yang, Bo Han, Sijun Zhang, Di Chen, Hui Lu, Wenlin Zhao, Lele Yu, et al . 2025. Longer: Scaling up long sequence modeling in industrial recommenders. In Proceedings of the Nineteenth ACM Conference on Recommender Systems . 247–256. [5] Jianxin Chang, Chenbin Zhang, Zhiyi Fu, Xiaoxue Zang, Lin Guan, Jing Lu, Yiqun Hui, Dewei Leng, Yanan Niu, Yang Song, et al . 2023. TWIN: TWo-stage interest network for lifelong user behavior modeling in CTR prediction at kuaishou. In 
+
+Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining . 3785–3794. [6] Wei Cheng, Yucheng Lu, Boyang Xia, Jiangxia Cao, Kuan Xu, Mingxing Wen, Wei Jiang, Jiaming Zhang, Zhaojie Liu, Liyin Hong, et al . 2025. ChorusCVR: Chorus Supervision for Entire Space Post-Click Conversion Rate Modeling. arXiv preprint arXiv:2502.08277 (2025). [7] Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit Dhillon, Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al . 2025. Gemini 2.5: Pushing the frontier with advanced reasoning, multi-modality, long context, and next generation agentic capabilities. arXiv preprint arXiv:2507.06261 (2025). [8] Paul Covington, Jay Adams, and Emre Sargin. 2016. Deep neural networks for youtube recommendations. In ACM Conference on Recommender Systems (RecSys) .[9] Jiaxin Deng, Shiyao Wang, Kuo Cai, Lejian Ren, Qigen Hu, Weifeng Ding, Qiang Luo, and Guorui Zhou. 2025. Onerec: Unifying retrieve and rank with generative recommender and iterative preference alignment. arXiv preprint arXiv:2502.18965 
+
+(2025). [10] Wang-Cheng Kang and Julian McAuley. 2018. Self-attentive sequential recom-mendation. In IEEE international conference on data mining (ICDM) .[11] Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Cheng-gang Zhao, Chengqi Deng, Chenyu Zhang, Chong Ruan, et al . 2024. Deepseek-v3 technical report. arXiv preprint arXiv:2412.19437 (2024). [12] Chi Liu, Jiangxia Cao, Rui Huang, Kai Zheng, Qiang Luo, Kun Gai, and Guorui Zhou. 2024. KuaiFormer: Transformer-Based Retrieval at Kuaishou. (2024). [13] Yueyang Liu, Jiangxia Cao, Shen Wang, Shuang Wen, Xiang Chen, Xiangyu Wu, Shuang Yang, Zhaojie Liu, Kun Gai, and Guorui Zhou. 2025. LLM-Alignment Live-Streaming Recommendation. arXiv preprint arXiv:2504.05217 (2025). [14] Xinchen Luo, Jiangxia Cao, Tianyu Sun, Jinkai Yu, Rui Huang, Wei Yuan, Hezheng Lin, Yichen Zheng, Shiyao Wang, Qigen Hu, et al . 2024. QARM: Quantitative Alignment Multi-Modal Recommendation at Kuaishou. arXiv (2024). [15] Fabian Mentzer, David Minnen, Eirikur Agustsson, and Michael Tschannen. 2023. Finite scalar quantization: Vq-vae made simple. arXiv preprint arXiv:2309.15505 
+
+(2023). [16] Qi Pi, Weijie Bian, Guorui Zhou, Xiaoqiang Zhu, and Kun Gai. 2019. Practice on long sequential user behavior modeling for click-through rate prediction. In Proceedings of the 25th ACM SIGKDD international conference on knowledge discovery & data mining . 2671–2679. [17] Qi Pi, Guorui Zhou, Yujing Zhang, Zhe Wang, Lejian Ren, Ying Fan, Xiaoqiang Zhu, and Kun Gai. 2020. Search-based user interest modeling with lifelong sequential behavior data for click-through rate prediction. In Proceedings of the 29th ACM International Conference on Information & Knowledge Management .2685–2692. [18] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al . 2021. Learning transferable visual models from natural language supervision. In International conference on machine learning . PmLR, 8748–8763. [19] Shashank Rajput, Nikhil Mehta, Anima Singh, Raghunandan Hulikal Keshavan, Trung Vu, Lukasz Heldt, Lichan Hong, Yi Tay, Vinh Tran, Jonah Samost, et al .2023. Recommender systems with generative retrieval. Advances in Neural Information Processing Systems 36 (2023), 10299–10315. [20] Zihua Si, Lin Guan, ZhongXiang Sun, Xiaoxue Zang, Jing Lu, Yiqun Hui, Xingchao Cao, Zeyu Yang, Yichen Zheng, Dewei Leng, et al . 2024. Twin v2: Scaling ultra-long user behavior sequence modeling for enhanced ctr prediction at kuaishou. In Proceedings of the 33rd ACM International Conference on Information and Knowledge Management . 4890–4897. [21] Kwai Keye Team, Biao Yang, Bin Wen, Changyi Liu, Chenglong Chu, Chengru Song, Chongling Rao, Chuan Yi, Da Li, Dunju Zang, et al . 2025. Kwai Keye-VL Technical Report. arXiv preprint arXiv:2507.01949 (2025). [22] Xu Wang, Jiangxia Cao, Zhiyi Fu, Kun Gai, and Guorui Zhou. 2024. HoME: Hierarchy of Multi-Gate Experts for Multi-Task Learning at Kuaishou. (2024). [23] Bin Wu, Feifan Yang, Zhangming Chan, Yu-Ran Gu, Jiawei Feng, Chao Yi, Xiang-Rong Sheng, Han Zhu, Jian Xu, Mang Ye, et al . 2025. MUSE: A Simple Yet Effective Multimodal Search-Based Framework for Lifelong User Interest Modeling. arXiv preprint arXiv:2512.07216 (2025). [24] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, et al . 2025. Qwen3 technical report. arXiv preprint arXiv:2505.09388 (2025). [25] Biao Yang, Bin Wen, Boyang Ding, Changyi Liu, Chenglong Chu, Chengru Song, Chongling Rao, Chuan Yi, Da Li, Dunju Zang, et al . 2025. Kwai keye-vl 1.5 technical report. arXiv preprint arXiv:2509.01563 (2025). [26] Xiaoyong Yang, Yadong Zhu, Yi Zhang, Xiaobo Wang, and Quan Yuan. 2020. Large scale product graph construction for recommendation in e-commerce. 
+
+arXiv preprint arXiv:2010.05525 (2020). [27] Guorui Zhou, Jiaxin Deng, Jinghao Zhang, Kuo Cai, Lejian Ren, Qiang Luo, Qian-qian Wang, Qigen Hu, Rui Huang, Shiyao Wang, et al . 2025. OneRec Technical Report. arXiv preprint arXiv:2506.13695 (2025). [28] Guorui Zhou, Xiaoqiang Zhu, Chenru Song, Ying Fan, Han Zhu, Xiao Ma, Yanghui Yan, Junqi Jin, Han Li, and Kun Gai. 2018. Deep interest network for click-through rate prediction. In Proceedings of the 24th ACM SIGKDD international conference on knowledge discovery & data mining . 1059–1068.
