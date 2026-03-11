@@ -1,0 +1,276 @@
+Title: MUSE: A Run-Centric Platform for Multimodal Unified Safety Evaluation of Large Language Models
+
+URL Source: https://arxiv.org/pdf/2603.02482v1
+
+Published Time: Wed, 04 Mar 2026 01:24:53 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+## MUSE: A Run-Centric Platform for Multimodal Unified Safety Evaluation of Large Language Models 
+
+Zhongxi Wang *1 Yueqian Lin ∗1 Jingyang Zhang 2 Hai “Helen” Li 1 Yiran Chen 11Duke University 2Virtue AI 
+
+{zhongxi.wang, yueqian.lin, hai.li, yiran.chen}@duke.edu zhjy227@gmail.com 
+
+Abstract 
+
+Safety evaluation and red-teaming of large language models remain predominantly text-centric, and existing frameworks lack the in-frastructure to systematically test whether align-ment generalizes to audio, image, and video in-puts. We present MUSE (Multimodal Unified Safety Evaluation), an open-source, run-centric platform that integrates automatic cross-modal payload generation, three multi-turn attack al-gorithms (Crescendo, PAIR, Violent Durian), provider-agnostic model routing, and an LLM judge with a five-level safety taxonomy into a single browser-based system. A dual-metric framework distinguishes hard Attack Success Rate (Compliance only) from soft ASR (in-cluding Partial Compliance), capturing partial information leakage that binary metrics miss. To probe whether alignment generalizes across modality boundaries, we introduce Inter-Turn Modality Switching (ITMS), which augments multi-turn attacks with per-turn modality ro-tation. Experiments across six multimodal LLMs from four providers show that multi-turn strategies can achieve up to 90–100% ASR against models with near-perfect single-turn re-fusal. ITMS does not uniformly raise final ASR on already-saturated baselines, but accelerates czhishionvergence by destabilizing early-turn defenses, and ablation reveals that the direction of modality effects is model-family-specific rather than universal, underscoring the need for provider-aware cross-modal safety testing. 1
+
+1 Introduction 
+
+Large language models have evolved into multi-modal agents that process audio, images, and video alongside natural language; commercial systems such as GPT-4o (OpenAI, 2024), Gemini (Gem-ini Team, 2023), and Claude Sonnet 4 (Anthropic, 2025), as well as open-source models such as the  
+
+> *Equal contribution.
+> 1Demo video: https://youtu.be/xHTUJlXJSmc .
+
+Qwen-Omni family (Xu et al., 2025a), now ac-cept multimodal inputs within a single conversa-tion, opening powerful new capabilities but also a broader attack surface. Ensuring that these mod-els refuse harmful requests regardless of the input modality has become a central concern for model developers and safety researchers. Existing safety research has tackled this chal-lenge along two largely independent lines. On the attack methodology side, multi-turn strate-gies such as Crescendo (Russinovich et al., 2024), PAIR (Chao et al., 2023), and Violent Durian (AI Verify Foundation, 2024) have demonstrated that iterative adversarial pressure can systematically by-pass safety alignment that withstands direct single-turn prompts. On the multimodal safety side, Qi et al. (2024), FigStep (Gong et al., 2025), and MM-SafetyBench (Liu et al., 2023) have shown that delivering harmful content through non-text modal-ities can weaken alignment even without multi-turn interaction. However, these two lines remain dis-connected: no existing tool jointly supports multi-turn automated attacks with cross-modal payload delivery and automated safety judgment within a single reproducible pipeline. More fundamentally, all current approaches evaluate modalities in iso-lation, leaving open whether resistance to textual multi-turn escalation generalizes when successive turns arrive in different modalities. Building such a unified pipeline poses practi-cal challenges: orchestrating a multi-turn attack requires coordinating an attacker LLM, a target model, a modality conversion pipeline, and an automated judge, while multimodal providers ex-pose substantially different interfaces that demand provider-specific adaptation. Existing red-teaming frameworks (Lopez Munoz et al., 2024; Derczyn-ski et al., 2024) and safety benchmarks (Mazeika et al., 2024; Chao et al., 2024) address parts of this problem but lack either native multimodal payload generation, interactive run management, or both 1
+
+> arXiv:2603.02482v1 [cs.LG] 3 Mar 2026
+
+(see Section 2 for a detailed comparison). More-over, most existing evaluations report only binary ASR, collapsing a rich behavioral spectrum into a single number that cannot distinguish complete safety bypass from partial information leakage. We address these challenges with MUSE 
+
+(Multimodal Unified Safety Evaluation), a run-centric platform that, to our knowledge, is the first to unify multimodal payload generation, multi-turn attack orchestration, and automated safety judg-ment within a single architecture (Figure 1). MUSE organizes the workflow around the run , a persistent entity that records the attack configuration, conver-sation state, media assets, and evaluation outcome, enabling reproducible cross-modal red-teaming at scale. Our principal contributions are as follows: • Run-centric unified platform. MUSE in-tegrates automatic cross-modal payload gen-eration (TTS, text-rendered image prompts, video composition), three base attack algo-rithms extensible to five strategies via ITMS, and provider-agnostic routing to six models across four APIs into a single browser-based system with concurrent batch execution, goal-level stop-and-resume, and real-time SSE streaming. • Dual-metric fine-grained evaluation. A five-level safety taxonomy (Compliance, Partial Compliance, Indirect Refusal, Direct Refusal, Non-Responsive) that emphasizes capability transfer over surface tone. Hard ASR counts only full Compliance; soft ASR additionally includes Partial Compliance; the gap between them quantifies the gray zone of partial infor-mation leakage. • Inter-Turn Modality Switching (ITMS). Acontrolled methodology for probing whether safety alignment generalizes across modality boundaries. ITMS augments multi-turn at-tacks with per-turn modality rotation; ablation across six configurations (text-only through full three-way rotation) helps isolate the ef-fect of modality switching from that of any individual modality. We validate MUSE through approximately 3,700 red-teaming runs spanning six multimodal LLMs from four providers, five attack strategies, and con-trolled ITMS ablation across modality configura-tions. 
+
+2 Related Work 
+
+Single-turn adversarial methods such as GCG (Zou et al., 2023), AutoDAN (Liu et al., 2024), and Deep-Inception (Li et al., 2023) craft inputs via gradient optimization, genetic search, or nested scenarios, while multi-turn strategies such as PAIR (Chao et al., 2023), Crescendo (Russinovich et al., 2024), and Violent Durian (AI Verify Foundation, 2024) apply iterative pressure through prompt rewriting, conversational escalation, or high-pressure rhetor-ical tactics. On the multimodal front, Qi et al. (2024), FigStep (Gong et al., 2025), and MM-SafetyBench (Liu et al., 2023) demonstrated that non-text modalities can weaken alignment, but all evaluate each modality in isolation; none investi-gates cross-modal transitions within a multi-turn conversation. On the infrastructure side, PyRIT (Lopez Munoz et al., 2024) and Garak (Derczynski et al., 2024) support programmatic red-teaming but lack na-tive multimodal payload generation, while Harm-Bench (Mazeika et al., 2024) and Jailbreak-Bench (Chao et al., 2024) provide standardized benchmarks without interactive run management. StrongREJECT (Souly et al., 2024) showed that binary metrics overstate jailbreak success, and WildGuard (Han et al., 2024) trained a dedicated safety classifier, both building on the LLM-as-judge paradigm (Zheng et al., 2023). MUSE builds on the StrongREJECT insight by adopting a five-level taxonomy that separates full compliance from partial information leakage, and combines this with multimodal payload generation, multi-turn attack orchestration, and interactive batch management in a single platform. It further introduces ITMS for probing whether safety alignment holds across modality boundaries. 
+
+3 System Design 
+
+3.1 Overview 
+
+MUSE follows a client-server architecture with a browser-based frontend for interactive exploration and a backend that manages computation, persis-tence, and real-time streaming. The design is guided by two principles: extensibility , so that new models, attack algorithms, and evaluation criteria can be added without modifying existing compo-nents; and reproducibility , so that every configu-ration choice, conversation turn, and judgment is recorded and retrievable. To this end, the backend is organized around five subsystems described in 2Statistics             
+
+> Dashboard
+> Run-Centric
+> Data Model LLM Judge Model Router
+> Cross-Modal
+> Payload Generation
+> Attack Strategy
+> Engine
+> Multi-Turn Dialogue
+> Text -> Audio
+> (TTS)
+> Text -> Image
+> (PIL Rendering)
+> Text -> Video
+> (FFmpeg Composition)
+> Caching & Deduplication
+> Qwen
+> Gemini
+> ChatGPT
+> Claude
+> Uni fi ed Interface
+> Supports 6 Target Models
+> 5-Level Safety
+> Classi fi cation
+> ✅Compliance
+> ✅Partial Compliance
+> ⚠Indirect Refusal
+> 🚫 Direct Refusal
+> 🚫 Non-Responsive
+> ASR Metrics
+> ✅Hard ASR
+> ✅Soft ASR
+> attack_runs
+> (Core Entity)
+> batch_attack_runs
+> attack_turn_results
+> Model ×Modality
+> Heatmap
+> Refusal Taxonomy
+> Operational Analytics
+> Run Management
+> Concurrent Campaigns SSE Real-Time Streaming Stop/Resume Goal-Level Checkpoint Batch Orchestration
+
+User Layer 
+
+Backend Layer       
+
+> (FastAPI Backend)
+> Automated Red Teaming Multimodal Test Interactive Chat Batch Evaluation Statistics
+> User Input
+> (Prompts + Con fi g)
+> Target LLM
+> Response
+> Compliance Score
+> Run Manage Runs
+> REST API SSE Stream
+
+User 
+
+> Manage Runs
+> View Statistics
+> Crescendo
+> Violent Durian
+> PAIR
+> ITMS-Crescendo
+> ITMS-VD
+
+Figure 1: MUSE system overview. The run-centric architecture connects cross-modal payload generation, multi-turn attack strategies, provider-agnostic model routing, and LLM-based safety judgment into a single browser-based platform. 
+
+the following subsections: a run-centric data model (Section 3.2), a pluggable attack strategy engine (Section 3.3), a provider-agnostic model routing layer and cross-modal payload generation pipeline (Section 3.4), and an LLM judge with a five-level safety taxonomy (Section 3.5). 
+
+3.2 Run-Centric Architecture 
+
+A central challenge in multi-turn red-teaming is maintaining a complete audit trail: which model was tested, what strategy was used, what was said on each turn, and how the response was judged. MUSE addresses this by organizing the entire workflow around the attack run , a persistent en-tity that captures the full attack configuration, ev-ery turn of the multi-turn conversation (including attacker prompt, target response, judge label, de-livery modality, and any generated media), and the final outcome. Because runs are self-contained, they serve as the natural unit of aggregation for all downstream analytics. At a higher level, batch campaigns compose multiple runs into orchestrated sequences with running totals updated after each goal, and a stop-and-resume mechanism restarts in-terrupted campaigns from the last completed goal rather than from scratch. 
+
+3.3 Attack Strategies and ITMS 
+
+MUSE implements three established attack algo-rithms through a common interface, making it straightforward to add new strategies in the fu-ture. Crescendo (Russinovich et al., 2024) escalates from benign questions through gradually harmful turns; each response is judged, and refusals trigger backtracking that re-prompts the attacker from a different angle. PAIR (Chao et al., 2023) generates fresh single-turn prompts each iteration; the judge assigns a score and the attacker rewrites accord-ingly, without accumulating conversational context. Violent Durian (AI Verify Foundation, 2024) ap-plies high-pressure rhetorical tactics from the first turn, employing authority impersonation and ur-gency framing; like Crescendo, it maintains multi-turn context with backtracking on refusal. These three strategies operate entirely in text. To investigate whether modality transitions them-selves can destabilize alignment, MUSE introduces an Inter-Turn Modality Switching (ITMS) exten-sion that augments any context-maintaining strat-egy (currently Crescendo and Violent Durian) with per-turn modality rotation. Before each turn, the system selects the next delivery modality by cy-cling through the intersection of user-requested and model-supported modalities. The attacker-generated text is then converted via the modality 3pipeline and delivered as a multimodal message. Because the per-turn modality sequence is logged alongside all other run metadata, ITMS enables controlled ablation across configurations ranging from single-modality delivery to full multi-way ro-tation. 
+
+3.4 Modality Conversion and Model Routing 
+
+The modality conversion pipeline transforms attacker-generated text into three non-text repre-sentations: audio (via TTS synthesis), image (text rendered onto a canvas with automatic word wrap-ping), and video (compositing the audio and im-age tracks into a single file). Generated assets are cached by a (project, prompt, modality) key, so repeated runs against different target models reuse the same media without redundant generation. The model routing layer abstracts over provider-specific APIs and presents a uniform interface to the rest of the system. Adding a new model re-quires only implementing a thin provider client that handles content formatting and retry logic; the rout-ing layer dispatches to the appropriate client based on the run configuration. MUSE currently sup-ports models from four providers (OpenAI, Google, Anthropic and Qwen) through their official APIs, covering both omni-modal models that accept text, audio, image, and video, and restricted-modality models limited to text and image. 
+
+3.5 Evaluation Framework 
+
+Binary pass/fail judgments, as noted by StrongRE-JECT (Souly et al., 2024), conflate qualitatively different model behaviors. MUSE therefore adopts a five-level taxonomy that emphasizes capabil-ity transfer rather than surface tone: Compliance (harmful capability directly transferred), Partial Compliance (incomplete but still actionable harm-ful information), Indirect Refusal (avoids assisting without explicit refusal), Direct Refusal (explic-itly declines), and Non-Responsive (irrelevant out-put). Under this taxonomy, a response that provides step-by-step instructions wrapped in disclaimers is classified as Compliance, while ethical discussion that conveys no actionable information is Indirect Refusal. From these labels, two metrics are derived. Hard ASR counts only Compliance; soft ASR addition-ally includes Partial Compliance. The gap between them, which we term the gray zone width (GZW), quantifies the extent to which a model partially re-sists but still transfers harmful capability. Because labels are recorded per turn, the taxonomy also sup-ports longitudinal analyses such as tracking how a model’s resistance erodes across successive turns or differs by delivery modality. 
+
+4 Experiments 
+
+4.1 Setup Dataset. We curate 50 harmful goals from Ad-vBench (Zou et al., 2023), sampled evenly across five categories (weapons, controlled substances, malware, biological threats, fraud/social engineer-ing) and rephrased as direct capability requests deliverable across all supported modalities. 
+
+Models. Six models from four providers are eval-uated: Qwen3-Omni and Qwen2.5-Omni (Xu et al., 2025a,b) (text, audio, image, video), Gemini 2.5 Flash and Gemini 3 Flash Preview (Gemini Team, 2023) (text, audio, image, video), GPT-4o (OpenAI, 2024) (text, image) 2, and Claude Sonnet 4 (An-thropic, 2025) (text, image). GPT-4o serves as both the attacker model and the automated judge (tem-perature 0) across experiments. 
+
+Strategies and hyperparameters. All five strategies described in Section 3.3 are em-ployed: Crescendo, PAIR, Violent Durian, ITMS-Crescendo, and ITMS-VD. All strategies share a maximum budget of 10 turns; other key settings include a backtrack limit of 3, attacker temperature of 0.9, and a PAIR success threshold of 9 on a 1–10 scale. 
+
+Metrics. From the five-level judge taxonomy (Section 3.5), we derive two attack success rate metrics. Hard ASR counts only Compliance: ASR hard = |{ r ∈ R : ℓ(r) = C}| /|R|. Soft ASR additionally includes Partial Compliance: ASR soft = |{ r ∈ R : ℓ(r) ∈ { C, PC }}| /|R|. The gap between them quantifies partial resistance; we report it where it is non-trivial. For the single-turn baseline, refusal rate (Direct Refusal + Indirect Refusal) is the primary metric instead. The three experiments below comprise approximately 3,700 runs in total. 
+
+4.2 Single-Turn Baseline 
+
+Before evaluating multi-turn attacks, we establish how well each model resists direct harmful requests. 
+
+> 2GPT-4o supports audio input through a separate Realtime API rather than the standard Chat Completions endpoint used in our evaluation pipeline. Claude Sonnet 4 similarly does not accept audio through its standard Messages API. We therefore test both models on text and image only.
+
+4Model Text Image Audio Video Comb. Split                               
+
+> Claude Sonnet 4 96 100 –––GPT-4o 98 100 –––Gemini 2.5 Flash 98 100 100 100 100 Gemini 3 Flash 90 98 96 92 92 Qwen2.5-Omni 94 98 98 92 94 Qwen3-Omni 98 100 100 100 100
+
+Table 1: Single-turn baseline refusal rates (%). Comb. 
+
+and Split denote combined (audio+video interleaved) and split (separate tracks) video inputs. Claude Son-net 4 and GPT-4o do not support audio or video inputs (marked “–”). 
+
+Each of the 50 goals is delivered to each model without attacker rewriting, transcoded into every modality the model supports, yielding 24 model-modality conditions and 24 × 50 = 1 ,200 runs. Table 1 confirms that all six models are well-aligned under single-turn pressure: refusal rates range from 90% to 100% across all tested modali-ties. The key takeaway is not the individual num-bers but the ceiling they establish. Any attack suc-cess observed in the following experiments cannot be attributed to weak baseline safety; it must arise from the qualitatively different pressure of multi-turn interaction. 
+
+4.3 Automated Red-Teaming (Main) 
+
+The central experiment evaluates all five strategies against all six models on the same 50 goals, pro-ducing 5 × 6 × 50 = 1 ,500 runs. Non-ITMS strate-gies deliver all turns as text; ITMS variants cycle through each target’s supported modalities.                                     
+
+> Baselines ITMS (Ours) Model Cresc. PAIR VD Cresc. VD
+> Claude Sonnet 4 90 60 292 6
+> GPT-4o 96 98 42 92 40
+> Gemini 2.5 Flash 94 100 56 98 62
+> Gemini 3 Flash 98 96 26 94 34
+> Qwen2.5-Omni 96 98 86 88 100
+> Qwen3-Omni 98 96 30 94 22
+
+Table 2: Hard ASR (%) across five red-teaming strategies and six target models. Cresc. = Crescendo; VD = Violent Durian. 
+
+Multi-turn attacks shatter single-turn de-fenses. Table 2 reveals a striking reversal from the baseline: Crescendo achieves 90–98% hard ASR across all six models, and PAIR reaches 96–100% on five of six. The sole exception is PAIR against 1 2 3 4 5 6 7 8 9 10 
+
+> Turn Number
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Cumulative ASR (%)
+> Crescendo
+> PAIR
+> Violent Durian
+> ITMS-Crescendo
+> ITMS-VD
+
+Figure 2: Cumulative ASR (%) as a function of turn number, aggregated across all six target models per strategy. Markers at each turn; all five strategies share a 10-turn maximum budget. 
+
+Claude Sonnet 4 (60% hard ASR), where a GZW of 26 percentage points indicates that the model redirects conversations toward partial rather than complete disclosure. Violent Durian shows the widest cross-model variance, near-failing against Claude (2%) but near-succeeding against Qwen2.5-Omni (86%), confirming that template-driven high-pressure tactics exploit model-specific weaknesses rather than a universal vulnerability. 
+
+ITMS accelerates convergence. Because Crescendo already saturates most defenses at 90– 98%, ITMS-Crescendo yields mixed ASR deltas (e.g., Gemini 2.5 Flash: +4 , but Qwen2.5-Omni: 
+
+−8). The more revealing signal is convergence speed : Table 4 (Appendix) shows that ITMS-Crescendo reaches success in fewer turns for 4 of 6 models (e.g., Claude: 3.0 → 2.6, Qwen2.5: 4.2 → 3.6). Where the baseline is not saturated, the ASR gains become visible: ITMS-VD raises Qwen2.5-Omni from 86% to 100% while cutting mean turns from 3.0 to 2.1. A turn-level analysis reveals the mechanism be-hind this acceleration. At turn 1, ITMS-Crescendo exhibits higher refusal rates than base Crescendo (86.0% vs. 81.0%), consistent with heightened model caution upon receiving multimodal content. At turn 2, following the first modality switch, re-fusal rates drop sharply (59.7% vs. 66.8%) and Partial Compliance rises (32.7% vs. 27.1%). This reversal does not occur in the text-only baseline, suggesting that the modality transition itself, rather than the content of any individual turn, is the desta-bilizing mechanism. 
+
+Convergence and category patterns. Figure 2 shows that Crescendo and ITMS-Crescendo accu-5Weapons Drugs Malware Bio/Eco Fraud                     
+
+> Crescendo
+> PAIR
+> Violent Durian
+> ITMS-Crescendo
+> ITMS-VD
+> 93 88 98 97 100
+> 87 87 92 93 98
+> 33 38 35 43 55
+> 97 87 97 87 98
+> 37 47 40 42 55
+> 0
+> 25
+> 50
+> 75
+> 100
+> Hard ASR (%)
+
+Figure 3: Hard ASR (%) broken down by harm category and strategy, aggregated across all six target models. Categories (columns): Weapons (goals 0–9), Drugs (10– 19), Malware (20–29), Bio/Eco (30–39), Fraud (40– 49). Horizontal rule separates base strategies (top) from ITMS variants (bottom). 
+
+mulate successes steadily across all ten turns, while Violent Durian concentrates 70% of its successes in the first three turns with rapidly diminishing returns. PAIR rises sharply through turn 4 and plateaus by turn 8. Across harm categories (Fig-ure 3), Fraud is the most vulnerable category under all five strategies, while Drugs and Weapons are the most resistant, suggesting uneven safety training coverage. 
+
+4.4 ITMS Ablation Study 
+
+The previous experiment shows that ITMS can accelerate convergence, but conflates the effect of modality switching with that of any individ-ual non-text modality. This experiment disentan-gles the two by varying only the modality config-uration while holding all other variables constant. The four omni-modal models are tested across six configurations (text-only, audio-only, image-only, text+audio, text+image, and three-way rotation), yielding 5 × 4 × 50 = 1 ,000 new runs with iden-tical Crescendo parameters. Video is excluded to avoid synthesis latency.                                                 
+
+> Config Gem. 2.5F Gem. 3F Qwen2.5 Qwen3
+> Text (baseline) 94 98 96 98 Audio-only 100 (+6 )100 (+2 )90 (−6)96 (−2)
+> Image-only 100 (+6 )100 (+2 )82 (−14 )92 (−6)
+> Text+Audio 98 (+4 )100 (+2 )92 (−4)94 (−4)
+> Text+Image 96 (+2 )98 (0)84 (−12 )94 (−4)
+> 3-Way 98 (+4 )98 (0)90 (−6)96 (−2)
+
+Table 3: ITMS ablation: hard ASR (%) by modality configuration for omni-modal models. Parenthesized values show ∆ relative to text-only baseline. 
+
+Table 3 reveals that the effect of modality sub-stitution is model-family-dependent. For Gem-ini models, non-text modalities raise hard ASR by 2–6 points above the text baseline, suggest-ing that audio and image delivery exploits align-ment gaps absent in text. For Qwen models the direction reverses: non-text modalities consistently 
+
+lower ASR, with the sharpest drop under image-only delivery for Qwen2.5-Omni ( ∆ = −14 ), sug-gesting that Qwen’s multimodal pipeline applies stricter content filtering to non-text inputs. Re-introducing text in dual-modality configurations partially attenuates both effects (e.g., Gemini 2.5 Flash Audio-only 100 → Text+Audio 98; Qwen2.5-Omni Image-only 82 → Text+Image 84), and a third modality adds no further incremental change. These results do not contradict the convergence advantage observed in the main experiment. The Crescendo text-only baseline already saturates at 94–98%, leaving little room for ASR movement in either direction. Where headroom exists, as with Violent Durian against Qwen2.5-Omni ( +14 points under ITMS-VD), modality cycling produces clear gains. The overall picture is that ITMS is most impactful not as a universal ASR amplifier, but as a convergence accelerator whose effect on final ASR depends on how much room the baseline strategy leaves. 
+
+5 Conclusion 
+
+We presented MUSE, an open-source run-centric platform for multimodal safety evaluation that in-tegrates cross-modal payload generation, multi-turn attack orchestration, and a five-level LLM judge into a single interactive system. The run-centric architecture made it possible to execute and analyze approximately 3,700 red-teaming runs across six models, five strategies, and six modality configurations within a single reproducible work-flow. Three findings emerge from this evaluation: (1) multi-turn strategies achieve 90–100% ASR against models with near-perfect single-turn re-fusal; (2) ITMS accelerates convergence by desta-bilizing early-turn defenses even when final ASR is saturated; and (3) the direction of modality effects is model-family-specific, underscoring the need for provider-aware cross-modal safety testing. Future work includes supporting locally deployed open-source models, expanding ITMS to native video rotation, and validating the five-level judge against human annotations. 6References 
+
+AI Verify Foundation. 2024. Project moonshot: Violent durian attack module. Moonshot Documentation. Accessed 2026-02-28. Anthropic. 2025. System card: Claude opus 4 & claude sonnet 4. System card (PDF). Accessed 2026-02-27. Patrick Chao, Edoardo Debenedetti, Alexander Robey, Maksym Andriushchenko, Francesco Croce, Vikash Sehwag, Edgar Dobriban, Nicolas Flammarion, George J. Pappas, Florian Tramer, Hamed Hassani, and Eric Wong. 2024. Jailbreakbench: An open ro-bustness benchmark for jailbreaking large language models. arXiv preprint. Preprint , arXiv:2404.01318. Patrick Chao, Alexander Robey, Edgar Dobriban, Hamed Hassani, George J. Pappas, and Eric Wong. 2023. Jailbreaking black box large language mod-els in twenty queries. arXiv preprint. Preprint ,arXiv:2310.08419. Leon Derczynski, Erick Galinkin, Jeffrey Martin, Subho Majumdar, and Nanna Inie. 2024. garak: A frame-work for security probing large language models. arXiv preprint. Preprint , arXiv:2406.11036. Gemini Team. 2023. Gemini: A family of highly ca-pable multimodal models. arXiv preprint. Preprint ,arXiv:2312.11805. Yichen Gong, Delong Ran, Jinyuan Liu, Conglei Wang, Tianshuo Cong, Anyu Wang, Sisi Duan, and Xiaoyun Wang. 2025. Figstep: Jailbreaking large vision-language models via typographic visual prompts. In 
+
+Proceedings of the AAAI Conference on Artificial Intelligence .Seungju Han, Kavel Rao, Allyson Ettinger, Liwei Jiang, Bill Yuchen Lin, Nathan Lambert, Yejin Choi, and Nouha Dziri. 2024. Wildguard: Open one-stop mod-eration tools for safety risks, jailbreaks, and refusals of llms. arXiv preprint. Preprint , arXiv:2406.18495. Xuan Li, Zhanke Zhou, Jianing Zhu, Jiangchao Yao, Tongliang Liu, and Bo Han. 2023. Deepinception: Hypnotize large language model to be jailbreaker. arXiv preprint. Preprint , arXiv:2311.03191. Xiaogeng Liu, Nan Xu, Muhao Chen, and Chaowei Xiao. 2024. Autodan: Generating stealthy jailbreak prompts on aligned large language models. arXiv preprint. Preprint , arXiv:2310.04451. Published as a conference paper at ICLR 2024 (per arXiv record). Xin Liu, Yichen Zhu, Jindong Gu, Yunshi Lan, Chao Yang, and Yu Qiao. 2023. Mm-safetybench: Abenchmark for safety evaluation of multimodal large language models. arXiv preprint. Preprint ,arXiv:2311.17600. Gary D. Lopez Munoz, Amanda J. Minnich, Roman Lutz, Richard Lundeen, Raja Sekhar Rao Dheekonda, Nina Chikanov, Bolor-Erdene Jagdagdorj, Martin Pouliot, Shiven Chawla, Whitney Maxwell, Blake Bullwinkel, Katherine Pratt, Joris de Gruyter, Char-lotte Siska, Pete Bryan, Tori Westerhoff, Chang Kawaguchi, Christian Seifert, Ram Shankar Siva Ku-mar, and Yonatan Zunger. 2024. Pyrit: A frame-work for security risk identification and red teaming in generative ai system. arXiv preprint. Preprint ,arXiv:2410.02828. Mantas Mazeika, Long Phan, Xuwang Yin, Andy Zou, Zifan Wang, Norman Mu, Elham Sakhaee, Nathaniel Li, Steven Basart, Bo Li, David Forsyth, and Dan Hendrycks. 2024. Harmbench: A standard-ized evaluation framework for automated red team-ing and robust refusal. arXiv preprint. Preprint ,arXiv:2402.04249. OpenAI. 2024. GPT-4o system card. arXiv preprint. 
+
+Preprint , arXiv:2410.21276. Xiangyu Qi, Kaixuan Huang, Ashwinee Panda, Peter Henderson, Mengdi Wang, and Prateek Mittal. 2024. Visual adversarial examples jailbreak aligned large language models. In Proceedings of the AAAI Con-ference on Artificial Intelligence .Mark Russinovich, Ahmed Salem, and Ronen Eldan. 2024. Great, now write an article about that: The crescendo multi-turn llm jailbreak attack. arXiv preprint. Preprint , arXiv:2404.01833. Accepted at USENIX Security 2025 (per arXiv record). Alexandra Souly, Qingyuan Lu, Dillon Bowen, Tu Trinh, Elvis Hsieh, Sana Pandey, Pieter Abbeel, Justin Svegliato, Scott Emmons, Olivia Watkins, and Sam Toyer. 2024. A strongreject for empty jailbreaks. arXiv preprint. Preprint , arXiv:2402.10260. Jin Xu, Zhifang Guo, Jinzheng He, Hangrui Hu, Ting He, Shuai Bai, Keqin Chen, Jialin Wang, Yang Fan, Kai Dang, Bin Zhang, Xiong Wang, Yunfei Chu, and Junyang Lin. 2025a. Qwen2.5-omni technical report. arXiv preprint. Preprint , arXiv:2503.20215. Jin Xu, Zhifang Guo, Hangrui Hu, Yunfei Chu, Xiong Wang, Jinzheng He, Yuxuan Wang, Xian Shi, Ting He, Xinfa Zhu, Yuanjun Lv, Yongqi Wang, Dake Guo, He Wang, Linhan Ma, Pei Zhang, Xinyu Zhang, Hongkun Hao, Zishan Guo, and 19 others. 2025b. Qwen3-omni technical report. arXiv preprint. 
+
+Preprint , arXiv:2509.17765. Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Stoica. 2023. Judg-ing llm-as-a-judge with mt-bench and chatbot arena. arXiv preprint. Preprint , arXiv:2306.05685. Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J. Zico Kolter, and Matt Fredrikson. 2023. Universal and transferable adversarial attacks on aligned language models. arXiv preprint. Preprint ,arXiv:2307.15043. 
+
+7A Appendix 
+
+A.1 Human Validation of Automated Judge 
+
+We manually reviewed 100 randomly sampled runs covering different models and attack strategies. A human annotator re-labeled the final-turn outputs using the same five-level taxonomy as the auto-mated judge. The agreement rate with the GPT-4o judge was 93%. Most disagreements occurred be-tween Compliance and Partial Compliance, and we found no cases where clear refusals were labeled as full Compliance. We also did not observe any systematic bias toward inflating hard ASR. 
+
+A.2 System Interface 
+
+MUSE exposes two complementary web interfaces from a unified navigation bar. Figure 4 illustrates the system workflow. The Automated Red Teaming interface (Fig. 4a) supports configurable multi-turn attacks. Users se-lect an attack strategy (e.g., Crescendo, Violent Durian, ITMS variants), specify a target goal with category-based quick-start examples, choose a tar-get model with modality capability indicators, and optionally enable per-turn modality rotation. Amax-turns control bounds the interaction length, enabling controlled and reproducible attack runs. The Multimodal Test interface (Fig. 4b) pro-vides single-turn evaluation. Users compose a test prompt, select one or more modalities (text, audio, image, or video), and generate the corresponding payload. The system then dispatches the payload to the selected model and returns both the model output and the automated safety judgment. 
+
+A.3 Average Turns to Success 
+
+Table 4 reports the mean number of turns required to achieve the first Compliance judgment, com-puted only over goals that ultimately succeed. This metric is invisible to ASR alone and reveals whether ITMS accelerates alignment erosion even when it cannot raise the final success rate.                                    
+
+> Strategy Claude Sonnet 4 GPT-4o Gemini 2.5 Flash Gemini 3 Flash Qwen 2.5-Omni Qwen 3-Omni
+> Crescendo 3.0 3.4 2.5 2.8 4.2 3.1 ITMS-Crescendo 2.6 (−0.4)4.0 ( +0 .5)2.8 ( +0 .3)2.2 (−0.6)3.6 (−0.6)3.0 (−0.1)Violent Durian 10.0 †2.4 3.5 3.3 3.0 2.8 ITMS-VD 5.3 (−4.7)2.7 ( +0 .3)2.8 (−0.8)2.5 (−0.8)2.1 (−0.9)3.4 ( +0 .5)
+
+Table 4: Average turns to success (successful runs only). Parenthesized ∆ values are relative to the base strategy; 
+
+bold = ITMS converges faster. †Based on a single suc-cessful run (VD hard ASR = 2% for Claude). ITMS-VD Qwen2.5-Omni achieves 100% ASR with a mean of 2.1 turns and zero failures. 
+
+A.4 License 
+
+MUSE is released under the MIT License. 8(a) Automated Red Teaming interface. 
+
+(b) Multimodal Test interface (single-turn). 
+
+Figure 4: MUSE user interfaces. 
+
+9

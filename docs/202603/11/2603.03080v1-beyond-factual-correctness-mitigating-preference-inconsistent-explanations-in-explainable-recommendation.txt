@@ -1,0 +1,609 @@
+Title: Beyond Factual Correctness: Mitigating Preference-Inconsistent Explanations in Explainable Recommendation
+
+URL Source: https://arxiv.org/pdf/2603.03080v1
+
+Published Time: Wed, 04 Mar 2026 02:29:51 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# Beyond Factual Correctness: Mitigating Preference-Inconsistent Explanations in Explainable Recommendation 
+
+# Chengkai Wang 
+
+Ningbo University Ningbo, China 2411100294@nbu.edu.cn 
+
+# Baisong Liu 
+
+Ningbo University Ningbo, China lbs@nbu.edu.cn 
+
+## Abstract 
+
+Explainable recommendation systems increasingly employ large language models (LLMs) to generate fluent and persuasive natural-language explanations for recommended items. Prior work has largely focused on improving factual correctness, implicitly assum-ing that factually grounded explanations are sufficient to establish user trust. However, in practice, explanations may remain factu-ally correct yet justify recommendations using attributes that are weakly supported or even contradicted by a user’s historical pref-erences, resulting in reasoning that is logically valid but norma-tively unconvincing to the user. This failure mode is not explic-itly addressed by existing explainable recommender systems and remains invisible to standard hallucination or model-faithfulness-based evaluation metrics. In this work, we identify this phenom-enon as preference-inconsistent explanations, a distinct and pre-viously under-examined failure mode in explainable recommen-dation, and propose PURE, a preference-aware reasoning frame-work that follows a select-then-generate paradigm. PURE inter-venes at the evidence selection stage rather than generation, iden-tifying a compact set of reasoning paths that are both factually grounded and aligned with user preference structure. Concretely, it performs preference-aware reasoning path selection over multi-hop item-centric structures, guided by user intent, specificity, and diversity, thereby suppressing generic but weakly personalized ev-idence. The selected evidence is then incorporated into LLM-based generation via structure-aware prompting that preserves relational constraints. To make this failure mode measurable, we introduce a feature-level evaluation metric that serves as a complementary, user-centric lens for quantifying preference inconsistency, reveal-ing systematic misalignment that factuality-based measures fail to detect. Experiments on three real-world datasets demonstrate that PURE consistently reduces preference-inconsistent explanations and factual hallucinations, while maintaining competitive recom-mendation accuracy, explanation quality, and inference efficiency. Taken together, these results suggest that explanation faithfulness must be understood not only as factual correctness, but also as justification aligned with user preferences, highlighting a previ-ously under-evaluated, user-centric dimension of trustworthy ex-plainable recommendation. 
+
+## CCS Concepts 
+
+• Information systems → Recommender systems .
+
+## Keywords 
+
+Explainable Recommendation, Large Language Models, Knowledge Graphs, Preference Consistency, User-Centric Faithfulness (a) Factuality Hallucination (b) Pr efer ence Inconsistency                  
+
+> I have watched {user watched
+> history}. Why do you recommend
+> {The Shawshank Redemption }?
+> User History
+> You should watch it because it is a
+> lighthear ted comedy full of funny
+> moments that will make you laugh.
+> I recommend it for its realistic
+> depiction of cr uel pr ison life and
+> the protagonist's heavy suffer ing .
+> I have watched {user watched
+> history}. Why do you recommend
+> {The Shawshank Redemption }?
+> LLM LLM
+> (c) Pr efer ence-Awar e Path Pr uning for Explainable Recommendation (our s)
+> The Shawshank Redemption is quietly
+> powerful —its focus on hope and fr eedom
+> feels healing and left me genuinely uplifted.
+> The story focuses on undying hope
+> and fr eedom , offering a truly healing
+> exper ience that fits your mood.
+> LLM
+> Crime
+> Prison
+> Hope
+> Friendship
+> Violence
+> Suffering
+> Healing
+> Warmth
+> genre
+> setting
+> theme
+> depicts
+> implies
+> has_attr
+> leads_to
+> provides
+> Preference-
+> Aware Path
+> Pruning
+> Augment
+> KG
+> [Gr ound-Tr uth]
+> ?
+> ……
+
+Figure 1: Illustration of factuality hallucinations and prefer-ence inconsistency in LLM-based explainable recommenda-tion, and our work. 
+
+## 1 Introduction 
+
+Recommender systems play a central role in helping users navi-gate large and complex item spaces, and explanations have long been recognized as a key mechanism for improving transparency, trust, and user acceptance [2, 6, 30]. With the rapid adoption of large language models (LLMs), explainable recommendation has shifted from rigid, template-based rationales to free-form natural-language explanations that are fluent, expressive, and human-like [12, 16, 23]. Recent studies show that LLM-based explainers can en-hance perceived transparency and user satisfaction, particularly in interactive recommendation scenarios [19, 24]. However, increased linguistic fluency does not necessarily im-ply increased trustworthiness. Most existing explainable recom-mender systems implicitly assume that an explanation is trustwor-thy as long as it is factually correct, i.e., it mentions item attributes that are objectively true [13, 35]. Consequently, recent efforts have focused heavily on mitigating factual hallucinations by grounding explanations in external evidence such as reviews, retrieved docu-ments, or knowledge graphs [5, 10, 17]. Yet factual correctness alone is insufficient to explain why an item is suitable for a particular user. Consider a user who has con-sistently engaged with light-hearted, comforting movies character-ized by warmth, humor, and emotional healing. The recommender system suggests a critically acclaimed prison drama that indeed contains themes of hope and redemption. When asked for an ex-planation, the system highlights the film’s realistic depiction of suffering and psychological struggle—attributes that are factually correct and well supported by external knowledge sources. 
+
+> arXiv:2603.03080v1 [cs.AI] 3 Mar 2026 , ,
+
+Table 1: Preference Inconsistency produces explanations that are factually valid yet misaligned with user interests.                 
+
+> Failure Mode Factual User-Relevant Preference-Aligned Example Factual Hallucination 7––“Directed by Spielberg” ( actually Nolan )
+> Generic Explanation 37–“It’s a popular movie.”
+> Preference Inconsistency (Ours) 337“Stunning CGI effects” ( actually user liked it for plot )
+
+From the user’s perspective, however, the explanation feels un-convincing. Although the recommended item itself may still be rea-sonable, the justification emphasizes precisely the aspects the user has historically avoided. The system does not fabricate facts, nor does it provide irrelevant information; instead, it offers the wrong reasons for the recommendation. Over time, such explanations can erode user trust, as users perceive the system as misunderstanding why items are recommended, even when recommendation accu-racy appears acceptable. This example illustrates a subtle yet critical failure mode in ex-plainable recommendation: explanations that remain factually cor-rect but are misaligned with a user’s preference structure. In this work, we refer to this phenomenon as preference-inconsistent ex-planations. As categorized in Table 1, we characterize this as a log-ically valid but normatively invalid explanation error: while the reasoning is factually sound, it violates the normative expectation that a recommendation must align with the user’s specific inter-ests. Unlike generic or low-informative explanations, preference-inconsistent explanations actively present factual item features as positive reasons despite lacking support from the user’s established preferences. As illustrated in Figure 1, this failure mode is funda-mentally different from factual hallucination: the explanation is grounded in true attributes, yet its reasoning contradicts what the user values. Existing explainable recommender systems rarely address this issue explicitly. Retrieval-augmented and knowledge-grounded ap-proaches effectively reduce blatant factual errors, but they typi-cally prioritize globally salient or high-frequency concepts when selecting evidence. Thus, explanations may be factually grounded yet preference-misaligned, especially when multi-hop reasoning paths emphasize popular but weakly personalized attributes. Be-cause standard faithfulness metrics focus primarily on factual cor-rectness, preference-inconsistent explanations often remain unde-tected and unpenalized. These observations suggest that improving trustworthiness in explainable recommendation requires more than factual ground-ing. It calls for a principled mechanism that explicitly incorporates user preference structure into the reasoning process underlying explanation generation, ensuring that explanations justify recom-mendations using preference-aligned evidence rather than merely correct facts. In this paper, we propose PURE (Preference-aligned Unhallu-cinated Reasoning for Explanation), a preference-aware reasoning framework for explainable recommendation. The key insight be-hind PURE is that preference inconsistency primarily arises from generic, high-frequency reasoning paths, rather than from miss-ing factual information. Accordingly, PURE focuses on identifying a compact set of factually grounded and preference-aligned rea-soning paths instead of maximizing knowledge coverage. PURE constructs multi-hop item-centric subgraphs, applies preference-aware path pruning based on target-aware user intent, node speci-ficity, and diversity-aware reranking, and conditions LLM-based explanation generation on the resulting preference-consistent ev-idence through a hybrid structure-aware prompting mechanism. Our contributions are threefold: 
+
+• We identify preference-inconsistent explanations as a previously under-characterized failure mode in LLM-based explainable rec-ommendation, where explanations remain factually correct yet violate the user’s intrinsic interests, a limitation not captured by existing faithfulness metrics. 
+
+• We propose PURE , a preference-aware reasoning framework that aligns explanation generation with user preferences via KG-based path construction, specificity and intent-aware path prun-ing, and structure-preserving prompting. 
+
+• We introduce feature-level metrics to quantify both factual hal-lucinations and preference inconsistency, and demonstrate sub-stantial improvements on three real-world datasets. 
+
+## 2 Related Work 2.1 Explainable Recommendation with LLMs 
+
+LLM-driven explainable recommendation has advanced rapidly, moving beyond template-based methods to generate fluent, human-like justifications. Representative methods, such as PEPLER [16], RecExplainer [12], Exp3rt [11], and ARTS [23], adapt pre-trained language models to recommendation scenarios through instruc-tion tuning, prompt learning, or multi-task training. To further en-hance generation quality and reasoning capabilities, recent works such as LLM2ER [37] and STLLM-Rec [20] employ reward model-ing and self-training strategies, respectively, achieving significant improvements in perceived transparency. Despite these advances, most existing LLM-based explainers pri-marily optimize surface-level properties of explanations, such as linguistic plausibility, topical relevance, or semantic coherence with the recommended item. Explanation faithfulness is often implic-itly reduced to factual correctness, assuming that mentioning ob-jectively true item attributes suffices to justify recommendations. As a result, explanations that are fluent and factually accurate are typically regarded as trustworthy, without explicitly considering whether the explanation logic aligns with the user’s preference structure. Departing from these generation-centric approaches, we argue that factual correctness alone is insufficient. We identify prefer-ence inconsistency—where explanations remain factually correct yet cite misaligned features—as a critical failure mode. Unlike prior Beyond Factual Correctness: Mitigating Preference-Inconsistent Explanations in Explainable Recommendation , , 
+
+explainers prioritizing plausibility, we treat preference consistency as a first-class objective, explicitly aligning explanation reasoning with user interests rather than treating it as a byproduct of fluency. 
+
+## 2.2 Retrieval-Augmented Recommendation 
+
+To mitigate hallucinations in LLM-generated explanations, recent works have increasingly adopted retrieval-augmented generation (RAG) and knowledge-graph (KG) grounding [3, 29]. Systems such as G-Refer [18], PEARLM [7], R3 [26] and K-RagRec [33] retrieve external evidence, ranging from textual reviews to structured sub-graphs, to constrain LLM generation [25], thereby reducing factual errors and enriching explanation content. However, existing retrieval-based approaches exhibit key limi-tations regarding preference alignment. First, retrieved evidence is typically linearized into plain textual context, discarding graph topology and multi-hop structures that may encode preference-relevant reasoning patterns. Second, retrieval strategies often fa-vor high-degree concepts that are globally salient but weakly per-sonalized, leading to explanations that are factually grounded yet generic. In contrast, PURE performs preference-aware structural prun-ing. Rather than maximizing evidence coverage, we select a com-pact set of multi-hop reasoning paths that are both faithful and strictly aligned with the user’s preference structure, preserving these structural constraints during LLM conditioning to avoid mis-aligned justifications. 
+
+## 2.3 Faithfulness and User Trust 
+
+Faithfulness is a prerequisite for user trust in explainable recom-mendation. Prior approaches, such as FIRE [28] and TriEOR [40], predominantly target model-level faithfulness, ensuring explana-tions remain true to model attributions. More recently, MMCT [22] and HDMR [1] extended this scope to preference explainability, grounding explanations in multimodal evidence or latent concepts, respectively. Yet, a critical gap remains regarding generative align-ment: whether the generated explanation strictly adheres to the user’s established preference structure. We argue that in user-centric systems, merely analyzing preferences is ineffective if the final jus-tification contradicts them. To bridge this gap, we identify preference inconsistency as a distinct failure mode. While prior art treats all factual features or identified concepts as valid candidates, we propose feature-level metrics to explicitly quantify preference misalignment. By extend-ing faithfulness from model parameters to user preferences, we demonstrate that preference consistency captures an essential di-mension of trustworthiness that current protocols fail to address. 
+
+## 3 Preliminaries 
+
+We assume a shared feature space ℱ for items and explanations. Conceptually, each user 𝑢 is associated with a set of historical pos-itive features ℱhist  
+
+> 𝑢
+
+⊆ ℱ, a latent preference function 𝑔 𝑢 ∶ ℱ →ℝ, and a decision threshold 𝜏 . We define a feature 𝑓 to be user-aligned if it is a verified historical preference ( 𝑓 ∈ ℱhist  
+
+> 𝑢
+
+) or a valid serendipitous interest ( 𝑔 𝑢 (𝑓 ) ≥ 𝜏 ). For a recommendation instance 
+
+𝑒 = (𝑢, 𝑖) , let ℱitem (𝑖) ⊆ ℱ denote the ground-truth attributes of item 𝑖 . Given a generated explanation 𝑌 , a feature extractor derives the set of generated features ℱgen (𝑒) ⊆ ℱ.
+
+Factual Hallucination. An explanation is considered factually hallucinated if it contains features absent from the item’s ground-truth attributes: 
+
+∃𝑓 ∈ ℱgen (𝑒) ∖ ℱitem (𝑖). 
+
+Preference Inconsistency. While factual hallucination concerns the item, preference inconsistency pertains to the user. Ideally, a feature 𝑓 serves as a valid justification only if it aligns with user interests. A preference inconsistency occurs when the explanation promotes a feature that is neither historically verified nor supported by the user’s latent preferences: 
+
+∃𝑓 ∈ ℱgen (𝑒) s.t. 𝑓 ∉ ℱhist  
+
+> 𝑢
+
+∧ 𝑔 𝑢 (𝑓 ) < 𝜏 . 
+
+Since the true latent preference 𝑔 𝑢 is unobservable, we approxi-mate it using an estimated preference proxy ̂ 𝑔 𝑢 , constructed from the user’s historical interactions and semantic reasoning (detailed in Section 5.1.3). 
+
+## 4 Methodology 
+
+Before detailing the technical components, we clarify the design rationale of PURE. The central goal is neither to maximize the vol-ume of retrieved knowledge nor to overload explanations with at-tributes. Instead, PURE aims to identify a concise set of factually grounded yet preference-aligned reasoning paths that faithfully justify the recommendation for a specific user. We observe that preference inconsistency primarily arises from generic and high-degree reasoning paths that dominate conven-tional retrieval pipelines. These paths, while factually correct, of-ten emphasize globally salient attributes that may contradict a user’s specific interests. Crucially, generation-level alignment is insuffi-cient; even a well-instructed LLM will hallucinate preferences if the upstream evidence is generic. Therefore, PURE intervenes be-fore generation, enforcing intent relevance at the reasoning path selection stage. This design shifts the focus from how to generate explanations to what evidence should justify them. 
+
+## 4.1 Structure-Enhanced Semantic Indexing 
+
+To enable preference-aware reasoning, PURE constructs a structure-enhanced semantic index that stratifies reasoning paths by seman-tic depth. Unlike conventional multi-hop retrieval methods that treat all hops as homogeneous context, we explicitly assign distinct semantic roles to varying hop depths. This design simultaneously reinforces factual grounding and deepens personalization: 
+
+• 1-hop (Explicit Features). Grounds explanations in directly ver-ifiable item attributes, thereby mitigating factual hallucination. 
+
+• 2-hop (Relational Reasoning). Captures proximal associations to support analogical reasoning across related items. 
+
+• 3-hop (Implicit Preference). Exposes high-order relational pat-terns that reflect latent user interests, addressing preference in-consistency beyond surface-level matching. We restrict the retrieval depth to 3 hops, as empirical evidence indicates that deeper traversals introduce semantic drift and noise, which tend to exacerbate rather than resolve preference inconsis-tency. , , Fr ank      
+
+> Dar abont
+> The Gr een
+> Mile Hope
+> Directed_by  Directed_by Has_Tag
+> USA
+> Produced_in  Tr ansfor mer
+> Produced_in
+> Action
+> Has_Genre
+> J ustice
+> Has_Tag 12 Angr y
+> Men
+> Has_Tag
+> Cour tr oom
+> Has_Tag
+> 1-Hop 2-Hop 3-Hop
+
+1. Str uctur e-Enhanced Semantic Indexing (Offline) 
+
+> Knowledge Gr aph
+> for Items
+
+PLM  
+
+> GNN Indexing
+> Layer
+> GNN Indexing
+> Layer
+> GNN Indexing
+> Layer
+> node edge
+> 1-hop
+> 2-hop
+> 3-hop
+> Vector
+> Database
+
+2. Tar get-Awar e User Intent  
+
+> The Green Mile
+> 12 Angry Men
+> Transformers
+> Attention
+> Target User Histor y 0.45
+> 0.35
+> 0.15
+
+3. Specificity-Awar e Pr uning      
+
+> USA
+> Dr ama
+> Fr ank
+> Dar abont
+> Hope
+> Pr ison
+> Noise Node
+> Noise Node
+> P∗= arg top Kp∈pSim (hu,hp)×Specificity (p)
+
+4. Diver sity-Awar e Rer anking    
+
+> Fr ank
+> Dar abont
+> Pr ison
+> Dr ama
+> Known_for
+> Pr ison Oppr essive
+> atmosphere
+> Hope Inspir ational
+> emotions
+> ��
+> ��
+> ��
+> Result Path
+> add
+> ��High Sim
+> Diverse ��
+> ……
+> ……
+> ……
+> 0.80
+> 0.74
+> 0.70
+> ��
+> ��
+> ��
+
+5. Pr efer ence-Awar e Explainable Recommendation 
+
+> Encoding
+
+GNN 
+
+Projector 
+
+> LoRA
+
+Large Language Model             
+
+> Pr ompt: "Explain why the user
+> would like {Movie} based on user
+> history {��,��. . . . . . ��}and
+> reasoning paths {��,��}"
+> "Considering you watched The Gr een Mile ,
+> I recommend The Shawshank Redemption . It is
+> dir ected by Fr ank Dar abont and shares the inspiring
+> theme of Hope ."
+
+Figure 2: Overview of PURE. It contains five components: Structure-Enhanced Semantic Indexing, Target-Aware User Intent, Specificity-Aware Pruning, MMR Diversity Reranking, and Preference-Aware Explainable Recommendation. 
+
+To materialize this index, we first initialize entity and relation representations using a frozen pre-trained language model (PLM), ensuring a robust semantic foundation. Building on these frozen embeddings, we employ a Relational Graph Attention Network (RGAT) [32] as the offline encoder to capture high-order struc-tural dependencies. Instead of performing complex gradient up-dates for downstream tasks, the RGAT focuses on iteratively ag-gregating multi-hop neighbor information to synthesize structure-aware item representations. These embeddings are pre-computed and stored in a vector database, facilitating efficient retrieval with-out incurring online inference overhead. 
+
+## 4.2 Preference-Aware Path Retrieval 
+
+While the indexed subgraphs encapsulate rich factual and relational evidence, naively ingesting all paths into the LLM leads to speci-ficity dilution : high-degree hub nodes often dominate the context, resulting in generic and non-informative explanations. To address this, we design a Preference-Aware Retrieval module to selectively extract paths that are strictly factually grounded yet deeply aligned with personalized preferences. 
+
+4.2.1 Target-Aware User Intent Modeling. User preferences are in-herently context-dependent, varying significantly based on the can-didate item. Unlike static approaches that represent users by av-eraging historical interactions, we construct a target-aware intent vector that dynamically prioritizes history items relevant to the target item 𝑖 𝑡 .Formally, given the user history ℋ𝑢 and the set of pre-computed graph embeddings {h(𝐾 ) 𝑣 } from the RGAT encoder, we employ an attention mechanism where the target 𝑖 𝑡 serves as the query, and history items 𝑖 ℎ ∈ ℋ𝑢 serve as keys and values. The user intent representation h𝑢 (𝑖 𝑡 ) is computed as: 
+
+h𝑢 (𝑖 𝑡 ) = ∑
+
+𝑖 ℎ∈ℋ𝑢 
+
+𝛼 𝑖 ℎ (W𝑉 h(𝐾 ) 𝑖 ℎ ), (1) where W𝑉 is a learnable projection matrix, and 𝛼 𝑖 ℎ denotes the normalized attention weight derived from the similarity between the target and history embeddings. By conditioning user intent on the specific target, this mech-anism avoids collapsing diverse historical interests into a single static centroid—a limitation that would otherwise amplify generic reasoning paths and exacerbate preference inconsistency. 
+
+4.2.2 Node Specificity. We posit that a node’s explanatory value hinges on three dimensions: structural discriminativeness, seman-tic specificity, and contextual relevance. Relying solely on struc-tural degree metrics is inadequate, as it fails to distinguish between 
+
+popular entities (which are informative) and generic concepts (which induce noise). To address this, we quantify node informativeness via a multi-view specificity metric that synergizes three complementary sig-nals. Formally, the specificity score 𝐼 (𝑣, 𝑢) for node 𝑣 and user 𝑢 is defined as: 
+
+𝐼 (𝑣, 𝑢) = 𝜆 𝑠 𝐼 struct (𝑣) + 𝜆 𝑚 𝐼 sem (𝑣) + 𝜆 𝑝 𝐼 pref (𝑣, 𝑢). (2) 
+
+Structural Specificity. To penalize global hubs while preserving locally informative nodes, we adopt an inverse degree-based scor-ing function: 
+
+𝐼 struct (𝑣) = exp ( − 𝛼 log (deg (𝑣) + 𝜖)), (3) where deg (𝑣) denotes the node degree in the knowledge graph, 
+
+𝜖 is a smoothing term, and 𝛼 > 0 controls the penalty strength. 
+
+Semantic Specificity. To identify semantically generic concepts that may act as ”bridges” across unrelated clusters, we measure the entropy of a node’s neighborhood distribution. We employ 𝐾 -means clustering on the pre-trained node embeddings to obtain 𝐾 
+
+semantic clusters. The semantic entropy is computed as: 
+
+𝐻 sem (𝑣) = − 
+
+𝐾 
+
+∑
+
+𝑐=1 
+
+𝑝(𝑐 ∣ 𝑣) log 𝑝(𝑐 ∣ 𝑣), (4) Beyond Factual Correctness: Mitigating Preference-Inconsistent Explanations in Explainable Recommendation , , 
+
+where 𝑝(𝑐 ∣ 𝑣) represents the empirical distribution of 𝑣 ’s neigh-bors over the clusters. The specificity score is then derived as: 
+
+𝐼 sem (𝑣) = 1 − 𝐻 sem (𝑣) 
+
+log 𝐾 . (5) A higher 𝐼 sem (𝑣) indicates that the node’s neighbors are concen-trated in specific semantic domains, rather than spanning diverse, unrelated topics. 
+
+Preference-Aware Specificity. To contextualize specificity within the user’s latent interests, we incorporate a relevance score based on the target-aware intent. Using the node embedding h(𝐾 ) 𝑣 and the user intent vector h𝑢 (𝑖 𝑡 ) (Eq. 1), we compute: 
+
+𝐼 pref (𝑣, 𝑢) = 12 (1 + cos (h(𝐾 ) 𝑣 , h𝑢 (𝑖 𝑡 ))) . (6) This term ensures that the retrieval process prioritizes nodes that are not only specific but also aligned with the user’s current decision-making context. 
+
+4.2.3 Specificity-Aware Path Pruning. Given the target-aware user intent, we score each path 𝑝 = 𝑖 ℎ𝑟 1
+
+−→ 𝑒 𝑟 2
+
+−→ 𝑖 𝑡 that connects a history item 𝑖 ℎ and the target item 𝑖 𝑡 through an intermediate entity 
+
+𝑒 . We employ a joint scoring function that integrates global path semantics with aggregated node specificity to mitigate preference inconsistency: 
+
+𝑆(𝑝) = cos (h𝑢 (𝑖 𝑡 ), h𝑝 ) ⋅ 1|𝑉 (𝑝)| ∑
+
+> 𝑣∈𝑉 (𝑝)
+
+𝐼 (𝑣, 𝑢), (7) where h𝑝 is the semantic representation of path 𝑝 , obtained by en-coding the linearized path sequence via BERT to capture deep se-mantic interactions. Unlike conventional relevance-based retrieval, this objective explicitly penalizes paths dominated by generic or preference-unsupported nodes, even if they are semantically re-lated to the target item. 
+
+4.2.4 Diversity-Aware Reranking. Even after pruning, a naive top-
+
+𝐾 selection based solely on scores may yield semantically redun-dant paths (e.g., multiple paths focusing on the same attribute). To ensure comprehensive reasoning that covers complementary aspects—such as director, genre, and style—we employ Maximal Marginal Relevance (MMR) to balance relevance with diversity. At each step, the next path 𝑝 ∗ is selected via: 
+
+𝑝 ∗ = arg max 
+
+> 𝑝∈ 𝒫 rem
+
+[𝛾 ⋅ 𝑆(𝑝) − (1 − 𝛾 ) ⋅ max 
+
+> 𝑝 ′∈𝒫 sel
+
+cos (h𝑝 , h𝑝 ′ )], (8) where 𝒫 rem and 𝒫 sel denote the sets of candidate and selected paths, respectively. This mechanism explicitly minimizes semantic overlap, ensuring the generated explanations cover diverse reason-ing angles. 
+
+## 4.3 Preference-Aware Explanation Generation 
+
+Retrieving high-quality paths is necessary but insufficient for gen-erating convincing explanations. Direct linearization of these paths often discards critical topological signals, causing LLMs to over-look relational dependencies within the graph. To address this, we propose a structure-aware hybrid prompting strategy. We integrate continuous soft prompts—which inject latent structural priors— with discrete hard prompts that serve as factual anchors. This com-bination ensures that the generated explanations maintain both logical coherence and factual faithfulness. 
+
+4.3.1 Structure-Aware Subgraph Encoding. We encode the expla-nation subgraph 𝒢 exp , composed of the selected reasoning paths, into a dense vector space. To capture global dependencies and long-range interactions beyond local neighborhoods, we employ a Graph Transformer [39]. To preserve the topological structure and edge semantics, we incorporate relation-aware structural encodings di-rectly into the self-attention mechanism. Let h(𝐿) 𝑣 denote the rep-resentation of node 𝑣 after 𝐿 Transformer layers. We derive the global subgraph representation via a readout operation: 
+
+h𝒢 = Pooling ({ h(𝐿) 𝑣 ∣ 𝑣 ∈ 𝒢 exp }), (9) which compresses the discrete path information into a structure-aware global embedding. 
+
+4.3.2 Heterogeneous Space Alignment. The graph representation 
+
+h𝒢 resides in a topological graph space, whereas the LLM oper-ates in a sequential textual embedding space. To bridge this gap and enable a hybrid prompting scheme, we employ a lightweight projector to map h𝒢 into a sequence of continuous soft prompts: 
+
+Pkg = Reshape (MLP proj (h𝒢 )) ∈ ℝ 𝑁 𝑝 ×𝐷 llm , (10) where Pkg consists of 𝑁 𝑝 virtual tokens aligned with the LLM’s embedding dimension 𝐷 llm . These soft prompts are prepended to the discrete hard prompts. This design creates a synergy: Pkg effi-ciently injects latent structural priors that are often lost during text linearization, while the hard prompts provide the explicit factual context necessary for the LLM to generate coherent and readable explanations. 
+
+4.3.3 Instruction Tuning and Explanation Generation. We construct the LLM input sequence by concatenating the structure-aware soft prompts with the embeddings of the system instruction 𝐼 sys , user history ℋtext , and target item 𝑡 item :
+
+Einput = [ Pkg , E(𝐼 sys ), E(ℋtext ), E(𝑡 item ) ]. (11) To ensure modality alignment, we employ a joint optimization ob-jective ℒ = ℒgen +𝜆 ℒalign . Here, ℒgen denotes the causal language modeling loss where the LLM is fine-tuned via Low-Rank Adapta-tion (LoRA) [8], and ℒalign enforces semantic consistency between the graph representation h𝒢 and the ground-truth explanation em-bedding h𝑌 :
+
+ℒalign = 1 − cos (Proj (h𝒢 ), h𝑌 ). (12) This end-to-end strategy aligns graph-level signals with the LLM’s semantic space, mitigating the gradient vanishing issue for the Graph Transformer while tightly coupling structural reasoning with explanation generation. 
+
+## 5 Experiments 
+
+In this section, we empirically evaluate the effectiveness of PURE. We first describe the experimental setup and then address the fol-lowing research questions: , , 
+
+RQ1 : How does PURE compare with state-of-the-art baselines in terms of explanation quality and recommendation performance? 
+
+RQ2 : How do the key components of PURE contribute to its overall effectiveness? 
+
+RQ3 : How do key hyperparameters impact faithfulness and ex-plainability? 
+
+RQ4 : How does the inference efficiency of PURE compare with competing methods? 
+
+RQ5 : Does the proposed preference-level metric, P-EHR, corre-late well with human judgments of preference consistency? 
+
+## 5.1 Experimental Settings 
+
+5.1.1 Datasets. We evaluate PURE on three benchmark datasets: Amazon Books 1, Movies & TV 2, and Yelp 3, all integrated with the Freebase 4 knowledge graph. Specifically, we align items to Free-base entities following the method in [41], achieving an average en-tity coverage of 92% across datasets, which ensures robust knowl-edge grounding. We adopt a leave-one-out protocol, using the last interaction as the target and the most recent 10 interactions as the user history. 
+
+5.1.2 Baselines. We compare PURE against KG-Flat (retrieving linearized facts via vector similarity) and representative models: 
+
+PEPLER [16] (continuous prompting), LLMXRec [24] (instruc-tion tuning), LLM2ER [38] (reward optimization), G-Refer [18] (graph RAG), and MAPLE [36]. To strictly disentangle the contri-bution of reasoning strategies from foundation model capabilities, we standardize the backbone LLM across all baselines and PURE to Llama-3.1-8B. We adapted official implementations to this unified backbone and performed hyperparameter tuning for all baselines to ensure fair comparison. This setup ensures that observed per-formance differences are attributable to framework designs rather than discrepancies in the underlying LLM. 
+
+5.1.3 Evaluation Metrics. We adopt a multi-dimensional evalua-tion protocol covering: (1) Accuracy , measured by HR@5 [31] and NDCG@5 [9] using a list-wise ranking protocol over a can-didate pool of 40 items (1 target vs. 39 negatives), following previ-ous work [34]; (2) Explanation Quality , assessed via BLEU-4 [27], ROUGE-L [21], and diversity metrics [14, 15] (FMR, FCR, DIV); and (3) Faithfulness , where we employ Fact-based (F-EHR) and Preference-based (P-EHR) Hallucination Rates to explicitly quan-tify factual correctness and preference consistency. 
+
+Fact-based Hallucination (F-EHR). Let 𝒟 denote the test set. For each instance 𝑒 ∈ 𝒟 , let ℱgen (𝑒) be the generated feature set and ℱitem (𝑒) be the ground-truth attribute set. F-EHR measures the ratio of non-factual features: F-EHR = 1|𝒟 | ∑
+
+> 𝑒∈ 𝒟
+
+|ℱgen (𝑒) ∖ ℱitem (𝑒)| |ℱgen (𝑒)| . (13) 
+
+Preference-based Hallucination (P-EHR). P-EHR quantifies the degree of preference misalignment by evaluating features against the estimated user preference proxy ̂ 𝑔 𝑢 . We compute it via a three-step process: 
+
+> 1https://jmcauley.ucsd.edu/data/amazon/
+> 2https://jmcauley.ucsd.edu/data/amazon/
+> 3https://www.kaggle.com/datasets/yelp-dataset/yelp-dataset
+> 4https://developers.google.com/freebase
+
+(1) History Extraction: We employ Sentires-Guide [15] to extract phrase-level quadruples (feature, opinion, sentence, score). Features from user history with aggregated positive sentiment scores con-stitute the explicit preference set ℱhist +𝑢 .(2) Semantic Proxy: To avoid penalizing valid novelty, we introduce a model-agnostic semantic proxy. We encode each feature 𝑓 into a vector 𝜙(𝑓 ) using a pretrained Sentence-BERT. For each user 𝑢 , we compute a history intent vector h𝑢 by averaging the embeddings of their historical positive features. The cosine similarity between 
+
+𝜙(𝑓 ) and h𝑢 serves as the proxy score ̂ 𝑔 𝑢 (𝑓 ) . A feature is consid-ered valid if it appears in ℱhist +𝑢 or its proxy score exceeds 𝜏 = 0.4 
+
+(fixed based on sensitivity analysis in Section 5.4). (3) Metric Calculation: We extract the feature set ℱgen (𝑒) from the generated explanation. A feature 𝑓 ∈ ℱgen (𝑒) incurs a penalty (𝒞 (𝑓 , 𝑢) = 1 ) only if it fails both validity conditions mentioned above. P-EHR reports the average penalty rate: P-EHR = 1|𝒟 | ∑
+
+> 𝑒∈ 𝒟
+
+∑𝑓 ∈ ℱgen (𝑒) 𝒞 (𝑓 , 𝑢) |ℱgen (𝑒)| . (14) We acknowledge that P-EHR is a strict metric. However, short explanations mean that every mentioned attribute serves as a di-rect justification signal. Even a seemingly peripheral but contradic-tory feature can undermine user trust, so strictly penalizing any misalignment helps guarantee explanation “safety”. P-EHR is used solely for evaluation and is not involved in model training. 
+
+5.1.4 Implementation Details. PURE is instantiated with Llama-3.1-8B [4], fine-tuned via LoRA ( 𝑟 = 8 , 𝛼 = 16 , dropout 0.1 ) using int8 quantization and fp16 precision. Training employs the AdamW optimizer on A100 GPUs with a batch size of 8, 20 epochs, 2 gradi-ent accumulation steps, and a learning rate of 1e-5. The graph mod-ule comprises a 3-layer RGAT (1024 hidden dim, 4 heads) followed by a 2-layer Graph Transformer (256 hidden dim, 2 heads). We set the component weights to 𝜆 s = 0.27 , 𝜆 m = 0.31 , and 𝜆 p = 0.42 .For inference, we use 𝜏 = 0.40 , 𝐾 = 3 , and 𝛾 = 0.6 (selecting top-5 paths). All hyperparameters are kept identical across datasets un-less otherwise stated, and reported results are averaged over three runs with different random seeds to ensure stability. 
+
+## 5.2 Model Performance (RQ1) 
+
+5.2.1 Overall Performance. Table 2 presents the comparative re-sults across three datasets. PURE consistently outperforms all base-lines on both Fact-based (F-EHR) and Preference-based (P-EHR) faithfulness metrics, achieving state-of-the-art results with statis-tical significance. Although PURE is tailored for explanation gener-ation rather than solely ranking optimization, it maintains highly competitive recommendation accuracy, ranking second-best in HR@5 across all datasets. This demonstrates that substantially im-proving explanation faithfulness does not require sacrificing rec-ommendation utility—a critical advantage for trust-sensitive appli-cations. Furthermore, PURE attains superior text quality (BLEU-4/ROUGE-L) and diversity scores, indicating its ability to produce well-grounded, varied explanations that capture user-specific in-terests rather than relying on generic templates. Beyond Factual Correctness: Mitigating Preference-Inconsistent Explanations in Explainable Recommendation , , 
+
+Table 2: Overall performance comparison on three datasets. The best performance and the second-best performance are marked in red and blue, respectively. ↑ and ↓ indicate that higher and lower values are preferred, respectively. “ ∗” indicates improvements over the second-best methods are statistically significant (t-test, 𝑝 < 0.05 ). 
+
+Dataset Model Faithfulness Explainability Text Quality Ranking Accuracy F-EHR ↓ P-EHR ↓ FMR ↑ FCR ↑ DIV ↓ BLEU-4 ↑ ROUGE-L ↑ HR@5 ↑ NDCG@5 ↑
+
+Book KG-Flat 0.445 0.581 0.092 0.051 2.735 0.851 12.452 0.535 0.402 LLMXRec 0.386 0.514 0.125 0.184 1.925 1.153 15.211 0.574 0.421 
+
+LLM2ER 0.352 0.498 0.138 0.245 1.552 1.172 16.689 0.482 0.348 PEPLER 0.411 0.555 0.113 0.275 2.106 1.095 14.855 0.405 0.285 G-Refer 0.112 0.455 0.155 0.352 2.415 0.985 13.926 0.441 0.308 MAPLE 0.295 0.421 0.105 0.195 2.528 0.612 10.546 0.332 0.225 PURE 0.098 ∗ 0.168 ∗ 0.168 0.328 1.265 ∗ 1.254 ∗ 17.244 ∗ 0.552 0.379 Movies &TV KG-Flat 0.385 0.512 0.065 0.042 2.615 0.925 13.158 0.548 0.436 LLMXRec 0.315 0.455 0.095 0.155 1.855 1.152 14.854 0.591 0.468 
+
+LLM2ER 0.295 0.425 0.125 0.198 1.765 1.193 17.176 0.505 0.396 PEPLER 0.355 0.495 0.072 0.293 2.712 1.053 13.952 0.432 0.405 G-Refer 0.095 0.315 0.105 0.245 2.355 1.015 13.552 0.275 0.248 MAPLE 0.255 0.385 0.085 0.165 2.415 0.685 11.256 0.342 0.305 PURE 0.082 ∗ 0.145 ∗ 0.135 ∗ 0.282 1.415 ∗ 1.315 ∗ 16.454 0.573 0.459 Yelp KG-Flat 0.551 0.682 0.074 0.061 1.954 1.215 15.555 0.475 0.412 LLMXRec 0.489 0.512 0.111 0.243 1.658 1.481 17.153 0.688 0.482 
+
+LLM2ER 0.463 0.591 0.127 0.285 1.585 1.523 16.827 0.628 0.408 PEPLER 0.526 0.467 0.082 0.322 1.685 0.732 12.551 0.565 0.442 G-Refer 0.186 0.552 0.147 0.355 2.154 1.357 16.252 0.592 0.375 MAPLE 0.324 0.359 0.091 0.184 2.258 0.585 12.157 0.495 0.362 PURE 0.073 ∗ 0.121 ∗ 0.155 ∗ 0.367 ∗ 1.355 ∗ 1.453 18.554 ∗ 0.669 0.474 
+
+5.2.2 Case Study. Table 3 presents randomly sampled examples from the Book and Yelp domains. As shown, LLM2ER tends to pro-duce fluent but distorted narratives, introducing factual errors that contradict user preferences. G-Refer reduces blatant fabrications but often defaults to generic themes that are weakly grounded in user history. In contrast, PURE accurately captures user-relevant aspects while avoiding misleading details. These patterns confirm our quantitative findings: prior models often generate fluent but factually incorrect narratives, whereas PURE remains grounded and aligned with users’ underlying preferences. 
+
+5.2.3 Human Evaluation. To complement automatic metrics, we conduct a pairwise human study comparing PURE with MAPLE and G-Refer on 450 randomly sampled user–item pairs (150 per dataset). Annotators are presented with the same context and two anonymized explanations, then asked to select the more helpful and convincing option (allowing for a “Tie”). As shown in Figure 3, PURE is preferred in the majority of cases, achieving win rates be-tween 52% and 65% across all domains. This consistent preference suggests that PURE’s explanations are perceived as more useful and trustworthy, aligning with the reduction in factual errors and preference misalignment. Book Yelp Movies & TV                 
+
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Preference Distribution (%)
+> 62% 58% 65%
+> 28% 30% 25%
+> 10% 12% 10%
+> (a) PURE vs. MAPLE
+> Book Yelp Movies & TV
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> 55% 52% 58%
+> 30% 33% 28%
+> 15% 15% 14%
+> (b) PURE vs. G-Refer
+> PURE Wins Tie Baseline Wins
+
+Figure 3: Pairwise human evaluation on explainability be-tween PURE and two baselines across three datasets. 
+
+## 5.3 Ablation Study (RQ2) 
+
+To investigate the contribution of each component in PURE, we conduct ablation studies on all three datasets (Table 4). Removing the external KG ( w/o KG ) yields the highest hallucination rates and weakest explainability, confirming that structured grounding is es-sential. Injecting all KG facts without pruning ( w/o Pruning ) im-proves factuality compared to the no-KG baseline but results in , , 
+
+Table 3: Case study examples from the Book and Yelp datasets. Green text highlights parts of the explanation that are aligned with the ground-truth review; red and orange highlight factuality hallucination and preference inconsistency.         
+
+> Dataset Type Example Book
+> User Context History: Little Women (Coming-of-age / Sisterhood), Anne of Green Gables (Warm, character-driven). Target item: Eleanor Oliphant Is Completely Fine. Ground-truth I loved how the book balances loneliness, awkward humor, and gradual healing. It’s a quiet character study rather than a fast-paced plot, but it felt very real and comforting. LLM2ER A fast-paced office drama about a quirky worker who constantly clashes with her colleagues and bosses in hilarious ways. G-Refer Recommended because you enjoy contemporary stories about young women facing challenges at work and in daily life. This book captures the stress and pressure of modern office culture.
+> PURE (ours)
+> Recommended for its intimate portrait of a socially awkward woman slowly opening up to others. Like Little Women and Anne of Green Gables, it focuses on inner growth, subtle humor, and the comfort of finding genuine connection.
+> Yelp
+> User Context History: Roast Coffeehouse and Wine Bar (hipster café, good coffee, workspace), St Honore Pastries (bakeries, coffee & tea, bubble tea). Target item: Zio’s Italian Market (Largo, FL). Ground-truth I like Zio’s Italian Market because it’s a casual deli where I can grab a simple Italian sandwich or some fresh bread and pastry. It’s family-friendly, not fancy, and good for a quick lunch or takeout. LLM2ER You’ll love Zio’s Italian Market because it feels like a cozy little Italian restaurant, with made-to-order hot dishes and neatly set tables where you can sit down and enjoy a relaxed meal. It’s great for a nicer family dinner or a small celebration, not just a quick grab-and-go stop. G-Refer Because you enjoy Italian-style places and bakeries like St Honore Pastries, Zio’s Italian Market is recommended as a spot with lots of Italian products and TV screens, where many people come to watch games and hang out for a long time.
+> PURE (ours)
+> We recommend Zio’s Italian Market because, like Roast Coffeehouse and Wine Bar and St Honore Pastries, it offers simple, affordable Italian sandwiches, baked goods, and coffee in a casual, family-friendly setting. It’s well suited for a quick lunch or take-home meals rather than a long, formal dinner.
+
+suboptimal P-EHR and DIV scores, indicating that raw evidence alone cannot resolve preference inconsistency. Similarly, restrict-ing reasoning to local evidence ( Only 1-hop ) minimizes factual er-rors but severely degrades preference alignment, suggesting that local attributes are insufficient for capturing complex user prefer-ences. We further examine module-specific effects. Ablating speci-ficity scoring ( w/o Spec ) leads to increased redundancy, while dis-abling MMR ( w/o MMR ) compromises explanation coverage. Drop-ping either prompt type ( Only Soft/Hard ) also results in perfor-mance degradation. Overall, these results confirm that preference alignment is not achieved by any single component in isolation. Instead, preference-aware path pruning serves as the cornerstone, while specificity modeling, diversity reranking, and hybrid prompt-ing play complementary roles in filtering generic or misleading reasoning paths. 
+
+## 5.4 Parameter Sensitivity Analysis (RQ3) 
+
+We investigate the impact of hop depth 𝐾 , MMR balance factor 
+
+𝛾 , retrieval count 𝑁 , and tolerance threshold 𝜏 on PURE’s per-formance (Figure 4). As shown in Figure 4(a), increasing 𝐾 from 1 to 3 improves preference alignment by leveraging richer con-text; however, factual errors increase notably at 𝐾 = 4 , motivat-ing our choice of 𝐾 = 3 . For 𝛾 (Figure 4(b)), the range 0.55 ≤ 𝛾 ≤ 0.75 provides a stable balance between coverage and align-ment; we thus set 𝛾 = 0.6 . Figure 4(c) reveals a U-shaped trend for 𝑁 , where 𝑁 = 5 achieves the optimal signal-to-noise ratio. Finally, Figure 4(d) demonstrates PURE’s robustness to the evalua-tion threshold 𝜏 . PURE consistently outperforms baselines across the full spectrum, confirming that its gains stem from structural reasoning optimization rather than sensitivity to specific metric cutoffs. Overall, these trends validate that while broader retrieval aids alignment, excessive expansion introduces noise and halluci-nations. 
+
+## 5.5 Efficiency Analysis (RQ4) 
+
+Figure 5 illustrates the trade-off between inference efficiency and alignment effectiveness. Compared with MAPLE, PURE reduces P-EHR by approximately 60% with only a modest 1.2 × increase in latency. Compared with G-Refer, PURE more than halves the P-EHR while reducing average latency from 2,030 ms to 1,630 ms. Theoretically, PURE circumvents the computational bottleneck of real-time graph traversal, which typically scales exponentially Beyond Factual Correctness: Mitigating Preference-Inconsistent Explanations in Explainable Recommendation , , 
+
+Table 4: Ablation results on three datasets. The best and second-best results are marked in red and blue, respectively. 
+
+Faithfulness Explainability Ablations F-EHR ↓ P-EHR ↓ FMR ↑ FCR ↑ DIV ↓
+
+Book 
+
+w/o KG 0.425 0.452 0.045 0.112 2.854 w/o Pruning 0.115 0.385 0.168 0.285 1.942 w/o Spec 0.133 0.263 0.147 0.304 1.556 w/o MMR 0.107 0.209 0.159 0.311 1.703 Only 1-hop 0.091 0.345 0.158 0.295 1.521 Only Hard 0.105 0.312 0.152 0.307 1.652 Only Soft 0.118 0.224 0.153 0.319 1.606 
+
+PURE 0.098 0.168 0.162 0.328 1.265 
+
+Movies & TV 
+
+w/o KG 0.382 0.415 0.038 0.095 3.102 w/o Pruning 0.095 0.322 0.128 0.245 2.015 w/o Spec 0.122 0.247 0.129 0.268 1.757 w/o MMR 0.089 0.163 0.132 0.274 1.907 Only 1-hop 0.088 0.295 0.115 0.265 1.654 Only Hard 0.092 0.312 0.120 0.272 1.788 Only Soft 0.101 0.214 0.124 0.279 1.724 
+
+PURE 0.082 0.145 0.135 0.282 1.415 
+
+Yelp 
+
+w/o KG 0.356 0.398 0.052 0.125 2.955 w/o Pruning 0.125 0.295 0.135 0.315 1.855 w/o Spec 0.117 0.266 0.147 0.343 1.603 w/o MMR 0.081 0.178 0.148 0.354 1.854 Only 1-hop 0.068 0.395 0.152 0.342 1.542 Only Hard 0.082 0.262 0.140 0.332 1.700 Only Soft 0.091 0.203 0.143 0.347 1.729 
+
+PURE 0.073 0.121 0.155 0.367 1.355 1 2 3 4                    
+
+> 0.05
+> 0.10
+> (a) Hop Depth ( K)
+> Optimal Balance
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> 0.2
+> 0.4
+> (b) MMR Factor ( )
+> Sweet
+> Spot
+> 12345610
+> 0.2
+> 0.4
+> (c) Top-N
+> Noise Overload
+> Lack of Info
+> 0.2 0.4 0.6 0.8
+> 0.2
+> 0.4
+> 0.6
+> (d) Tolerance Threshold ( )
+> Default
+> 0.2
+> 0.4
+> F-EHR P-EHR FCR G-Refer MAPLE PURE
+
+Figure 4: Parameter sensitivity analysis of the PURE. 
+
+as 𝑂(𝐻 𝐵 𝐾 ). Instead of expensive on-the-fly enumeration, we shift the structural reasoning burden to the offline phase via Structure-Enhanced Semantic Indexing. By pre-computing multi-hop embed-dings using RGAT and storing them in a vector database, PURE de-couples complex graph aggregation from online inference. Conse-quently, the online process is reduced to efficient vector retrieval, ensuring that explanation quality is enhanced through deep rea-soning without incurring prohibitive inference costs. 1000 1500 2000        
+
+> Inference Latency (ms)
+> 0.1
+> 0.3
+> 0.5
+> P-EHR (Lower is Better)
+> Book
+> MAPLE
+> G-Refer
+> PURE (Ours)
+> 1000 1500 2000
+> Inference Latency (ms)
+> 0.1
+> 0.3
+> 0.5 Yelp
+> MAPLE
+> G-Refer
+> PURE (Ours)
+> 1000 1500 2000
+> Inference Latency (ms)
+> 0.1
+> 0.3
+> 0.5 Movies & TV
+> MAPLE G-Refer
+> PURE (Ours)
+
+Figure 5: Efficiency Analysis of PURE. 
+
+## 5.6 Human Alignment of P-EHR (RQ5) 
+
+To validate the robustness of P-EHR, we conducted a blind human evaluation comparing PURE with G-Refer on 450 pairs. Annotators were presented with a summary of the user’s past reviews and the target item, and were asked to identify which of two anonymized explanations better aligned with user preferences (or indicate a tie). We recruited 15 graduate students with backgrounds in recom-mender systems; each pair was independently evaluated by three annotators blinded to model identities, whose majority-vote pref-erences were compared against pairwise P-EHR scores. A pair was considered consistent if the model preferred by humans achieved a lower P-EHR score. Figure 6 illustrates the agreement rates. Overall consistency reaches 80.4% (Book), 84.2% (Yelp), and 74.5% (Movies & TV). Cru-cially, excluding ambiguous human ties, the decisive alignment ac-curacy rises to an average of 92 .7%, while direct conflicts remain remarkably low, averaging only 6.2%. We observe that Yelp shows higher alignment due to explicit sentiments, whereas Movies & TV exhibits slightly more conflict, likely reflecting the subjectiv-ity of cinematic preferences. Overall, the strong agreement (Co-hen’s 𝜅 = 0.76 ) confirms P-EHR as a reliable proxy for human judgment. Book Yelp Movies & TV       
+
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Percentage of Cases (%)
+> 18.9% 21.7% 25.5%
+> 61.5% 62.5% 49.0%
+> 13.5% 11.8%
+> 16.8%
+> 6.1% 8.7%
+> Consistent (Baseline Wins)
+> Consistent (PURE Wins)
+> Ambiguous (Human Tie)
+> Misaligned (Conflict)
+
+Figure 6: Human evaluation of P-EHR alignment. 
+
+## 6 Conclusion 
+
+This paper investigates preference-inconsistent explanations where generated descriptions are factually correct yet misrepresent the rationale behind a user-item match—a failure mode largely over-looked by existing metrics. We propose PURE, a preference-aware , , 
+
+reasoning framework that integrates multi-hop subgraph construc-tion, intent modeling, and specificity-based pruning to select factu-ally grounded, preference-consistent reasoning paths. Experiments on three real-world datasets demonstrate that PURE reduces both factual hallucination and preference inconsistency while maintain-ing competitive accuracy and efficiency. Crucially, PURE recon-ciles the tension between serendipity and consistency: rather than restricting item novelty, it ensures that even novel recommenda-tions are grounded in familiar preference anchors, thereby prevent-ing “reasoning filter bubbles.” While extending this paradigm to im-plicit feedback, multimodal contexts, and dynamic environments remains a key frontier, we position preference alignment as a crit-ical dimension of faithfulness beyond surface-level correctness. 
+
+## References 
+
+[1] Nitay Calderon, Liat Ein Dor, and Roi Reichart. 2025. Multi-domain explainabil-ity of preferences. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing . 14553–14586. [2] Jinpeng Chen, Jianxiang He, Huan Li, Senzhang Wang, Yuan Cao, Kaimin Wei, Zhenye Yang, and Ye Ji. 2025. Hierarchical Intent-guided Optimization with Pluggable LLM-Driven Semantics for Session-based Recommendation. In Pro-ceedings of the 48th International ACM SIGIR Conference on Research and Develop-ment in Information Retrieval (Padua, Italy) (SIGIR ’25) . Association for Comput-ing Machinery, New York, NY, USA, 1655–1665. doi:10.1145/3726302.3729994 [3] Junyi Chen, Mengjia Wu, Qian Liu, and Yi Zhang. 2026. Explainable prediction of knowledge recombination: A synergized method with heterogeneous hyper-graph learning and large language models. Information Processing & Manage-ment 63, 1 (2026), 104336. [4] Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. 2024. The llama 3 herd of models. arXiv e-prints (2024), arXiv–2407. [5] Wenqi Fan, Yujuan Ding, Liangbo Ning, Shijie Wang, Hengyun Li, Dawei Yin, Tat-Seng Chua, and Qing Li. 2024. A Survey on RAG Meeting LLMs: Towards Retrieval-Augmented Large Language Models. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining (Barcelona, Spain) 
+
+(KDD ’24) . Association for Computing Machinery, New York, NY, USA, 6491– 6501. doi:10.1145/3637528.3671470 [6] Chongming Gao, Mengyao Gao, Chenxiao Fan, Shuai Yuan, Wentao Shi, and Xi-angnan He. 2025. Process-Supervised LLM Recommenders via Flow-guided Tun-ing. In Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval (Padua, Italy) (SIGIR ’25) . Association for Computing Machinery, New York, NY, USA, 1934–1943. doi:10.1145/3726302. 3729981 [7] Shijie Geng, Zuohui Fu, Juntao Tan, Yingqiang Ge, Gerard De Melo, and Yongfeng Zhang. 2022. Path language modeling over knowledge graphsfor ex-plainable recommendation. In Proceedings of the ACM Web Conference 2022 . 946– 955. [8] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, Weizhu Chen, et al. 2022. Lora: Low-rank adaptation of large language models. ICLR 1, 2 (2022), 3. [9] Kalervo Järvelin and Jaana Kekäläinen. 2002. Cumulated gain-based evaluation of IR techniques. ACM Transactions on Information Systems (TOIS) 20, 4 (2002), 422–446. [10] Sara Kemper, Justin Cui, Kai Dicarlantonio, Kathy Lin, Danjie Tang, Anton Ko-rikov, and Scott Sanner. 2024. Retrieval-augmented conversational recommen-dation with prompt-based semi-structured natural language state tracking. In 
+
+Proceedings of the 47th International ACM SIGIR Conference on Research and De-velopment in Information Retrieval . 2786–2790. [11] Jieyong Kim, Hyunseo Kim, Hyunjin Cho, SeongKu Kang, Buru Chang, Jinyoung Yeo, and Dongha Lee. 2025. Review-driven Personalized Preference Reasoning with Large Language Models for Recommendation. In Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval (Padua, Italy) (SIGIR ’25) . Association for Computing Machinery, New York, NY, USA, 1697–1706. doi:10.1145/3726302.3730055 [12] Yuxuan Lei, Jianxun Lian, Jing Yao, Xu Huang, Defu Lian, and Xing Xie. 2023. RecExplainer: Aligning Large Language Models for Recommendation Model In-terpretability. ArXiv abs/2311.10947 (2023). https://api.semanticscholar.org/ CorpusID:265294974 [13] Guanrong Li, Haolin Yang, Xinyu Liu, Zhen Wu, and Xinyu Dai. 2025. Counterfactual Language Reasoning for Explainable Recommendation Systems. arXiv:2503.08051 [cs.AI] https://arxiv.org/abs/2503.08051 [14] Lei Li, Li Chen, and Yongfeng Zhang. 2020. Towards Controllable Explanation Generation for Recommender Systems via Neural Template. In WWW Demo .[15] Lei Li, Yongfeng Zhang, and Li Chen. 2020. Generate Neural Template Explana-tions for Recommendation. In CIKM .[16] Lei Li, Yongfeng Zhang, and Li Chen. 2023. Personalized Prompt Learning for Explainable Recommendation. ACM Trans. Inf. Syst. 41, 4, Article 103 (March 2023), 26 pages. doi:10.1145/3580488 [17] Xinze Li, Yushi Bai, Bowen Jin, Fengbin Zhu, Liangming Pan, and Yixin Cao. 2025. Long Context vs. RAG: Strategies for Processing Long Documents in LLMs. In Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval (Padua, Italy) (SIGIR ’25) . Association for Computing Machinery, New York, NY, USA, 4110–4113. doi:10.1145/3726302. 3731690 [18] Yuhan Li, Xinni Zhang, Linhao Luo, Heng Chang, Yuxiang Ren, Irwin King, and Jia Li. 2025. G-refer: Graph retrieval-augmented large language model for ex-plainable recommendation. In Proceedings of the ACM on Web Conference 2025 .240–251. [19] Zelong Li, Yan Liang, Ming Wang, Sungro Yoon, Jiaying Shi, Xin Shen, Xiang He, Chenwei Zhang, Wenyi Wu, Hanbo Wang, et al. 2024. Explainable and coherent complement recommendation based on large language models. In Proceedings of the 33rd ACM International Conference on Information and Knowledge Manage-ment . 4678–4685. [20] Ziyu Li, Zhijie Tan, Suhuan Wu, Weiping Li, and Tong Mo. 2026. STLLM-Rec: enhancing explainable recommendation via self-training LLMs. World Wide Web 
+
+29, 1 (2026), 11. [21] Chin-Yew Lin. 2004. Rouge: A package for automatic evaluation of summaries. In Text summarization branches out . 74–81. [22] Zhuang Liu, Yunpu Ma, Matthias Schubert, Yuanxin Ouyang, Wenge Rong, and Zhang Xiong. 2023. Multimodal contrastive transformer for explainable rec-ommendation. IEEE Transactions on Computational Social Systems 11, 2 (2023), 2632–2643. [23] Zunlong Liu, Yang Xu, Gao Cong, Lei Zhu, Qinjun Qiu, and Huaxiang Zhang. 2025. ARTS: A General and Efficient Multi-Task Self-Prompt Framework for Explainable Sequential Recommendation. ACM Trans. Inf. Syst. 43, 3, Article 73 (March 2025), 30 pages. doi:10.1145/3717833 [24] Yucong Luo, Mingyue Cheng, Hao Zhang, Junyu Lu, and Enhong Chen. 2024. Unlocking the potential of large language models for explainable recommenda-tions. In International Conference on Database Systems for Advanced Applications .Springer, 286–303. [25] Chuangtao Ma, Yongrui Chen, Tianxing Wu, Arijit Khan, and Haofen Wang. 2025. Unifying Large Language Models and Knowledge Graphs for Question Answering: Recent Advances and Opportunities.. In EDBT . 1174–1177. [26] Sicheng Pan, Dongsheng Li, Hansu Gu, Tun Lu, Xufang Luo, and Ning Gu. 2022. Accurate and explainable recommendation via review rationalization. In Proceed-ings of the ACM web conference 2022 . 3092–3101. [27] Kishore Papineni, Salim Roukos, Todd Ward, and Wei-Jing Zhu. 2002. Bleu: a method for automatic evaluation of machine translation. In Proceedings of the 40th annual meeting of the Association for Computational Linguistics . 311–318. [28] S.M.F. Sani, Asal Meskin, Mohammad Amanlou, and Hamid R. Rabiee. 2025. FIRE: Faithful Interpretable Recommendation Explanations. ArXiv 
+
+abs/2508.05225 (2025). https://api.semanticscholar.org/CorpusID:280546117 [29] Teng Shi, Jun Xu, Xiao Zhang, Xiaoxue Zang, Kai Zheng, Yang Song, and Han Li. 2025. Retrieval Augmented Generation with Collaborative Filtering for Per-sonalized Text Generation. In Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval (Padua, Italy) 
+
+(SIGIR ’25) . Association for Computing Machinery, New York, NY, USA, 1294– 1304. doi:10.1145/3726302.3730075 [30] Yiqun Sun, Qiang Huang, Yixuan Tang, Anthony KH Tung, and Jun Yu. 2024. A general framework for producing interpretable semantic text embeddings. arXiv preprint arXiv:2410.03435 (2024). [31] Yan-Martin Tamm, Rinchin Damdinov, and Alexey Vasilev. 2021. Quality metrics in recommender systems: Do we calculate metrics consistently?. In Proceedings of the 15th ACM conference on recommender systems . 708–713. [32] Kai Wang, Weizhou Shen, Yunyi Yang, Xiaojun Quan, and Rui Wang. 2020. Re-lational graph attention network for aspect-based sentiment analysis. arXiv preprint arXiv:2004.12362 (2020). [33] Shijie Wang, Wenqi Fan, Yue Feng, Lin Shanru, Xinyu Ma, Shuaiqiang Wang, and Dawei Yin. 2025. Knowledge Graph Retrieval-Augmented Generation for LLM-based Recommendation. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , Wanxi-ang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pilehvar (Eds.). Association for Computational Linguistics, Vienna, Austria, 27152–27168. doi:10.18653/v1/2025.acl-long.1317 [34] Shijie Wang, Wenqi Fan, Yue Feng, Lin Shanru, Xinyu Ma, Shuaiqiang Wang, and Dawei Yin. 2025. Knowledge graph retrieval-augmented generation for llm-based recommendation. In Proceedings of the 63rd Annual Meeting of the Associ-ation for Computational Linguistics (Volume 1: Long Papers) . 27152–27168. Beyond Factual Correctness: Mitigating Preference-Inconsistent Explanations in Explainable Recommendation , , 
+
+[35] Cedric Waterschoot, Nava Tintarev, and Francesco Barile. 2025. Consistent Ex-plainers or Unreliable Narrators? Understanding LLM-generated Group Recom-mendations. In Proceedings of the Nineteenth ACM Conference on Recommender Systems . 539–544. [36] Ching-Wen Yang, Zhi-Quan Feng, Ying-Jia Lin, Che Wei Chen, Kun-da Wu, Hao Xu, Yao Jui-Feng, and Hung-Yu Kao. 2025. Maple: Enhancing review generation with multi-aspect prompt learning in explainable recommendation. In Proceed-ings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) . 31803–31821. [37] Mengyuan Yang, Mengying Zhu, Yan Wang, Linxun Chen, Yilei Zhao, Xiuyuan Wang, Bing Han, Xiaolin Zheng, and Jianwei Yin. 2024. Fine-tuning large lan-guage model based explainable recommendation with explainable quality re-ward. In Proceedings of the Thirty-Eighth AAAI Conference on Artificial Intelli-gence and Thirty-Sixth Conference on Innovative Applications of Artificial Intel-ligence and Fourteenth Symposium on Educational Advances in Artificial Intelli-gence (AAAI’24/IAAI’24/EAAI’24) . AAAI Press, Article 1029, 10 pages. doi:10. 1609/aaai.v38i8.28777 [38] Mengyuan Yang, Mengying Zhu, Yan Wang, Linxun Chen, Yilei Zhao, Xiuyuan Wang, Bing Han, Xiaolin Zheng, and Jianwei Yin. 2024. Fine-tuning large lan-guage model based explainable recommendation with explainable quality re-ward. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 38. 9250–9259. [39] Seongjun Yun, Minbyul Jeong, Raehyun Kim, Jaewoo Kang, and Hyunwoo J Kim. 2019. Graph transformer networks. Advances in neural information processing systems 32 (2019). [40] Yuting Zhang, Ying Sun, Fuzhen Zhuang, Yongchun Zhu, Zhulin An, and Yongjun Xu. 2023. Triple dual learning for opinion-based explainable recom-mendation. ACM Transactions on Information Systems 42, 3 (2023), 1–27. [41] Wayne Xin Zhao, Gaole He, Kunlin Yang, Hong-Jian Dou, Jin Huang, Siqi Ouyang, and Ji-Rong Wen. 2019. KB4Rec: A Data Set for Linking Knowl-edge Bases with Recommender Systems. Data Intelligence 1, 2 (2019), 121–136. doi:10.1162/dint_a_00008

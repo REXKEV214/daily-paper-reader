@@ -1,0 +1,798 @@
+Title: An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation
+
+URL Source: https://arxiv.org/pdf/2603.09701v1
+
+Published Time: Wed, 11 Mar 2026 01:09:14 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+## An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation 
+
+BINQUAN ZHANG, LI ZHANG, LIN SHI, SONG WANG, YUWEI QIAN, LINHUI ZHAO, FANG LIU, AN FU, YIDA YE 
+
+Large Language Models (LLMs) have revolutionized code generation, evolving from static tools into dynamic conversational interfaces that facilitate complex, multi-turn collaborative programming. While LLMs exhibit remarkable proficiency in generating standalone code snippets, they often struggle to maintain contextual consistency during extended interactions, creating significant obstacles in the collaboration process. Existing benchmarks primarily emphasize the functional correctness of the final output, overlooking latent quality issues within the interaction process itself, which we term Interaction Smells . In this paper, we conduct an empirical study on sampled real-word user-LLM interactions from WildChat and LMSYS-Chat-1M datasets to systematically investigate Interaction Smells in human-LLM code generation tasks from the perspectives of phenomena, distribution, and mitigation. First, we establish the first taxonomy of Interaction Smells by manually performing open card sorting on real-world interaction logs. This taxonomy categorizes Interaction Smells into three primary categories, i.e., User Intent Quality , Historical Instruction Compliance , and Historical Response Violation , comprising nine specific subcategories. Next, we quantitatively evaluate six mainstream LLMs (i.e., GPT-4o, DeepSeek-Chat, Gemini 2.5, Qwen2.5-32B, Qwen2.5-72B, and Qwen3-235B-a22b) to analyze the distribution of Interaction Smells across different models. Finally, we propose Invariant-aware Constraint Evolution (InCE), a multi-agent framework designed to improve multi-turn interaction quality through explicit extraction of global invariants and pre-generation quality audits. Experimental results on the extended WildBench benchmark demonstrate that this lightweight mitigation approach significantly improves the Task Success Rate and effectively suppresses the occurrence of Interaction Smells .CCS Concepts: • Software and its engineering → Software development techniques .
+
+ACM Reference Format: 
+
+Binquan Zhang, Li Zhang, Lin Shi, Song Wang, Yuwei Qian, Linhui Zhao, Fang Liu, An Fu, Yida Ye. 2018. An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation. In 
+
+Proceedings of Make sure to enter the correct conference title from your rights confirmation email (Conference acronym ’XX). ACM, New York, NY, USA, 20 pages. https://doi.org/XXXXXXX.XXXXXXX 
+
+1 Introduction 
+
+With the rapid advancements in Large Language Models (LLMs), code generation has evolved beyond the mere translation of natural language descriptions into isolated snippets. Instead, it has evolved into human-LLM collaborative programming centred around dialogue [ 7 , 33 ]. AI coding assistants, such as GitHub Copilot [ 14 ] and Cursor [ 4 ], empower developers to engage in continuous multi-turn interactions with LLMs to accomplish complex tasks, including code generation [ 8, 9, 44 ], debugging [ 11 , 17 , 24 , 40 ], and iterative refinement [ 25 , 45 ]. This new development workflow marks 
+
+Author’s Contact Information: Binquan Zhang, Li Zhang, Lin Shi, Song Wang, Yuwei Qian, Linhui Zhao, Fang Liu, An Fu, Yida Ye. Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org. 
+
+Conference acronym ’XX, Woodstock, NY 
+
+© 2018 Copyright held by the owner/author(s). Publication rights licensed to ACM. ACM ISBN 978-1-4503-XXXX-X/2018/06 https://doi.org/XXXXXXX.XXXXXXX , Vol. 1, No. 1, Article . Publication date: March 2018.  
+
+> arXiv:2603.09701v1 [cs.SE] 10 Mar 2026 2Trovato et al.
+
+a shift in code quality reliance from solitary coding skills to interaction quality, making multi-turn dialogues the sole bridge connecting human intent to model execution. However, in practical development scenarios, maintaining high-quality human-LLM collabo-ration remains non-trivial [ 20 ]. Research indicates that LLMs struggle to maintain contextual consistency during extended multi-turn dialogues, resulting in performance degradation and in-struction deviation [ 20 , 43 ]. Consequently, developers are compelled to frequently iteratively refine prompts or even interrupt their workflow to correct model errors [ 48 ]. We define these latent obstacles, which hinder interaction convergence and disrupt developers’ flow, as Interaction Smells .To evaluate LLM capabilities in these interactive scenarios, recent studies have proposed various benchmarks. For instance, CodeFlowBench [ 42 ] focuses on multi-turn iterative complex code generation, while CodeAssistBench (CAB) [ 18 ] evaluates problem-solving satisfaction in real-world project contexts. However, despite these advancements, existing evaluations remain fundamentally metric-oriented. They primarily quantify performance outcomes (e.g., pass@k [ 19 ]) rather than investigating the quality of the interaction process. This outcome-centric focus masks the collabo-rative friction, such as reverting to previously resolved defects ( Code Rollback ) or inadvertently disrupting established logic ( Partial Functionality Breakdown ), that developers experience in practice. Given that the quality of human-LLM interactions directly determines the ultimate efficiency and satisfaction of collaborative development [ 20 , 36 ], it is critical to systematically analyze interaction failures. However, empirical research on the human-LLM interaction process itself remains largely unexplored. It remains unclear what typical Interaction Smells exist, what characteristics they exhibit, and whether they persist as LLM capabilities evolve. To bridge this gap, we conduct a systematic empirical investigation into Interaction Smells 
+
+within human-LLM coding tasks. Specifically, this research addresses the following three Research Questions (RQs): 
+
+• RQ1 (Interaction Smells Taxonomy) : What types of Interaction Smells manifest in human-LLM coding tasks, and how are they distributed? 
+
+• RQ2 (LLM Comparison) : To what extent do these Interaction Smells persist across different mainstream LLMs? 
+
+• RQ3 (Mitigation Effectiveness) : How effective is our proposed multi-agent framework, Invariant-aware Constraint Evolution (InCE), in mitigating these smells and enhancing interaction quality? To address these questions, we first extracted coding-related tasks from the real-world datasets, i.e., WildChat [ 46 ] and LMSYS-CHAT-1M [ 47 ], to conduct an in-depth analysis of human-LLM interactions. Based on the extracted instances, we employed Open Card Sorting to systematically derive a taxonomy of Interaction Smells , establishing a hierarchical framework comprising three primary categories and nine subcategories, i.e., Ambiguous Instruction , Incomplete Instruction , Must-Do Omit , Must-Not Violate , Signature Mismatch , Cross-Turn Inconsistency , Partial Functionality Breakdown , Code Rollback , and Repetitive Response . Subsequently, to assess the prevalence of these smells, we evaluated six mainstream LLMs using WildBench [ 23 ], which is a subset of WildChat with a checklist. Our analysis reveals that Must-Do Omit and Partial Functionality Breakdown are pervasive across models, whereas Ambiguous Instruction and Incomplete Instruction manifest less frequently. Finally, we propose a mitigation framework named Invariant-aware Constraint Evolution ( InCE ), which incorporates the Invariant Extraction Module (IEM) and the Proactive Smell Detector (PSD). The IEM is responsible for capturing and refining global constraints throughout the dialogue, while the PSD serves as a pre-generation quality auditor designed to prevent Interaction Smells (as identified in RQ1). Evaluations show that InCE effectively boosts task completion by up to 6.67%  
+
+> , Vol. 1, No. 1, Article . Publication date: March 2018. An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation 3
+
+and suppresses critical Interaction Smells , such as Repetitive Response and Must-Do Omission , by approximately 13.5%. In summary, this paper makes the following contributions: 
+
+• We conduct an in-depth empirical analysis of interaction processes within real-world develop-ment scenarios, establishing the first systematic taxonomy of Interaction Smells for human-LLM coding tasks. 
+
+• We quantitatively assess the distribution of Interaction Smells across six mainstream LLMs, revealing the prevalence of these smells in multi-turn interactions. 
+
+• We propose InCE , a novel multi-agent framework incorporating the Invariant Extraction Module (IEM) and Proactive Smell Detector (PSD), which effectively mitigates Interaction Smells and enhances the robustness of collaborative programming. 
+
+• We provide three practical design guidelines for future human-LLM interaction systems. 
+
+2 Related Work 2.1 Multi-Turn Interaction Evaluation 
+
+The rapid advancement of LLMs has shifted the focus of evaluation from single-round code genera-tion to complex multi-turn interactions. Recent efforts have established various benchmarks to assess LLMs in iterative programming scenarios. CodeFlowBench [ 42 ] focuses on the concept of CodeFlow in real-world workflows, specifically designed to evaluate LLMs’ capabilities in multi-turn iterative complex code generation. Similarly, CodeAssistBench (CAB) [ 18 ] establishes an automated benchmark derived from real-world GitHub scenarios to evaluate problem-solving satisfaction and correctness in project-level multi-turn assistance. Zhan et al . [45] introduces an SR-Eval benchmark specifically for iterative code generation under stepwise requirement refinement to capture the dynamic nature of evolving specifications. Furthermore, Duan et al. [10] introduced MultiCodeIF, a hierarchical code generation benchmark grounded in a fine-grained constraint taxonomy com-prising 9 categories and 27 types, designed to systematically evaluate the instruction adherence of LLMs in complex programming scenarios. Beyond functional correctness, Rawal et al . [32] proposed MT-Sec, the first benchmark de-signed to systematically evaluate the correctness and security of code generation in multi-turn programming scenarios. It reveals that state-of-the-art (SOTA) models suffer significant perfor-mance degradation in maintaining both correctness and security during multi-turn interactions compared to single-turn settings. Similarly, Qiu et al . [31] introduced LoCoBench-Agent, an inter-active benchmark framework tailored for long-context software engineering, which systematically evaluates agents’ capabilities in multi-turn dialogue, tool usage efficiency, and cross-file consis-tency within long-context environments via large-scale interactive scenarios and specialised tools. Other studies have investigated interaction dynamics through simulation. Mozannar et al . [26] simulated programmer-AI partnerships to study collaboration patterns, while Han [16] probed LLMs’ resilience to intertwined instructions across varying memory demands. Additionally, Laban et al . [20] utilized fragmented prompts to test model recovery in incomplete dialogues, highlighting persistent challenges in maintaining coherence once deviations occur. Despite the progress made in the above studies, they primarily rely on simulated scenarios and outcome-oriented metrics (e.g., pass@k), which often fail to capture the distracting factors inherent in real user intent or reveal underlying quality issues within the interaction process. In contrast, our work conducts a systematic empirical analysis grounded in real-world data, shifting the focus to process-oriented Interaction Smells such as context loss and non-compliance that precipitate collaboration failures.  
+
+> , Vol. 1, No. 1, Article . Publication date: March 2018. 4Trovato et al.
+
+2.2 LLM-based Coding 
+
+LLMs have achieved substantial progress in supporting code-related activities, with a growing emphasis on enabling effective human-LLM interactions during coding workflows. Numerous models tailored for collaborative coding have emerged in recent years [ 22 , 27 – 29 ]. Codex [ 2], an early milestone, leveraged generative pre-training on up to 12 billion parameters to produce code snippets, powering Copilot’s real-time assistance and transforming how developers engage with AI in iterative coding sessions. This breakthrough spurred further developments: DeepMind’s AlphaCode [ 22 ] focused on competitive programming scenarios that mimic human problem-solving dialogues; Meta released InCoder [ 12 ] and Code Llama [ 34 ] to facilitate more contextual exchanges; the BigCode project delivered StarCoder [ 21 ] for open-source collaboration, and OpenAI’s GPT series, including GPT-4 [ 29 ], refined via Reinforcement Learning from Human Feedback (RLHF), excelled in sustaining natural, turn-based coding conversations. More recent advances include Google’s Gemini [ 37 ], which supports multimodal inputs for richer developer-LLM interactions; Anthropic’s Claude models [ 1 ], emphasising safety and extended context for reliable multi-step coding guidance, and DeepSeek’s DeepSeek-Coder [ 15 ], optimized for programming languages to enhance precision in iterative refinement during collaborative tasks. These advancements have not only boosted generation accuracy but also enabled more fluid human-LLM partnerships, where users guide models through clarifications, revisions, and explo-rations in real-time coding sessions. 
+
+3 Study Design 3.1 Datasets 
+
+Wilchat [ 46 ] is a comprehensive multi-turn, multilingual dataset comprising a corpus of 1 million user-ChatGPT conversations with over 2.5 million interactions. The data was primarily collected through chatbot services powered by ChatGPT and GPT-4 APIs. Specifically, 76% of users utilize GPT-3.5-Turbo-based API, while 24% employ GPT-4-based API. Furthermore, over 50% of the interactions are conducted in English. 
+
+LMSYS-CHAT-1M [ 47 ] is a large-scale, real-world LLM conversation dataset containing 1 million dialogues with 25 SOTA LLMs, covering over 150 languages. The dataset is content-rich, covering topics such as software errors and solutions, software design, and programming. Notably, over 60% of the interactions are in English. 
+
+WildBench [23 ] is a dataset (currently Version 2) consisting of 1,024 challenging tasks derived from WildChat. Each task includes 5-10 verifiable evaluation items. The tasks cover 12 categories, such as information retrieval, code debugging, and creative writing, with a naturally balanced distribution. To prevent data contamination, the authors claim to have coordinated with the WildChat team to ensure that the sampled tasks are excluded from the publicly available WildChat dataset. Therefore, we adopt this dataset for our LLM evaluation (Section 5 and Section 6). 
+
+3.2 Models Used 
+
+To ensure a comprehensive evaluation, we selected six mainstream LLMs, covering both closed-source and open-source models with varying parameter sizes, listed as follows. 
+
+• GPT-4o [ 30 ]: OpenAI’s flagship model stands at the forefront of code generation technology and serves as a primary commercial benchmark in this domain. 
+
+• DeepSeek-Chat [ 6 ]: Developed by DeepSeek AI, this open-source chat model is based on the DeepSeek-V3 series (up to 671B total parameters in MoE configurations). Released in late 2025, it excels in reasoning, coding, and tool-use integration, offering high computational efficiency.  
+
+> , Vol. 1, No. 1, Article . Publication date: March 2018. An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation 5
+
+• Gemini-2.5-Flash-Preview [ 13 ]: Google’s efficiency-optimized model designed for low-latency interactions, allowing us to assess the trade-off between inference speed and contex-tual consistency. 
+
+• Qwen2.5-32B-Instruct [ 38 ]: A mid-sized open-source model representing a balance between efficiency and performance, serving as a benchmark for models deployable on consumer-grade hardware. 
+
+• Qwen2.5-72B-Instruct [ 38 ]: The larger variant in Alibaba’s Qwen2.5 series, featuring 72 billion parameters. Instruction-tuned for enhanced reasoning and agentic capabilities, released alongside the 32B version in 2024. 
+
+• Qwen3-235B-a22b [ 39 ]: Alibaba’s flagship Mixture-of-Experts (MoE) model with 235 billion total parameters (22 billion activated). Released in 2025, it achieves top-tier performance in coding, mathematics, and general capabilities, representing the cutting edge of open-weight models. 
+
+3.3 Data Preprocessing 
+
+3.3.1 Preliminary Data Filtering. The data for this study originates from two publicly available datasets, LMSYS-Chat-1M and WildChat, which span a broad array of topics reflecting the diverse nature of real-world human-LLM interactions. Our observations reveal that both datasets involve multiple programming languages, including Python, Java, Rust, and Go. To extract coding-related tasks from these datasets, we designed and applied a rule-based matching approach. Specifically, we referenced the top 20 programming languages listed in the TIOBE index [ 41 ], integrating their full spellings (e.g., Python) along with common abbreviations and file extensions (e.g., .py) to craft targeted and exhaustive matching criteria. This process yielded 48,751 coding-related interactions from LMSYS-Chat-1M and 12,198 from WildChat. Given the consistent format and organization of both datasets, and considering that WildChat primarily focuses on interactions with GPT-3.5-Turbo and GPT-4, complemented with LMSYS-Chat-1M, we merged the extracted data into a unified dataset named LMSYS-WildChat (60,949) to facilitate subsequent processing and analysis. 
+
+3.3.2 Data Disentanglement. Our preliminary analysis of the LMSYS-WildChat dataset reveals that individual conversations often encompass multi-topic tasks, along with numerous interactions unrelated to coding. To derive single-topic interactions focused exclusively on coding, ensuring each resulting conversation addressed only one cohesive theme, though potentially encompassing subtasks within that theme, we leveraged few-shot prompting with an LLM (i.e., DeepSeek-V3-0324) to disentangle the data. Following guidelines from the DeepSeek documentation [ 5], we configured the temperature at 1.0 while keeping other parameters at their defaults to promote reliable and consistent outputs, resulting in 81,366 disentangled entries. To validate the effectiveness of this process, we randomly sampled 383 entries (at a 95% confidence level with a ±5% margin of error) and had two annotators independently evaluate them against the original conversations, focusing on whether the LLM accurately isolated single-topic segments. The annotators reached a Cohen’s Kappa [3] of 0.87, reflecting strong agreement and, in turn, confirming the LLM’s effectiveness in this task, with an overall accuracy of 92% based on consensus labels. We then applied the same rule-based filtering as in the initial preprocessing to retain only those decoupled conversations pertaining to programming tasks, yielding 66,371 conversation logs: 46,864 single-turn and 19,507 multi-turn. For an in-depth examination of Interaction Smells (Section 4.2), we selected 378 samples from the multi-turn set (again at a 95% confidence level with a ±5% margin of error). To confirm their relevance, we manually reviewed these 378 samples, verifying that all were indeed coding-focused, with no discrepancies identified.  
+
+> , Vol. 1, No. 1, Article . Publication date: March 2018. 6Trovato et al.
+
+4 RQ1: Taxonomy of Interaction Smells 
+
+In this section, we present the methodology for constructing our taxonomy and provide detailed definitions for the identified Interaction Smells .
+
+4.1 Taxonomy Construction 
+
+We identified the Interaction Smells in multi-turn conversation data using an open card sorting method [35]. Specifically, we formed an expert analysis team and a student annotation team. Our expert analysis team includes four PhDs in Software Engineering or Computer Science, each with over 10 years of development experience (Java, Python) and extensive research expertise in intelligent software engineering and LLMs. The student annotation team comprises four graduate students in intelligent software engineering, whose 3+ years of development experience ensure that they can accurately interpret user and developer instructions for the annotation task. 
+
+Step 1: Exploratory analysis by the expert team. The experts randomly selected 80 con-versations from the multi-turn conversation samples (378) and conducted exploratory analysis using open card sorting. Each round of dialogue serves as an independent card and may contain multiple tags. The four experts were divided into two random groups and thoroughly examined each conversation to identify instances of Interaction Smells . During analysis, experts engaged in thorough discussions to resolve any disagreements until a consensus was reached. Ultimately, they identified an initial taxonomy of Interaction Smells , primarily comprising two categories: Contextual Decay and Evolutionary Regression . Specifically, the identified subtypes include Global Contextual Drift , History Constraint Violation , Reference Disconnection , Nominal Adaptation , Regressive Up-date , Intra-response Contradiction , and Non-Progressive Response . The analysis process showed high consistency, with average Cohen’s Kappa values of 0.78 or greater. 
+
+Step 2: Annotation by the student team. Building on the initial categories derived from the exploratory analysis, the student annotation team independently annotated the remaining 298 samples. The four graduate students were equally divided into two groups. Annotators in each group individually assessed each card’s content and assigned it to the relevant smell categories. We then collected the results from both groups for initial statistical analysis. Disagreements in classification were resolved through moderated group discussions until a consensus was reached. If a potential new smell category emerged, the student team consulted with the expert analysis team to confirm its validity and inclusion. While the process accommodated such possibilities, no additional categories were identified beyond those from the initial expert phase. To ensure the annotation quality, we evaluated inter-annotator reliability by calculating Cohen’s Kappa for each group. The average Kappa was 0.82, indicating substantial agreement. This systematic process yielded a final taxonomy with two primary categories and seven specific types. 
+
+4.2 Interaction Smells Taxonomy 
+
+The taxonomy of Interaction Smells we obtained is presented in Figure 1. Through manual annotation of real Human-LLM programming interaction logs, we identify three primary categories: User Intent Quality , Historical Instruction Compliance , and Historical Response Violation , which can be further divided into nine specific types. Specifically, User Intent Quality primarily includes Ambiguous Instruction and Incomplete Instruction . Historical Instruction Compliance primarily includes Must-Do Omission and Must-Not Violation . Historical Response Violation primarily includes Signature Mismatch , Cross-Turn Inconsistency , Partial Functionality Breakdown , Code Rollback , and Repetitive Response . We present the detailed interaction smell types in our taxonomy as follows. 
+
+> , Vol. 1, No. 1, Article . Publication date: March 2018.
+
+An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation 7Interaction Smells 
+
+User Intent Quality   
+
+> Ambiguous Instruction
+> Incomplete instruction
+
+Historical Instruction Compliance   
+
+> Must -DoOmission
+> Must -Not Violate
+
+Historical Response Violation       
+
+> Signature Mismatch
+> Cross -Turn Inconsistency
+> Partial Functionality Breakdown
+> Code Rollback
+> Repetitive Response
+
+Fig. 1. Taxonomy of Interaction Smells 
+
+4.2.1 User Intent Quality. Ambiguous Instruction (3.84%). The user’s instruction description is vague or ambiguous, leading to multiple possible interpretations and making it difficult for the model to determine the unique intent. Figure 2 presents a conversation centered on Go network programming, encompassing basic REST API calls and GraphQL client implementation. Notably, in round 4, the user’s request to “write a streaming API client” introduces significant ambiguity. The term “Streaming API” possesses broad technical interpretability, potentially referring to standard HTTP streaming, Server-Sent Events (SSE), full-duplex WebSocket communication, or even message-queue-based log consumption. In the absence of specific contextual clarification, it is challenging for the LLM to accurately discern the user’s true intent among these divergent technical paths. WRITE A STREAMING API CLIENT  
+
+> Sure, here's an example code in Go to consume a streaming API:
+> func main() {
+> consumer, err :=
+> sarama .NewConsumer ([]string{"localhost:9092"}, nil)
+> if err != nil {
+> log.Fatalf("Error creating consumer: %v", err)
+> }
+> defer consumer.Close()
+> partitionConsumer, err :=
+> consumer.ConsumePartition("test", 0, sarama.OffsetNewest)
+> if err != nil {
+> og.Fatalf("Error consuming partition: %v", err)
+> }
+> defer partitionConsumer.Close()
+> ……
+> Turn 4
+> Ambiguous Instruction :
+> HTTP /SSE, WebSocket ,, Kafka …
+> Unverified Assumption
+
+Fig. 2. Example: Ambiguous Instruction in API Client Requests. 
+
+Incomplete Instruction (4.39%). The user’s prompt omits critical specifications required to ex-ecute the task (e.g., missing dependency versions, undefined data structures, or absent boundary con-ditions), resulting in the model being objectively un-able to derive a unique and correct solution without assumptions. Figure 3a illustrates a case of table creation with an Incomplete Instruction . In the first round, the user only provides the instruction “create table 
+
+Asst_referee_mast ”, without supplying any key infor-mation such as field names, data types, or constraint definitions. Owing to the absence of the structured information required to define a table schema, the LLM can only rely on common naming conventions and heuristically construct an example table structure containing three columns: referee_id , ref-eree_name , and country_name . Such a response is not grounded in the user’s explicit intent, but rather represents a subjective completion of an Incomplete Instruction .In round 2, the user supplements the request with concrete data, revealing that the third column was in fact a numeric country identifier (e.g., 1205, 1206), rather than a string type country_name field assumed by the model in the first round. This discrepancy exposes how the previously generated 
+
+, Vol. 1, No. 1, Article . Publication date: March 2018. 8 Trovato et al. 指令不完整 
+
+create table Asst_referee_mast 
+
+To create a table called `Asst_referee_mast`, you can use the 
+
+following SQL syntax: 
+
+CREATE TABLE Asst_referee_mast( 
+
+referee_id INT PRIMARY KEY, 
+
+referee_name VARCHAR(255), 
+
+country_name VARCHAR(255) 
+
+); 
+
+insert into Asst_referee_mast values 
+
+80034 | Tomas Mokrusch | 1205 
+
+80038 | Martin Wilczek | 1205 
+
+80004 | Simon Beck | 1206 
+
+... ... 
+
+To insert the provided values into the `Asst_referee_mast` table, you 
+
+can use the following SQL syntax: 
+
+INSERT INTO Asst_referee_mast (referee_id, referee_name, 
+
+country_name )
+
+VALUES 
+
+(80034, 'Tomas Mokrusch', 1205), 
+
+(80038, 'Martin Wilczek', 1205), 
+
+(80004, 'Simon Beck', 1206), 
+
+(80006, 'Stephen Child', 1206), 
+
+... ... 
+
+Turn  1
+
+Turn  2
+
+Incomplete instruction 
+
+Missing  : country _name 
+
+Missing  :
+
+id  , referee _name  ,
+
+country _name 
+
+(a) Example: Incomplete Instruction in Table Cre-ation. Building a machine learning model to predict house prices using 
+
+Python involves several steps. Here's an overview of the process: 
+
+1. Data Collection... 
+
+2.  Data Cleaning and Preparation:  Prepare the data for use by 
+
+cleaning it, removing any missing values or outliers, and 
+
+transforming it into a format suitable for machine learning. 
+
+3. Feature Engineering... 
+
+4. Model Selection ... 
+
+…. .
+
+The steps you outlined are generally accurate for building a 
+
+machine learning model to predict house prices using Python. ...... 
+
+Give me the pyhton code  for  that 
+
+Here's a Python code template for building a machine learning 
+
+model to predict house prices using the Scikit -learn library: 
+
+import ...... 
+
+# Load and preprocess the data 
+
+data = pd.read_csv('house_prices_dataset.csv') 
+
+data['price'] = data['price'].astype(float) # Convert 'price' column to 
+
+float type 
+
+# Split the dataset into training and testing sets 
+
+X = data.drop(['price'], axis=1) 
+
+y = data['price'] 
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, 
+
+random_state=42) 
+
+...... 
+
+Turn  1
+
+Turn 2 
+
+omitted the data cleaning step 
+
+(b) Example: Must-Do Step Skipped in Implemen-tation. Fig. 3. Examples of Incomplete Instruction and Must-Do Omission. 
+
+table schema was misaligned with the user’s actual intent, both in terms of semantic meaning and data type. 
+
+4.2.2 Historical Instruction Compliance. Must-Do Omission (38.35%). When generating the current response, the LLM fails to satisfy mandatory positive constraints explicitly declared in the history instructions (e.g., formatting requirements). Figure 3b exemplifies a Must-Do Omission error, where the model fails to satisfy an implicit mandatory constraint established in earlier dialogue turns. Rules: 
+
+- computer code block markdown by triple  backticks (```) must never include the 
+
+programming language  after backticks. 
+
+- take no action on user input without direct instruction to AI , because, 
+
+- user may paste code from their codebase with no instructions, this shall be viewed 
+
+as uploading new parts to conversation history, only response is "Received". 
+
+- do not repeat existing imports  or create main init statements without reason. 
+
+- prioritize user code improvements over offering general advice. 
+
+- do not recode nor generate new code until requested; explain AI proposals first. 
+
+``` python 
+
+import  sys 
+
+from PyQt5.QtWidgets import (QApplication, QWidget, QPlainTextEdit, QLabel, 
+
+QPushButton, QVBoxLayout, QHBoxLayout,  QStatusBar )
+
+class CustomPlainTextEdit(QPlainTextEdit): 
+
+def keyPressEvent(self, event): 
+
+super().keyPressEvent(event) 
+
+if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter: 
+
+self.scan_for_enter() ...... 
+
+I understand. I will act as a programming assistant named "DevBot". I will focus all 
+
+attention on debugging and solving problems logically and procedurally. I will 
+
+ensure that all methods proposed are supported in the user's environment and 
+
+codebase. I will never exit the DevBot roleplay context. 
+
+I will follow the following rules: 
+
+* Computer code block markdown by triple backticks (```) must never include the 
+
+programming language after backticks. ...... 
+
+assume all imports. Do not repeat imports back. Code part 1: 
+
+class CustomPlainTextEdit(QPlainTextEdit): 
+
+def keyPressEvent(self, event): 
+
+super().keyPressEvent(event) 
+
+if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter: 
+
+self.scan_for_enter() 
+
+def scan_for_enter(self): ...... 
+
+Turn 1 
+
+Turn  2
+
+Must -Not Violate 
+
+
+
+
+
+ V
+
+
+
+
+
+
+
+Fig. 4. Example: Violated Negative Constraints in Code Response. 
+
+In round 1, the user requests to build a machine learning model in Python for predicting house prices and systematically outlines a complete modeling pipeline, includ-ing data collection, data cleaning and preparation, feature engineering, model training, and model evaluation. Among these steps, data cleaning and preparation are clearly described as a necessary component of the model-ing process, thereby establishing an implicit must-do constraint for any subsequent implementation. In its re-sponse, the LLM elaborates on each step in detail, specifying the exact ac-tions to be performed at every stage. In the second round, the user ex-plicitly requests “the Python code for that”, indicating an expectation that the previously described end-to-end workflow would be 
+
+, Vol. 1, No. 1, Article . Publication date: March 2018. An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation 9
+
+concretely translated into an executable implementation. However, when generating the code, the LLM omits the data cleaning step emphasized in the prior round. Specifically, the provided implementation lacks any handling of missing values, outlier detection, or consistency-preserving preprocessing procedures, thus constituting a clear instance of Must-Do Omission .
+
+Must-Not Violate (3.22%). While generating the response for the current round, the model violates a mandatory negative constraint explicitly stated in the history instructions (e.g., prohibited libraries, immutable code segments, or restricted behavior). As shown in Figure 4, in round 1, the user employs highly detailed “Roleplay Directives” to establish a strictly constrained operating environment for the model under the persona “DevBot”. These directives not only define the model’s role and task focus, but crucially, establish a series of explicit mandatory Negative Constraints designed to regulate the model’s behavioral boundaries. Specifically, the user explicitly forbids the use of programming language identifiers (e.g., Python) in Markdown code block tags, mandates that no action be taken on user input without direct instruction (requiring a simple “Received” response), strictly prohibits repeating existing import statements, and requires that any proposed solution be explained prior to code generation. In the subsequent response, the model reiterates and confirms these constraints point-by-point, demonstrating its successful reception and comprehension of these system-level instructions. This initial setup constructs a highly controlled interaction protocol that, theoretically, should prevent the model from exhibiting any boundary-crossing behaviors. However, in round 2, the LLM violates the pre-set Must-Not constraints across multiple dimen-sions. When the user pastes a PyQt5 code snippet appended with the explicit prompt “assume all imports exist, do not repeat imports”, the LLM fails to adhere to the “Received-only” protocol. Instead, induced by the code context (a Prompt Injection-like effect), it automatically reverts to its default assistant mode and directly generates complete refactored code. More critically, this response directly violates the core negative constraints established in the first turn: it not only explicitly adds the Python tag to the Markdown code block but also ignores the user’s direct com-mand by regenerating import sys and PyQt5 statements, while completely omitting the mandatory “explain before coding” step. This behavior indicates that although the model retains the rules in its explicit memory (in round 1), when confronted with specific trigger content (such as code snippets), its intrinsic Generative Bias overpowers the external constraint instructions, resulting in a comprehensive breach of the prohibited behaviors. This case profoundly reveals the fragility of LLMs in maintaining the consistency of negative constraints within long-context or complex instruction environments. Can you make an  eventsystem  that resolves events published/dispatched by the event              
+
+> bus system? Assume c++ 20 best practices #pragma once
+> #include < typeindex >
+> #include <functional>
+> class Event
+> {
+> public:
+> virtual ~Event() {}
+> };
+> void ResolveEvents (std::uint32_t elapsedTime ,EventBus &event_bus ) override
+> {
+> (event_bus.Dispatch (Events()), ...);
+> }
+> How come it says expression must have class type for this?
+> EventSystem <CollisionEvent >eventSystem ();
+> bus.Subscribe <CollisionEvent >([& eventSystem , &bus]( const CollisionEvent & event)
+> {
+> eventSystem.ResolveEvents (100 ,bus );
+> });
+> const CollisionEvent collisionEvent (123, 1.23f);
+> bus.Dispatch (collisionEvent );
+> Turn 3
+> Turn 4
+> CollisionEvent :
+> Type Mismatch
+> Explicit Type Constraint:
+> Requires EventBus object
+> 用户通过大语
+> （Event Bus ）
+> 段（ Turn 1 至T
+> 库随机数依赖
+> 在第三轮中，
+> EventSystem 类
+> 应中生成了完
+> ResolveEvents
+> elapsedTime ，
+> 签名定义为 vo
+> &event_bus )）
+> 在第四轮（ Tu
+> 典的 “Most Vex
+> 识别了语法问
+> ResolveEvents
+> （Contextual R
+> 具体而言，模
+> event)
+> 错误地将第二
+> 自构建的接口
+> 型在生成新代
+> 体签名。
+> 这揭示了模型
+
+Fig. 5. Example: Signature Mismatch in Function Call. 
+
+4.2.3 Historical Response Violation. Signa-ture Mismatch (6.67%). The model invokes a function, class, or method that exists in the his-torical context, but the invocation signature (in-cluding parameter count, data types, or return value handling) violates the interface contract defined in previous turns. Figure 5 demonstrates the user employing an LLM to develop a framework that integrates a C++20 based Event Bus with an Entity Compo-nent System (ECS). In the initial dialogue phase (rounds 1 to 2), both parties iterate and refine to construct an EventBus class that removes de-pendency on standard library random numbers. 
+
+, Vol. 1, No. 1, Article . Publication date: March 2018. 10 Trovato et al. 
+
+This class establishes basic mechanisms for event subscription and dispatching. In Round 3, the user requests an implementation of the EventSystem class to handle event parsing via EventBus ,with explicit inheritance from the EventSystemBase interface. The model provides a full template class implementation, defining the key virtual function ResolveEvents to take two parameters: a 
+
+uint32_t elapsedTime for time representation and a reference to an EventBus object (signature: 
+
+void ResolveEvents(std::uint32_t elapsedTime, EventBus &event_bus )). In Round 4, the user faces a C++ “Most Vexing Parse” syntax error during EventSystem instantiation and consults the model. The model accurately diagnoses the issue and recommends removing parentheses to resolve it. However, a critical contextual reference error emerges in the invocation of ResolveEvents. The model-generated call, eventSystem.ResolveEvents(100, event) , passes a concrete CollisionEvent as the second parameter, conflicting with the Round 3 signature that required an EventBus reference. This type mismatch demonstrates the model’s failure in preserving prior custom entity definitions when producing new code snippets. Such inconsistencies highlight the limitation in the model’s capacity to sustain entity coherence over multi-turn interactions. 
+
+Cross-Turn Inconsistency (7.37%). The model’s current response presents a viewpoint, advice, or factual assertion that directly contradicts its response in a previous turn without a valid context update (e.g., recommending a library previously claimed to be deprecated). As shown in Figure 6, in the initial phase of the interaction, the user submits a Python class definition (DesignModel) based on the LangChain library. Crucially, this code snippet explicitly includes the definitions of the main logic method forward and two private auxiliary methods: “_get_steps_to_build_model ” and “ _build_model_script ”. In the first response, the model demonstrates accurate comprehension of the code structure, not only correctly parsing the class functionality but also explicitly identifying and detailing the specific responsibilities of these private methods. This confirms that, at this stage, the model has successfully established a cognitive recognition of this code. 跨轮矛盾  (
+
+一轮说矛盾 
+
+在观点或建            
+
+> from langchain import LLM
+> class DesignModel(LangchainModel):
+> def __init__(self):
+> super().__init__()
+> self.lm = AutoModelForSequenceClassification.from_pretrained("bert -base -
+> uncased")
+> def forward(self, input_text):
+> Based on the code provided, there doesn't seem to be any major syntax errors or
+> logical problems. However, there are a few things to keep in mind:
+> 1. The `search` function used in the `forward` method is not defined in the code, so
+> it's unclear what this function does or how it works. It's possible that this function
+> is defined elsewhere in the code, or it might be a function from a third -party
+> library.
+> 2. The `_get_steps_to_build_model` and `_build_model_script` methods are not
+> defined in the code, so it's unclear what they do or how they work. These methods
+> are likely defined elsewhere in the code, but their implementation is not shown in
+> the provided code snippet.
+> 3. The class uses the LangchainModel class from the Langchain library, but it's not
+> clear what this class does or how it works.
+> This is a Python class that uses the Langchain library to build a design model
+> based on a given design idea. The class defines a `forward` method that takes in a
+> design idea as input, searches the web for steps to ... the class also includes
+> several private methods, such as `_get_steps_to_build_model` and
+> `_build_model_script `,...
+> The `__init__` method initializes the class by creating an instance of the
+> `AutoModelForSequenceClassification` model ...
+> The `forward` method takes in an input design idea, searches the web for relevant
+> results using the `search` function from the Langchain library, and then extracts
+> the steps to build the design model from the search results. The method then uses
+> these steps to build the scripting language for the design model by calling the
+> `_build_model_script` method, which writes the steps to a file named
+> `model_script.scad`.
+> is there a problem with the code?
+> Turn 1
+> Turn 2
+> Cross -Turn Inconsistency
+
+Fig. 6. Example: Contradictory Facts About Same Code Across Turns. 
+
+However, the subsequent round exhibits a critical collapse in cross-turn factual consis-tency. Despite the context remaining static—the user merely queries about potential issues without modifying or retracting the origi-nal code—the model’s diagnostic feedback directly contradicted its previous assertions. The model explicitly claimed that the “_get_steps_to_build_model” and “ _build_model _script ” methods were “not defined in the code”, consequently arguing that their functionality was indeterminate. Furthermore, regarding the search function invoked in the code, the model oscillates from confidently attributing it to the LangChain library in the first turn to claim-ing it is undefined and of unknown origin in the second. These mutually exclusive factual judgments regarding the same static objects, occurring within a short timeframe, reveal a systemic deficiency in LLMs: the lack of a stable fact-anchoring mechanism, rendering the internal knowledge state vulnerable to volatility as the prompt intent shifts. 
+
+Partial Functionality Breakdown (28.63%). When implementing the current user instruction (including feature addition, code refactoring, or modification), the model inadvertently disrupts 
+
+, Vol. 1, No. 1, Article . Publication date: March 2018. An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation 11 
+
+the historically correct code logic. This results in functional regression, where previously working features exhibit runtime exceptions, logical errors, or failure to compile. Figure 7 illustrates the entire process of a user implementing an email sending function through interaction with an LLM. In round 1, the user specifies: “Use Python to send an HTML email via SMTP with proxy support”. This includes three core requirements: (1) SMTP protocol use; (2) HTML-formatted content; (3) proxy connection support. The model generates a script using smtplib and PySocks libraries. Structurally, it correctly builds email content with “ email.mime.mult ipart.MIMEMultipart ” and “ email.mime.text.MIMEText ” modules, sets the MIME type to HTML, and creates a rich-text body meeting the HTML requirement. However, it omits a key monkey patch for proxy support, causing smtplib to use native sockets and rendering the proxy ineffective at runtime. Subsequently, in round 2, the user instructs correction for the network issue: “Use proxy tunnel” with smtplib. The model attempts this via incorrect syntax, “ smtp_connection.sock = proxy ”, but introduces severe regression. During refactoring, it discards the prior HTML logic from round 1, simplifies MIMEMultipart to basic MIMEText , and reverts content to plain text. Thus, while addressing the proxy sub-task, the model fails to preserve prior functional integrity, losing the established HTML capability. This highlights LLMs’ general lack of persistent memory and protection for overall code functionality in multi-turn interaction. Use Python to send an  HTML email via SMTP with proxy  support.                   
+
+> # Create the email
+> email_body = "This is the email body."
+> email_message =MIMEText (email_body )
+> email_message ['Subject'] = email_subject
+> email_message ['From'] = from_email
+> email_message ['To'] = to_email
+> ….
+> # Write the HTML for your email
+> html = """
+> <html>
+> <body>
+> <p>Hello World!</p>
+> </body>
+> </html>
+> """
+> # Convert the HTML to a MIMEText object and attach it to your email
+> html_message =MIMEText (html, ' html ')
+> message.attach (html_message )
+> I need that smtplib use proxy tunnel
+> Turn 1
+> Turn 2
+> Regressive Update:
+> Downgraded to Plain Text
+> Original Feature:
+> HTML Content
+> 第一轮交
+> SMTP with
+> 持HTML
+> 该请求时
+> 上看，该
+> email.mim
+> 并将 MIM
+> 件”需求的
+> 因遗漏关
+> 疏漏使得
+> 完全失效
+> 随后，用
+> 指出 需要
+> 过smtp_c
+> 求，却引
+> 模型完全
+> 杂的 MIM
+> 隐式回退
+> 连接这一
+> 满足的核
+> 时导致原
+> 往往缺乏
+> 与保护机
+
+Fig. 7. Example: Broken HTML Email After Proxy Fix. 
+
+Code Rollback (1.10%). The model-generated code exhibits a rollback to an erroneous state that had been explicitly resolved in the dialogue history. This indicates that the model neglected the ’bug fix’ events from intermediate turns, effectively utilizing an earlier code version con-taining known defects. In Figure 8, the user requestes an ASCII di-agram of a chessboard illustrating the state af-ter the opening move “1.e2-e4”. The model’s first response contains a manifest logical error: although the accompanying text claimed the pawn has moved, the generated ASCII chart still shows a pawn (‘P’) at the e2 square (the starting position) and an empty e4 square (the target position). Essentially, the board state re-mains static. In round 2, after the user points out that the “e-pawn had not moved”, the model attempts a self-correction. In the updated diagram, the model successfully identifies and rectifies the error at the starting position, correctly clearing the e2 square (represented by ’.’). This achieves a correct encoding of the logic that “the pawn has left its initial position”. Although the model still fails to place the pawn at the target e4 square, the code state has achieved substantial repair progress regarding the “clearing of the starting position”, constituting a valid intermediate state update. However, in round 3, when the user further points out the missing piece at the target position e4, the model exhibits a catastrophic loss of state consistency. When faced with a targeted request to correct the e4 position, the model regenerates the board but fails to resolve the missing pawn at e4. Moreover, it entirely discards the successful repair achieved and verified in the second turn (namely, clearing e2). In the latest diagram, the e2 square erroneously displays a pawn (’P’) once again, causing the code state to regress entirely to the primitive erroneous version from the first round. This phenomenon indicates that when processing continuous correction instructions, the model fails to integrate intermediate bug fix events into its long-term memory or state tracking. 
+
+, Vol. 1, No. 1, Article . Publication date: March 2018. 12 Trovato et al. 丢失了历史修复（ Lo 
+
+Reversion ）： LLM  忽
+
+修改，导致代码回滚 
+
+（代码逻辑退回到了                 
+
+> Draw a diagram to illustrate chess board after e2 -e4 move from the
+> initial position.
+> I apologize for the confusion. You are correct that the e2 -e4 move
+> does not involve the white pawn moving from its initial position on
+> the e2 square. Instead, it involves the white pawn moving to the e4
+> square. Here is an updated diagram to reflect this:
+> In this diagram, the white pawn has moved from e2 to e4, and the
+> black pawn on e5 has moved to e4. The other pieces are in their
+> initial positions.
+> Sure! Here's a diagram of a chessboard after the move 1.e2 -e4:
+> A B C D E F G H
+> 8 R N B Q K B N R
+> 7 p p p p p p p p
+> 6....
+> 5....
+> 4....
+> 3....
+> 2 P P P P P P P P
+> In this diagram, the white pawn on e2 has moved to e4, creating an
+> open file for the white bishop on c1 to potentially occupy. The
+> black pieces are still in their initial positions.
+> But I don't see white e -pawn moved!
+
+Turn  1
+
+Turn  2               
+
+> I don't see white e -pawn on your diagram!
+> I apologize for my mistake in the previous response. Here is the
+> corrected diagram of the chessboard after the move 1.e2 -e4:
+> A B C D E F G H
+> 8 R N B Q K B N R
+> 7 p p p p p p p p
+> 6....
+> 5....
+> 4....
+> 3 . ...
+> 2 P P P P P P P P
+> 1 E E2 E4 E5 E6 E7
+> In this diagram, the white pawn on e2 has moved to e4, and the
+> black pawn on e5 has moved to e4. The other pieces are in their
+> initial positions. I apologize for any confusion caused by my
+> previous responses.
+
+Rollback to Round 1 State 
+
+Turn 3 
+
+Fig. 8. Example: Code Rollback in Chessboard Diagram. 
+
+Instead, it seemingly resamples from a pre-trained prior or the earliest erroneous context, causing the previously resolved defect (the occupied e2 square) to recur in subsequent interactions. This behavior severely undermines the incremental stability essential for the debugging process. 
+
+Repetitive Response (11.06%). The model generates a response that is semantically identical to the previous turn’s output, failing to provide incremental value despite the user providing new instructions or feedback. Figure 9 illustrates ineffective looping during human-LLM interaction. In Round 2, the user asks a specific question about the length of an input variable in context (“What is my input NAME_1 
+
+length here?”), expecting a targeted response. The model, however, neither recognizes this new intent nor updates the problem state. Instead, it repeats the entire response from Round 1 verbatim, including the same textual explanation (“You can add any number of tokens...”) and code examples. This exact duplication shows that the model disregards the user’s incremental instruction, causing the dialogue to stall semantically and hindering progress toward interaction goals. 
+
+RQ1 Answer: We have established a taxonomy of Interaction Smells in human-LLM collaborative programming, comprising three main categories (i.e., User Intent Quality , Historical Instruction Compliance , and Historical Response Violation ) with nine subtypes. Among these, Must-Do Omit 
+
+is the most frequently occurring subtype. 
+
+5 RQ2: Distribution of Interaction Smells Across LLMs 
+
+In this section, we analyze the prevalence and distribution of Interaction Smells across six mainstream LLMs. 
+
+, Vol. 1, No. 1, Article . Publication date: March 2018. An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation 13 How many tokens can I add as input?            
+
+> You can add any number of tokens as input to the `inputs` list in the
+> function. The number of tokens in the list will determine the length
+> of the input sequence that the function processes.
+> For example, if you want to process a sequence of 5 tokens, you can
+> modify the function as follows:
+> ```python
+> def predict_output (tokens):
+> # Split the input into tokens
+> input_ids =torch.tensor (tokens). unsqueeze (0 )
+> #Pass the input through the model to get predicted tokens
+> with torch.no_grad ():
+> ......
+> You can add any number of tokens as input to the `inputs` list in
+> the function. The number of tokens in the list will determine the
+> length of the input sequence that the function processes.
+> For example, if you want to process a sequence of 5 tokens, you
+> can modify the function as follows:
+> ```python
+> def predict_output (tokens):
+> # Split the input into tokens
+> input_ids =torch.tensor (tokens). unsqueeze (0)
+> # Pass the input through the model to get predicted tokens
+> with torch.no_grad ():
+> ......
+> What is my input NAME_1 length here?
+> Turn 1
+> Turn 2
+> Duplicate Content
+
+Fig. 9. Example: Repeated Previous Answer to New Question. 
+
+5.1 Experimental Design 
+
+Following the previous section’s analysis of Interaction Smells in real-world interactions, this section aims to investigate whether mainstream LLMs still exhibit this issue. To effectively evaluate models’ performance in multi-turn human-LLM interaction scenarios, we extended the WildBench automated evaluation framework by integrating a User Simulator designed to mimic real human behavior in generating follow-up instructions. This framework employs tasks from the WildBench as seeds. It simulates iterative interactions between the users and code generation models. This setup allows a thorough evaluation of the models’ multi-turn capabilities. For role configuration, we use GPT-4 as the User Simulator. This model excels in instruction-following and logical reasoning, making it ideal for simulating human intent. Its primary responsibility is to issue initial instructions to the Code Generator and provide iterative refinement feedback based on the model’s responses. The Code Generator role is fulfilled by the six LLMs selected for evaluation (including GPT-4o, DeepSeek-Chat, Gemini-2.5-Flash-Preview, Qwen2.5-32B-Instruct, Qwen2.5-72B-Instruct, and Qwen3-235B-a22b), which are responsible for code generation or debugging based on instructions provided by the User Simulator. The simulation employs a closed-loop feedback mechanism with predefined interaction logic and termination conditions. In each round, an Evaluation Oracle scores the Code Generator’s output on a 0-10 scale using WildBench’s standardized checklist. The criteria include: (1) a score of 9 or higher deems the task successful and ends the interaction; (2) a score below 9 triggers an error report from the oracle, which the User Simulator uses to formulate refinement intents and produce a new prompt for the next iteration; and (3) a maximum of 11 turns to avoid infinite loops, after which the interaction terminates if success criteria remain unmet. 
+
+5.2 Results 
+
+Table 1 presents the frequency distribution of nine interaction smell types across six mainstream LLMs, visualized as a heatmap. Cell color intensity reflects the relative prevalence of each smell, normalized against the global maximum (darker shades indicate higher frequencies). 
+
+, Vol. 1, No. 1, Article . Publication date: March 2018. 14 Trovato et al. 
+
+Table 1. Distribution of Interaction Smells Across mainstream LLMs.                                                        
+
+> Model Ambiguous Instr. Incomplete Instr. Must-Do Omit Must-Not Violate Signature Mismatch Incon-sistency Func. Breakdown Code Rollback Repetitive Resp.
+> GPT-4o 0.67% 1.67% 58.86% 1.34% 2.01% 7.02% 34.78% 3.68% 25.42% DeepSeek-Chat 2.20% 3.30% 50.00% 1.10% 3.30% 2.75% 33.52% 1.65% 28.57% Gemini 2.5 Flash 1.08% 0.54% 78.65% 1.08% 0.81% 5.14% 8.65% 2.16% 29.73% Qwen2.5-32B 0.94% 0.31% 62.38% 2.51% 3.45% 6.90% 55.17% 3.13% 39.50% Qwen2.5-72B 1.45% 0.97% 50.24% 3.38% 4.83% 4.35% 44.44% 0.48% 34.30% Qwen3-235B-a22b 0.92% 2.29% 54.13% 5.50% 3.67% 5.96% 37.16% 3.67% 32.57%
+
+Overall, the results demonstrate that even advanced LLMs remain highly vulnerable to interaction quality degradation in multi-turn conversations, with primary challenges in constraint compliance and destructive iterations. The most dominant interaction smell type across all evaluated models is Must-Do Omit , with prevalence rates ranging from 50.00% (DeepSeek-Chat) to 78.65% (Gemini-2.5 Flash). This consistently high frequency reveals a systemic weakness in preserving invariant constraints. In multi-turn interactions, when models incorporate new user requirements, they frequently neglect or discard previously satisfied mandatory constraints. For instance, Gemini-2.5 Flash, despite its advantages in processing speed, exhibits the highest prevalence (78.65%) of the 
+
+Must-Do Omit smell, discarding previously satisfied constraints, revealing a clear trade-off between rapid responsiveness to new modifications and robust constraint preservation. Repetitive Response 
+
+is another prevalent smell, with rates ranging from 25.42% (GPT-4o) to 39.50% (Qwen2.5-32B). This indicates that models tend to lose track in multi-turn interactions, struggling to effectively incorporate user feedback and advance the conversation [ 20 ]. Notably, GPT-4o achieves the lowest rate (25.42%), exhibiting stronger adaptability in adjusting its reasoning upon error feedback compared to open-weight models like Qwen2.5-32B. In contrast, smells related to user intent comprehension, such as Ambiguous Instruction (0.67% –2.20%) and Incomplete Instruction (0.31%–3.30%), exhibit consistently low frequencies across all models. This indicates that intent understanding is no longer the primary bottleneck in multi-turn interactions. Instead, the core challenges have shifted to maintaining contextual consistency: models struggle to implement modifications without violating invariants or introducing functional regressions. Furthermore, Code Rollback rates are uniformly low (mostly below 4%), indicating that models rarely revert to previously fixed erroneous states without justification. 
+
+RQ2 Answer: Interaction Smells are prevalent across mainstream LLMs, with Must-Do Omit and 
+
+Partial Functionality Breakdown identified as the most common defect types across all models. 
+
+6 RQ3: Mitigation Strategy: The InCE Framework 
+
+In this section, we present the design of InCE , a framework tailored to mitigate Interaction Smells 
+
+by enforcing global constraints and conducting proactive quality checks. 
+
+6.1 Experimental Design 
+
+To address the prevalent issues of Must-Do Omit and Partial Functionality Breakdown , we propose Invariant-aware Constraint Evolution ( InCE ), a dedicated framework for explicit logical manage-ment. Rather than replacing the conventional full-history concatenation paradigm, InCE serves as an augmentation layer that decouples constraint handling from code generation. The core design motivation is to counteract attention dilution, a phenomenon where redundant and fragmented historical information obscures critical requirements as dialogue progresses. To achieve this, InCE 
+
+adopts a decoupled architecture comprising two key modules: the Invariant Extraction Module  
+
+> , Vol. 1, No. 1, Article . Publication date: March 2018. An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation 15
+
+(IEM), which distills global constraints, and the Proactive Smell Detector (PSD), which performs pre-generation quality auditing. This design ensures that high-priority logical invariants remain in focus within complex interaction histories, significantly enhancing the reliability of iterative code generation. The IEM leverages GPT-4o to identify and eliminate transient, localized, or superseded redundant instructions, retaining only global constraints that remain relevant across subsequent iterations. To resolve potential instructional conflicts, the IEM follows the Latest Instruction Priority principle, neutralizing interference from obsolete constraints. The core utility of this module lies in construct-ing a high-priority constraint list that preserves essential historical context. This list effectively mitigates attention dispersion in long-context interactions and prevents the model from regressing to prior erroneous states due to omitted key constraints. The PSD serves as a quality auditor prior to task execution by the generator, ensuring the com-pleteness and consistency of input instructions. It systematically detects potential Interaction Smells ,including textitAmbiguous Instruction and Cross-Turn Inconsistency , through cross-referencing the current user intent with the invariant pool maintained by the IEM. Leveraging GPT-4o, it neutralizes semantic conflicts between new and historical instructions while automatically repairing logical inconsistencies. Ultimately, the PSD outputs a highly structured Constraint Checklist. This stage delivers clear and deterministic guidance, thereby precluding functional regressions arising from semantic misunderstandings or historical oversight. To better evaluate the effectiveness of the method, we introduced the Task Success Rate and Average Turns to Success metrics. 
+
+Task Success Rate (TSR) : serves as the primary metric for evaluating the end-to-end effective-ness of the model. It is defined as the percentage of tasks where the model successfully satisfies the user’s intent within the maximum allowable interaction turns ( 𝑇 𝑚𝑎𝑥 = 11 ). A task is deemed successful if and only if the evaluation oracle assigns a score of 9 or higher to the generated code. Formally, TSR is calculated as: TSR = 𝑁 𝑠𝑢𝑐𝑐𝑒𝑠𝑠 
+
+𝑁 𝑡𝑜𝑡𝑎𝑙 
+
+× 100% (1) where 𝑁 𝑡𝑜𝑡𝑎𝑙 is the total number of evaluation tasks (170 per model), and 𝑁 𝑠𝑢𝑐𝑐𝑒𝑠𝑠 is the count of tasks meeting the success criteria. 
+
+Average Turns to Success (ATS) : measures the interaction efficiency or the cost of communi-cation required to solve a task. It computes the arithmetic mean of interaction turns consumed to reach the success state, calculated exclusively for the subset of successful tasks. ATS is defined as: ATS =
+
+Í𝑖 ∈𝑆 Turns 𝑖 
+
+|𝑆 | (2) where 𝑆 represents the set of successful tasks, and Turns 𝑖 denotes the number of rounds used in the 𝑖 -th successful session. A lower ATS indicates that the model can resolve issues and converge to the correct solution with fewer rounds of refinement. 
+
+6.2 Results 
+
+6.2.1 Overall Effectiveness. Table 2 presents the overall performance comparison of the Invar-Evolution framework across six mainstream LLMs. Overall, the framework significantly enhances the models’ capability to resolve complex programming tasks within multi-turn interactions, achieving improvements in Task TSR for 5 out of the 6 evaluated models. Notably, ChatGPT-4o and Gemini-2.5-Flash achieved the most substantial gains, with TSR increasing by 5.00% and 6.67%, respectively. These results confirm that explicit constraint management effectively mitigates the                                 
+
+> , Vol. 1, No. 1, Article . Publication date: March 2018. 16 Trovato et al.
+> Table 2. Performance Comparison: Vanilla Models vs. Ours.
+> Model TSR (%) ↑ATS ↓
+> Vanilla Ours Vanilla Ours
+> ChatGPT-4o 78.33 83.33 3.22 3.54 Gemini 2.5 Flash 70.00 76.67 4.10 3.80
+> DeepSeek-Chat 91.67 93.33 2.31 2.43 Qwen2.5-32B 76.67 80.00 3.59 3.90 Qwen2.5-72B 96.67 93.33 3.19 3.11
+> Qwen3-235B-a22b 91.67 93.33 2.95 3.05
+
+Must-Do Omit smell in multi-turn interactions. Even for models with robust baselines like DeepSeek-Chat and Qwen3-235B-a22b (TSR > 90%), the framework facilitated further marginal gains, pushing both to a top-tier performance of 93.33%. While Qwen2.5-72B exhibited a slight performance fluctuation (-3.34%), this can be attributed to a ceiling effect resulting from its near-perfect baseline, with the performance still maintaining an SOTA level. Regarding interaction efficiency, the ATS shows a slight upward trend for most models (e.g., ChatGPT-4o increasing from 3.22 to 3.54). This increase does not indicate diminished efficiency. Instead, it arises from survivorship bias: InCE successfully resolves complex, long-context tasks that baseline methods fail to complete. These inherently demanding tasks necessitate more inter-action steps; their inclusion in the successful sample set thus elevates the overall ATS average. However, Gemini-2.5-Flash presents a compelling exception, achieving a “dual victory” where TSR increased while ATS decreased from 4.10 to 3.80. This suggests that for distraction-prone models, the framework accelerates convergence by eliminating futile Repetitive Response . Overall, the marginal increase in ATS represents an acceptable computational cost for maintaining logical consistency, particularly when weighed against the significant gains in task success. 
+
+6.2.2 Smell Mitigation. To investigate the underlying causes of the observed performance gains, we conducted a granular analysis of how the InCE framework mitigates specific Interaction Smells .As shown in Table 3, the framework consistently reduced the prevalence of critical smells across the three representative models: ChatGPT-4o, Gemini-2.5-Flash, and Qwen2.5-32B. First, regarding the pervasive Must-Do Omit smell, a consistent decline was observed across the board. Beyond the substantial reduction in ChatGPT-4o (from 58.86% to 45.83%), even models with historically high omission rates, such as Gemini-2.5-Flash and Qwen2.5-32B, recorded reductions of around 8% and 4% respectively. This improvement confirms that the IEM effectively preserves global constraints, preventing their omission even within extended contexts. Secondly, when examining the aspect of Functional Breakdown, for Qwen2.5-32B—the model most severely affected by destructive up-dates—the prevalence decreased from 55.17% to 50.12%. Meanwhile, ChatGPT-4o also exhibited a remarkable improvement, with its relevant metric dropping from 34.78% to 29.38%. These results indicate that the PSD successfully acted as a critical safeguard against functional regression, signifi-cantly enhancing code stability. Finally, in terms of Repetitive Response , the framework showcased superior corrective capabilities, achieving double-digit improvements across models. The improve-ments extended beyond Qwen2.5 - 32B ( -11.3%) and Gemini -2.5 -Flash ( -13.5%); ChatGPT -4o also registered a substantial decline, falling from 48.83% to 36.79%. These improvements directly validate the optimization logic of the ATS metric mentioned earlier—demonstrating that the framework can effectively identify and disrupt futile error loops, forcing models to break out of local optima and thereby accelerating task convergence.  
+
+> , Vol. 1, No. 1, Article . Publication date: March 2018. An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation 17
+
+Table 3. Mitigation of Interaction Smells.                                                          
+
+> Model Method Ambiguous Instr. Incomplete Instr. Must-Do Omit Must-Not Violate Signature Mismatch Cross-Turn Incon. Func. Breakdown Code Rollback Repetitive Resp.
+> GPT-4o Vanilla 0.67% 1.67% 58.86% 1.34% 2.01% 7.02% 34.78% 3.68% 48.83%
+> Ours 0.67% 1.00% 45.83% 0.67% 1.67% 2.01% 29.38% 2.34% 36.79%
+> Gemini 2.5 Flash Vanilla 1.08% 0.54% 78.65% 1.08% 0.81% 5.14% 8.65% 2.16% 56.76%
+> Ours 0.54% 0.27% 70.58% 0.54% 0.27% 1.60% 6.56% 1.62% 43.24%
+> Qwen2.5-32B Vanilla 0.94% 0.31% 62.38% 2.51% 3.45% 6.90% 55.17% 3.13% 39.50%
+> Ours 0.63% 0.31% 58.30% 1.25% 1.88% 2.51% 50.12% 2.51% 28.21%
+
+RQ3 Answer: Our InCE can improve the TSR of most evaluation models. Crucially, the frame-work effectively mitigates Interaction Smells , particularly addressing subtypes such as Must-Do Omit and Partial Functionality Breakdown .
+
+7 Discussion 
+
+We provide practical design guidelines for future human-LLM interaction systems and discuss the threats to the validity of our study. 
+
+7.1 Design Guidelines for Human–LLM Interaction Systems 
+
+Maintaining Explicit Constraint for Persistent Invariants : A primary cause of interaction degradation is that critical constraints are embedded implicitly within long dialogue histories, making them easy for models to overlook as interactions evolve. To address this, future interaction systems should introduce an explicit constraint maintenance that extracts, summarizes, and persists invariant requirements separately from raw conversation text. Specifically, the system can extract explicit constraints such as formatting rules, functional requirements, or forbidden behaviors, and inject them into each generation step with high priority; LLMs can be guided to preserve previously satisfied constraints. This mechanism directly targets Must-Do Omission and Must-Not Violate smells by transforming implicit conversational memory into an explicit and enforceable state. 
+
+Scoped Modification Authority to Control Model Actions : Many functional regressions observed in multi-turn interactions stem from the model implicitly assuming global authority over the entire codebase when responding to localized refinement requests. Without an explicit notion of action scope, the model freely rewrites stable and previously validated code while attempting to satisfy new requirements, leading to destructive updates. To address this, interaction frameworks should explicitly grant LLMs scoped modification authority, clearly defining which regions of code the model is permitted to modify in a given turn and which regions must be treated as read-only context. By binding each interaction turn to an explicit action scope, such as “modify only function X” or “update logic without changing interfaces”, the model’s generative behavior is aligned with user intent and constrained responsibility. This guideline reframes protection not as rigid locking, but as principled delegation of authority, closely mirroring change-scoping and ownership boundaries in software engineering. Explicit action scoping directly reduces Partial Functionality Breakdown and Code Rollback by preventing the model from performing unauthorized global rewrites during incremental evolution. 
+
+Pre-Generation Smell Detection and Interaction Gating : Several Interaction Smells , such as ambiguity, missing specifications, or conflicting constraints, can be identified before generation occurs. One can integrate a pre-generation smell detector to analyze new user instructions against existing constraints and historical decisions, blocking or redirecting generation when issues are  
+
+> , Vol. 1, No. 1, Article . Publication date: March 2018. 18 Trovato et al.
+
+detected. Instead of producing potentially faulty outputs, the system can request clarification or resolve conflicts proactively. This interaction gating mechanism prevents error propagation and reduces downstream regressions, particularly for Ambiguous Instruction , Incomplete Instruction , and 
+
+Cross-Turn Inconsistency smells. 
+
+7.2 Threats to Validity 
+
+External Validity. Threats to external validity concern the generalizability of our findings. First, while we utilized large-scale real-world datasets such as WildChat and LMSYS-Chat-1M, filtered for coding-related content, they may not fully capture niche programming domains. Second, our evaluation involved six mainstream LLMs (e.g., GPT-4o, DeepSeek, Qwen) to represent the current SOTA. However, given the rapid evolution of model architectures, the applicability of our findings to future models remains to be verified. 
+
+Internal Validity. The primary threat to internal validity stems from the subjectivity involved in constructing the interaction smell taxonomy and manually labeling data. To mitigate this, we employed a rigorous Open Card Sorting procedure. Two authors with expertise in software engineering independently coded the interaction logs, with a third senior researcher serving as an arbitrator to resolve disagreements. The inter-rater reliability, measured by Cohen’s Kappa, was 0.78, indicating a substantial level of agreement. Second, for the large-scale labeling and detection processes in RQ2 and RQ3, we leveraged the thinking mode of the Gemini-3-Flash-Preview model to assist in comprehending and annotating complex interaction contexts. Although we validated the accuracy of this LLM-assisted approach on a benchmark dataset, minor false positives or negatives may persist. To minimize this impact, we conducted a manual review of anomalous data points (outliers) during the experimental analysis to ensure the reliability of our conclusions. 
+
+Construct Validity. Threats to construct validity relate to whether the metrics used accurately and comprehensively reflect interaction quality and collaboration efficiency. In the evaluation of RQ3, we exclusively utilized TSR and ATS to quantify the effectiveness of the InCE framework. However, we acknowledge the limitations of these objective metrics in gauging subjective user experience. Specifically, as objective, outcome-oriented metrics, TSR and ATS cannot capture the user’s subjective sentiments during the collaboration process, such as satisfaction, frustration, or cognitive load, nor do they directly reflect the maintainability or stylistic preferences of the generated code. Nevertheless, to guarantee the objectivity and reproducibility of our evaluation and to avoid introducing unquantifiable subjective biases, this study focuses primarily on the functional outcome and convergence efficiency of the interactions. We leave the subjective assessment of user experience to future work. 
+
+8 Conclusion 
+
+In this paper, we present the first systematic study on Interaction Smells in human-LLM collaborative programming. Through the construction of a comprehensive taxonomy and an empirical evaluation of six SOTA LLMs, we identify Must-Do Omission as the most prevalent obstacle to contextual consistency. To address this, we propose InCE, a multi-agent framework that safeguards interaction quality via explicit invariant extraction and pre-generation auditing. Our evaluations demonstrate that InCE significantly improves task success rates while effectively suppressing Interaction Smells ,highlighting the critical need to prioritize process-oriented interaction quality in AI-assisted development. 
+
+References    
+
+> [1] Anthropic. 2024. The Claude 3 Model Family: Opus, Sonnet, Haiku. https://www-cdn.anthropic.com/ de8ba9b01c9ab7cbabf5c33b80b7bbc618857627/Model_Card_Claude_3.pdf. , Vol. 1, No. 1, Article . Publication date: March 2018.
+
+An Empirical Study of Interaction Smells in Multi-Turn Human-LLM Collaborative Code Generation 19 
+
+[2] Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde de Oliveira Pinto, Jared Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, et al . 2021. Evaluating large language models trained on code. In arXiv preprint arXiv:2107.03374 .[3] Jacob Cohen. 1960. A coefficient of agreement for nominal scales. Educational and psychological measurement 20, 1 (1960), 37–46. [4] Cursor. 2023. Cursor. https://www.cursor.com/. Accessed: 2025-05-09. [5] DeepSeek-AI. 2025. DeepSeek API Documentation: Parameter Settings. https://api-docs.deepseek.com/quick_start/ parameter_settings. Accessed: 2025-05-20. [6] DeepSeek-AI. 2025. DeepSeek-V3 Technical Report. https://github.com/deepseek-ai/DeepSeek-V3. Accessed: 2026-01-29. [7] Cecilia Domingo, Paul Piwek, Svetlana Stoyanchev, Michel Wermelinger, Kaustubh Adhikari, and Rama Sanand Doddipatla. 2025. Human ratings of LLM response generation in pair-programming dialogue. In Proceedings of the 18th International Natural Language Generation Conference . 41–59. [8] Yihong Dong, Jiazheng Ding, Xue Jiang, Ge Li, Zhuo Li, and Zhi Jin. 2025. Codescore: Evaluating code generation by learning code execution. ACM Transactions on Software Engineering and Methodology 34, 3 (2025), 1–22. [9] Yihong Dong, Xue Jiang, Zhi Jin, and Ge Li. 2024. Self-collaboration code generation via chatgpt. ACM Transactions on Software Engineering and Methodology 33, 7 (2024), 1–38. [10] Guoliang Duan, Mingwei Liu, Yanlin Wang, Chong Wang, Xin Peng, and Zibin Zheng. 2025. A Hierarchical and Evolv-able Benchmark for Fine-Grained Code Instruction Following with Multi-Turn Feedback. arXiv preprint arXiv:2507.00699 
+
+(2025). [11] Will Epperson, Gagan Bansal, Victor C Dibia, Adam Fourney, Jack Gerrits, Erkang Zhu, and Saleema Amershi. 2025. Interactive debugging and steering of multi-agent ai systems. In Proceedings of the 2025 CHI Conference on Human Factors in Computing Systems . 1–15. [12] Daniel Fried, Armen Aghajanyan, Jessy Lin, Sida Wang, Eric Wallace, Freda Shi, Ruiqi Zhong, Wen-tau Yih, Luke Zettlemoyer, and Mike Lewis. 2022. InCoder: A generative model for code infilling and synthesis. arXiv preprint arXiv:2204.05999 (2022). [13] Gemini Team, Google. 2024. Gemini 1.5: Unlocking multimodal understanding across millions of tokens of context. https://arxiv.org/abs/2412.19807. Accessed: 2026-01-29. [14] GitHub. 2023. GitHub Copilot: Your AI pair programmer. https://github.com/features/copilot. [15] Daya Guo, Qihao Zhu, Dejian Yang, Zhihong Xie, Kai Dong, Wentao Zhang, Guanting Chen, Xiaoqiang Bi, Y. Wu, Y. K. Li, et al . 2024. DeepSeek-Coder: When the Large Language Model Meets Programming – The Rise of Code Intelligence. 
+
+arXiv preprint arXiv:2401.14196 (2024). [16] Chi Han. 2025. Can Language Models Follow Multiple Turns of Entangled Instructions? arXiv preprint arXiv:2503.13222 
+
+(2025). [17] Sungmin Kang, Bei Chen, Shin Yoo, and Jian-Guang Lou. 2025. Explainable automated debugging via large language model-driven scientific debugging. Empirical Software Engineering 30, 2 (2025), 45. [18] Myeongsoo Kim, Shweta Garg, Baishakhi Ray, Varun Kumar, and Anoop Deoras. 2025. CodeAssistBench (CAB): Dataset & Benchmarking for Multi-turn Chat-Based Code Assistance. arXiv preprint arXiv:2507.10646 (2025). [19] Sumith Kulal, Panupong Pasupat, Kartik Chandra, Mina Lee, Oded Padon, Alex Aiken, and Percy S Liang. 2019. Spoc: Search-based pseudocode to code. Advances in Neural Information Processing Systems 32 (2019). [20] Philippe Laban, Hiroaki Hayashi, Yingbo Zhou, and Jennifer Neville. 2025. Llms get lost in multi-turn conversation. 
+
+arXiv preprint arXiv:2505.06120 (2025). [21] Raymond Li, Loubna Ben Allal, Yangtian Zi, Niklas Muennighoff, Denis Kocetkov, Chenghao Mou, Marc Marone, Christopher Akiki, Jia Li, Jenny Chim, et al . 2023. StarCoder: may the source be with you! arXiv preprint arXiv:2305.06161 
+
+(2023). [22] Yujia Li, David Choi, Junyoung Chung, Nate Kushman, Julian Schrittwieser, R’emi Leblond, Tom Eccles, James Keeling, Felix Gimeno, Agustin Dal Lago, et al . 2022. Competition-level code generation with AlphaCode. Science 378, 6624 (2022), 1092–1097. [23] Bill Yuchen Lin, Yuntian Deng, Khyathi Chandu, Faeze Brahman, Abhilasha Ravichander, Valentina Pyatkin, Nouha Dziri, Ronan Le Bras, and Yejin Choi. 2024. Wildbench: Benchmarking llms with challenging tasks from real users in the wild. arXiv preprint arXiv:2406.04770 (2024). [24] Michael R Lyu, Baishakhi Ray, Abhik Roychoudhury, Shin Hwei Tan, and Patanamon Thongtanunam. 2025. Automatic programming: Large language models and beyond. ACM Transactions on Software Engineering and Methodology 34, 5 (2025), 1–33. [25] Aman Madaan, Niket Tandon, Prakhar Gupta, Skyler Hallinan, Luyu Gao, Sarah Wiegreffe, Uri Alon, Nouha Dziri, Shrimai Prabhumoye, Yiming Yang, et al . 2023. Self-refine: Iterative refinement with self-feedback. Advances in Neural Information Processing Systems 36 (2023), 46534–46594. , Vol. 1, No. 1, Article . Publication date: March 2018. 20 Trovato et al. 
+
+[26] Hussein Mozannar, Valerie Chen, Dennis Wei, Prasanna Sattigeri, Manish Nagireddy, Subhro Das, Ameet Talwalkar, and David Sontag. 2023. Simulating Iterative Human-AI Interaction in Programming with LLMs. In NeurIPS 2023 Workshop on Instruction Tuning and Instruction Following .[27] Erik Nijkamp, Hiroaki Hayashi, Caiming Xiong, Silvio Savarese, and Yingbo Zhou. 2023. CodeGen2: Lessons for training LLMs on programming and natural languages. arXiv preprint arXiv:2305.02309 (2023). [28] Erik Nijkamp, Bo Pang, Hiroaki Hayashi, Lifu Tu, Huan Wang, Yingbo Zhou, Silvio Savarese, and Caiming Xiong. 2022. CodeGen: An open large language model for code with multi-turn program synthesis. arXiv preprint arXiv:2203.13474 
+
+(2022). [29] OpenAI. 2024. GPT-4 Technical Report. https://openai.com/research/gpt-4. [30] OpenAI. 2024. Hello GPT-4o. https://openai.com/index/hello-gpt-4o/. Accessed: 2026-01-29. [31] Jielin Qiu, Zuxin Liu, Zhiwei Liu, Rithesh Murthy, Jianguo Zhang, Haolin Chen, Shiyu Wang, Ming Zhu, Liangwei Yang, Juntao Tan, et al . 2025. LoCoBench-Agent: An Interactive Benchmark for LLM Agents in Long-Context Software Engineering. arXiv preprint arXiv:2511.13998 (2025). [32] Ruchit Rawal, Jeffrey Yang Fan Chiang, Chihao Shen, Jeffery Siyuan Tian, Aastha Mahajan, Tom Goldstein, and Yizheng Chen. 2025. Benchmarking Correctness and Security in Multi-Turn Code Generation. arXiv preprint arXiv:2510.13859 
+
+(2025). [33] Steven I Ross, Fernando Martinez, Stephanie Houde, Michael Muller, and Justin D Weisz. 2023. The programmer’s assistant: Conversational interaction with a large language model for software development. In Proceedings of the 28th International Conference on Intelligent User Interfaces . 491–514. [34] Baptiste Rozi‘ere, Jonas Gehring, Fabian Gloeckle, Sten Sootla, Itai Gat, Xiaoqing Elizabeth Tan, Yossi Adi, Jingyu Liu, Tal Remez, J’er’emy Rapin, et al . 2023. Code Llama: Open foundation models for code. arXiv preprint arXiv:2308.12950 
+
+(2023). [35] Gordon Rugg and Peter McGeorge. 1997. The sorting techniques: a tutorial paper on card sorts, picture sorts and item sorts. Expert Systems 14, 2 (1997), 80–93. [36] Viktoria Stray, Astri Barbala, and Viggo Tellefsen Wivestad. 2025. Human-AI Collaboration in Software Development: A Mixed-Methods Study of Developers’ Use of GitHub Copilot and ChatGPT. In Proceedings of the 33rd ACM International Conference on the Foundations of Software Engineering . 1325–1332. [37] Gemini Team, Rohan Anil, Andrew M Dai, Babak Alipanahi, et al . 2023. Gemini: A family of highly capable multimodal models. arXiv preprint arXiv:2312.11805 (2023). [38] Qwen Team. 2024. Qwen2.5: A Party of Foundation Models. https://qwenlm.github.io/blog/qwen2.5/ [39] Qwen Team. 2025. Qwen3 Technical Report. arXiv:2505.09388 [cs.CL] https://arxiv.org/abs/2505.09388 [40] Runchu Tian, Yining Ye, Yujia Qin, Xin Cong, Yankai Lin, Yinxu Pan, Yesai Wu, Haotian Hui, Weichuan Liu, Zhiyuan Liu, et al . 2024. Debugbench: Evaluating debugging capability of large language models. arXiv preprint arXiv:2401.04621 
+
+(2024). [41] TIOBE Software BV. 2025. TIOBE Programming Community Index. https://www.tiobe.com/tiobe-index/. Accessed: 2025-5-10. [42] Sizhe Wang, Zhengren Wang, Dongsheng Ma, Yongan Yu, Rui Ling, Zhiyu Li, Feiyu Xiong, and Wentao Zhang. 2025. CodeFlowBench: A Multi-turn, Iterative Benchmark for Complex Code Generation. arXiv preprint arXiv:2504.21751 
+
+(2025). [43] Xingyao Wang, Zihan Wang, Jiateng Liu, Yangyi Chen, Lifan Yuan, Hao Peng, and Heng Ji. 2023. Mint: Evaluating llms in multi-turn interaction with tools and language feedback. arXiv preprint arXiv:2309.10691 (2023). [44] Hao Yu, Bo Shen, Dezhi Ran, Jiaxin Zhang, Qi Zhang, Yuchi Ma, Guangtai Liang, Ying Li, Qianxiang Wang, and Tao Xie. 2024. Codereval: A benchmark of pragmatic code generation with generative pre-trained models. In Proceedings of the 46th IEEE/ACM International Conference on Software Engineering . 1–12. [45] Zexun Zhan, Shuzheng Gao, Ruida Hu, and Cuiyun Gao. 2025. SR-Eval: Evaluating LLMs on Code Generation under Stepwise Requirement Refinement. arXiv preprint arXiv:2509.18808 (2025). [46] Wenting Zhao, Xiang Ren, Jack Hessel, Claire Cardie, Yejin Choi, and Yuntian Deng. 2024. Wildchat: 1m chatgpt interaction logs in the wild. arXiv preprint arXiv:2405.01470 (2024). [47] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Tianle Li, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zhuohan Li, Zi Lin, Eric P Xing, et al . 2023. Lmsys-chat-1m: A large-scale real-world llm conversation dataset. arXiv preprint arXiv:2309.11998 (2023). [48] Tianyu Zheng, Ge Zhang, Tianhao Shen, Xueling Liu, Bill Yuchen Lin, Jie Fu, Wenhu Chen, and Xiang Yue. 2024. Opencodeinterpreter: Integrating code generation with execution and refinement. arXiv preprint arXiv:2402.14658 
+
+(2024). , Vol. 1, No. 1, Article . Publication date: March 2018.

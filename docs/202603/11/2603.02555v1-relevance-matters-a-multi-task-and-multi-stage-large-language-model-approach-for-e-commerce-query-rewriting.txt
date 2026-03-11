@@ -1,0 +1,362 @@
+Title: Relevance Matters: A Multi-Task and Multi-Stage Large Language Model Approach for E-commerce Query Rewriting
+
+URL Source: https://arxiv.org/pdf/2603.02555v1
+
+Published Time: Wed, 04 Mar 2026 01:26:46 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Relevance Matters: A Multi-Task and Multi-Stage Large Language Model Approach for E-commerce Query Rewriting 
+
+Aijun Dai ∗, Jixiang Zhang †, Haiqing Hu ∗, Guoyu Tang ∗, Lin Liu ∗, Ziguang Cheng ∗∗JD.com, Beijing, China 
+
+†Tsinghua University 
+
+Abstract —For e-commerce search, user experience is measured by users’ behavioral responses to returned products, like click-through rate and conversion rate, as well as the relevance between returned products and search queries. Consequently, relevance and user conversion constitute the two primary objectives in query rewriting, a strategy to bridge the lexical gap between user expressions and product descriptions. This research pro-poses a multi-task and multi-stage query rewriting framework grounded in large language models (LLMs). Critically, in contrast to previous works that primarily emphasized rewritten query generation, we inject the relevance task into query rewriting. Specifically, leveraging a pretrained model on user data and product information from JD.com, the approach initiates with multi-task supervised fine-tuning (SFT) comprising of the rewrit-ten query generation task and the relevance tagging task between queries and rewrites. Subsequently, we employ Group Relative Policy Optimization (GRPO) for the model’s objective alignment oriented toward enhancing the relevance and stimulating user conversions. Through offline evaluation and online A/B test, our framework illustrates substantial improvements in the effective-ness of e-commerce query rewriting, resulting in elevating the search results’ relevance and boosting the number of purchases made per user (UCVR). Since August 2025, our approach has been implemented on JD.com, one of China’s leading online shopping platforms. 
+
+Index Terms —Query Rewriting, E-commerce Search, LLM. 
+
+I. I NTRODUCTION 
+
+In the field of information retrieval, query rewriting is a highly effective approach to bridge the semantic gap between user expressions and search contents, helping users access information that meets their expectations. Consistently, in e-commerce search, query rewriting retrieves products by mini-mizing lexical discrepancies between user queries and product descriptions, thus better addressing user shopping needs and enhancing overall user experience. For e-commerce search, user experience is primarily evaluated by user interactions with search results and the relevance of retrieved items to the original queries. As a core component of e-commerce search systems, query rewriting is required to concurrently optimize two key objectives: user performance and perceived relevance. In query rewriting, there are two main paradigms: dis-criminative methods and generative methods. Discriminative methods rephrase queries by retrieving similar terms, typically using sparse or dense retrieval techniques such as BM25 and Hierarchical Navigable Small World Graphs (HNSW) [1]. However, their reliance on exact lexical matching leads to semantic fragility and prevents them from recognizing se-mantic equivalence between different expressions. In contrast, generative methods [2], [3] use language models to directly rewrite queries into different forms. Both discriminative and generative methods overlook the importance of relevance in query rewriting, focusing exclusively on the lexical diversity of rewrites and user conversion rates. In the search retrieval funnel, query rewriting competes with alternative recall meth-ods for a shared retrieval budget. Unrestrainedly increasing the textual diversity of rewrites can monopolize this retrieval budget, limiting the retrieval of relevant products from other pathways and significantly degrading the overall recall quality. Recently, with the rapid advancement of large language models, an increasing number of studies have proposed LLM-based approaches to query rewriting. Most of these works [4], [5] employ composite reward functions that incorporate relevance-oriented components. While relevance is included in the RL reward, the presence of competing signals within composite formulations tends to dilute its impact, constraining the LLMs’ ability to optimize relevance in a fine-grained manner during query rewriting. To address this limitation, our approach augments the fused RL reward with joint optimiza-tion of relevance tag prediction and query rewriting, thereby prompting deterministic relevance alignment. In this study, we propose an LLM-based multi-task super-vised finetuning (SFT) and multi-task reinforcement learning (RL) framework shown in Fig1, in which relevance predic-tion is integrated into query rewriting. Specifically, while generating rewrites, the post-pretrained LLM also produces corresponding relevance tags. For SFT training data construc-tion, we extract query-rewrite pairs from online logs using rejection sampling. Then relevance scores are computed by the JD relevance model, measuring the relevance between original queries and products retrieved by rewrites; scores above a predefined threshold are assigned a relevance tag of 1, otherwise 0. During the SFT stage, the model jointly performs next-token prediction for both query rewrites and relevance tags, employing task-specific losses: cross-entropy for rewrite generation and binary cross-entropy for relevance tag prediction. In the RL stage, besides integrating rewards as in [4], we introduce an additional reward for relevance tag 
+
+> © 2026 IEEE. Personal use of this material is permitted. Permission from IEEE must be obtained for all other uses, in any current or future media, including reprint-ing/republishing this material for advertising or promotional purposes, creating new collective works, for resale or redistribution to servers or lists, or reuse of any copyrighted component of this work in other works.
+> arXiv:2603.02555v1 [cs.IR] 3 Mar 2026
+
+Fig. 1: Multi-Task SFT and RL Architecture. (1)In SFT, LLM generates rewrites with the prompt as inputs and relev tag is constructed by Offline Search Engine and Relevance Model. (2)In RL, LLM is optimized by Query-Based Normalized GRPO. The integrated reward consists of tag reward, productive reward, increment reward, relevance reward and rule reward. prediction. The reward for rewrite generation is a composite of relevance, productivity, increment, and rule-based components. For relevance tag prediction, the reward is derived from the relevance scores between queries and products retrieved by the rewrites. In summary, the primary contributions of this paper include:  
+
+> •
+
+We propose a multi-task and multi-stage approach, in-tegrating the relevance tag prediction into query rewrit-ing. The approach significantly enhances the open-source LLMs’ capabilities in e-commerce query rewriting, par-ticularly relevance alignment between retrieved products and user intents.  
+
+> •
+
+We have introduced a reinforcement learning strategy that optimizes a composite reward function for query rewriting, achieving superior alignment of LLMs in e-commerce search compared to existing methods.  
+
+> •
+
+The efficacy of our framework has been corroborated through comprehensive offline evaluations and online A/B testing, confirming its practical value and robustness. II. RELATED WORK 
+
+A. Query Rewriting 
+
+Query rewriting plays a pivotal role in e-commerce search technology to impact both the users’ shopping experience and the revenue of e-commerce platforms. Broadly, query rewriting approaches can be categorized into two classes: discriminative methods and generative methods. 
+
+Discriminative methods frame query rewriting as a re-trieval task, aiming to expand the semantics of the original query by selecting appropriate terms from a candidate set. Pseudo-relevance feedback approaches [6]–[11] typically en-hance queries by identifying expansion terms from the top-ranked documents retrieved in an initial search, but may introduce noise and struggle to maintain relevance. To mit-igate these issues, researchers have explored leveraging well-constructed thesaurus [12], [13] or mining search logs [14]– [18] to generate candidate rewrites. However, thesaurus-based methods depend heavily on coverage and quality. The log-based approaches are biased toward popular queries and lack sufficient data for long-tail queries. 
+
+Generative methods formulate query rewriting as a genera-tive process by transformer-based models. Zero-grounding and non-interactive approaches [19]–[22] primarily rely on LLMs’ prior knowledge and generate rewrites in a single pass, lacking domain-specific adaptation and resulting in limited retrieval effectiveness. Grounding-only and non-interactive methods [23]–[30] explicitly condition generation on corpus evidence or pseudo-relevant documents with constraints or feedback to control semantic drift. Grounding-aware interactive ap-proaches [31]–[33] iteratively refine rewrites through multiple retrieve–rewrite cycles, but increasing engineering complexity. 
+
+B. Objective Alignment 
+
+Reinforcement Learning from Human Feedback (RLHF) [34] represents a pivotal technique for aligning LLMs with human preferences and has been widely adopted for tasks such as safety assurance and reasoning enhancement. Proximal Policy Optimization (PPO) [35] is commonly employed in RLHF frameworks due to its stability and effectiveness. Direct Preference Optimization (DPO) [36] streamlines this process by directly optimizing model parameters using pairwise human preference data. Recently, Group Relative Policy Optimization (GRPO) [37] and its variants [38]–[41] have attracted signif-icant attention, demonstrating promising results in objective alignment tasks. For query rewriting, several approaches inject domain-specific knowledge through pretraining or supervised fine-tuning (SFT), and further align model objectives using reinforcement learning algorithms [4], [5], [42], [43]. III. METHOD 
+
+A. Framework Overview 
+
+Query Rewriting aims to enhance the semantics of the origi-nal query to bridge the semantic gap between user expressions and product descriptions, while ensuring user experience in which relevance is paramount. We propose a two-stage query rewriting framework consisting of multi-task SFT and multi-task RL alignment driven by the offline search engine. 
+
+B. Multi-task SFT 
+
+Previous works have sought to bridge lexical gap between original query and its rewrite through carefully designed query rewriting generation methods. However, these approaches do not guarantee the relevance between the original query and its rewrite. To address this challenge, we inject the relevance prediction task into query rewriting, thereby ensuring both the effectiveness and relevance of the generated rewrites. 
+
+Multi-task SFT dataset: we initially collect query-rewrite pairs from search logs. Specifically, x is a query, and the set of rewrites is Y = {y1, y 2, · · · , y n}. We sample millions of user queries along with their associated rewrites to construct our initial query rewriting dataset D:
+
+D =
+
+n xi, y ki
+
+ xi ∼ p(x), y ki ∼ πθold (y | x = xi) , k = 1 ...n 
+
+o
+
+(1) where p(x) denotes the query distribution in our search engine, and πθold represents the previous-generation rewriting policy of JD parameterized by θold .It is important that effective user clicks on the retrieved products of a rewrite serve as a key metric for measuring the relevance and the effectiveness of rewrite y. Therefore, we apply a click filter to the dataset D through rejection sampling: 
+
+Dr =
+
+n xi, y ki
+
+ (xi, y ki ) ∈ D , Ryki ∩ C xi̸ = ∅
+
+o
+
+(2) where Ryki is the recall set of rewrite yki and Cxi is the click set of query xi.To further enhance the relevance between the generated rewrite and the original query, we incorporate the relevance tag prediction into the query rewriting process. Specifically, a relevance tag is assigned to each rewrite based on its relevance score: 
+
+Dsf t =
+
+n xi, y ki , t ) (xi, y ki ) ∈ D r
+
+o
+
+(3) 
+
+t =
+
+(
+
+1, if rR(xi, Ryki ) > τ relev 
+
+0, otherwise (4) Here, rR(x, Ry ) is defined in Equation 6, and τ relev denotes the relevance threshold. Experimental results show that in-creasing τ relev leads to higher relevance but lower recall. In this work, τ relev is set to 0.2. The SFT training task evolves from a single-task rewrite generation to a multi-task setting that jointly performs rewrite generation and relevance tagging. 
+
+Supervised Fine Tuning: In the context of our multi-task SFT process, which includes both rewrite generation and relevance tagging, the training objective involves jointly minimizing the negative log-likelihood of the rewrite sequence and the binary cross-entropy of relevance tag prediction: 
+
+LSFT (θ) = − E(x,y,t )∼D sf t 
+
+
+
+> |y|
+
+X
+
+> i=1
+
+log πθ (yi | y0: i−1, x )+λ (t log pθ (1 | x, y ) + (1 − t) log pθ (0 | x, y ))] 
+
+(5) where (x, y, t ) denotes the query, the rewrite, and the relevance tag respectively; πθ (·) represents our query rewriting model parameterized by θ, pθ (t | x, y ) is the predicted probability of the relevance tag, and λ is a hyperparameter that balances the two tasks. 
+
+C. Multi-task RL Alignment 
+
+Although LLMs achieve promising performance through SFT, RL can further improve the LLMs’ ability [44] [45]. To directly refine the LLM’s query rewriting capabilities in the e-commerce domain, we employ GRPO to align the LLM’s objective toward enhancing relevance and stimulating user conversion, leveraging the offline search engine for alignment. 
+
+Reward Design: A well-designed reward function is es-sential for effective reinforcement learning [46]. We propose a hybrid reward that integrates both search engine feedback and rule-based components to enhance multi-task objectives. 
+
+Rewrite Reward: A central challenge in context-grounded query rewriting is the absence of ground-truth labels to su-pervise the training process. To address this, we optimize query rewriting by leveraging feedback from the offline search engine to guide and reward high-quality rewrites. The core intuition is that a high-quality rewrite should retrieve a set of products that is not only relevant to the original query but also diverse in its retrieval coverage. This principle enables us to design a feedback-based reward for rewrites, comprising three components derived from the offline search engine: 1) the relevance reward rR, which measures the relevance between the query and the rewrite, 2) the productive reward rP , which assesses the effectiveness of the rewrite, and 3) the increment reward rI , which quantifies the complementary value of the rewrite. rF eedback is a hybrid combination of these individual parts. 
+
+rR(x, Ry ) = 
+
+> M
+
+Y
+
+> j=1
+
+relev (x, Ryj ) (6) 
+
+rP (Cx, R y ) = 
+
+> N
+
+X
+
+> i=1
+
+η(Cxi , Ry )δ(Cxi , Ry ) (7) 
+
+η(Cxi , Ry ) = 
+
+(
+
+1, if Cxi ∈ R y
+
+0, else (8) 
+
+rI (Rx, Ry ) = |R y | − |R x ∩ R y ||R x| (9) 
+
+rF eedback (x, y ) = rR(x, Ry ) × rI (Rx, Ry ) + rP (Cx, Ry )
+
+(10) where x is the query and y is the rewrite, and accordingly Cx
+
+denotes the click set of query, Rx is the recall set of query and Ry is the recall set of rewrite. relev (·) is the relevance score from the online relevance model of JD search. | · | 
+
+is the counting operation of sets. δ(·) is the recall position weight, which is set to 1, 2, or 3 depending on whether the click’s recall position is within the top 100%, 70%, or 30%, respectively. Furthermore, to promote retrieval diversity, we introduce a character-level difference rate reward that quantifies the diversity of rewrites relative to the original query. Additionally, a rewrite length constraint reward is incorporated to discourage overly long outputs and simple term appending. These rule-based rewards help guide the model toward generating well-formed and executable rewrites: 
+
+rRule (x, y ) = α × diff( x, y ) × len (x)
+
+len (y) (11) where α is a hyparameter controlling the balance between reward components. Thus the final rewrite reward for original query x and it’s rewrite y is defined as: 
+
+rRewrite (x, y ) = rRule (x, y ) × rF eedback (x, y ) (12) 
+
+Constrained Tagging Reward: We enforce a strict validation mechanism by assigning the final reward of zero to any output that does not satisfy this structural requirement. Based on this constraint, if the output adheres to the required format, the constrained tagging reward is defined as follows: 
+
+rT ag (x, y, t ) = 
+
+(
+
+1, if |t − I(rR(x, Ry ) > τ relev )| = 0 0, otherwise (13) where I(·) denotes the indicator function, rR(x, Ry ) is defined in Equation 6 and τ relev represents the relevance threshold. The final fusion reward is a hybrid signal that combines both search engine feedback and rule-based components to reinforce the multi-task objective: 
+
+rF usion (x, y, t ) = rRewrite (x, y ) × rT ag (x, y, t ) (14) 
+
+Group Relative Policy Optimization (GRPO): Given the one-to-many nature of query rewriting, where multiple rewrites may be valid for a single query, we adopt GRPO to fine-tune the model using relative rewards across candidate rewrites. For each query x, the policy πθ (·) samples N candidates, denoted as ˆY = {ˆy1, . . . , ˆyN }, where ˆyi represents a rewrite 
+
+yi paired with its corresponding relevance tag. Notably, beam search sampling is employed in this phase rather than top-
+
+k or top-p sampling. The reward ri for each candidate ˆyi is computed with respect to the original query x as defined in Equation 14. The group-relative advantage for candidate ˆyi is then calculated as follows: 
+
+Ai = ri − mean (r1, . . . , r N )
+
+std (r1, . . . , r N ) (15) Since each rewrite ˆyi is serialized into a single output sequence, the likelihood of generating the rewrite is simply the sequence likelihood under the model. The probability ratio is defined as: 
+
+ρi = πθ (ˆ yi|x)
+
+πθold (ˆ yi|x) (16) where both numerator and denominator are computed as products of token-level probabilities over the entire sequence 
+
+ˆyi. Finally, the GRPO objective combines clipped policy optimization with a KL regularizer: 
+
+LGRPO (θ) = − Ex ∼ P (x), {ˆyi}Ni=1 ∼ πold (ˆ y|x)
+
+1
+
+N
+
+> N
+
+X
+
+> i=1
+
+min  ρiAi, clip  ρi, 1 − ϵ, 1 + ϵ Ai
+
+− βDKL (πθ ∥πref )
+
+!
+
+(17) where the KL divergence is estimated using an unbiased estimator: 
+
+DKL (πθ ∥πref ) = πref (ˆ yi|x)
+
+πθ (ˆ yi|x) − log πref (ˆ yi|x)
+
+πθ (ˆ yi|x) − 1 (18) In this objective, ϵ specifies the clipping range for stabilizing updates, while β controls the strength of the KL regularization. 
+
+D. Online Serving 
+
+In the context of deploying LLMs for online serving, it is crucial to consider both computational efficiency and latency. We adopt a near-line deployment strategy [47] to meet the latency requirements of the JD search system while fully leveraging the capabilities of the LLM. For each new query, our query rewriting LLM generates a list of rewrites along with corresponding relevance tags using beam search sampling. After filtering based on relevance tags, the top three rewrites are selected as the final rewrites. Once the rewrites are generated, they are cached for up to 14 days to enable rapid online responses. IV. EXPERIMENTS 
+
+A. Datasets 
+
+Multi-task SFT Dataset: As detailed in Section III-B, we obtain a multi-task SFT dataset consisting of approximately 5.6 million queries and rewrites, each annotated with its corresponding relevance tag and table I demonstrates it. 
+
+Multi-task RL Dataset: The RL dataset, comprising 36k queries along with their corresponding clicked product sets, is constructed from the SFT dataset using the RL reward defined in our algorithm. 
+
+Evaluation Datasets: For the offline test set, a manually an-notated dataset I of 1k <query, rewrite > pairs is constructed to serve as ground-truth for evaluating the accuracy of relevance tagging. Since rewrites retrieve products via inverted index methods, we construct a recall evaluation dataset employing embedding-based retrieval strategies. The resulting evaluation dataset comprises 100k queries and their corresponding re-trieved product pairs, where the products have been frequently clicked by users for the given queries. 
+
+B. Evaluation 
+
+Offline Metrics: To comprehensively evaluate our query rewriting approach, we utilize several offline metrics: 1) Tagging Accuracy: An accuracy-oriented metric that measures the alignment between the relevance tags gen-erated by our LLM and the ground-truth labels assigned by experienced annotators. TABLE I: Prompt Examples and Data Examples. For SFT, the blue parts are alternative. For RL, ”The synonymous search term and its corresponding relevance tag for {query }” is the input for LLMs to generate rewrite and relevance tag. 
+
+Stage Prompt Sample / Data Sample 
+
+SFT The synonymous search term and its corresponding relevance tag for {query } are {rewrite } < |sep | >
+
+{relev tag }
+
+The synonymous search term and its corresponding relevance tag for Kappa school bag are Kappa backpack < |sep | > 1. RL query, product titles, click product ids 
+
+perfume for men, {Men’s 50ml Eau de Toilette Oriental Fragrance, Tea Eau de Toilette 50ml Woody Fragrance }, {id 1, id 2}
+
+Evaluation query, product title 
+
+baby yogurt, SIMPLELOVE Father’s Love For-mula Children’s Yogurt 0% Sucrose Original Fla-vor 100g*6 Bags 
+
+2) Recall Rate: This metric evaluates the extent to which rewrites generated by the LLM benefit the search engine, defined as: recall =
+
+P 
+
+> x∈D recall
+
+|R Y ∩ C x||D recall | (19) where Drecall denotes the recall evaluation dataset, Y is the set of rewrites for x filtered by relevance tag, RY
+
+is recall set of Y obtained via inverted index methods and Cx is the valid clicked set retrieved by either item-based or embedding-based retrieval. | · | is the counting operation of sets. 3) Relevance Score: A semantic alignment metric that measures the average relevance score between rewrites and queries. The relevance score for each <query, rewrite > pair is calculated as described in Equation (6). 
+
+Online Metrics: To evaluate the model’s online performance, we use three metrics: user conversion rate (UCVR), user click-through rate (UCTR) and Unique Visitor Value(UV value). 
+
+C. Implementation Details 
+
+Both the SFT and RL training processes were conducted using the open-source TRL framework [48]. Below, we give detailed explanations of key training parameters, while all unmentioned parameters were kept at their default values. 
+
+Multi-task Fine-tuning: We fine-tuned the Qwen3-8B model using a cosine learning rate schedule with a peak learning rate of 2e-5 and a warmup ratio of 0.03. The process was optimized with AdamW ( β1 = 0 .9, β2 = 0 .999 ) and a weight decay of 0.001. We used a batch size of 64 and applied the DeepSpeed ZeRO Stage 1 parallelism strategy with bfloat16 precision. The model was trained for 5 epochs on 8 Ascend 910B NPUs for a total of 25 hours. 
+
+Post-training Alignment: The alignment phase was per-formed with a linear learning rate schedule set to 1e-6. We configured the AdamW optimizer with coefficients (β1, β 2)
+
+of (0 .9, 0.999) and omitted weight decay to maintain training consistency. The KL coefficient β in GRPO was set to 0.4. The training was executed on 4 NVIDIA H800 GPUs for a duration of 18 hours. 
+
+D. Offline Experiments 1) Comparison of Different LLMs: In this section, we present a comparative analysis of different LLMs as base mod-els trained on the multi-task SFT dataset, as summarized in Table II. Several open-source LLMs are considered, including BaiChuan [49], Qwen2.5 [50], Hunyuan [51], Qwen3 [52] and R1-distill Qwen3. Among these, R1-distilled Qwen3-8B exhibits superior overall performance compared to the other models. However, Qwen3-8B achieves the highest relevance score, which is the primary focus of this work. Consequently, we select Qwen3-8B as our base model and further perform e-commerce domain-specific pretraining on it prior to subse-quent experiments. TABLE II: Comparison of different LLMs trained on multi-task SFT dataset. 
+
+Model Acc(%) Recall(%) Relev(%) 
+
+Baichuan-7B 79.9 62.69 73.03 Qwen2.5-7B 80.5 62.79 72.90 Hunyuan-7B 80.7 62.85 71.57 
+
+Qwen3-8B 80.8 62.86 73.21 R1-Qwen3-8B 81.6 63.18 71.79 
+
+2) Multi-task SFT V.S. Single-task SFT: Given that the training objective of multi-task SFT is to jointly generate both the rewrite and its relevance tag in a single step, we aim to compare this approach with a sing-task SFT setting where the model is trained to generate only the rewrite. For single-task, we perform SFT using the <query, rewrite >
+
+pairs obtained via rejection sampling as described in Section III-B, with the model trained solely for rewrite generation. Figure 2 demonstrates that compared with model with single-task SFT, multi-task SFT achieve significantly better relevance but lower recall rates. These results highlight the effectiveness of multi-task SFT in enhancing rewrite relevance. 1 2 3 4 5                  
+
+> Epoch
+> 0.550
+> 0.575
+> 0.600
+> 0.625
+> 0.650
+> 0.675
+> 0.700
+> 0.725
+> 0.750
+> Recall  Rate  0.66489 0.66426 0.66546 0.66422 0.66390
+> 0.63304 0.63735 0.63394 0.62801 0.62383
+> Single Task
+> Multi Task 12345
+> Epoch
+> 0.600
+> 0.625
+> 0.650
+> 0.675
+> 0.700
+> 0.725
+> 0.750
+> 0.775
+> 0.800
+> Relevance  Score
+> 0.6574
+> 0.6653 0.6680 0.6631 0.6659
+> 0.7210 0.7232 0.7199
+> 0.7351 0.7347
+> Single Task
+> Multi Task
+
+Fig. 2: Comparison of Recall Rate and Relevance Score 
+
+3) Comprehensive Study of RL Algorithms: Recent ad-vances [5], [42], [43] show that reinforcement learning algo-rithms significantly contribute to performance improvements in query rewriting tasks. Building upon these insights, our comparative experiments primarily focuse on the reinforce-ment learning stage, where we added DPO and PPO base-lines and performed detailed analyses on the individual and combined effects of different reward components within our proposed framework. We constructed 72k DPO training pairs by sampling 10 candidate rewrites per query(from RL dataset) via beam search with SFT model, and scoring them with the fusion reward. For each query, the top-scoring rewrite was chosen as the positive sample and two negatives were randomly selected from the five lowest-scoring candidates. For the PPO experiments, we directly used the fusion reward defined in our work as the training reward. TABLE III: Comprehensive Study of RL Algorithms                                      
+
+> Method Acc(%) Recall(%) Relev(%)
+> pretrain+SFT 80.0 63.74 72.32 Pretrain +SFT +DPO 81.2 63.93 72.61 +PPO 80.9 65.89 70.03 +GRPO ( rP)77.2 64.04 74.17 +GRPO ( rI)81.6 47.22 33.97 +GRPO ( rR)77.4 34.07 84.15 +GRPO ( rF eedback )77.8 62.39 68.98 +GRPO ( rRewrite )80.1 70.18 64.16 +GRPO ( rF eedback &T ag )81.9 59.36 73.29 +GRPO ( rF usion )81.5 67.94 69.65
+
+As shown in Table III, both DPO and PPO yield mod-erate improvements across overall metrics. For GRPO, each individual reward component effectively serves its intended purpose, but often at the expense of other performance metrics. The fused reward achieves the best overall performance. (rF eedback &T ag = rF eedback × rT ag )
+
+4) Ablation Study of Beam Size In GRPO: As discribed above, after multi-task SFT, our model achieves higher rel-evance score but lower recall rate. To enhance recall rate while maintaining relevance, we adopt GRPO for objective alignment. Notably, beam search sampling is employed in this phase rather than top-k or top-p sampling. Table IV presents the effect of varying beam sizes on model performance during the objective alignment stage. It can be observed that as the beam size increases, both recall rate and tagging accuracy consistently improve, while relevance score initially rises and subsequently declines. TABLE IV: Ablation Study of Beam Size                         
+
+> Method Beam Size Acc(%) Recall(%) Relev(%)
+> pretrain+SFT /80.0 63.74 72.32 pretrain+SFT+GRPO 362.9 66.76 65.86 pretrain+SFT+GRPO 568.7 67.30 66.05 pretrain+SFT+GRPO 10 78.5 67.94 69.65 pretrain+SFT+GRPO 15 78.9 68.97 67.79
+
+5) Result of Different Rewrite Number: The number of rewrites retained after filtering by relevance tags for each query also influences retrieval performance. It is straightforward that increasing the number of rewrite candidates leads to a notable improvement in recall rate. 
+
+E. Online Experiments 
+
+To evaluate the online performance of our model, we deployed it in an online search engine and allocated 10% of TABLE V: Result of Different Rewrite Number.         
+
+> Rewrite Number Recall(%) Relev(%)
+> 367.94 69.65 469.44 69.65 569.96 69.80
+
+user traffic for a seven-day A/B testing period. The evaluation focused on three key metrics: Unique Visitor Value(UV value), user conversion rate (UCVR), and user click-through rate (UCTR). As shown in Table VI, our model outperformed the previous-generation rewriting model by 0.106%, 0.181%, and 0.082% in terms of UV, UCVR, and UCTR, respectively. These results demonstrate that our model effectively rewrites queries and addresses potential semantic gaps in the semantic matching process. TABLE VI: Result of Online Experiments.                
+
+> Online Traffic UV value uCVR uCTR
+> All +0.106% +0.181% +0.082% Top +0.240% +0.170% +0.110% Torso +0.430% +0.030% +0.020% Long-tail +0.490% +0.290% +0.110%
+
+F. Case Study 
+
+Table VII reveals some case samples of our model’s results. Case1 and Case2 shows our multi-task framework enhance LLMs’ comprehensive ability in e-commerce, where “NB” is the abbreviation for “New Balance”. Case3 illustrates the effectiveness of introducing the relevance task into query rewriting, reducing the retrival of irrelevanr products. TABLE VII: Case Samples.            
+
+> Query Rewrite Relev tag
+> 1kitchen drain pipe sink drain pipe 12NB down jacket New Balance down jacket 13Xiaomi pad tablet 0
+
+V. CONCLUSION In this paper, we reveal a pivotal limitation in e-commerce query rewriting: the systematic underemphasis on relevance critically impacts retrieval quality. Consequently, we propose a multi-task and multi-stage LLM framework, integrating relevance tag prediction into query rewriting. In the SFT stage, LLM concurrently generates rewrites and correspond-ing relevance tags with task-specific losses. For objective alignment towards relevance and user conversion, we employ GRPO with query-based normalized group optimization for advantage calculation and a comprehensive reward with the relevance reward, the productive reward, the increment reward, the rule reward and the relevance tag reward. Offline and online experiments validate the efficacy of our multi-task and muli-stage framework. REFERENCES [1] Y. A. Malkov and D. A. Yashunin, “Efficient and robust approximate nearest neighbor search using hierarchical navigable small world graphs,” 2018. [Online]. Available: https://arxiv.org/abs/1603.09320 [2] Y. Qiu, K. Zhang, H. Zhang, S. Wang, S. Xu, Y. Xiao, B. Long, and W.-Y. Yang, “Query rewriting via cycle-consistent translation for e-commerce search,” in 2021 IEEE 37th International Conference on Data Engineering (ICDE) . IEEE, Apr. 2021, p. 2435–2446. [Online]. Available: http://dx.doi.org/10.1109/ICDE51399.2021.00276 [3] M.-C. Lee, B. Gao, and R. Zhang, “Rare query expansion through generative adversarial networks in search advertising,” in Proceedings of the 24th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining , ser. KDD ’18. New York, NY, USA: Association for Computing Machinery, 2018, p. 500–508. [Online]. Available: https://doi.org/10.1145/3219819.3219850 [4] A. Dai, Z. Zhu, H. Hu, G. Tang, L. Liu, and S. Xu, “Enhancing e-commerce query rewriting: A large language model approach with domain-specific pre-training and reinforcement learning,” in Proceed-ings of the 33rd ACM International Conference on Information and Knowledge Management , 2024, pp. 4439–4445. [5] W. Peng, G. Li, Y. Jiang, Z. Wang, D. Ou, X. Zeng, D. Xu, T. Xu, and E. Chen, “Large language model based long-tail query rewriting in taobao search,” in Companion Proceedings of the ACM Web Conference 2024 , 2024, pp. 20–28. [6] J. Xu and W. B. Croft, “Quary expansion using local and global document analysis,” in Acm sigir forum , vol. 51, no. 2. ACM New York, NY, USA, 2017, pp. 168–175. [7] S. Naseri, J. Dalton, A. Yates, and J. Allan, “Ceqe to sqet: A study of contextualized embeddings for query expansion,” Inf. Retr. , vol. 25, no. 2, p. 184–208, Jun. 2022. [Online]. Available: https://doi.org/10.1007/s10791-022-09405-y [8] ——, “Ceqe to sqet: A study of contextualized embeddings for query expansion,” Information Retrieval Journal , vol. 25, no. 2, pp. 184–208, 2022. [9] Z. Zheng, K. Hui, B. He, X. Han, L. Sun, and A. Yates, “Bert-qe: contextualized query expansion for document re-ranking,” arXiv preprint arXiv:2009.07258 , 2020. [10] A. Khader and F. Ensan, “Learning to rank query expansion terms for covid-19 scholarly search,” Journal of Biomedical Informatics , vol. 142, p. 104386, 2023. [11] E. Bassani, N. Tonellotto, and G. Pasi, “Personalized query expansion with contextual word embeddings,” ACM Transactions on Information Systems , vol. 42, no. 2, pp. 1–35, 2023. [12] J. Bhogal, A. MacFarlane, and P. Smith, “A review of ontology based query expansion,” Information processing & management , vol. 43, no. 4, pp. 866–886, 2007. [13] A. Mandal, I. K. Khan, and P. S. Kumar, “Query rewriting using automatic synonym extraction for e-commerce search.” in eCOM@ SIGIR , 2019. [14] I. Antonellis, H. Garcia-Molina, and C.-C. Chang, “Simrank++ query rewriting through link analysis of the clickgraph (poster),” in Proceed-ings of the 17th international conference on World Wide Web , 2008, pp. 1177–1178. [15] H. Cui, J.-R. Wen, J.-Y. Nie, and W.-Y. Ma, “Probabilistic query expansion using query logs,” in Proceedings of the 11th international conference on World Wide Web , 2002, pp. 325–332. [16] Z. Kunpeng, W. Xiaolong, and L. Yuanchao, “A new query expansion method based on query logs mining,” International Journal on Asian Language Processing , vol. 19, no. 1, pp. 1–12, 2009. [17] S. Li, F. Lv, T. Jin, G. Li, Y. Zheng, T. Zhuang, Q. Liu, X. Zeng, J. Kwok, and Q. Ma, “Query rewriting in taobao search,” in Proceedings of the 31st ACM International Conference on Information & Knowledge Management , 2022, pp. 3262–3271. [18] S. Manchanda, M. Sharma, and G. Karypis, “Intent term weighting in e-commerce queries,” in Proceedings of the 28th ACM International Conference on Information and Knowledge Management , 2019, pp. 2345–2348. [19] L. Wang, N. Yang, and F. Wei, “Query2doc: Query expansion with large language models,” arXiv preprint arXiv:2303.07678 , 2023. [20] R. Jagerman, H. Zhuang, Z. Qin, X. Wang, and M. Bendersky, “Query expansion by prompting large language models,” arXiv preprint arXiv:2305.03653 , 2023. [21] L. Gao, X. Ma, J. Lin, and J. Callan, “Precise zero-shot dense retrieval without relevance labels,” in Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) ,2023, pp. 1762–1777. [22] L. Liu and M. Zhang, “Exp4fuse: A rank fusion framework for enhanced sparse retrieval using large language model-based query expansion,” 
+
+arXiv preprint arXiv:2506.04760 , 2025. [23] P. Jia, Y. Liu, X. Zhao, X. Li, C. Hao, S. Wang, and D. Yin, “Mill: Mutual verification with large language models for zero-shot query expansion,” arXiv preprint arXiv:2310.19056 , 2023. [24] X. Chen, X. Chen, B. He, T. Wen, and L. Sun, “Analyze, generate and refine: Query expansion with llms for zero-shot open-domain qa,” in 
+
+Findings of the Association for Computational Linguistics ACL 2024 ,2024, pp. 11 908–11 922. [25] Y.-S. Chuang, W. Fang, S.-W. Li, W.-t. Yih, and J. Glass, “Expand, rerank, and retrieve: Query reranking for open-domain question answer-ing,” arXiv preprint arXiv:2305.17080 , 2023. [26] X. Wang, S. MacAvaney, C. Macdonald, and I. Ounis, “Genera-tive query reformulation for effective adhoc search,” arXiv preprint arXiv:2308.00415 , 2023. [27] Y. Lei, Y. Cao, T. Zhou, T. Shen, and A. Yates, “Corpus-steered query ex-pansion with large language models,” arXiv preprint arXiv:2402.18031 ,2024. [28] L. Zhang, Y. Wu, Q. Yang, and J.-Y. Nie, “Exploring the best prac-tices of query expansion with large language models,” arXiv preprint arXiv:2401.06311 , 2024. [29] H. Li, X. Wang, B. Koopman, and G. Zuccon, “Pseudo relevance feedback is enough to close the gap between small and large dense retrieval models,” arXiv preprint arXiv:2503.14887 , 2025. [30] T. Jaenich, G. McDonald, and I. Ounis, “Fair exposure allocation using generative query expansion,” in European Conference on Information Retrieval . Springer, 2025, pp. 267–281. [31] J. Feng, C. Tao, X. Geng, T. Shen, C. Xu, G. Long, D. Zhao, and D. Jiang, “Synergistic interplay between search and large language models for information retrieval,” arXiv preprint arXiv:2305.07402 ,2023. [32] M. S. Rashid, J. A. Meem, Y. Dong, and V. Hristidis, “Progressive query expansion for retrieval over cost-constrained data sources,” arXiv preprint arXiv:2406.07136 , 2024. [33] Y. Lei, T. Shen, and A. Yates, “Thinkqe: Query expansion via an evolving thinking process,” arXiv preprint arXiv:2506.09260 , 2025. [34] L. Ouyang, J. Wu, X. Jiang, D. Almeida, C. Wainwright, P. Mishkin, C. Zhang, S. Agarwal, K. Slama, A. Ray et al. , “Training language models to follow instructions with human feedback,” Advances in neural information processing systems , vol. 35, pp. 27 730–27 744, 2022. [35] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Prox-imal policy optimization algorithms,” arXiv preprint arXiv:1707.06347 ,2017. [36] R. Rafailov, A. Sharma, E. Mitchell, C. D. Manning, S. Ermon, and C. Finn, “Direct preference optimization: Your language model is secretly a reward model,” Advances in neural information processing systems , vol. 36, pp. 53 728–53 741, 2023. [37] Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H. Zhang, M. Zhang, Y. Li, Y. Wu et al. , “Deepseekmath: Pushing the limits of mathematical reasoning in open language models,” arXiv preprint arXiv:2402.03300 ,2024. [38] Q. Yu, Z. Zhang, R. Zhu, Y. Yuan, X. Zuo, Y. Yue, W. Dai, T. Fan, G. Liu, L. Liu et al. , “Dapo: An open-source llm reinforcement learning system at scale,” arXiv preprint arXiv:2503.14476 , 2025. [39] Z. Liu, C. Chen, W. Li, P. Qi, T. Pang, C. Du, W. S. Lee, and M. Lin, “Understanding r1-zero-like training: A critical perspective,” 
+
+arXiv preprint arXiv:2503.20783 , 2025. [40] Q. Zhang, H. Wu, C. Zhang, P. Zhao, and Y. Bian, “Right question is already half the answer: Fully unsupervised llm reasoning incentiviza-tion,” arXiv preprint arXiv:2504.05812 , 2025. [41] C. Zheng, S. Liu, M. Li, X.-H. Chen, B. Yu, C. Gao, K. Dang, Y. Liu, R. Men, A. Yang et al. , “Group sequence policy optimization,” arXiv preprint arXiv:2507.18071 , 2025. [42] B. Zuo, X. Zhang, F. Li, P. Wang, J. Xu, and B. Zheng, “Value: Value-aware large language model for query rewriting via weighted trie in sponsored search,” arXiv preprint arXiv:2504.05321 , 2025. [43] Y. Zhang, B. Liu, X. Zhang, A. Mandal, Z. Wu, and C. Xu, “Leser: Learning to expand via search engine-feedback reinforcement in e-commerce,” arXiv preprint arXiv:2509.05570 , 2025. [44] D. Guo, D. Yang, H. Zhang, J. Song, R. Zhang, R. Xu, Q. Zhu, S. Ma, P. Wang, X. Bi et al. , “Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning,” arXiv preprint arXiv:2501.12948 ,2025. [45] T. Chu, Y. Zhai, J. Yang, S. Tong, S. Xie, D. Schuurmans, Q. V. Le, S. Levine, and Y. Ma, “Sft memorizes, rl generalizes: A com-parative study of foundation model post-training,” arXiv preprint arXiv:2501.17161 , 2025. [46] Y. Gao, C. M. Meyer, M. Mesgar, and I. Gurevych, “Reward learning for efficient reinforcement learning in extractive document summarisation,” 
+
+arXiv preprint arXiv:1907.12894 , 2019. [47] X. Amatriain and J. Basilico, “Recommender systems in industry: A netflix case study,” in Recommender systems handbook . Springer, 2015, pp. 385–419. [48] L. von Werra, Y. Belkada, L. Tunstall, E. Beeching, T. Thrush, N. Lam-bert, and S. Huang. (2020) Trl: Transformer reinforcement learning. https://github.com/huggingface/trl. [49] A. Yang, B. Xiao, B. Wang, B. Zhang, C. Bian, C. Yin, C. Lv, D. Pan, D. Wang, D. Yan et al. , “Baichuan 2: Open large-scale language models,” 
+
+arXiv preprint arXiv:2309.10305 , 2023. [50] Q. Team et al. , “Qwen2 technical report,” arXiv preprint arXiv:2407.10671 , vol. 2, p. 3, 2024. [51] Tencent, “Hunyuan-7b,” https://huggingface.co/tencent/Hunyuan-7B, 2025, [Online; Accessed: 2025-10-28]. [52] A. Yang, A. Li, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Gao, C. Huang, C. Lv et al. , “Qwen3 technical report,” arXiv preprint arXiv:2505.09388 , 2025. 
+
+.

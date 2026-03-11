@@ -1,0 +1,944 @@
+Title: Why Does RLAIF Work At All?
+
+URL Source: https://arxiv.org/pdf/2603.03000v1
+
+Published Time: Wed, 04 Mar 2026 02:07:16 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Why Does RLAIF Work At All? 
+
+## Robin Young 
+
+## Department of Computer Science and Technology University of Cambridge Cambridge, UK 
+
+## robin.young@cl.cam.ac.uk 
+
+## Abstract 
+
+Reinforcement Learning from AI Feedback (RLAIF) enables language models to improve by training on their own preference judgments, yet no theoretical account explains why this self-improvement seemingly works for value learning. We propose the latent value hypoth-esis, that pretraining on internet-scale data encodes human values as directions in rep-resentation space, and constitutional prompts elicit these latent values into preference judg-ments. We formalize this intuition under a linear model where the constitution acts as a projection operator selecting value-relevant directions. Our analysis yields several re-sults. RLAIF improves alignment when the constitution-activated direction correlates with true values better than the model’s default gen-eration direction thus explaining the generation-judgment gap; the ceiling on RLAIF quality is determined by how well representations en-code values, which scales with model capacity; and adversarial constitutions exist that can acti-vate anti-social value directions encoded from harmful pretraining data. Our account unifies scattered empirical findings including the re-fusal direction, low-rank safety subspaces, and RLAIF scaling behavior. 
+
+## 1 Introduction 
+
+A puzzling phenomenon underlies modern AI. Namely, language models can improve their own safety by training on their own judgments. In Rein-forcement Learning from AI Feedback (RLAIF; Bai et al., 2022; Lee et al., 2024), a model is prompted with a “constitution,” a set of principles like “choose the less harmful response,” and asked to judge pairs of outputs. The model then trains on these self-generated preferences. Empirically, this works. RLAIF achieves alignment quality com-parable to human feedback, and models can even improve by judging their own outputs (Lee et al., 2024). 
+
+But why should this work at all? No new infor-mation enters the system, creating an apparent ten-sion with the data processing inequality (Shannon, 1948). The model judges its own outputs according to its own understanding of the constitution. If the model already “knew” what was harmful, why did it not just avoid generating harmful content in the first place? And if it did not know, how can its judgments provide useful signal? We propose a resolution in the latent value hy-pothesis. Our core claim is that pretraining on internet-scale data encodes human values as direc-tions in the model’s representation space, but these representations are not fully utilized during genera-tion. The constitution prompt acts as a retrieval key that elicits these latent values into explicit prefer-ence judgments. Training on these judgments then “wires up” the latent value representations to the output distribution. This hypothesis makes RLAIF more legible; we posit self-improvement is possible because know-ing and doing are decoupled in language models. The model’s representations encode more about human values than its default generation behavior reflects. The constitution bridges this gap. We formalize the latent value hypothesis un-der a linear model of value encoding and derive four main results. First, we characterize the self-improvement condition. RLAIF improves align-ment if and only if the constitution-activated direc-tion correlates positively with true values, and we explain when this correlation exceeds that of de-fault generation, namely the “generation-judgment gap.” Second, we establish an RLAIF ceiling where the maximum achievable alignment is bounded by how well the model’s representations encode val-ues, a ceiling that scales with model capacity and pretraining diversity. Third, we offer a conjecture on low-rank values. Human values concentrate in a low-dimensional subspace, consistent with em-pirical findings that safety fine-tuning modifies few 1
+
+> arXiv:2603.03000v1 [cs.LG] 3 Mar 2026
+
+directions. Fourth, we prove that adversarial con-stitutions exist because pretraining encodes both pro-social and anti-social norms, there exist con-stitutions that activate harmful value directions, making the model worse. We show that this ex-plains existing empirical findings, including the existence of a “refusal direction” in base models (Arditi et al., 2024), the low-rank structure of safety fine-tuning (Pan et al., 2025), and the scaling be-havior of RLAIF (Lee et al., 2024). We conclude by discussing implications for alignment practice. 
+
+## 2 Related Work 
+
+Concurrent work by Huang et al. (2025) formal-izes self-improvement as “sharpening” by using the model as a verifier to concentrate probability mass on high-quality responses. Their work ap-plies to reasoning tasks where correctness is ver-ifiable as the model can check whether a proof is valid or whether code passes tests, even if gen-erating correct proofs or code is difficult. They provide sample complexity bounds showing when self-improvement via SFT or RLHF is efficient. Our work is complementary. Sharpening ex-plains self-improvement when there is a ground-truth “correct answer” that the model can verify. We explain self-improvement for values, where there is no external ground truth; instead, the “cor-rect answer” is encoded in the model’s own latent representations from pretraining. Both share the insight that knowing and doing are decoupled in language models, but the mechanisms differ. Sharp-ening identifies a computational bottleneck in that generation requires difficult search, while verifica-tion is easy. We identify an architectural bottleneck. Values are encoded in representations but not fully utilized by the default generation process. Bai et al. (2022) introduce constitutional AI, us-ing principles to generate self-critiques and revi-sions. They demonstrate empirically that RLAIF with a constitution can match or exceed RLHF for harmlessness. However, they do not provide a the-oretical framework for why this works. Our contri-bution is to formalize the mechanism. The consti-tution elicits latent value representations that were encoded during pretraining. A growing body of work establishes that con-cepts are linearly encoded in language model rep-resentations. Probing classifiers can extract syn-tactic and semantic information (Belinkov et al., 2017). Steering vectors can control model behavior by adding directions to activations (Turner et al., 2024; Rimsky et al., 2024). Representation engi-neering provides a systematic approach to finding and manipulating concept directions (Zou et al., 2025). Inference-time intervention can elicit truth-ful answers by shifting activations (Li et al., 2023). We build on this foundation, applying linear repre-sentation assumptions specifically to value encod-ing. Our Assumption 1 is directly motivated by empirical findings that harmfulness and refusal are linearly encoded (Arditi et al., 2024). Our work also relates to scalable oversight and eliciting latent knowledge (Christiano et al., 2018; Burns et al., 2024). That line of work proposes bootstrapping alignment through recursive supervi-sion and the system helps generate the training sig-nal. RLAIF can be seen as a tractable instance, and constitutional judgments supervise policy updates. The ELK problem asks how to extract knowledge a model has encoded but does not report; our la-tent value hypothesis offers a partial answer for values specifically. The constitution acts as an elic-itation mechanism, surfacing latent representations as explicit judgments. However, there is still no guarantee that the elicited direction reflects true values rather than a proxy satisfying the prompt. Recent work studies the internal mechanisms of safety behaviors. Arditi et al. (2024) show that re-fusal is mediated by a single direction across many chat models, and that this direction exists even before RLHF. Pan et al. (2025) find that safety fine-tuning modifies a low-rank subspace, with effective rank approximately 1 in early layers. We provide theoretical grounding for these findings through Conjecture 9 that formalizes why safety might be low-rank and Assumption 1. 
+
+## 3 Problem Setup 
+
+We formalize the components of RLAIF under a linear model of value encoding. 
+
+3.1 Representations and Values 
+
+Let X denote the space of prompts and Y the space of responses. A language model maps prompt-response pairs to representations: 
+
+h : X × Y → Rd (1) We can think of h(x, y ) as the model’s internal representation of responding to prompt x with re-sponse y (e.g. the residual stream at some layer, averaged over positions). For now, let us assume 2representations are whitened: E[hh ⊤] = I and are centered: E[h] = 0 . This gives Cov( h) = I.
+
+Assumption 1 (Linear Value Encoding) . There ex-ists a direction v∗ ∈ Rd such that the “true safety” of a response is a linear function of the representa-tion: 
+
+S(x, y ) = ⟨h(x, y ), v ∗⟩ + ϵ(x, y ) (2) 
+
+where ϵ is mean-zero noise with E[ϵ2] = σ2 
+
+> ϵ
+
+, inde-pendent of h.
+
+This assumption is empirically motivated. Prior work shows that harmfulness, refusal, and other safety-relevant properties are linearly encoded in language model representations (Arditi et al., 2024; Zou et al., 2025; Li et al., 2023). The noise ϵ cap-tures aspects of harm that are not encoded in rep-resentations (e.g. context-dependent judgments, ambiguous cases). We can relax this with no loss of generality (see Appendix Theorem 13). 
+
+Definition 1 (Encoding Quality) . The encoding quality ρ ∈ [0 , 1] measures how well representa-tions capture true harm: 
+
+ρ2 = ∥v∗∥2
+
+∥v∗∥2 + σ2
+
+> ϵ
+
+= Var( ⟨h, v ∗⟩)Var( S) (3) When ρ = 1 , harm is perfectly encoded. When 
+
+ρ = 0, representations contain no information about harm. 
+
+3.2 Generation and Judgment 
+
+We model the base policy as implicitly optimizing a linear score: 
+
+Assumption 2 (Linear Generation) . The base model’s log-probability decomposes as: 
+
+log Pbase (y | x) = ⟨h(x, y ), w ⟩ + g(x) (4) 
+
+where w ∈ Rd is the “generation direction” and 
+
+g(x) is a prompt-dependent normalizer. 
+
+The direction w captures what the base model implicitly prefers and responses that score high on 
+
+⟨h, w ⟩ are more likely to be generated. This direc-tion is shaped by the pretraining objective (next-token prediction) across the entire corpus. For constitutional judgment, we assume: 
+
+Assumption 3 (Linear Judgment) . A constitution 
+
+c induces pairwise preferences: 
+
+Jc(y1 ≻ y2 | x) = σ ⟨h(x, y 1) − h(x, y 2), v c⟩
+
+(5) 
+
+where σ is the sigmoid function and vc ∈ Rd is the direction activated by constitution c.
+
+The key modeling choice is that different con-stitutions activate different directions. The con-stitution “Principle: choose the response that is less harmful” activates a direction vc that (ideally) aligns with v∗. A different constitution might acti-vate a different direction. 
+
+Remark 1. We take as given that prompting can activate specific directions in representation space as a phenomenon documented in work on steering vectors (Turner et al., 2024; Rimsky et al., 2024) and activation engineering (Zou et al., 2025). The mechanism by which prompts select directions is beyond our scope. 
+
+3.3 Alignment Measure 
+
+We measure alignment as expected safety: 
+
+Align( π) = ExEy∼π(·| x)[S(x, y )] (6) Higher values indicate better alignment. 
+
+## 4 Self-Improvement Condition 
+
+We now characterize when RLAIF improves align-ment. 
+
+4.1 RLAIF as Direction Adjustment 
+
+Training on constitutional preferences adjusts the generation direction. We derive this from first prin-ciples using Direct Preference Optimization (DPO) (Rafailov et al., 2023). DPO shows that for KL-constrained reward max-imization by maximizing expected reward while staying close to a reference policy, the optimal pol-icy takes the form: 
+
+π∗(y | x) = 1
+
+Z(x) πref (y | x) exp( r(x, y )/β )
+
+(7) where β controls the strength of the KL penalty. Rearranging gives the implicit reward: 
+
+r(x, y ) = β log π∗(y | x)
+
+πref (y | x) + β log Z(x) (8) In our setting, constitutional preferences (As-sumption 3) correspond to a Bradley-Terry model with implicit reward: 
+
+rc(x, y ) = ⟨h(x, y ), v c⟩ (9) since Jc(y1 ≻ y2) = σ(rc(y1) − rc(y2)) .Taking the base policy as reference ( πref =
+
+Pbase ), we can derive the RLAIF policy: 3Proposition 2 (RLAIF Policy) . Under Assump-tions 1–3, DPO on constitutional preferences with KL penalty β yields the optimal policy: 
+
+log PRLAIF (y | x) = ⟨h(x, y ), w + λv c⟩ + g′(x)
+
+(10) 
+
+where λ = 1 /β .Proof. The optimal policy satisfies: 
+
+rc(x, y ) = β log π∗(y | x)
+
+πref (y | x) + const( x) (11) Substituting rc(x, y ) = ⟨h(x, y ), v c⟩ and 
+
+log πref (y | x) = ⟨h(x, y ), w ⟩ + g(x):
+
+⟨h, v c⟩ = β log π∗(y | x)−β⟨h, w ⟩− βg (x)+const( x)
+
+(12) Solving for log π∗:      
+
+> log π∗(y|x) = ⟨h, w ⟩+ 1
+> β⟨h, v c⟩+g′(x) = ⟨h, w +λv c⟩+g′(x)
+> (13)
+
+where λ = 1 /β and g′(x) absorbs the x-dependent terms. The interpretation is that RLAIF shifts the gen-eration direction from w to w + λv c. The strength of the shift is controlled by λ = 1 /β . Weaker KL regularization (smaller β) means larger shift toward the constitution direction. The policy now favors responses that score high on both the original generation direction and the constitution-activated direction. 
+
+4.2 Improvement Condition Theorem 3 (Self-Improvement) . Under Assump-tions 1–3, for small λ the alignment improvement from RLAIF is:       
+
+> Align( πRLAIF )−Align( πbase ) = λ⟨Σwvc, v ∗⟩+O(λ2)
+> (14)
+
+where Σw = Cov πbase (h) is positive definite. In particular, improvement occurs iff ⟨Σwvc, v ∗⟩ > 0.Proof. The expected safety (or negative harm) un-der policy π with linear score direction u is: 
+
+Ey∼π[S(x, y )] = Ey∼π[⟨h, v ∗⟩] + E[ϵ] (15) For an energy-based model π(y) ∝
+
+exp( ⟨h(y), u ⟩), the expected representa-tion is Ey∼π[h] = ∇u log Z(u) where 
+
+Z(u) = R exp( ⟨h(y), u ⟩)dy . For small per-turbations δu :
+
+Eπu+δu [h] ≈ Eπu [h] + Σ uδu (16) where Σu = ∇2 
+
+> u
+
+log Z(u) = Cov πu (h) is the rep-resentation covariance under πu, which is positive definite. Applying the first-order expansion with δu =
+
+λv c:
+
+ERLAIF [h] − Ebase [h] = λΣwvc + O(λ2) (17) Taking the inner product with v∗:      
+
+> ERLAIF [⟨h, v ∗⟩]−Ebase [⟨h, v ∗⟩] = λ⟨Σwvc, v ∗⟩+O(λ2)
+> (18)
+
+Corollary 4 (Self-Improvement Condition) .
+
+RLAIF improves alignment (for small λ) if and only if ⟨Σwvc, v ∗⟩ > 0. When representations are isotropic ( Σw ∝ I), this simplifies to ⟨vc, v ∗⟩ > 0.
+
+The condition is intuitive. RLAIF helps when the constitution activates a direction that correlates positively with true safety (so that preferring high-
+
+vc responses means preferring safe responses). 
+
+4.3 The Generation-Judgment Gap 
+
+Why should ⟨vc, v ∗⟩ exceed ⟨w, v ∗⟩? This is the core question. Why does constitutional judgment access value information better than default gener-ation? 
+
+Proposition 5 (Generation-Judgment Gap) . Sup-pose: 1. The generation direction w is shaped by next-token prediction across a corpus where frac-tion η ≪ 1 is value-relevant (ethics discus-sions, content moderation, etc.) and fraction 
+
+1 − η is value-neutral. 2. The constitution is designed to query values directly, achieving alignment ⟨vc, v ∗⟩ = αc ≈
+
+1.Then ⟨w, v ∗⟩ ≈ η and the gap is: 
+
+⟨vc, v ∗⟩ − ⟨ w, v ∗⟩ ≈ 1 − η (19) The intuition: pretraining optimizes for predict-ing all tokens, most of which have nothing to do with values. The generation direction w is there-fore “diluted” and only a small component points toward v∗. In contrast, the constitution explicitly asks about harm, so it activates a direction vc that is targeted at the value-relevant subspace. This is a plausible explanation for the generation-judgment gap. The model “knows” about values 4(they are encoded in representations), but default generation doesn’t fully utilize this knowledge (be-cause w is optimized for a different objective). The constitution retrieves the relevant knowledge. 
+
+4.4 A Toy Example 
+
+To make things more concrete, consider a minimal example in R2.
+
+Setup. Let representations live in R2 with: • Safety direction: v∗ = (1 , 0) 
+
+• Generation direction: w = (0 .1, 0.995) 
+
+(mostly orthogonal to v∗)• Constitution direction: vc = (0 .95 , 0.31) 
+
+(well-aligned with v∗)The generation direction w has ⟨w, v ∗⟩ = 0 .1.only 10% of its magnitude points toward the safety-relevant direction. This reflects a base model trained mostly on value-neutral text. The consti-tution direction vc has ⟨vc, v ∗⟩ = 0 .95 ; it nearly recovers the true safety direction. Under the base policy, responses y with high 
+
+⟨h(y), w ⟩ are favored. Since w is nearly orthogo-nal to v∗, the policy is nearly indifferent to harm. A harmful response and a benign response with similar projections onto w are equally likely. After RLAIF with λ = 1 , the new generation direction is:       
+
+> w′=w+λv c= (0 .1+0 .95 ,0.995+0 .31) = (1 .05 ,1.305)
+> (20)
+
+Normalizing: w′ ≈ (0 .63 , 0.78) .The new direction has ⟨w′, v ∗⟩ ≈ 0.63 ; the pol-icy now substantially penalizes harm. The first-order alignment improvement is: 
+
+∆ ≈ λ⟨Σwvc, v ∗⟩ = λ(v∗)⊤Σwvc (21) For isotropic Σw = σ2I, this gives ∆ =
+
+λσ 2⟨vc, v ∗⟩ = 0 .95 λσ 2 > 0.Now suppose an adversarial constitution acti-vates vadv  
+
+> c
+
+= ( −0.8, 0.6) , which has ⟨vadv  
+
+> c
+
+, v ∗⟩ =
+
+−0.8. After RLAIF:      
+
+> w′′ =w+λv adv c= (0 .1−0.8,0.995+0 .6) = ( −0.7,1.595)
+> (22)
+
+Normalizing: w′′ ≈ (−0.40 , 0.92) .Now ⟨w′′ , v ∗⟩ ≈ − 0.40 . The policy actively favors unsafe responses. The alignment change is 
+
+∆ = −0.8C < 0. The adversarial constitution made the model worse than the base policy. This toy example illustrates the core dynamics: (1) the base policy underutilizes value information because w is diluted; (2) a good constitution recov-ers value information by activating vc ≈ v∗; (3) an adversarial constitution can activate directions anti-correlated with v∗, degrading alignment. 
+
+## 5 RLAIF Ceiling 
+
+How good can RLAIF get? We posit the ceiling is determined by representation quality. 
+
+Theorem 6 (RLAIF Ceiling) . For any constitution 
+
+c, if ϵ ∼ N (0 , σ 2 
+
+> ϵ
+
+):
+
+Align ∗ − Align( πc
+
+> RLAIF
+
+) ≥ (1 − ρ)σS
+
+√π (23) 
+
+where Align ∗ is the alignment achievable with or-acle access to S, σS = std( S), and ρ is the encod-ing quality. Proof sketch. The best possible constitution sets 
+
+vc = v∗, reducing RLAIF to selection based on the proxy ⟨h, v ∗⟩ rather than true safety S =
+
+⟨h, v ∗⟩ + ϵ. This is a standard noisy selection prob-lem: the proxy has correlation ρ with the truth. For Gaussian noise, the regret from proxy-based selec-tion scales as (1 − ρ)σS . See Appendix A for the full derivation. 
+
+Corollary 7 (Scaling) . If encoding quality ρ in-creases with model capacity (parameters, pretrain-ing data), then the RLAIF ceiling increases with scale. 
+
+This explains the empirical finding that larger models make better RLAIF labelers (Lee et al., 2024). Larger models encode values better (higher 
+
+ρ), so their constitutional judgments are more accu-rate, and training on them yields better alignment. 
+
+## 6 Conjecture on Low-Rank Values 
+
+Empirical work finds that safety-related representa-tions have low effective rank. We formalize this as a conjecture and discuss possible explanations. Let Σ = E[hh ⊤] be the representation co-variance (identity under our whitening assump-tion, but consider the pre-whitened structure). Let 
+
+λ1 ≥ λ2 ≥ . . . be its eigenvalues with eigenvectors 
+
+u1, u 2, . . . 
+
+Definition 8 (Effective Dimension) . The effective dimension of the representation is: 
+
+deff = (P 
+
+> i
+
+λi)2
+
+P 
+
+> i
+
+λ2
+
+> i
+
+(24) 5Conjecture 9 (Value Concentration) . The true harm direction v∗ lies predominantly in the top eigenspace: 
+
+> k
+
+X
+
+> i=1
+
+⟨v∗, u i⟩2 ≈ ∥ v∗∥2 for k = O(deff ) (25) This conjecture is supported by empirical find-ings. Arditi et al. (2024) show that refusal is medi-ated by a single direction across many models. Pan et al. (2025) find that safety fine-tuning induces representation shifts with effective rank approxi-mately 1 in early layers, increasing but remaining low throughout the network. Why might values concentrate in few directions? We see several possibilities, though none constitute a proof: 
+
+Statistical frequency. Value-relevant distinctions like toxic/non-toxic and harmful/benign appear fre-quently in pretraining. Contexts involving these distinctions push representations in consistent di-rections, building up high-variance components. Subtle ethical nuances appear rarely and inconsis-tently, contributing little variance. If v∗ captures common distinctions, it naturally aligns with high-variance (top) eigenvectors. 
+
+Intrinsic simplicity. Human values may be funda-mentally low-dimensional. Core ethical principles such as avoid harm, be honest, and respect auton-omy might span most of the variation in human moral judgments. If ground-truth values are sim-ple, the encoding v∗ will be too. 
+
+Capacity allocation. Neural networks may allo-cate representational capacity in proportion to pre-dictive usefulness. Common patterns get dedicated dimensions; rare patterns share capacity. Value-relevant features, being common, get dedicated directions. We do not commit to any particular explanation. Understanding why values are low-rank, if indeed they are in general, is an important open question. Our work is consistent with low-rank values but does not derive this property from first principles. The practical implication, if the conjecture holds, is that safety alignment is achievable by modifying few directions. This is both encouraging (align-ment may be tractable) and concerning (few direc-tions means small attack surface for adversarial manipulation). 
+
+## 7 Adversarial Constitutions 
+
+An implication of our hypothesis is that because pretraining encodes diverse norms, adversarial con-stitutions can make alignment worse. 
+
+Theorem 10 (Adversarial Constitutions Exist) .
+
+Suppose the pretraining corpus contains both pro-social content (encoding direction v+ with 
+
+⟨v+, v ∗⟩ > 0) and anti-social content (encoding direction v− with ⟨v−, v ∗⟩ < 0). Then there exists a constitution c∗ such that: 
+
+⟨vc∗ , v ∗⟩ < 0 (26) 
+
+and therefore: 
+
+Align( πc∗
+
+> RLAIF
+
+) < Align( πbase ) (27) 
+
+Proof. The map c 7 → vc from constitutions to ac-tivated directions spans some subspace of Rd (the “promptable” subspace). If this subspace contains a direction vc with ⟨vc, v ∗⟩ < 0 which we take as a mild assumption, since pretraining on anti-social content (e.g. forums endorsing manipulation, de-ception, or violence) plausibly encodes directions retrievable by appropriately crafted constitutions then by Theorem 3, RLAIF with such a constitution yields negative alignment improvement. 
+
+Remark 2. Adversarial constitutions need not be obviously malicious. A constitution emphasizing “edginess,” “authenticity,” or “not being preachy” might activate directions that correlate negatively with safety. The risk surface is subtle. 
+
+## 8 Accounting for Existing Evidence 
+
+Our account unifies several empirical findings that previously lacked theoretical explanation. 
+
+8.1 Refusal Direction in Base Models 
+
+Arditi et al. (2024) show that refusal behavior is me-diated by a single direction across 13 chat models up to 72B parameters. Remarkably, this direction can be found even in base models before any RLHF or safety fine-tuning. Erasing the direction from the residual stream disables refusal; adding it induces refusal on benign prompts. Assumption 1 posits that the harm direction v∗
+
+exists as a property of pretraining, not alignment training. The internet contains extensive discus-sion of harmful vs. benign content such as content moderation, ethics debates, and safety guidelines, and pretraining compresses this into a direction in 6representation space. Alignment training increases 
+
+⟨w, v ∗⟩ (shifts generation toward the value direc-tion) but does not create v∗. The refusal direction exists in base models because the knowledge of what is harmful exists in base models. 
+
+8.2 Low-Rank Safety Subspace 
+
+Pan et al. (2025) analyze the representation shifts induced by safety fine-tuning on Llama 3 8B. They find that the effective rank of these shifts is approx-imately 1 in early layers, increasing in later layers but remaining low throughout. A single dominant direction governs refusal behavior, with secondary directions encoding features like hypothetical nar-rative and role-playing. Our Conjecture 9 is consistent with this find-ing. If values concentrate in few directions be-cause value-relevant distinctions (toxic vs. non-toxic, harmful vs. benign, safe vs. unsafe) are high-frequency in the pretraining corpus, then these dis-tinctions would induce high-variance directions in representation space. Subtle ethical nuances, by contrast, are rare and induce low-variance direc-tions. The harm direction v∗ would align with the high-variance subspace, which has low effective dimension. The finding that secondary directions encode specific features (hypothetical framing, roleplay) is also consistent with our hypothesis. Different constitutions might activate different combinations of these directions, explaining why some jailbreaks work by invoking fictional scenarios. 
+
+8.3 RLAIF Scales with Labeler Size 
+
+Lee et al. (2024) systematically vary the size of the AI labeler in RLAIF experiments. They find a strong positive relationship that alignment quality decreases by 4% when substituting PaLM 2 L with PaLM 2 S, and by another 11% with PaLM 2 XS. This scaling behavior is consistent across tasks. Our Corollary 7 is consistent with this. Larger models have higher representation quality ρ and they encode values more accurately because they have more capacity and see more pretraining data. Higher ρ means the RLAIF ceiling is higher. The constitutional judgments are more accurate, and training on them yields better alignment. This also explains a puzzling finding from the same paper. RLAIF works even when the labeler is the same size as the policy. Our work makes this intelligible. The labeler and policy are the same model, but they access the model’s knowledge dif-ferently. The labeler (with constitution) accesses value representations via vc; the policy (default gen-eration) accesses them via w. If ⟨vc, v ∗⟩ > ⟨w, v ∗⟩,which Proposition 5 argues is typical, then training on the labeler’s judgments improves the policy. 
+
+8.4 Self-Improvement Without External Information 
+
+The deepest puzzle is that RLAIF works at all. No external information enters the system; the model judges its own outputs according to its own un-derstanding of the constitution. If this worked by simply memorizing “refuse harmful requests,” the base model would already do that. Our work resolves this puzzle. Self-improvement is possible because knowing and do-ing are decoupled. The representation h encodes harm (via v∗), but default generation (via w) does not fully utilize this encoding. The constitution retrieves the value-relevant information and makes it available for training. The model improves not by learning new facts, but by eliciting knowledge it already had. 
+
+## 9 Discussion 
+
+9.1 Implications for Alignment Practice 
+
+Our work suggests that RLAIF quality is bottle-necked by representation quality ρ, not by the amount of preference data. This has practical im-plications for how alignment resources should be allocated. Scaling labeler model size may be more impor-tant than scaling preference dataset size. If the ceil-ing is determined by how well the labeler encodes values, then a larger labeler with fewer preference pairs may outperform a smaller labeler with more pairs. This is consistent with the empirical find-ing that labeler size strongly affects RLAIF quality (Lee et al., 2024). Then, we posit that RLAIF will fail for value judgments that are not well-represented in pretrain-ing data. Novel ethical dilemmas, culture-specific norms, and post-training value shifts cannot be elicited if they were never encoded. For these cases, human feedback remains necessary. The generation-judgment gap suggests that eval-uation and generation should be treated as distinct capabilities. A model might excel at judging harm-ful content while still generating it under certain prompts, because the constitution-activated direc-tion and the default generation direction access 7different information. 
+
+9.2 Constitution Design as Attack Surface 
+
+Theorem 10 identifies constitution design as a po-tential attack surface, though one with significant barriers to exploitation. Unlike prompt injection, which any user can attempt, deploying a malicious constitution requires access to the training pipeline, therefore limiting the threat model to insiders, sup-ply chain compromises, or organizations that train their own models. The more realistic concern may be inadvertent harm. A well-intentioned constitu-tion emphasizing authenticity,” not being preachy,” or “respecting user autonomy” might activate direc-tions that correlate negatively with safety, without anyone recognizing the problem. The mapping from constitution text to activated direction is com-plex and not fully understood, making it difficult to predict which constitutions are safe. This suggests defensive measures even absent adversarial intent. Constitutions should be tested empirically for their effect on downstream behavior, not just inspected for surface-level safety. Multi-ple constitutions might be ensembled to reduce the impact of any single problematic direction. And the constitution design process should be treated with appropriate care, recognizing that subtle word-ing choices can have outsized effects on alignment outcomes. 
+
+9.3 Complementarity of RLAIF and RLHF 
+
+Our hypothesis suggests that RLAIF and RLHF are complementary rather than competing approaches. RLAIF elicits values that are already encoded in representations as the high-frequency distinctions that appear often in pretraining (toxic vs. non-toxic, helpful vs. unhelpful). RLHF provides signal for values that are not well-encoded such as rare distinctions, nuanced judgments, and norms that emerged after pretraining. Optimal alignment may therefore combine both approaches. RLAIF provides broad coverage at low cost, handling the 95% of cases where pre-training knowledge suffices. RLHF provides preci-sion on the long tail, correcting systematic biases and encoding new values. The information gained, we conject, is approximately additive. RLAIF contributes what can be elicited from pretraining, RLHF contributes what humans know beyond pre-training. 
+
+9.4 Iterated RLAIF 
+
+Our analysis considers a single round of RLAIF of judge, train, deploy. In practice, RLAIF is of-ten iterated. The trained model becomes the new judge, generating preferences for the next round of training. What happens under iteration? Our work suggests two possibilities. If the con-stitution consistently activates the same direction vc
+
+regardless of the base model, then iterated RLAIF converges to a fixed point where the generation di-rection aligns with vc. Alignment improves mono-tonically until it saturates at the representation qual-ity ceiling. However, if the trained model’s representations shift in ways that change which direction the con-stitution activates, the dynamics become more com-plex. The direction v(t) 
+
+> c
+
+at iteration t might drift, potentially in harmful directions. This suggests that iterated RLAIF should be monitored for dis-tributional shift, and that constitutions should be stress-tested on models at various stages of train-ing. We leave a full analysis of iterated RLAIF dynamics to future work. 
+
+## 10 Conclusion 
+
+We proposed the latent value hypothesis. RLAIF works because pretraining encodes human values in representations, and constitutional prompts elicit these values into judgments. Under a linear model, we derived conditions for self-improvement, char-acterized the RLAIF ceiling, explained the struc-ture of values, and identified adversarial constitu-tions as a risk. Our hypothesis unifies scattered em-pirical findings and provides a theoretical ground-ing for constitutional AI. The core of the hypothesis is that self-improvement value bootstrapping is possible be-cause knowing and doing are decoupled in lan-guage models. The model knows more about values than its default behavior reflects. RLAIF bridges this gap not by creating new knowledge, but by eliciting knowledge that was there all along. 
+
+## Limitations 
+
+Our work rests on several simplifying assumptions that may not hold in practice. We discuss these limitations and their implications. Assumption 1 posits that harm is a linear func-tion of representations. While empirically mo-tivated by work on refusal directions and linear probes, real value encoding is likely more complex. 8Harmfulness may depend on nonlinear interactions between features, context-dependent weightings, or hierarchical structure that linear models cannot capture. If value encoding is substantially nonlinear, our theorems provide only a first-order approximation. The qualitative insights that constitutions select di-rections, that representation quality bounds RLAIF, that adversarial constitutions exist may still hold, but the quantitative predictions would need revi-sion. Extending our framework to nonlinear value encoding (e.g. using kernel methods or neural net-work function classes) is an important direction for future work. We discuss this further in Appendix C. We take as given that constitutions activate spe-cific directions in representation space (Assump-tion 3), but we do not model how this mapping works. In reality, the relationship between consti-tution text and activated direction is mediated by complex in-context learning mechanisms that are not fully understood. This is a significant gap. Our framework cannot predict, from constitution text alone, what direction will be activated. It cannot explain why some constitutions are more effective than others, or how to design constitutions that reliably activate safety-relevant directions. A com-plete theory of RLAIF would need to incorporate a model of how prompts select directions. Essen-tially, it requires a theory of in-context learning for value elicitation, which is outside the scope of this work. We use “values” and “harm” loosely to refer to the properties that safety alignment aims to opti-mize. But human values are heterogeneous, con-tested, and context-dependent. Different communi-ties have different norms. What counts as harmful depends on who is affected and how. We also treat 
+
+v∗ as a single ground-truth direction, which is a strong simplification. In reality, there may be mul-tiple value directions corresponding to different ethical frameworks, cultural norms, or stakeholder interests. The “true harm” function H may not be well-defined, or may be defined differently by different groups. This limitation affects the interpretation of our results. When we say RLAIF improves alignment, we mean alignment with whatever values are en-coded in pretraining which reflect the biases and distributions of internet text. Whether these are the “right” values is a normative question our hypothe-sis does not address. Our analysis is static as we characterize the out-come of RLAIF without modeling the training dy-namics. We assume that preference optimization converges to the policy described in Proposition 2, but we do not analyze the optimization trajectory, sample complexity, or potential failure modes dur-ing training. In practice, preference optimization can fail in various ways like reward hacking, dis-tributional shift, mode collapse, or optimization instability. These failure modes are orthogonal to the representation-level analysis we provide. Acomplete understanding of RLAIF would need to combine our representation-level hypothesis with an analysis of optimization dynamics. While we cite existing empirical findings as ev-idence for our hypothesis, we do not provide new experiments. Our theorems make predictions that could be tested, such as that constitution effec-tiveness correlates with direction alignment, that RLAIF ceiling scales with model size, that adver-sarial constitutions degrade alignment. Validating these predictions empirically would strengthen the hypothesis. We view the current paper as providing a hypothesis that organizes existing evidence and generates testable predictions. Empirical validation is important future work. 
+
+## References             
+
+> Andy Arditi, Oscar Balcells Obeso, Aaquib Syed, Daniel Paleka, Nina Rimsky, Wes Gurnee, and Neel Nanda. 2024. Refusal in language models is me-diated by a single direction. In The Thirty-eighth Annual Conference on Neural Information Process-ing Systems .Yuntao Bai, Saurav Kadavath, Sandipan Kundu, Amanda Askell, Jackson Kernion, Andy Jones, Anna Chen, Anna Goldie, Azalia Mirhoseini, Cameron McKinnon, Carol Chen, Catherine Olsson, Christo-pher Olah, Danny Hernandez, Dawn Drain, Deep Ganguli, Dustin Li, Eli Tran-Johnson, Ethan Perez, and 32 others. 2022. Constitutional ai: Harmlessness from ai feedback. Preprint , arXiv:2212.08073. Yonatan Belinkov, Nadir Durrani, Fahim Dalvi, Has-san Sajjad, and James Glass. 2017. What do neural machine translation models learn about morphology? In Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 861–872, Vancouver, Canada. Association for Computational Linguistics. Collin Burns, Pavel Izmailov, Jan Hendrik Kirchner, Bowen Baker, Leo Gao, Leopold Aschenbrenner, Yining Chen, Adrien Ecoffet, Manas Joglekar, Jan Leike, Ilya Sutskever, and Jeff Wu. 2024. Weak-to-strong generalization: eliciting strong capabili-ties with weak supervision. In Proceedings of the
+
+941st International Conference on Machine Learning ,ICML’24. JMLR.org. Paul Christiano, Buck Shlegeris, and Dario Amodei. 2018. Supervising strong learners by amplifying weak experts. Preprint , arXiv:1810.08575. Audrey Huang, Adam Block, Dylan J Foster, Dhruv Ro-hatgi, Cyril Zhang, Max Simchowitz, Jordan T. Ash, and Akshay Krishnamurthy. 2025. Self-improvement in language models: The sharpening mechanism. In 
+
+The Thirteenth International Conference on Learning Representations .Harrison Lee, Samrat Phatale, Hassan Mansoor, Thomas Mesnard, Johan Ferret, Kellie Lu, Colton Bishop, Ethan Hall, Victor Carbune, Abhinav Rastogi, and Sushant Prakash. 2024. Rlaif vs. rlhf: scaling re-inforcement learning from human feedback with ai feedback. In Proceedings of the 41st Interna-tional Conference on Machine Learning , ICML’24. JMLR.org. Kenneth Li, Oam Patel, Fernanda Viégas, Hanspeter Pfister, and Martin Wattenberg. 2023. Inference-time intervention: eliciting truthful answers from a lan-guage model. In Proceedings of the 37th Interna-tional Conference on Neural Information Processing Systems , NIPS ’23, Red Hook, NY, USA. Curran Associates Inc. Wenbo Pan, Zhichao Liu, Qiguang Chen, Xiangyang Zhou, Yu Haining, and Xiaohua Jia. 2025. The hidden dimensions of LLM alignment: A multi-dimensional analysis of orthogonal safety directions. In Forty-second International Conference on Ma-chine Learning .Rafael Rafailov, Archit Sharma, Eric Mitchell, Stefano Ermon, Christopher D. Manning, and Chelsea Finn. 2023. Direct preference optimization: your language model is secretly a reward model. In Proceedings of the 37th International Conference on Neural In-formation Processing Systems , NIPS ’23, Red Hook, NY, USA. Curran Associates Inc. Nina Rimsky, Nick Gabrieli, Julian Schulz, Meg Tong, Evan Hubinger, and Alexander Turner. 2024. Steer-ing llama 2 via contrastive activation addition. In 
+
+Proceedings of the 62nd Annual Meeting of the As-sociation for Computational Linguistics (Volume 1: Long Papers) , pages 15504–15522, Bangkok, Thai-land. Association for Computational Linguistics. Claude E. Shannon. 1948. A mathematical theory of communication. Bell Syst. Tech. J. , 27:623–656. Alexander Matt Turner, Lisa Thiergart, Gavin Leech, David Udell, Juan J. Vazquez, Ulisse Mini, and Monte MacDiarmid. 2024. Steering language models with activation engineering. Preprint ,arXiv:2308.10248. Andy Zou, Long Phan, Sarah Chen, James Campbell, Phillip Guo, Richard Ren, Alexander Pan, Xuwang Yin, Mantas Mazeika, Ann-Kathrin Dombrowski, Shashwat Goel, Nathaniel Li, Michael J. Byun, Zifan Wang, Alex Mallen, Steven Basart, Sanmi Koyejo, Dawn Song, Matt Fredrikson, and 2 others. 2025. Representation engineering: A top-down approach to ai transparency. Preprint , arXiv:2310.01405. 
+
+## A Proof of Theorem 6 
+
+We analyze the regret from proxy-based selection. Consider choosing between two responses y1, y 2
+
+with: • True safety values Si = ⟨hi, v ∗⟩ + ϵi
+
+• Proxy values Pi = ⟨hi, v ∗⟩
+
+where ϵi ∼ N (0 , σ 2 
+
+> ϵ
+
+) i.i.d. The oracle selects i∗ =arg max i Si; RLAIF selects ˆi = arg max i Pi.
+
+Step 1: Correlation structure. The pairs (Pi, S i)
+
+are jointly normal with: 
+
+Var( Pi) = ∥v∗∥2 (28) 
+
+Var( Si) = ∥v∗∥2 + σ2 
+
+> ϵ
+
+= σ2 
+
+> S
+
+(29) 
+
+Corr( Pi, S i) = Cov( Pi, S i)
+
+σP σS
+
+= ∥v∗∥2
+
+∥v∗∥σS
+
+= ∥v∗∥
+
+σS
+
+= ρ (30) 
+
+Step 2: Oracle expected value. For i.i.d. 
+
+S1, S 2 ∼ N (0 , σ 2 
+
+> S
+
+), the expected maximum is: 
+
+E[max( S1, S 2)] = σS
+
+√π (31) 
+
+Step 3: Proxy-based expected value. By symme-try: 
+
+E[Sˆi] = E[S1 | P1 > P 2] (32) The conditional expectation of S1 given P1 follows from standard Gaussian regression: 
+
+E[S1 | P1] = ρ σS
+
+∥v∗∥ P1 (33) Therefore: 
+
+E[S1 | P1 > P 2] = ρ σS
+
+∥v∗∥ E[P1 | P1 > P 2]= ρ σS
+
+∥v∗∥ · ∥v∗∥√π = ρσ S
+
+√π (34) 
+
+Step 4: Regret bound. The regret is: 
+
+R = E[max( S1, S 2)] − E[Sˆi] (35) 
+
+= σS
+
+√π − ρσ S
+
+√π (36) 
+
+= (1 − ρ)σS
+
+√π (37) 10 This is the regret for the optimal constitution (vc = v∗). Any other constitution achieves corre-lation at most ρ between proxy and truth, yielding weakly higher regret. The bound extends from binary choice to general policies by standard argu-ments. 
+
+## B Relaxing Assumptions 
+
+The main text develops the latent value hypothesis under simplifying assumptions like linear value encoding, whitened representations, a single value direction v∗, and a linear constitution-to-direction map. This section examines the robustness of the framework by relaxing each assumption in turn. Notation follows the main text throughout. 
+
+## C Relaxing Linearity of Value Encoding 
+
+C.1 Setup 
+
+We replace Assumption 1 with a smooth general-ization. 
+
+Definition 11 (Smooth Value Encoding) . (Assump-tion 1 ′). There exists a smooth function f : Rd →
+
+R such that 
+
+S(x, y ) = f (h(x, y )) + ϵ(x, y )
+
+where ϵ is mean-zero noise independent of h.
+
+The original assumption is the special case 
+
+f (h) = ⟨h, v ∗⟩. Assumptions 2–3 are unchanged, so the RLAIF policy is still πRLAIF (y|x) ∝
+
+πbase (y|x) exp( λ⟨h(x, y ), v c⟩).
+
+C.2 General Self-Improvement Condition Lemma 12 (Exponential Tilt) . Let πλ(y) ∝
+
+π0(y) exp( λ⟨h(y), v c⟩). For any test function ϕ
+
+with Eπ0 [ϕ(h)2] < ∞:
+
+Eπλ [ϕ(h)] = Eπ0 [ϕ(h)] + λ Cov π0 (ϕ(h), ⟨h, v c⟩) + O(λ2).
+
+(38) 
+
+Proof. Write Z(λ) = Eπ0 [exp( λ⟨h, v c⟩)] , so that 
+
+Eπλ [ϕ(h)] = Eπ0 [ϕ(h) exp( λ⟨h, v c⟩)] 
+
+Z(λ) .
+
+Expanding exp( λ⟨h, v c⟩) = 1 + λ⟨h, v c⟩ + O(λ2):
+
+N (λ) = Eπ0 [ϕ(h)] + λ E π0 [ϕ(h)⟨h, v c⟩] + O(λ2), (39) 
+
+Z(λ) = 1 + λ E π0 [⟨h, v c⟩] + O(λ2). (40) Inverting Z(λ) to first order and multiplying: 
+
+N (λ)
+
+Z(λ) =  E[ϕ] + λ E [ϕ ⟨h, v c⟩]
+
+×  1 − λ E [⟨h, v c⟩] + O(λ2) (41) 
+
+= E[ϕ] + λ
+
+
+
+E[ϕ ⟨h, v c⟩]
+
+− E[ϕ] E[⟨h, v c⟩]
+
+
+
++ O(λ2) (42) 
+
+= E[ϕ] + λ Cov( ϕ(h), ⟨h, v c⟩) + O(λ2).
+
+(43) 
+
+Theorem 13 (Nonlinear Self-Improvement) . Un-der Assumption 1′ and Assumptions 2–3, for small 
+
+λ:
+
+∆Align = λ Cov base 
+
+ f (h), ⟨h, v c⟩ + O(λ2).
+
+(44) 
+
+RLAIF improves alignment if and only if 
+
+Cov base 
+
+ f (h), ⟨h, v c⟩ > 0.Proof. The alignment change is ∆Align =
+
+ERLAIF [S] − Ebase [S] = ERLAIF [f (h)] −
+
+Ebase [f (h)] , since E[ϵ] = 0 under both policies (noise is independent of h, and the policy only reweights via h). Apply Lemma 12 with ϕ =
+
+f .
+
+Remark 3 (Recovery of Linear Case) . When 
+
+f (h) = ⟨h, v ∗⟩:
+
+Cov( f (h), ⟨h, v c⟩) = Cov( ⟨h, v ∗⟩, ⟨h, v c⟩)= v∗⊤ Σw vc
+
+= ⟨Σwvc, v ∗⟩, (45) 
+
+recovering Theorem 3 of the main text. 
+
+C.3 Gaussian Representations and Stein’s Lemma 
+
+Under a distributional assumption on representa-tions, we can give the nonlinear improvement con-dition a directional interpretation. 
+
+Theorem 14 (Gaussian Nonlinear Improvement) .
+
+If h ∼ N (μ, Σw) under the base policy, and f is differentiable with E[∥∇ f (h)∥] < ∞, then: 
+
+∆Align = λ⟨Σwvc, ¯v∗⟩ + O(λ2)
+
+where ¯v∗ := Ebase [∇f (h)] is the population-average gradient of the safety function. RLAIF improves alignment if and only if ⟨Σwvc, ¯v∗⟩ > 0.
+
+11 Proof. By Stein’s lemma, for h ∼ N (μ, Σw) and differentiable f with the requisite integrability: 
+
+Cov( f (h), h i) = X
+
+> j
+
+(Σ w)ij E
+
+ ∂f ∂h j
+
+(h)
+
+
+
+.
+
+In vector form: Cov( f (h), h ) = Σ wE[∇f (h)] = Σw ¯v∗. Therefore: 
+
+Cov( f (h), ⟨h, v c⟩) = v⊤ 
+
+> c
+
+Cov( f (h), h )= v⊤ 
+
+> c
+
+Σw ¯v∗
+
+= ⟨Σwvc, ¯v∗⟩. (46) Substituting into Theorem 13 gives the result. 
+
+Remark 4 (Interpretation) . Theorem 14 is the pre-cise sense in which the linear theory is a local approximation. The true value direction v∗ gener-alizes to the expected gradient ¯v∗ = E[∇f (h)] , a global average of local value directions. For linear 
+
+f , ∇f = v∗ everywhere, so ¯v∗ = v∗. For mildly nonlinear f , ¯v∗ is close to ∇f evaluated at the mean, so the linear approximation is good. The approximation breaks down when ∇f (h) varies substantially across the support of the base distri-bution, so that ¯v∗ is a poor summary of the value structure. 
+
+C.4 Non-Monotone Values 
+
+The framework breaks down for non-monotone value functions where no single direction means “safer.” 
+
+Proposition 15 (Non-Monotone Failure) . Let 
+
+f (h) = −(⟨h, v ⟩ − τ )2 for some direction v and target τ . Then ¯v∗ = −2( E[⟨h, v ⟩] − τ )v, and the sign of ¯v∗ depends on the base model’s position rel-ative to τ . No constitution is uniformly improving across the support of h.Proof. ∇f (h) = −2( ⟨h, v ⟩ − τ )v, so ¯v∗ =
+
+E[∇f (h)] = −2( E[⟨h, v ⟩] − τ )v. If E[⟨h, v ⟩] <τ , then ¯v∗ points along +v; if E[⟨h, v ⟩] > τ , it points along −v. A constitution activating vc = v
+
+helps in the first case and hurts in the second. More-over, even when ¯v∗ has a definite sign, individual samples h with ⟨h, v ⟩ on the wrong side of τ are pushed further from the optimum. 
+
+Remark 5. This is, as far as our best efforts are concerned, a genuine limitation. The framework applies to monotone value dimensions (more hon-est is better, less harmful is better) but not to U-shaped or context-dependent value functions. Val-ues like assertiveness, formality, or detail-level, where there is an optimal amount and deviations in either direction are bad, cannot be captured by a single improvement condition. The generation-judgment gap story loses its force as there is no fixed value direction for the constitution to retrieve. 
+
+## D Non-Whitened Representations 
+
+Replace Assumption: E[hh ⊤] = Σ ̸ = I.Every instance of ⟨vc, v ∗⟩ becomes ⟨vc, Σv∗⟩ or equivalently v⊤ 
+
+> c
+
+Σv∗. The self-improvement condi-tion is: 
+
+v⊤ 
+
+> c
+
+Σwv∗ > 0
+
+where Σw = Cov πbase (h), which we already use in Theorem 3. The encoding quality becomes: 
+
+ρ2 = v∗⊤ Σv∗
+
+v∗⊤ Σv∗ + σ2
+
+> ϵ
+
+.
+
+The RLAIF ceiling (Theorem 6) carries through with ∥v∗∥2 replaced by v∗⊤ Σv∗.No qualitative change. This relaxation is book-keeping. 
+
+## E Multiple Value Directions 
+
+E.1 Setup 
+
+Replace the single value direction with m value objectives: 
+
+Si(x, y ) = ⟨h(x, y ), v ∗ 
+
+> i
+
+⟩+ϵi(x, y ), i = 1 , . . . , m 
+
+where v∗ 
+
+> 1
+
+, . . . , v ∗ 
+
+> m
+
+are (not necessarily orthogonal) value directions, and ϵi are independent noise terms. These correspond to distinct normative criteria such as helpfulness, harmlessness, honesty, respect for autonomy, etc. 
+
+Definition 16 (Multi-Objective Alignment) . The alignment profile of policy π is the vector: 
+
+A(π) =  Eπ[S1], . . . , E π[Sm] ∈ Rm.
+
+Aggregate alignment may be defined via a scalar-ization Align (π) = g(A(π)) for some aggregation function g. Common choices: • Weighted sum: g(a) = P 
+
+> i
+
+αiai with αi >
+
+0.• Worst-case: g(a) = min i ai.• Constrained: maximize a1 subject to ai ≥ τi
+
+for i ≥ 2.12 E.2 Per-Objective Improvement 
+
+Since RLAIF still shifts the generation direction by 
+
+λv c, the improvement on each objective is (apply-ing Theorem 3 per objective): 
+
+∆i := ERLAIF [Si]−Ebase [Si] = λ⟨Σwvc, v ∗ 
+
+> i
+
+⟩+O(λ2).
+
+(47) The vector of improvements is: 
+
+∆ = λ V ∗⊤ Σwvc + O(λ2)
+
+where V ∗ = [ v∗ 
+
+> 1
+
+| · · · | v∗
+
+> m
+
+] ∈ Rd×m.
+
+E.3 Pareto Structure Definition 17 (Pareto-Improving Constitution) . Aconstitution c is Pareto-improving if ∆i > 0 for all 
+
+i = 1 , . . . , m , i.e. it improves every value dimen-sion simultaneously. 
+
+Proposition 18 (Pareto-Improving Cone) . Define the cone 
+
+CPareto = {d ∈ Rd : ⟨d, v ∗ 
+
+> i
+
+⟩ > 0 for all i = 1 , . . . , m }.
+
+A constitution c is Pareto-improving if and only if 
+
+Σwvc ∈ C Pareto .Proof. Immediate from (47). 
+
+Proposition 19 (Pareto Cone Geometry) . The Pareto-improving cone CPareto is: 1. Nonempty if and only if there exists d ∈ Rd
+
+with ⟨d, v ∗ 
+
+> i
+
+⟩ > 0 for all i.2. A full half-space when m = 1 (the original single-objective case). 3. Generically nonempty when m ≤ d and the 
+
+v∗ 
+
+> i
+
+do not span a full half-space. 4. Empty if and only if 0 ∈ conv( v∗ 
+
+> 1
+
+, . . . , v ∗
+
+> m
+
+),i.e. the value directions are so conflicting that zero is in their convex hull. Proof. Part (d) follows from the separating hy-perplane theorem. CPareto = ∅ iff there is no d
+
+with V ∗⊤ d > 0 (componentwise), iff the sys-tem V ∗⊤ d > 0 is infeasible, iff by Gordan’s theorem there exist αi ≥ 0, not all zero, with P 
+
+> i
+
+αiv∗ 
+
+> i
+
+= 0 , iff 0 ∈ conv (v∗ 
+
+> 1
+
+, . . . , v ∗
+
+> m
+
+) (after nor-malizing α). 
+
+Remark 6 (Interpretation) . The convex hull con-dition 0 ∈ conv( v∗ 
+
+> 1
+
+, . . . , v ∗
+
+> m
+
+) characterizes when values are fundamentally irreconcilable when no single intervention can improve all of them simul-taneously. When this holds, every constitution nec-essarily trades off some values against others, and alignment becomes a question of which trade-offs are acceptable rather than whether improvement is possible. For typical safety objectives (helpful, harmless, honest), 0 /∈ conv( v∗ 
+
+> 1
+
+, v ∗ 
+
+> 2
+
+, v ∗ 
+
+> 3
+
+) is plausible since these values are positively correlated in most con-texts. The Pareto cone is narrow but nonempty. The difficulty of alignment is not that improvement is impossible, but that the cone is narrow as most con-stitutions improve some objectives while degrading others. 
+
+E.4 Trade-Off Characterization Definition 20 (Constitution Trade-Off Profile) . For constitution c, define the trade-off profile: 
+
+τ (c) =  sign (∆ 1), . . . , sign (∆ m) ∈ {− 1, 0, +1 }m.
+
+Proposition 21 (Trade-Off Classification) . A con-stitution c is: 1. Pareto-improving if τ (c) = (+1 , . . . , +1) .2. Trade-off inducing if τ (c) has both positive and negative entries. 3. Pareto-degrading if τ (c) = ( −1, . . . , −1) .
+
+Remark 7 (Adversarial Constitutions Revisited) .
+
+Theorem 10 (adversarial constitutions exist) ex-tends naturally. In the multi-objective setting, an adversarial constitution need not degrade all ob-jectives. It suffices to degrade one critical objective while improving others. A constitution that makes the model more helpful but less safe is adversarial in a meaningful sense, but harder to detect because the aggregate signal is ambiguous. Formally, if g(a) = min i ai (worst-case aggre-gation), then a constitution that improves m − 1
+
+objectives while degrading one will reduce align-ment whenever the degraded objective was already the bottleneck. 
+
+E.5 The Helpful–Harmless Trade-Off 
+
+Consider the canonical case m = 2 with v∗
+
+> help
+
+(helpfulness) and v∗ 
+
+> harm
+
+(harmlessness). Let θ =
+
+∠(v∗
+
+> help
+
+, v ∗
+
+> harm
+
+).
+
+Proposition 22 (Two-Objective Geometry) . Under isotropic Σw = I:1. The Pareto cone has angular width π − θ.
+
+13 2. When θ < π/ 2 (positively correlated values), the Pareto cone is “wide” and most constitu-tions are Pareto-improving. 3. When θ > π/ 2 (conflicting values), the Pareto cone is “narrow” and most constitutions in-duce trade-offs. 4. At θ = π (perfectly opposed values), CPareto =
+
+∅.Proof. In the plane spanned by v∗ 
+
+> help
+
+and v∗
+
+> harm
+
+, the Pareto cone is the intersection of the half-spaces 
+
+⟨d, v ∗
+
+> help
+
+⟩ > 0 and ⟨d, v ∗
+
+> harm
+
+⟩ > 0. This intersection has angular width π − θ, where θ is the angle be-tween the two value directions. The rest follows from π − θ > π/ 2 iff θ < π/ 2.
+
+Remark 8. The helpful–harmless trade-off is often discussed informally in the alignment literature. This gives it geometric content where the severity of the trade-off is determined by θ, the angle between the value directions in representation space. If one could measure this angle empirically (e.g. by finding the helpfulness and harmlessness directions via linear probes), one would have a quantitative measure of how difficult the trade-off is. 
+
+E.6 Optimal Constitution Under Multiple Objectives Proposition 23 (Optimal Weighted Constitu-tion) . For weighted-sum aggregation Align (π) = P 
+
+> i
+
+αiEπ[Si] with αi > 0, the optimal constitu-tion direction (maximizing first-order alignment improvement) is: 
+
+v∗ 
+
+> c
+
+∝ Σw
+
+X
+
+> i
+
+αiv∗ 
+
+> i
+
+= Σ wV ∗α. 
+
+Proof. The first-order improvement is 
+
+λ P 
+
+> i
+
+αi⟨Σwvc, v ∗ 
+
+> i
+
+⟩ = λ⟨Σwvc, V ∗α⟩. Max-imizing over vc with ∥vc∥ = 1 gives 
+
+vc ∝ ΣwV ∗α by Cauchy–Schwarz applied to ⟨Σwvc, V ∗α⟩ = ⟨vc, ΣwV ∗α⟩.
+
+Remark 9. This suggests that constitution design is implicitly a multi-objective optimization problem. The weights α encode which values the designer prioritizes. Different constitutions correspond to different implicit weightings. This makes consti-tution design a normative choice, not merely a technical one, which the single-objective framing obscures. 
+
+## F Constitution-to-Direction Mapping 
+
+Replace Assumption 3 with a smooth nonlinear map c 7 → Fc, where Fc : Rd → R gives the prefer-ence score (not necessarily linear in h): 
+
+Jc(y1 ≻ y2 | x) = σ Fc(h(x, y 1)) −Fc(h(x, y 2)) .
+
+The implicit reward is now rc(x, y ) =
+
+Fc(h(x, y )) , and the RLAIF policy becomes: 
+
+log πRLAIF (y|x) = ⟨h, w ⟩ + λF c(h) + g′(x).
+
+For small λ, the alignment change is: 
+
+∆Align = λ Cov base (f (h), F c(h)) + O(λ2).
+
+This is well-defined and the improvement con-dition Cov( f (h), F c(h)) > 0 is interpretable. RLAIF helps when the constitution’s implicit re-ward correlates with true safety across the base distribution. The clean story breaks down at the next level of characterizing which constitutions (as text) produce which functions Fc. This requires modeling how prompt text is processed by the transformer, how in-context instructions modify the model’s compu-tation, and how the modified computation produces a preference function over representations. Each of these involves transformer internals. The map c 7 → Fc goes through attention patterns, MLP computations, and residual stream dynamics that are the subject of mechanistic interpretability re-search. There is no existing compact analytical model for this map that would support further theo-retical development. Even without modeling c 7 → Fc, we can charac-terize the “promptable set”: 
+
+Definition 24 (Promptable Set) . The promptable set is F = {Fc : c ∈ C} , the set of all preference functions achievable by some constitution text. 
+
+Proposition 25 (Limits of RLAIF) . The maximum achievable alignment improvement via RLAIF is: 
+
+sup 
+
+> c∈C
+
+∆Align (c) = λ sup  
+
+> F∈F
+
+Cov base (f (h), F (h))+ O(λ2).
+
+This is bounded above by λ · std (f (h)) ·
+
+sup F ∈F std (F (h)) (by Cauchy–Schwarz), with equality iff there exists F ∈ F perfectly correlated with f (h).
+
+This reformulates the RLAIF ceiling in terms of the expressiveness of the promptable set. The ceiling from encoding quality ( ρ) and the ceiling 14 from promptability are distinct bottlenecks. Even if values are perfectly encoded ( ρ = 1 ), if no con-stitution text activates the right preference function (f /∈ F ), RLAIF cannot achieve optimal align-ment. 15

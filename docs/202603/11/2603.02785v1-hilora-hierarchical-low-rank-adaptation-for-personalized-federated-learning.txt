@@ -1,0 +1,1040 @@
+Title: HiLoRA: Hierarchical Low-Rank Adaptation for Personalized Federated Learning
+
+URL Source: https://arxiv.org/pdf/2603.02785v1
+
+Published Time: Wed, 04 Mar 2026 02:00:48 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# HiLoRA: Hierarchical Low-Rank Adaptation for Personalized Federated Learning 
+
+## Zihao Peng 1, Nan Zou 1, Jiandian Zeng 1, Guo Li 1, Ke Chen 1, Boyuan Li 2, and Tian Wang 1,B
+
+1Beijing Normal University, 2Zhengzhou University 
+
+{pzh cs, 202311109042, liguo, kechen }@mail.bnu.edu.cn l202311841010602@gs.zzu.edu.cn, {jiandian, tianwang }@bnu.edu.cn 
+
+## Abstract 
+
+Vision Transformers (ViTs) have been widely adopted in vi-sion tasks due to their strong transferability. In Federated Learning (FL), where full fine-tuning is communication-heavy, Low-Rank Adaptation (LoRA) provides an efficient and communication-friendly way to adapt ViTs. However, existing LoRA-based federated tuning methods overlook la-tent client structures in real-world settings, limiting shared representation learning and hindering effective adaptation to unseen clients. To address this, we propose HiLoRA, a hierarchical LoRA framework that places adapters at three levels: root, cluster, and leaf, each designed to capture global, subgroup, and client-specific knowledge, respec-tively. Through cross-tier orthogonality and cascaded op-timization, HiLoRA separates update subspaces and aligns each tier with its residual personalized objective. In par-ticular, we develop a LoRA-Subspace Adaptive Cluster-ing mechanism that infers latent client groups via sub-space similarity analysis, thereby facilitating knowledge sharing across structurally aligned clients. Theoretically, we establish a tier-wise generalization analysis that sup-ports HiLoRA’s design. Experiments on ViT backbones with CIFAR-100 and DomainNet demonstrate consistent improvements in both personalization and generalization. 
+
+## 1. Introduction 
+
+Federated Learning (FL) enables collaborative training across distributed clients without sharing raw data [25]. With the rapid progress of large-scale Foundation Models (FMs), combining FL and FMs has become a compelling paradigm [3, 8, 50]. Pretrained FMs provide powerful ini-tialization that accelerates convergence and enhances gen-eralization, while FL alleviates the data-sharing bottleneck of cross-domain data collection. 
+
+> B
+
+Corresponding Author. Personalized LoRA           
+
+> Overfitting!
+> Pre-trained ViT Global LoRA
+> One-size-fits-all!
+> Client 6
+> Client 3
+> Client 5
+> Client 1
+> Client 2 Client 4
+> Client 6
+> Client 3
+> Client 5
+> Client 1
+> Client 2 Client 4
+> Cluster-shared
+> knowledge
+> （a）Gradient drift （b）Cluster knowledge loss
+> Ideal LoRA
+> Actual Aggragation
+> Decision Boundary
+> (ideal vs. overfitted )
+> （c）Prone to overfitting
+> Pre-trained ViT
+> Cluster 1
+> Cluster 2
+> Cluster 3
+> Non-IID Local Data
+> Client
+> ID1
+> ID2
+> ID3
+> ID4
+> ID5
+> ID6
+> motor
+> -cycle
+> bicycle
+> apple
+> pear
+> butterfly
+> bee
+> Group Consensus (insect)
+> ❌
+> ❌
+> divergence
+
+Figure 1. Challenges of Dual-LoRA . Six clients own non-IID data that form three latent clusters (vehicles, insects, fruits). Global LoRA forces a “one-size-fits-all” adapter, causing (a) gradient drift and (b) loss of cluster-level cues. Fully personalized LoRA re-moves sharing but (c) overfits scarce local data. These limitations motivate a hierarchical LoRA design. 
+
+Building upon these advantages, recent research has increasingly explored how this collaboration between FL and FMs can be leveraged in specific domains. Among them, Computer Vision (CV) has emerged as one of the most promising areas, owing to the vast amount of visual data distributed across diverse devices and institutions. In CV, Vision Transformers (ViTs) are representative founda-tion models that transfer across diverse downstream tasks [14, 18, 49]. However, full fine-tuning of ViTs in FL incurs prohibitive communication overhead [8, 20, 32], motivat-ing Parameter-Efficient Fine-Tuning (PEFT). Among PEFT methods, Low-Rank Adaptation (LoRA) [16, 47] achieves performance close to full fine-tuning while reducing com-munication costs, making it a promising solution for effi-cient FM adaptation in FL [1, 30, 39, 40]. Although PEFT enables large FMs to be deployed in FL, the long-standing tension between global utility and local personalization re-mains unresolved [13, 26, 36]. Under the prevalent non-IID setting, a single global model neither generalizes well to diverse client distributions nor adapts to client-specific patterns, leading to client drift and degraded performance 
+
+> arXiv:2603.02785v1 [cs.CV] 3 Mar 2026
+
+[12, 35]. This gap requires an adaptation mechanism that can maintain PEFT-level efficiency while reconciling per-sonalization and generalization in FM-driven FL systems. Recent studies extend PEFT to FL by equipping each client with two distinct LoRA adapters, one aggregated globally and the other tuned locally [21, 44], to account for both personalization and generalization, as illustrated in Fig. 1. Although this “dual-adapter” paradigm improves upon fully global or fully local LoRA, it still has some in-herent drawbacks. First, severe data heterogeneity causes clients to pursue divergent local optima, producing gra-dient drift that pulls the aggregated global adapter away from the optimal global solution [9, 19]. Second, local adapters trained only on limited and skewed client data tend to overfit, leading to brittle decision boundaries and poor in-client generalization. Third, dual-adapter designs neglect the latent group structures inherent in real-world FL de-ployments, where different clients may naturally form sub-groups due to data characteristics. Thus, the dispersal of subgroup-shared knowledge is either diluted into the global adapter or trapped within local ones, impeding transfer across related clients [10, 22]. Consequently, group-specific information remains under-exploited, and the trade-off be-tween generalization and personalization is still coarse-grained, leaving potential performance gains unrealized. To address these limitations, we introduce HiLoRA, a hierarchical low-rank adaptation framework for federated foundation models. HiLoRA organizes LoRA adapters into three hierarchical tiers: root, cluster, and leaf levels, and enforces cross-tier orthogonality to disentangle global and personalized knowledge. (1) The Root-LoRA serves as the globally shared adapter, capturing common patterns across all clients and providing the foundation for subse-quent cluster and leaf adaptations. (2) The Cluster-LoRA modules are shared among clients with similar data distri-butions. To identify such client communities, we propose a 
+
+LoRA-Subspace Adaptive Clustering method that automati-cally partitions clients into clusters, each associated with a shared adapter. By explicitly modeling these latent client clusters, the cluster tier captures subgroup-shared represen-tations and aggregates within clusters, thereby mitigating heterogeneity-induced gradient drift and promoting con-sistent learning dynamics. (3) The Leaf-LoRA is unique to each client, capturing residual patterns specific to each client’s data, with regularized updates on local data that al-leviate overfitting and improve in-client generalization. Fi-nally, we conduct a generalization analysis to demonstrate that clustering and cross-tier orthogonality jointly tighten the upper bound on client-level excess risk, thereby provid-ing theoretical support for HiLoRA’s hierarchical design. Our main contributions are summarized as follows: • We introduce HiLoRA, a novel hierarchical low-rank adaptation framework for FL that organizes LoRA adapters into root, cluster, and leaf tiers, with each tier having its own personalized objective. • We develop a clustering mechanism based on LoRA sub-space similarity, which infers latent client groups via principal-angle analysis and enables knowledge sharing among aligned clients within each cluster. • We provide a generalization analysis for HiLoRA, show-ing that orthogonality mitigates cross-tier interference and that clustering reduces distributional discrepancies, jointly yielding tighter generalization bounds. • Extensive experiments on the CIFAR-100 and Domain-Net datasets show that HiLoRA outperforms state-of-the-art methods in both personalization and generalization. 
+
+## 2. Preliminaries 
+
+2.1. LoRA Recap 
+
+Following [4, 16], a pre-trained weight matrix W0 ∈ Rp×q
+
+is frozen, and the adapted weight W is obtained by adding a learnable low-rank update ∆W parameterized as the prod-uct of two factors: 
+
+W = W0 + ∆ W, ∆W = BA . (1) Here, B and A are learned low-rank factors with B ∈ Rp×r
+
+and A ∈ Rr×q , where r ≪ min {p, q }. Since r is much smaller than the dimensions of W0, the number of train-able parameters is substantially reduced. In addition, the additive form in Eq. (1) naturally lends itself to extensions involving multiple LoRA modules, leading to a hierarchical composition that can be formally expressed as: 
+
+W = W0 +
+
+> H
+
+X
+
+> h=1
+
+∆Wh, (2) with h ∈ { 1, . . . , H } indexing hierarchy levels and ∆Wh
+
+denoting the update at level h.
+
+2.2. Three-Level LoRA 
+
+Building on the hierarchical formulation in Eq. (2), we in-troduce a three-level structure over the N clients, consisting of root, cluster, and leaf levels. The clients are partitioned into K disjoint clusters {C j }Kj=1 , and adapters are attached at each level as follows: • Root: a single adapter (Br , Ar ) shared by all N clients; • Cluster: adapters {(Bc,j , Ac,j )}Kj=1 , each derived from the root and shared among clients in the cluster Cj ;• Leaf: adapters {(Bℓ,i , Aℓ,i )}Ni=1 , each associated with the cluster Cj(i) of client i, and unique to client i.For client i in cluster Cj(i), the effective LoRA update is 
+
+∆Wi = Br Ar + Bc,j (i)Ac,j (i) + Bℓ,i Aℓ,i , (3) where j(i) ∈ { 1, . . . , K } denotes the cluster assignment of client i. The three terms correspond respectively to (Br , Ar ) as a global backbone, (Bc,j (i), Ac,j (i)) captur-ing intra-cluster commonality, and (Bℓ,i , Aℓ,i ) modeling client-specific personalization. 
+
+2.3. Federated Learning Setup 
+
+We consider a personalized Federated Learning (pFL) setup with N clients. Client i holds a private dataset Di =
+
+{(x(k) 
+
+> i
+
+, y (k) 
+
+> i
+
+)}ni 
+
+> k=1
+
+that remains on-device, where ni = |D i|.Each input x ∈ Rd has a label y ∈ { 1, . . . , C }, and the pre-dictor is f (·; W) : Rd → RC . For client i, the personalized model is written as Wi = W0 +∆ Wi. The local empirical risk is ℓi(Wi) = 1
+
+> ni
+
+Pni 
+
+> k=1
+
+L f (x(k) 
+
+> i
+
+; Wi), y (k)
+
+> i
+
+, where L
+
+denotes the cross-entropy loss. Unlike standard FL, which optimizes a single shared model W via min W
+
+PNi=1 πi ℓi(W), the pFL formulation optimizes client-specific models 
+
+{Wi}Ni=1 that share a hierarchical LoRA parame-terization. Specifically, for client i, we denote by 
+
+Ai(Φ) = (Br , Ar ), (Bc,j (i), Ac,j (i)), (Bℓ,i , Aℓ,i )
+
+the subset on its root–cluster–leaf path, and compose the effective model as Wi(Φ) = W0 + P 
+
+> (B,A)∈A i(Φ)
+
+B A .We consider the following aggregated objective: 
+
+min 
+
+> Φ
+> N
+
+X
+
+> i=1
+
+πi ℓi
+
+ Wi(Φ) , (4) where πi = niPNu=1 nu
+
+are data-proportional weights. Each client performs local updates and periodically communi-cates with the server without sharing raw data. 
+
+## 3. The HiLoRA Framework 
+
+There are three fundamental challenges in FL with hierar-chical low-rank adaptation: • Knowledge hierarchy (Q1): How can we disentangle global consensus, cluster-level commonalities, and client-specific patterns within a unified low-rank representation? • Adaptive clustering (Q2): How can we discover latent client structures from LoRA updates without pre-defined groups and promote effective mutual knowledge sharing? • Tier-wise training (Q3): How can we design acascaded, tier-wise optimization scheme for training root–cluster–leaf LoRA adapters that achieves hierarchi-cal personalization? HiLoRA tackles these challenges by combining orthog-onal low-rank decomposition ( Q1 ), adaptive clustering in the LoRA-update subspace ( Q2 ), and cascaded tier-wise optimization with cross-tier orthogonality ( Q3 ) in a unified workflow, as illustrated in Fig. 2. 
+
+3.1. Hierarchical Orthogonal LoRA Decomposition 
+
+HiLoRA models knowledge at multiple granularities by de-composing each client’s weight update ∆Wi ∈ Rp×q into three orthogonally constrained low-rank components: 
+
+∆Wi = Br Ar + Bc,j (i)Ac,j (i) + Bℓ,i Aℓ,i . (5) Here, each basis matrix B ∈ Rp×r specifies the direction of adaptation, i.e., where to adapt , while its paired coeffi-cient matrix A ∈ Rr×q controls the magnitude, i.e., how much to adapt , along those directions. To prevent different tiers from adapting along overlapping directions, we aim to enforce pairwise orthogonality on their column spaces for each path r → j(i) → i:
+
+∀ U̸ = V ∈ {R (Br ), R(Bc,j (i)), R(Bℓ,i )} : U ⊥ V, 
+
+(6) where R(B) ⊆ Rp denotes the column space of B.By encouraging orthogonality among the basis matrices 
+
+B, we ensure that each tier tends to isolate its intended residual component. In particular, Br provides global 
+
+adaptation directions and Ar scales them to encode trends shared across all clients, while Bc,j defines shared cluster-level directions and Ac,j weights them to capture intra-cluster commonalities. Finally, Bℓ,i supplies client-specific 
+
+directions and Aℓ,i modulates them to represent residuals not explained by higher tiers. This decoupling of direction and magnitude allows HiLoRA to naturally support global, cluster-level, and client-specific personalization. 
+
+3.2. LoRA-Subspace Adaptive Clustering 
+
+To identify client groups without exposing raw data, we cluster clients based on the similarity of their LoRA sub-spaces. Specifically, for each client i in communication round t, we extract the LoRA basis B(t) 
+
+> i
+
+, which encodes its adaptation directions. The basis is subsequently normal-ized to a unit Frobenius norm ˆB(t) 
+
+> i
+
+= B(t) 
+
+> i
+
+/∥B(t) 
+
+> i
+
+∥F , and stabilized across rounds via an EMA with decay λ ∈ (0 , 1) :
+
+¯B(t) 
+
+> i
+
+= λ ¯B(t−1)  
+
+> i
+
++ (1 − λ) ˆB(t) 
+
+> i
+
+, ¯B(t) 
+
+> i
+
+← ¯B(t)
+
+> i
+
+∥ ¯B(t) 
+
+> i
+
+∥F
+
+. (7) We then compute the SVD of ¯B(t) 
+
+> i
+
+and retain the top-r left singular vectors U(t) 
+
+> i
+
+∈ Rp×r , which span the subspace of adaptation directions and provide reparameterization invari-ance and noise robustness. For a single module, the pair-wise distance is defined as follows: 
+
+dij = 1 − 1
+
+r
+
+> r
+
+X
+
+> s=1
+
+cos 2 θs = 1 − 1
+
+r U(t)⊤ 
+
+> i
+
+U(t) 
+
+> j
+> 2
+> F
+
+, (8) where θs is the s-th principal angle whose cosine equals the s-th singular value of U(t)⊤ 
+
+> i
+
+U(t) 
+
+> j
+
+. If multiple LoRA-instrumented layers are used, dij is computed for each layer and then averaged over the layers. Collecting all dij yields Root 
+
+Cluster 
+
+Leaf     
+
+> where denotes the LoRA update of client
+
+（A）Root Stage 
+
+（B）Clustering  （D）Leaf Stage 
+
+.
+
+. 
+
+> (A-2) Local Training
+> Local Loss:
+> (A-1) Distribute Root LoRA
+> (A-3) Aggregation
+
+Hierarchical Low-Rank Adaptation     
+
+> Client 6
+> Client 3 Client 5
+> Client 1
+> Client 2 Client 4
+> Cluster 1 Cluster 2
+> Cluster 3
+> Freezing
+> Collect
+> Gradient
+> In t-th round
+> For each client and each LoRA layer
+> (Normalization )
+> (Ren ormalization )
+> (EMA )
+> Distance Matrix
+> Distance:
+> SC Clustering
+> Construct
+> Output:
+> (C-2) Local Training
+> Local Loss:
+
+（C）Cluster Stage  
+
+> Ortho-Isolation ：
+> Root vs. Cluster
+> (C-3) Aggregation
+
+e.g., cluster 2  includes  client1, client5     
+
+> Freezing
+> (C-1) Distribute Cluster LoRA
+> Local Loss:
+> Ortho-Isolation ：
+> for each client
+> (D-1) Local update
+> Cluster vs. Leaf
+> Root vs. Leaf
+> ①.Root LoRA converged
+> ②. Cluster LoRA converged
+> ③. Leaf LoRA converged Freezing
+> Leaf LoRA :
+> Orthogonal subspaces ：
+> (Subspace extraction )
+
+Figure 2. HiLoRA overview. Top-right: cascaded tier-wise optimization with progressive freezing. (A) Train the Root-LoRA as the global adapter; (B) Perform LoRA-Subspace Adaptive Clustering to identify client communities. (C) Update the Cluster-LoRA with an orthogonality constraint to the frozen root; (D) Adapt the Leaf-LoRA orthogonal to both root and cluster tiers. Each client i with cluster index j = j(i) updates its effective LoRA as ∆Wi = Br Ar + Bc,j Ac,j + Bℓ,i Aℓ,i .
+
+the client–client distance matrix: 
+
+Ddist =
+
+
+
+0 d12 · · · d1N
+
+d21 0 · · · d2N
+
+... ... . . . ...
+
+dN 1 dN 2 · · · 0
+
+ . (9) Finally, the matrix Ddist is converted into an affinity ma-trix S using a Gaussian kernel Sij = exp   − d2 
+
+> ij
+
+/(2 σ2)
+
+with Sii = 1 and σ set to the median off-diagonal dis-tance, and then proceed to run Spectral Clustering (SC) on S [27]. The number of clusters is chosen by sweep-ing K ∈ [Kmin , K max ] and selecting the maximizer of the eigengap of the normalized Laplacian spectrum [37], yield-ing {C j }K⋆
+
+> j=1
+
+, which is then used in the subsequent cluster stage of the cascaded optimization. Intuitively, aligning clients that have similar adapta-tion subspaces R(B) strengthens within-cluster knowl-edge sharing and suppresses cross-cluster interference dur-ing later optimization stages. In contrast, non-hierarchical methods treat clients in isolation, hindering targeted sharing and amplifying cross-client negative transfer. 
+
+3.3. Cascaded Tier-wise Optimization 
+
+We train the adapters in a cascade: first the root, then the cluster, and finally the leaf. At each stage, we op-timize the active tier on its designated data while freez-ing the previously learned adapters, so subsequent stages emphasize directions that are complementary to the frozen ones. In each stage, we minimize the objective for Eq. (4) over the active tier’s adapters while keeping the others fixed, and we terminate that stage once a standard stop-ping criterion is met [28]. To reduce cross-tier redundancy, we apply orthogonality regularization to the basis matrices 
+
+{Br , Bc,j (i), Bℓ,i } along each path of each client i from root to cluster to leaf, which discourages reuse of directions and mitigates interference. 
+
+Root stage. We learn a single global root adapter (Br , Ar )
+
+shared by all clients by minimizing the weighted loss over all N clients: 
+
+(B⋆r , A⋆r ) = arg min   
+
+> Br,Ar
+> N
+
+X
+
+> i=1
+
+πroot  
+
+> i
+
+ℓi
+
+ W0 + Br Ar
+
+, (10) where πroot  
+
+> i
+
+= niPNu=1 nu
+
+denotes the aggregation weight for client i. At round t, each client i uses (B(t) 
+
+> r
+
+, A(t) 
+
+> r
+
+) as ini-tialization and performs a local update on its dataset Di
+
+to obtain (B(t) 
+
+> r,i
+
+, A(t) 
+
+> r,i
+
+). The server aggregates in product space: ∆W(t+1)  
+
+> r
+
+= PNi=1 πroot  
+
+> i
+
+B(t) 
+
+> r,i
+
+A(t) 
+
+> r,i
+
+, which avoids the unwanted cross terms caused by averaging B and A
+
+separately [1, 30, 33]. It then computes the truncated SVD to rank r, ∆W(t+1)  
+
+> r
+
+= UrΣrVr⊤, and sets B(t+1)  
+
+> r
+
+:= 
+
+Ur, A(t+1)  
+
+> r
+
+:= ΣrVr⊤. Training proceeds for at most 
+
+Troot rounds, or until the relative step-size stopping criterion is met [28], e.g., ρt = ∆W(t+1)      
+
+> r−∆W(t)
+> rF
+> ∆W(t)
+> rF+ε
+
+≤ τrel . If triggered, we freeze B⋆r := B(t+1)  
+
+> r
+
+, A⋆r := A(t+1)  
+
+> r
+
+.
+
+Cluster stage. Given the clusters {C j }K⋆ 
+
+> j=1
+
+produced by the LoRA-Subspace Adaptive Clustering in Sec. 3.2 and the frozen root (B⋆r , A⋆r ), cluster j solves: 
+
+(B⋆c,j , A⋆c,j ) = arg min  
+
+> Bc,j ,Ac,j
+
+X
+
+> i∈C j
+
+πcluster 
+
+> i,j
+
+h
+
+ℓi
+
+
+
+W0 + B⋆r A⋆r
+
++Bc,j Ac,j 
+
+
+
++ γc B⋆⊤ 
+
+> r
+
+Bc,j 
+
+> 2
+> F
+
+i
+
+.
+
+(11) Here πcluster  
+
+> i,j
+
+= niP  
+
+> u∈C jnu
+
+is the aggregation weight, and 
+
+γc > 0 controls the regularization strength, encouraging 
+
+R(Bc,j ) ⊥ R (B⋆r ) to reduce cross-tier interference. At round t, cluster j aggregates the client-level factors within 
+
+Cj in product space: ∆W(t) 
+
+> c,j
+
+= P 
+
+> i∈C j
+
+πcluster 
+
+> i,j
+
+ B(t) 
+
+> c,i
+
+A(t)
+
+> c,i
+
+,
+
+and apply the same relative step-size criterion as in the root stage to obtain (B⋆c,j , A⋆c,j ), after which cluster j is frozen. 
+
+Leaf stage. With (B⋆r , A⋆r ) and (B⋆c,j , A⋆c,j ) frozen, client 
+
+i ∈ C j learns (Bℓ,i , Aℓ,i ) on Di with cross-tier penalties: 
+
+(B⋆ℓ,i , A⋆ℓ,i ) = arg min  
+
+> Bℓ,i ,Aℓ,i
+
+ℓi
+
+
+
+W0 + B⋆r A⋆r + B⋆c,j A⋆c,j 
+
++ Bℓ,i Aℓ,i 
+
+
+
++ γc B⋆⊤ 
+
+> r
+
+Bℓ,i  
+
+> 2
+> F
+
++ γℓ B⋆⊤ 
+
+> c,j
+
+Bℓ,i  
+
+> 2
+> F
+
+.
+
+(12) Here j = j(i) is the cluster index of client i, and γc, γ ℓ > 0
+
+control the cross-tier orthogonality so that the leaf captures only client-specific residuals. Training halts under the same relative step-size criterion, and (B⋆ℓ,i , A⋆ℓ,i ) is frozen. 
+
+3.4. Personalization and Generalization in HiLoRA 
+
+We now discuss how this design facilitates personalization for participating clients and generalization to new clients. 
+
+Personalized path. Personalization is achieved by com-posing only the adapters along client i’s route Ai(Φ) = 
+
+{(B⋆r , A⋆r ), (B⋆c, j (i), A⋆c, j (i)), (B⋆ℓ, i , A⋆ℓ, i )}, yielding the effective model Wi = W0 + P 
+
+> (B,A)∈A i(Φ)
+
+B A . This path-specific assembly ensures cluster-level specialization while suppressing interference from unrelated branches. 
+
+Generalization to new clients. For a new client u, we as-sign a cluster using the same subspace metric as in LoRA-Subspace Adaptive Clustering. Specifically, we extract a lightweight probe basis Bu by running a few local gradient steps, compute its top-r left singular vectors Uu, and de-termine j⋆(u) = arg max j mean 
+
+
+
+cos 2 Θ Uu, Uc,j 
+
+
+
+,
+
+where Uc,j denotes the subspace of cluster j, and Θ( ·, ·)
+
+represents the set of principal angles. This procedure en-ables immediate inference through root and cluster tiers, while the leaf adapter can be instantiated and refined online. 
+
+## 4. Theoretical Guarantees 
+
+Notation. We consider N clients partitioned into K clus-ters, as in Eq. (3). Client i has data distribution Di and dataset Di ∼ D ni 
+
+> i
+
+. Let D denote the global distribution induced by {Di}Ni=1 and Cj the cluster distribution induced by {Di : i ∈ C j }. We independently draw global samples 
+
+S ∼ D m, cluster-level samples Sj ∼ C mj 
+
+> j
+
+, and client-level samples Di ∼ D ni 
+
+> i
+
+. For any function class F and dis-tributions Q1, Q 2, disc F (Q1, Q 2) := sup f ∈F LQ1 (f ) −
+
+LQ2 (f ) . Let H be the hypothesis class consistent with the HiLoRA parameterization Φ in Eq. (4). Denote by 
+
+Gr , Gc, Gℓ the root, cluster, and leaf prediction classes, and let the corresponding loss classes be Fr := { L(h) : h ∈Gr }, Fc := { L(h) : h ∈ G c}, Fℓ := { L(h) : h ∈ G ℓ}. Let 
+
+Y = {1, . . . , C } and the predictor output lie in RC . The loss L : RC × Y → [0 , 1] is bounded. 
+
+Assumption 1 (Orthogonal LoRA Subspaces) . For each client i with cluster j(i), there exist subspaces 
+
+Ur , {U (j) 
+
+> c
+
+}Kj=1 , {U (i) 
+
+> ℓ
+
+}Ni=1 ⊆ Rp×q such that, w.r.t. the Frobenius inner product, U (j(i))  
+
+> c
+
+⊥ Ur and 
+
+U (i) 
+
+> ℓ
+
+⊥ (Ur ⊕ U (j(i))  
+
+> c
+
+). Tier-wise LoRA updates sat-isfy ∆Wr ∈ Ur , ∆W (j(i))  
+
+> c
+
+∈ U (j(i))  
+
+> c
+
+, ∆W (i) 
+
+> ℓ
+
+∈ U (i) 
+
+> ℓ
+
+. We define the restricted loss classes: 
+
+F⊥(j) 
+
+> c
+
+:= {(x, y ) 7 → L(h(r)(x; W0 + ∆ Wc), y )},
+
+F⊥(i) 
+
+> ℓ
+
+:= {(x, y ) 7 → L(h(r,c )(x; W0 + ∆ Wℓ), y )}.
+
+Theorem 1 (HiLoRA Excess-Risk Generalization Bound) . Under Assumption 1, for any client i and 
+
+δ ∈ (0 , 1) , with a probability of at least 1 − 3δ,
+
+LDi
+
+ h(r,c,ℓ ) − inf  
+
+> h∈H
+
+LDi (h)
+
+≤  ˆLS (h(r)) − inf 
+
+> h∈H
+
+ˆLS (h) + 4 bRS (F) + 6 
+
+q log(2 /δ )2m
+
++ 2 disc F (Di, D ) +   ˆLSj(i) (h(r,c )) − ˆLSj(i) (h(r))
+
++ 4 bRSj(i)
+
+ F⊥(j(i)) 
+
+> c
+
+ + 2 disc F⊥(j(i)) 
+
+> c
+
+(Di, C j(i))+ 6 
+
+r log(2 /δ )2mj(i) +   ˆLDi (h(r,c,ℓ )) − ˆLDi (h(r,c ))
+
++ 4 bRDi
+
+ F⊥(i)
+
+> ℓ
+
+ + 6 
+
+q log(2 /δ )2ni . (13) Theorem 1 is proved using Lemmas 1–2, with detailed proofs deferred to Appendix B. We partition the bound in (13) into three components. First, the Generalization ( GE )terms comprise the empirical Rademacher complexity 
+
+4 bRS (F), 4 bRSj(i) (F⊥(j(i))  
+
+> c
+
+), and 4 bRDi (F⊥(i) 
+
+> ℓ
+
+), together with their concentration terms 6
+
+q log(2 /δ )2m , 6
+
+q log(2 /δ )2mj(i) , and 
+
+6
+
+q log(2 /δ )2ni . Second, the Distribution Shift ( DS ) terms con-sist of 2 disc F (Di, D ) and 2 disc F⊥(j(i)) 
+
+> c
+
+(Di, C j(i)). Third, the Empirical Optimization ( EO ) terms are   ˆLS (h(r)) −
+
+inf h∈H ˆLS (h) (≥ 0) ,   ˆLSj(i) (h(r,c )) − ˆLSj(i) (h(r)) (≤
+
+0) , and   ˆLDi (h(r,c,ℓ )) − ˆLDi (h(r,c )) (≤ 0) .
+
+Corollary 1. Under Assumption 1, for any client i and δ ∈
+
+(0 , 1) , with a probability of at least 1 − 3δ,
+
+LDi
+
+ h(r,c,ℓ ) − inf  
+
+> h∈H
+
+LDi (h) ≤ GE + DS + EO . (14) 
+
+Remark 1. HiLoRA tightens the GE terms via sam-ple amplification and orthogonality. The root depends on 
+
+m = PNu=1 nu and the cluster-level bound on mj(i) =
+
+P 
+
+> t∈C j(i)
+
+nt, yielding O(m−1/2) and O(m−1/2 
+
+> j(i)
+
+) rates. Meanwhile, F⊥(j(i))  
+
+> c
+
+⊆ F c and F⊥(i) 
+
+> ℓ
+
+⊆ F ℓ, orthogonal-ity narrows the classes further reducing their complexities. 
+
+Remark 2. The DS terms are reduced via cluster-aware grouping by assigning client i to j(i), making Di closer to 
+
+Cj(i), thereby lowering disc F⊥(j(i)) 
+
+> c
+
+(Di, C j(i)).
+
+Remark 3. With orthogonality ( U (j(i))  
+
+> c
+
+⊥ Ur , U (i) 
+
+> ℓ
+
+⊥
+
+(Ur ⊕ U (j(i))  
+
+> c
+
+)), the cluster and leaf empirical terms are nonincreasing on their own data. Defining gains 
+
+Gc(i) := ˆLSj(i) (h(r)) − ˆLSj(i) (h(r,c )) ≥ 0 and Gℓ(i) := ˆLDi (h(r,c )) − ˆLDi (h(r,c,ℓ )) ≥ 0, these appear in the bound as ( −Gc(i) − Gℓ(i)), tightening the bound numerically. 
+
+## 5. Experiments 
+
+5.1. Experimental Setup 
+
+Model and Datasets. We adopt the ViT-Base pretrained on ImageNet-21K as the backbone [5] and insert LoRA adapters into the query and value projections of each at-tention layer. Experiments are conducted on CIFAR-100 and DomainNet. For CIFAR-100, we instantiate 100 clients with three label-skewed non-IID partitions. GL–Dir( α)
+
+samples client label priors from a Dirichlet distribution over all classes [9], using α = 0 .3 for strong skew. SC–Dir( α)
+
+extends Dirichlet partitioning to superclasses [17, 46, 48]; each client’s superclass prior is drawn from a Dirichlet with 
+
+α = 3 , producing data concentrated on one to two super-classes. Patho(10) follows the pathological non-IID setup with 10 classes per client [25]. For DomainNet, we con-struct 90 clients across six domains, each representing a dis-   
+
+> (a) Patho(10) (b) SC–Dir(3)
+
+Figure 3. t-SNE of clustering results on CIFAR-100. Clients are visualized by Jensen–Shannon distances of their label distribu-tions: (a) Patho-10, K⋆=10 ; (b) SC–Dir( α=3 ), K⋆=20 .
+
+tinct domain skew , where intra-domain label sampling fol-lows a Dirichlet prior distribution with α set to 0.6 [34, 42]. Consistent with [38, 43], we use the ten most frequent classes to build a sub-dataset for our experiments. 
+
+Baselines. We compare HiLoRA with nine LoRA-based federated learning baselines. Local-LoRA fine-tunes local data without aggregation. Single-branch federated adapters include FedIT [45], which directly aggregates client B
+
+and A modules, and FlexLoRA [1], which aggregates in the product space BA . Dual-LoRA personalization meth-ods include FedSA-LoRA [11], which uses a shared ba-sis A and local coefficients B; FDLoRA [31], which al-ternates updates of shared and client adapters; FedDPA-F and FedDPA-T [21], which adopt sequential and alternating training, respectively; and PF2LoRA [15], which combines a global and a personal branch with automatic rank selec-tion. FedALT [2] mixes an individual adapter with a rest-of-the-world adapter through an adaptive gating network. 
+
+Evaluation and Implementation Details. (1) Personaliza-tion. Each client is evaluated on its own test set. We report the mean accuracy across clients and the 10th-percentile ac-curacy to assess tail robustness[23, 24]. (2) Generalization. 
+
+We hold out 20% of clients as unseen for evaluating gen-eralization [24, 41]. At test time, each unseen client per-forms 5 local epochs of fine-tuning on the resulting model before evaluation on its test set [7, 29]. We train for 50 global rounds, using 1 local epoch for CIFAR-100 and 2 local epochs for DomainNet. To ensure a fair compari-son, HiLoRA maintains an equal total training budget, with 
+
+Troot + Tcluster + Tleaf = 50 , to match that of all baselines. Detailed implementation and training settings are described in Appendix D. 
+
+5.2. Performance Evaluation 
+
+5.2.1. Label-Heterogeneous Federated Setting Overall Results on CIFAR-100. Table 1 summarizes the overall performance of HiLoRA on the CIFAR-100 dataset under different label heterogeneity settings. For personal-ization , HiLoRA consistently achieves the best mean and worst-case accuracies across all partitions, surpassing prior methods such as FedALT and FedDPA-T. For instance, un-Table 1. Performance analysis on CIFAR-100. We evaluate across statistical heterogeneity patterns: (i) Client-level Personalization :reporting the mean (Avg) and worst-case (10%) accuracies ± std across all clients. (ii) Unseen-Client Adaptation : accuracy on unseen clients’ test distributions. Best results are in bold ; second-best are underlined. 
+
+Method (i) Personalization Accuracy ( ↑) (ii) Unseen-Client Adaptation ( ↑)GL–Dir(0.3) SC–Dir(3) Patho(10) GL–Dir(0.3) SC–Dir(0.3) Patho(10) Mean Acc. Worst Acc. Mean Acc. Worst Acc. Mean Acc. Worst Acc. Test Acc. Test Acc. Test Acc. 
+
+Local-LoRA 0.691 ±0.06 0.579 ±0.03 0.867 ±0.11 0.601 ±0.10 0.844 ±0.12 0.577 ±0.09 0.521 ±0.09 0.639 ±0.17 0.756 ±0.09 
+
+FedIT 0.772 ±0.05 0.711 ±0.04 0.578 ±0.16 0.315 ±0.03 0.869 ±0.07 0.766 ±0.07 0.753 ±0.04 0.687 ±0.16 0.848 ±0.17 
+
+FlexLoRA 0.818 ±0.06 0.695 ±0.04 0.718 ±0.20 0.301 ±0.15 0.862 ±0.06 0.775 ±0.06 0.808 ±0.05 0.719 ±0.17 0.834 ±0.19 
+
+FedSA-LoRA 0.786 ±0.05 0.693 ±0.02 0.734 ±0.12 0.462 ±0.08 0.860 ±0.09 0.638 ±0.11 0.813 ±0.06 0.765 ±0.10 0.846 ±0.09 
+
+FDLoRA 0.802 ±0.03 0.731 ±0.04 0.828 ±0.14 0.673 ±0.12 0.871 ±0.10 0.774 ±0.08 0.754 ±0.05 0.701 ±0.15 0.813 ±0.13 
+
+FedDPA-F 0.811 ±0.06 0.743 ±0.04 0.841 ±0.13 0.574 ±0.09 0.905 ±0.08 0.701 ±0.09 0.821 ±0.03 0.686 ±0.15 0.854 ±0.16 
+
+FedDPA-T 0.803 ±0.04 0.726 ±0.02 0.895 ±0.06 0.745 ±0.07 0.928 ±0.05 0.818 ±0.04 0.810 ±0.04 0.738 ±0.13 0.879 ±0.10 
+
+PF2LoRA 0.793 ±0.03 0.714 ±0.02 0.873 ±0.08 0.726 ±0.10 0.916 ±0.05 0.794 ±0.05 0.802 ±0.03 0.788 ±0.12 0.860 ±0.08 
+
+FedALT 0.809 ±0.04 0.695 ±0.04 0.912 ±0.06 0.763 ±0.06 0.929 ±0.06 0.801 ±0.05 0.756 ±0.07 0.774 ±0.14 0.763 ±0.11 
+
+HiLoRA 0.846±0.04 0.763±0.02 0.934±0.06 0.791±0.06 0.941±0.05 0.823±0.03 0.841±0.04 0.859±0.11 0.940±0.04 
+
+Table 2. Comparative analysis on DomainNet. We evaluate: (i) Client-level Personalization , reporting the mean (Avg) and worst-case (10%) accuracies ± std across all clients; (ii) Domain-wise accuracy , averaging client accuracies within each domain (C/I/P/Q/R/S); (iii) Unseen-Client Adaptation , accuracy on test distributions of unseen clients. Best results are in bold ; second-best are underlined. 
+
+Method (i) Client-level ( ↑) (ii) Domain-wise Accuracy ( ↑) (iii) Unseen ( ↑)Mean Acc. Worst Acc. C I P Q R S Test Acc. 
+
+Local-LoRA 0.755 ±0.17 0.374 ±0.11 0.716 ±0.07 0.428 ±0.12 0.850 ±0.06 0.748 ±0.06 0.954 ±0.02 0.794 ±0.05 0.665 ±0.21 
+
+FedIT 0.822 ±0.15 0.494 ±0.05 0.886 ±0.09 0.539 ±0.08 0.898 ±0.06 0.762 ±0.07 0.966 ±0.02 0.854 ±0.03 0.813 ±0.14 
+
+FlexLoRA 0.839 ±0.14 0.526 ±0.07 0.887 ±0.05 0.567 ±0.09 0.926±0.06 0.779 ±0.05 0.975 ±0.02 0.874±0.04 0.840 ±0.11 
+
+FedSA-LoRA 0.814 ±0.13 0.532 ±0.05 0.850 ±0.07 0.568 ±0.07 0.867 ±0.06 0.810 ±0.07 0.971 ±0.02 0.792 ±0.06 0.797 ±0.17 
+
+FDLoRA 0.822 ±0.13 0.535 ±0.05 0.860 ±0.07 0.562 ±0.07 0.882 ±0.05 0.822 ±0.06 0.974 ±0.02 0.800 ±0.05 0.804 ±0.17 
+
+FedDPA-F 0.860 ±0.12 0.583 ±0.04 0.879 ±0.07 0.610 ±0.06 0.922 ±0.04 0.877 ±0.05 0.988 ±0.02 0.848 ±0.05 0.831 ±0.16 
+
+FedDPA-T 0.831 ±0.13 0.529 ±0.02 0.875 ±0.06 0.554 ±0.05 0.897 ±0.06 0.830 ±0.04 0.976 ±0.01 0.819 ±0.04 0.835 ±0.13 
+
+PF2LoRA 0.820 ±0.13 0.531 ±0.05 0.858 ±0.07 0.560 ±0.07 0.880 ±0.05 0.820 ±0.06 0.973 ±0.02 0.799 ±0.05 0.801 ±0.18 
+
+FedALT 0.796 ±0.15 0.440 ±0.04 0.804 ±0.07 0.482 ±0.08 0.849 ±0.05 0.741 ±0.08 0.953 ±0.02 0.797 ±0.04 0.743 ±0.21 
+
+HiLoRA 0.877±0.11 0.589±0.02 0.921±0.06 0.624±0.06 0.924 ±0.03 0.899±0.05 0.989±0.01 0.872 ±0.06 0.861±0.12 
+
+der the SC–Dir(3) setting, HiLoRA improves mean accu-racy from 0.912 to 0.934 and worst-case accuracy from 0.763 to 0.791 over the second-best baseline, demonstrat-ing the advantage of hierarchical three-tier adaptation over dual-branch and other flat LoRA designs. For generalization ability, HiLoRA delivers leading per-formance across all configurations at a comparable training cost to other methods . This advantage arises from adaptive clustering, which groups clients with similar data distribu-tions to share knowledge and form stable cluster-level rep-resentations. At test time, an unseen client is routed to its nearest cluster using LoRA subspace similarity and reuses the corresponding adapter, enabling faster and more effec-tive adaptation to new clients. 
+
+Impact of Label Heterogeneity Levels. Results in Ta-ble 1 indicate that HiLoRA exhibits stable performance across varying degrees of label heterogeneity, with both personalization and generalization remaining robust com-pared to other approaches. This performance is attributed to HiLoRA’s hierarchical adaptation mechanism, which effectively suppresses cross-distribution interference, en-abling the model to maintain consistent learning perfor-mance across diverse label-distribution patterns. 
+
+5.2.2. Domain-Heterogeneous Federated Setting Overall Results on DomainNet. As shown in Table 2, HiLoRA consistently surpasses all baselines on DomainNet in both mean and tail-client accuracy, demonstrating strong robustness under domain distribution shifts. Compared with the next-best baselines, FedDPA-F and FlexLoRA, HiLoRA 0.00 0.05 0.10 0.15 0.20 0.25 0.30 0.35   
+
+> cos 2
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> Density
+> cos 2= 0.05
+> cos 2= 0.10
+
+(a) Root vs Leaf. 0.00 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40    
+
+> cos 2
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Density
+> cos 2= 0.05
+> cos 2= 0.10
+
+(b) Cluster vs Leaf. 
+
+Figure 4. Principal-angle distributions between tiers in HiLoRA. Computed from the column spaces of the LoRA-B ma-trices. Lower cos 2 θ indicates stronger subspace orthogonality. Table 3. HiLoRA multi-level gain comparison across Root, Cluster, and Leaf stages on CIFAR-100 and DomainNet, report-ing Mean±Std and accuracy gains relative to Root and Cluster. 
+
+Stage CIFAR-100 DomainNet Mean ±std Gains (R/C) % Mean ±std Gains (R/C) % 
+
+Root 0.663 ± 0.18 —-/—- 0.815 ± 0.15 —-/—-+ Cluster 0.889 ± 0.10 +22.6% / —- 0.864 ± 0.13 +4.9% / —-+ Leaf 0.934 ± 0.06 +27.1% / +4.5% 0.877 ± 0.11 +6.2% / +1.3% 
+
+Second-best 0.912 ±0.06 0.860 ±0.12 
+
+improves mean accuracy by about 1.5%–2.0% while main-taining the highest generalization performance on unseen clients. These results highlight the effectiveness of hierar-chical decomposition in transferring shared representations across domains while preserving client-level adaptability. 
+
+Domain-Specific Personalization. The results in Table 2 indicate that HiLoRA attains strong performance across all domains, especially in challenging ones such as illustration (I) and sketch (S). This indicates that the hierarchical design with adaptive clustering yields domain-specific adapters and suppresses cross-domain interference, enabling refined and disentangled adaptation within each domain. 
+
+5.3. Ablation and Further Analysis 
+
+In this section, we present detailed analyses of each module and provide further analysis in Appendix E. 
+
+Progressive Layer Gains. As shown in Table 3, the model’s performance steadily improves with each addi-tional tier. On CIFAR-100, the accuracy rises from 0.663 at the Root stage to 0.889 with the Cluster layer, yielding an absolute gain of 22.6%. Incorporating the Leaf layer further improves accuracy to 0.934, which corresponds to a 27.1% increase over Root and a 4.5% increase over Cluster. Mean-while, the standard deviation consistently decreases from 0.18 to 0.06, indicating more uniform performance across clients. A similar trend appears on DomainNet, where ac-curacy improves at each tier while variance declines. 
+
+Ablation Study of HiLoRA Components. As shown in Table 4, by sequentially adding LoRA subspace clustering and cross-layer orthogonality constraints, the performance consistently improves on both CIFAR-100 and DomainNet. In vanilla clustering, we form client groups by running k-0 1 2 3 4 5    
+
+> Adaptation epochs
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Unseen client accuracy
+> 0.811 0.818
+> 0.834 0.844 0.852 0.859
+
+(a) CIFAR-100 0 1 2 3 4 5      
+
+> Adaptation epochs
+> 0.65
+> 0.70
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Unseen client accuracy
+> 0.849 0.856 0.852 0.852 0.855 0.861
+
+(b) DomainNet 
+
+Figure 5. Unseen-client accuracy ( mean ± std ) across adaptation epochs on (a) CIFAR-100 and (b) DomainNet . The starred point indicates the Root+Cluster initialization, while subsequent epochs correspond to leaf-level LoRA adaptation. Table 4. Ablation study of HiLoRA components. We report personalized accuracy (Per.) and unseen-client adaptation (Gen.) on CIFAR-100 and DomainNet.                        
+
+> Hierarchical LoRA LoRA subspace clustering Orthogonality loss CIFAR-100 DomainNet Per. ↑Gen. ↑Per. ↑Gen. ↑
+> ✓89.7 87.5 85.4 84.2
+> ✓✓92.8 92.2 86.0 85.1
+> ✓✓✓94.1 94.0 87.7 86.1
+
+means on full parameter updates using cosine similarity [6]. We observe that subspace clustering improves client align-ment within clusters, and the orthogonality constraints fur-ther mitigate interference across tiers. 
+
+Cluster Structure and Orthogonality. On CIFAR-100, we compute t-SNE embeddings from Jensen–Shannon dis-tances of client label distributions, as shown in Figure 3, where clients form compact and meaningful subgroups. On DomainNet, Figure 4(a) and (b) show the principal-angle distributions between the Root–Leaf and Cluster–Leaf LoRA subspaces, indicating that orthogonality regulariza-tion reduces overlap and improves performance. 
+
+Generalization Across Adaptation Epochs. According to the LoRA-subspace similarity, each new client is assigned to its nearest cluster. Loading only the corresponding Root and Cluster adapters achieves 0.811 on CIFAR-100 and 0.849 on DomainNet, surpassing the second-best baseline, which requires 5 epochs of tuning, with 0.788 and 0.840. With 5 epochs of leaf-level updates, the accuracy further im-proves to 0.859 and 0.861, while cross-client variance con-tinues to decrease. As shown in Fig. 5, these results demon-strate that HiLoRA effectively aligns new clients with suit-able clusters and reuses their learned parameters, enabling strong generalization with few adaptation steps. 
+
+## 6. Conclusion 
+
+We propose HiLoRA, a multi-level LoRA personalized FL method. We demonstrate its effectiveness through both ex-perimental and theoretical studies. Future work will explore assigning different ranks, as well as extending HiLoRA to LoRA-MoE architectures. Acknowledgements 
+
+The above work was supported in part by the Joint Funds of the National Natural Science Foundation of China un-der Grant U25A20436, Guangxi Key Research & Devel-opment Program (FN2504240036,2025FN96441087), the National Natural Science Foundation of China (NSFC) (62372047,62302049), Guangdong S&T Programme (No. 2025B0101120006), the Natural Science Foundation of Guangdong Province (2024A1515011323), the Supplemen-tal Funds for Major Scientific Research Projects of Bei-jing Normal University, Zhuhai (ZHPT2023002), the Fun-damental Research Funds for the Central Universities, Guangdong Province Educational Science Planning Re-search Project under 2025JKZG069, and Higher Education Research Topics of Guangdong Association of Higher Ed-ucation in the 14th Five-Year Plan under 24GYB207. We also acknowledge the support of the Interdisciplinary Intel-ligence Super Computing Center of Beijing Normal Univer-sity at Zhuhai. 
+
+## References 
+
+[1] Jiamu Bai, Daoyuan Chen, Bingchen Qian, Liuyi Yao, and Yaliang Li. Federated fine-tuning of large language mod-els under heterogeneous tasks and client resources. In 
+
+The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. 1, 5, 6 [2] Jieming Bian, Lei Wang, Letian Zhang, and Jie Xu. Fedalt: Federated fine-tuning through adaptive local training with rest-of-world lora. arXiv preprint arXiv:2503.11880 , 2025. 6[3] Haokun Chen, Yao Zhang, Denis Krompass, Jindong Gu, and Volker Tresp. Feddat: An approach for foundation model finetuning in multi-modal heterogeneous federated learning. In Proceedings of the AAAI Conference on Artificial Intelli-gence , pages 11285–11293, 2024. 1 [4] Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. Qlora: Efficient finetuning of quantized llms. 
+
+Advances in neural information processing systems , 36: 10088–10115, 2023. 2 [5] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-vain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In International Conference on Learning Representa-tions , 2021. 6 [6] Moming Duan, Duo Liu, Xinyuan Ji, Renping Liu, Liang Liang, Xianzhang Chen, and Yujuan Tan. Fedgroup: Ef-ficient federated learning via decomposed similarity-based clustering. In 2021 IEEE Intl Conf on Parallel & Distributed Processing with Applications, Big Data & Cloud Computing, Sustainable Computing & Communications, Social Comput-ing & Networking (ISPA/BDCloud/SocialCom/SustainCom) ,pages 228–237. IEEE, 2021. 8 [7] Alireza Fallah, Aryan Mokhtari, and Asuman Ozdaglar. Per-sonalized federated learning with theoretical guarantees: A model-agnostic meta-learning approach. Advances in neural information processing systems , 33:3557–3568, 2020. 6 [8] Tao Fan, Hanlin Gu, Xuemei Cao, Chee Seng Chan, Qian Chen, Yiqiang Chen, Yihui Feng, Yang Gu, Jiaxiang Geng, Bing Luo, Shuoling Liu, Win Kent Ong, Chao Ren, Jiaqi Shao, Chuan Sun, Xiaoli Tang, Hong Xi Tae, Yongxin Tong, Shuyue Wei, Fan Wu, Wei Xi, Mingcong Xu, He Yang, Xin Yang, Jiangpeng Yan, Hao Yu, Han Yu, Teng Zhang, Yifei Zhang, Xiaojin Zhang, Zhenzhe Zheng, Lixin Fan, and Qiang Yang. Ten Challenging Problems in Federated Foun-dation Models . IEEE Transactions on Knowledge & Data Engineering , 37(07):4314–4337, 2025. 1 [9] Liang Gao, Huazhu Fu, Li Li, Yingwen Chen, Ming Xu, and Cheng-Zhong Xu. Feddc: Federated learning with non-iid data via local drift decoupling and correction. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10112–10121, 2022. 2, 6 [10] Avishek Ghosh, Jichan Chung, Dong Yin, and Kannan Ram-chandran. An efficient framework for clustered federated learning. Advances in neural information processing sys-tems , 33:19586–19597, 2020. 2 [11] Pengxin Guo, Shuang Zeng, Yanran Wang, Huijie Fan, Feifei Wang, and Liangqiong Qu. Selective aggregation for low-rank adaptation in federated learning. In The Thirteenth In-ternational Conference on Learning Representations , 2025. 6[12] Tao Guo, Song Guo, and Junxiao Wang. Pfedprompt: Learn-ing personalized prompt for vision-language models in fed-erated learning. In Proceedings of the ACM Web Conference 2023 , pages 1364–1374, 2023. 2 [13] Yaming Guo, Kai Guo, Xiaofeng Cao, Tieru Wu, and Yi Chang. Out-of-distribution generalization of federated learn-ing via implicit invariant relationships. In International Con-ference on Machine Learning , pages 11905–11933. PMLR, 2023. 1 [14] Kai Han, Yunhe Wang, Hanting Chen, Xinghao Chen, Jianyuan Guo, Zhenhua Liu, Yehui Tang, An Xiao, Chun-jing Xu, Yixing Xu, et al. A survey on vision transformer. 
+
+IEEE transactions on pattern analysis and machine intelli-gence , 45(1):87–110, 2022. 1 [15] Jie Hao, Yuman Wu, Ali Payani, Myungjin Lee, and Min-grui Liu. Personalized federated fine-tuning for heteroge-neous data: An automatic rank learning approach via two-level lora. arXiv preprint arXiv:2503.03920 , 2025. 6 [16] Edward J Hu, yelong shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. LoRA: Low-rank adaptation of large language models. In In-ternational Conference on Learning Representations , 2022. 1, 2 [17] Hansol Kim, Youngjun Kwak, Minyoung Jung, Jinho Shin, Youngsung Kim, and Changick Kim. Protofl: Unsupervised federated learning via prototypical distillation. In Proceed-ings of the IEEE/CVF international conference on computer vision , pages 6470–6479, 2023. 6 [18] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-head, Alexander C Berg, Wan-Yen Lo, et al. Segment any-thing. In Proceedings of the IEEE/CVF international confer-ence on computer vision , pages 4015–4026, 2023. 1 [19] Junkang Liu, Yuanyuan Liu, Fanhua Shang, Hongying Liu, Jin Liu, and Wei Feng. Improving generalization in federated learning with highly heterogeneous data via momentum-based stochastic controlled weight averaging. In 
+
+Forty-second International Conference on Machine Learn-ing , 2025. 2 [20] Junkang Liu, Fanhua Shang, Hongying Liu, Yuxuan Tian, Yuanyuan Liu, Jin Liu, Kewen Zhu, and Zhouchen Lin. Fedadamw: A communication-efficient optimizer with con-vergence and generalization guarantees for federated large models, 2026. 1 [21] Guodong Long, Tao Shen, Jing Jiang, Michael Blumenstein, et al. Dual-personalizing adapter for federated foundation models. Advances in Neural Information Processing Sys-tems , 37:39409–39433, 2024. 2, 6 [22] Jie Ma, Tianyi Zhou, Guodong Long, Jing Jiang, and Chengqi Zhang. Structured federated learning through clus-tered additive modeling. Advances in Neural Information Processing Systems , 36:43097–43107, 2023. 2 [23] Othmane Marfoq, Giovanni Neglia, Aur´ elien Bellet, Laetitia Kameni, and Richard Vidal. Federated multi-task learning under a mixture of distributions. Advances in neural infor-mation processing systems , 34:15434–15447, 2021. 6 [24] Othmane Marfoq, Giovanni Neglia, Richard Vidal, and Laetitia Kameni. Personalized federated learning through lo-cal memorization. In International Conference on Machine Learning , pages 15070–15092. PMLR, 2022. 6 [25] Brendan McMahan, Eider Moore, Daniel Ramage, Seth Hampson, and Blaise Aguera y Arcas. Communication-efficient learning of deep networks from decentralized data. In Artificial intelligence and statistics , pages 1273–1282. PMLR, 2017. 1, 6 [26] Lei Meng, Zhuang Qi, Lei Wu, Xiaoyu Du, Zhaochuan Li, Lizhen Cui, and Xiangxu Meng. Improving global gen-eralization and local personalization for federated learning. 
+
+IEEE Transactions on Neural Networks and Learning Sys-tems , 2024. 1 [27] Andrew Ng, Michael Jordan, and Yair Weiss. On spectral clustering: Analysis and an algorithm. Advances in neural information processing systems , 14, 2001. 4 [28] Jorge Nocedal and Stephen J Wright. Numerical optimiza-tion . Springer, 2006. 4, 5 [29] Jaehoon Oh, SangMook Kim, and Se-Young Yun. Fed-BABU: Toward enhanced representation for federated image classification. In International Conference on Learning Rep-resentations , 2022. 6 [30] Zihao Peng, Jiandian Zeng, Boyuan Li, Guo Li, Shengbo Chen, and Tian Wang. Fedhl: Federated learning for het-erogeneous low-rank adaptation via unbiased aggregation. 
+
+arXiv preprint arXiv:2505.18494 , 2025. 1, 5 [31] Jiaxing Qi, Zhongzhi Luan, Shaohan Huang, Carol Fung, Hailong Yang, and Depei Qian. Fdlora: personalized fed-erated learning of large language model via dual lora tuning. 
+
+arXiv preprint arXiv:2406.07925 , 2024. 6 [32] Chao Ren, Han Yu, Hongyi Peng, Xiaoli Tang, Bo Zhao, Liping Yi, Alysa Ziying Tan, Yulan Gao, Anran Li, Xiaox-iao Li, Zengxiang Li, and Qiang Yang. Advances and open challenges in federated foundation models. IEEE Communi-cations Surveys & Tutorials , pages 1–1, 2025. 1 [33] Raghav Singhal, Kaustubh Ponkshe, and Praneeth Vepakomma. Fedex-lora: Exact aggregation for feder-ated and efficient fine-tuning of large language models. In 
+
+Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) ,pages 1316–1336, 2025. 5 [34] Shangchao Su, Mingzhao Yang, Bin Li, and Xiangyang Xue. Federated adaptive prompt tuning for multi-domain collabo-rative learning. In Proceedings of the AAAI conference on artificial intelligence , pages 15117–15125, 2024. 6 [35] Guangyu Sun, Matias Mendieta, Jun Luo, Shandong Wu, and Chen Chen. Fedperfix: Towards partial model personaliza-tion of vision transformers in federated learning. In Proceed-ings of the IEEE/CVF international conference on computer vision , pages 4988–4998, 2023. 2 [36] Alysa Ziying Tan, Han Yu, Lizhen Cui, and Qiang Yang. To-wards personalized federated learning. IEEE transactions on neural networks and learning systems , 34(12):9587–9603, 2022. 1 [37] Ulrike Von Luxburg. A tutorial on spectral clustering. Statis-tics and computing , 17(4):395–416, 2007. 4 [38] Yuan Wang, Huazhu Fu, Renuga Kanagavelu, Qingsong Wei, Yong Liu, and Rick Siow Mong Goh. An aggregation-free federated learning for tackling data heterogeneity. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition , pages 26233–26242, 2024. 6 [39] Ziyao Wang, Zheyu Shen, Yexiao He, Guoheng Sun, Hongyi Wang, Lingjuan Lyu, and Ang Li. FLoRA: Federated fine-tuning large language models with heterogeneous low-rank adaptations. In The Thirty-eighth Annual Conference on Neural Information Processing Systems , 2024. 1 [40] Panlong Wu, Kangshuo Li, Ting Wang, Yanjie Dong, Victor C. M. Leung, and Fangxin Wang. Fedfmsl: Federated learn-ing of foundation models with sparsely activated lora. IEEE Transactions on Mobile Computing , 23(12):15167–15181, 2024. 1 [41] Yue Wu, Shuaicheng Zhang, Wenchao Yu, Yanchi Liu, Quanquan Gu, Dawei Zhou, Haifeng Chen, and Wei Cheng. Personalized federated learning under mixture of distribu-tions. In International Conference on Machine Learning ,pages 37860–37879. PMLR, 2023. 6 [42] Hao Yan and Yuhong Guo. Local and global flatness for federated domain generalization. In European Conference on Computer Vision , pages 71–87. Springer, 2024. 6 [43] Fu-En Yang, Chien-Yi Wang, and Yu-Chiang Frank Wang. Efficient model personalization in federated learning via client-specific prompt generation. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pages 19159–19168, 2023. 6 [44] Liping Yi, Han Yu, Gang Wang, Xiaoguang Liu, and Xiaoxiao Li. pfedlora: model-heterogeneous personal-ized federated learning with lora tuning. arXiv preprint arXiv:2310.13283 , 2023. 2 [45] Jianyi Zhang, Saeed Vahidian, Martin Kuo, Chunyuan Li, Ruiyi Zhang, Tong Yu, Guoyin Wang, and Yiran Chen. To-wards building the federatedgpt: Federated instruction tun-ing. In ICASSP 2024-2024 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , pages 6915–6919. IEEE, 2024. 6 [46] Jianqing Zhang, Yang Liu, Yang Hua, Hao Wang, Tao Song, Zhengui Xue, Ruhui Ma, and Jian Cao. Pfllib: A beginner-friendly and comprehensive personalized federated learning library and benchmark. Journal of Machine Learning Re-search , 26(50):1–10, 2025. 6 [47] Qingru Zhang, Minshuo Chen, Alexander Bukharin, Pengcheng He, Yu Cheng, Weizhu Chen, and Tuo Zhao. Adaptive budget allocation for parameter-efficient fine-tuning. In The Eleventh International Conference on Learn-ing Representations , 2023. 1 [48] Junyi Zhu, Xingchen Ma, and Matthew B Blaschko. Confidence-aware personalized federated learning via vari-ational expectation maximization. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 24542–24551, 2023. 6 [49] Xizhou Zhu, Weijie Su, Lewei Lu, Bin Li, Xiaogang Wang, and Jifeng Dai. Deformable {detr }: Deformable transform-ers for end-to-end object detection. In International Confer-ence on Learning Representations , 2021. 1 [50] Weiming Zhuang, Chen Chen, and Lingjuan Lyu. When foundation model meets federated learning: Motiva-tions, challenges, and future directions. arXiv preprint arXiv:2306.15546 , 2023. 1

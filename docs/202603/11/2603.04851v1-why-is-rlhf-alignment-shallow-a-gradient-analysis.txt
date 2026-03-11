@@ -1,0 +1,1397 @@
+Title: Why Is RLHF Alignment Shallow? A Gradient Analysis
+
+URL Source: https://arxiv.org/pdf/2603.04851v1
+
+Published Time: Fri, 06 Mar 2026 01:34:30 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Why Is RLHF Alignment Shallow? A Gradient Analysis 
+
+Robin Young 
+
+Department of Computer Science and Technology University of Cambridge Cambridge, UK 
+
+robin.young@cl.cam.ac.uk 
+
+Abstract 
+
+Why is safety alignment in LLMs shallow? We prove that gradient-based alignment inherently concentrates on positions where harm is de-cided and vanishes beyond. Using a martingale decomposition of sequence-level harm, we de-rive an exact characterization of alignment gra-dients. The gradient at position t equals the covariance between the conditional expected harm and the score function. This implies that positions beyond the harm horizon where the output’s harmfulness is already determined re-ceive zero gradient signal during training. This explains empirical observations that KL diver-gence between aligned and base models con-centrates on early tokens. Consequently, stan-dard alignment objectives cannot produce deep alignment, regardless of optimization quality. We introduce the concept of harm information 
+
+It, which quantifies each position’s influence on harm, and prove that equilibrium KL diver-gence tracks this quantity. Finally, we derive an objective based on recovery penalties that cre-ates gradient signal at all positions, providing theoretical grounding for empirically success-ful data augmentation techniques. 
+
+1 Introduction 
+
+Large language models (LLMs) undergo safety alignment to reduce harmful outputs, typically through reinforcement learning from human feed-back (RLHF) or direct preference optimization. A growing body of evidence suggests this alignment is troublingly fragile. It was demonstrated that the behavioral shift from alignment concentrates in the first few tokens; the KL divergence between aligned and base models rapidly decays to near-zero beyond a shallow prefix (Qi et al., 2025). This shallow alignment creates vulnerabilities to prefill-ing attacks, where an adversary supplies the first few tokens of a harmful response, bypassing the aligned model’s safety behavior. Why is alignment shallow? The prevailing view treats this as a failure to be remedied perhaps through better training data (Qi et al., 2025) or architectural interventions (Zou et al., 2024). We argue instead that shallow alignment is optimal given standard objectives. The shallowness is not a bug but a necessary consequence of how gradient-based optimization interacts with the structure of sequence-level harm. We make several contributions in this work. We provide a martingale decomposition of sequence-level harm into per-position innovations, enabling precise analysis of where alignment pressure orig-inates (Section 4). We give a characterization of alignment gradients, showing that the gradient at position t equals the covariance between condi-tional expected harm and the score function (Theo-rem 8). We prove that positions beyond the harm horizon receive zero gradient, explaining why stan-dard training cannot produce deep alignment (The-orem 10). We introduce the concept of harm in-formation It, which quantifies each position’s in-fluence on the final harm determination, and prove that equilibrium KL divergence tracks this quan-tity (Section 8). Finally, we derive a deep align-ment objective based on recovery penalties that creates gradient signal at all positions, providing theoretical justification for empirically successful interventions (Section 9). 
+
+2 Related Work 
+
+Our work connects several lines of research on LLM alignment, adversarial robustness, and the theoretical foundations of RLHF. Modern LLM alignment traces to RLHF (Chris-tiano et al., 2017; Ouyang et al., 2022), which trains a reward model on human preferences and then op-timizes the policy via reinforcement learning with a KL penalty against the base model. Direct Prefer-ence Optimization (Rafailov et al., 2023) eliminates 1
+
+> arXiv:2603.04851v1 [cs.LG] 5 Mar 2026
+
+the explicit reward model by reparameterizing the RLHF objective, enabling direct policy optimiza-tion from preference data. Constitutional AI (Bai et al., 2022) uses AI feedback to scale alignment. These methods all optimize sequence-level objec-tives with KL regularization, which is the setting we analyze. Qi et al. (2025) demonstrated empirically that safety alignment concentrates in early tokens as the KL divergence between aligned and base mod-els decays rapidly beyond a shallow prefix. This creates vulnerabilities to prefilling attacks, where adversarial prefixes bypass safety guardrails (An-driushchenko et al., 2024). Prior work formalized alignment depth using Markov chains, proving geo-metric convergence to harmful absorbing states and showing that ensemble width can compensate for shallow individual models (Kao et al., 2025). that work characterizes the structure of shallow align-ment at inference time but does not explain why training produces it, leaving open whether better optimization, more data, or longer training could yield deep alignment. Our work answers this ques-tion in the negative as we prove that zero gradient signal reaches positions beyond the harm horizon under standard objectives, making shallow align-ment the optimal solution rather than a training artifact. The GCG attack (Zou et al., 2023) finds uni-versal adversarial suffixes via greedy coordinate gradient search, achieving high attack success rates even on black-box models through transfer. Sub-sequent work has improved attack efficiency (Liu et al., 2024; Liao and Sun, 2024) and explored multi-turn jailbreaks (Chao et al., 2025). These attacks exploit shallow alignment by steering early tokens toward harmful continuations. Our theoreti-cal framework explains why such attacks succeed: once the harm horizon is bypassed, the model has no training signal to recover. Representation-level interventions offer an alter-native to output-level alignment. Representation engineering (Zou et al., 2025), refusal direction ablation (Arditi et al., 2024), and circuit breakers (Zou et al., 2024) operate on internal activations rather than output distributions, and thus fall out-side our gradient-theoretic framework. Recent work analyzes sample complexity (Zhu et al., 2023), reward model scaling (Rafailov et al., 2024), and iterative DPO convergence (Xiong et al., 2024); our contribution is orthogonal, characteriz-ing where in the sequence alignment pressure is applied rather than how much data or compute is needed. 
+
+3 Setup 
+
+Autoregressive Generation. Let V denote the vocabulary. A language model Pθ defines a dis-tribution over sequences y = ( y1, . . . , y T ) via the autoregressive factorization: 
+
+Pθ(y) = 
+
+> T
+
+Y
+
+> t=1
+
+Pθ(yt | y<t ) (1) where y<t = ( y1, . . . , y t−1) and y<1 = ∅ (or a fixed prompt). We write Pθ(yt | y<t ) for the condi-tional distribution at position t.
+
+Harm Function. We assume a harm function 
+
+Harm : V∗ → [0 , 1] that maps complete sequences to a harm score. This abstracts reward models, clas-sifiers, or human judgments. We assume Harm 
+
+depends only on the output sequence (not on inter-nal model states). 
+
+Alignment Objective. Standard alignment min-imizes expected harm subject to a KL penalty against a base model Pbase :
+
+H(θ) = λ · Ey∼Pθ [Harm( y)] + DKL (Pθ∥Pbase )
+
+(2) where λ > 0 controls the strength of harm aver-sion. The KL term prevents collapse to degenerate distributions and preserves capabilities. 
+
+Goal. We seek to understand how gradient-based minimization of Eq (2) distributes behavioral changes across positions t = 1 , . . . , T .
+
+4 Martingale Decomposition of Harm 
+
+The key insight is that expected harm, viewed as a function of the partial sequence y≤t, forms a martingale. This decomposition reveals which po-sitions carry information about harm. 
+
+Definition 1 (Conditional Expected Harm) . For a partial sequence y≤t = ( y1, . . . , y t), define 
+
+ht(y≤t) := E[Harm( y) | y1, . . . , y t] (3) 
+
+where the expectation is over continuations y>t 
+
+drawn from Pθ(· | y≤t).
+
+Proposition 2 (Martingale Property) . The se-quence (ht)Tt=0 is a martingale with respect to the filtration generated by (yt):
+
+E[ht | y<t ] = ht−1(y<t ) (4) 2Proof. By the tower property of conditional expectation:              
+
+> E[ht(y≤t)|y<t ] = E[E[Harm( y)|y≤t]|y<t ](5)
+> =E[Harm( y)|y<t ] = ht−1(y<t )(6)
+
+Definition 3 (Harm Innovation) . The innovation at position t is: 
+
+∆t := ht(y≤t) − ht−1(y<t ) (7) 
+
+This measures the change in expected harm upon observing token yt.
+
+Proposition 4 (Doob Decomposition) . The harm function admits the decomposition: 
+
+Harm( y) = E[Harm] + 
+
+> T
+
+X
+
+> t=1
+
+∆t (8) 
+
+where the innovations ∆t are orthogonal: E[∆ s ·
+
+∆t] = 0 for s̸ = t.Proof. The equality follows from telescoping: 
+
+hT = Harm( y) and h0 = E[Harm] . For orthogo-nality, assume s < t :
+
+E[∆ s · ∆t] = E[E[∆ s · ∆t | y≤s]] (9) 
+
+= E[∆ s · E[∆ t | y≤s]] (10) 
+
+= E[∆ s · 0] = 0 (11) where E[∆ t | y≤s] = 0 follows from iterated appli-cation of the martingale property. 
+
+Definition 5 (Harm Information) . The harm infor-mation at position t is: 
+
+It := E[∆ 2 
+
+> t
+
+] = E[Var( ht | y<t )] (12) 
+
+This quantifies how much variance in harm is ex-plained by position t.
+
+Proposition 6 (Variance Reduction Characteriza-tion) . The harm information admits the equivalent representation: 
+
+It = E Var(Harm | y<t )−E Var(Harm | y≤t)
+
+(13) 
+
+That is, It equals the expected reduction in con-ditional variance of harm upon observing token 
+
+yt.Proof. We use two applications of the law of total variance, Var( X) = E[Var( X | Z)] + Var( E[X |
+
+Z]) .Applying with X = Harm( y) and Z = y≤t:
+
+Var(Harm) = E[Var(Harm | y≤t)] + Var( ht)
+
+(A) Applying with Z = y<t :
+
+Var(Harm) = E[Var(Harm | y<t )] + Var( ht−1)
+
+(B) Subtracting (A) from (B): 
+
+Var( ht) − Var( ht−1) = E[Var(Harm | y<t )] 
+
+− E[Var(Harm | y≤t)] 
+
+(14) From the Doob decomposition and orthogonality of innovations: Var( ht) = Pts=1 Is. Thus Var( ht) −
+
+Var( ht−1) = It, completing the proof. 
+
+Corollary 7 (Variance Decomposition) . The total variance of harm decomposes as: 
+
+Var(Harm( y)) = 
+
+> T
+
+X
+
+> t=1
+
+It (15) 
+
+Proof. By telescoping:             
+
+> TX
+> t=1
+> It=
+> TX
+> t=1
+> 
+> E[Var(Harm |y<t )] −E[Var(Harm |y≤t)]
+> 
+> = Var(Harm | ∅ )−Var(Harm |y)= Var(Harm)
+> (16)
+
+The final equality uses Var(Harm | y) = 0 since 
+
+Harm( y) is determined by y.
+
+Remark 1 (Information-Theoretic Interpretation) .
+
+Define the variance-based conditional information 
+
+Ivar (X; Z | W ) := E[Var( X | W )] − E[Var( X |
+
+W, Z )] . Then It = Ivar (Harm; yt | y<t ), and the variance decomposition becomes the chain rule: 
+
+Ivar (Harm; y) = 
+
+> T
+
+X
+
+> t=1
+
+Ivar (Harm; yt | y<t ) (17) 
+
+This parallels the mutual information chain rule 
+
+I(Harm; y) = P 
+
+> t
+
+I(Harm; yt | y<t ). For jointly Gaussian random variables, variance-based and entropy-based information are monotonically re-lated, so Ivar = 0 ⇔ I = 0 . In general, the relationship is more subtle as variance measures second-moment dependence while mutual informa-tion captures all statistical dependence. 
+
+The harm information It will prove central: it governs both gradient magnitude during training and KL divergence at equilibrium. 35 Gradient Characterization 
+
+We now derive the key result: an exact formula for the gradient of expected harm with respect to the parameters governing position t.
+
+Theorem 8 (Gradient Characterization) . The gra-dient of expected harm with respect to parameters 
+
+θ satisfies: 
+
+∇θE[Harm( y)] = 
+
+> T
+
+X
+
+> t=1
+
+Ey<t 
+
+
+
+Cov yt|y<t 
+
+
+
+ht(y≤t)
+
+∇θ log Pθ(yt | y<t )
+
+
+
+(18) 
+
+Proof. We use the policy gradient identity. For any function f (y):
+
+∇θEy∼Pθ [f (y)] = Ey∼Pθ [f (y) · ∇ θ log Pθ(y)] 
+
+(19) Applying the autoregressive factorization: 
+
+∇θ log Pθ(y) = 
+
+> T
+
+X
+
+> t=1
+
+∇θ log Pθ(yt | y<t ) (20) Substituting f (y) = Harm( y) = E[Harm] + PTs=1 ∆s:
+
+∇θE[Harm] = E
+
+
+
+E[Harm] + X
+
+> s
+
+∆s
+
+!
+
+· X
+
+> t
+
+∇θ log Pθ(yt | y<t )
+
+
+
+(21) The constant E[Harm] contributes zero (since 
+
+E[∇θ log Pθ(yt | y<t )] = 0 ). For the cross terms ∆s · ∇ θ log Pθ(yt | y<t ), we consider three cases. If s < t , then ∆s is determined by y≤s, so it is constant given y<t . Hence: 
+
+E[∆ s · ∇ θ log Pθ(yt | y<t )] = E[∆ s · E[∇θ log Pθ(yt | y<t ) | y<t ]] = 0 
+
+(22) If s > t , then by the martingale property, E[∆ s |
+
+y≤t] = 0 . Hence: 
+
+E[∆ s · ∇ θ log Pθ(yt | y<t )] = E[E[∆ s | y≤t] · ∇ θ log Pθ(yt | y<t )] = 0 
+
+(23) If s = t, this term survives. We have: 
+
+E[∆ t · ∇ θ log Pθ(yt | y<t )] = Ey<t 
+
+Eyt|y<t [∆ t · ∇ θ log Pθ(yt | y<t )] 
+
+(24) 
+
+= Ey<t 
+
+Cov yt|y<t (∆ t, ∇θ log Pθ(yt | y<t )) 
+
+(25) where the covariance appears because 
+
+E[∇θ log Pθ(yt | y<t ) | y<t ] = 0 .Finally, note that ∆t = ht(y≤t) − ht−1(y<t ),where ht−1(y<t ) is constant given y<t . Thus 
+
+Cov(∆ t, ·) = Cov( ht, ·), yielding the result. 
+
+Remark 2 (Intuition) . The gradient at position t
+
+depends only on how the choice of yt correlates with the resulting expected harm ht(y≤t). If all tokens yt lead to similar expected harm (given y<t )the covariance is small and the gradient is weak. 
+
+6 The Harm Horizon and Zero-Gradient Theorem 
+
+We now formalize when harm is “determined” by an early prefix, and prove that later positions re-ceive no gradient signal. The following theorem establishes a tight equivalence between the harm horizon and the decay of harm information. 
+
+Theorem 9 (Harm Horizon Characterization) . The following are equivalent: (i) It = 0 for all t > k .(ii) There exists a measurable function g : Vk →
+
+[0 , 1] such that Harm( y) = g(y≤k) almost surely. We call the smallest such k the harm horizon .Proof. (ii) ⇒ (i): Assume Harm( y) = g(y≤k) for some measurable g. Let t > k . Then          
+
+> ht(y≤t) = E[Harm( y)|y≤t] = E[g(y≤k)|y≤t] = g(y≤k)
+> (26)
+
+since the prefix y≤k is determined by y≤t when t > k. Similarly, ht−1(y<t ) = g(y≤k) since t − 1 ≥ k.Therefore ∆t = ht − ht−1 = 0 almost surely, which implies It = E[∆ 2 
+
+> t
+
+] = 0 .
+
+(i) ⇒ (ii): Assume It = 0 for all t > k . Since 
+
+It = E[∆ 2 
+
+> t
+
+] and ∆2 
+
+> t
+
+≥ 0, we have ∆t = 0 almost surely for all t > k .We proceed by backward induction. For t = T :
+
+∆T = 0 a.s. implies hT = hT −1 a.s. Continuing down to t = k + 1 :
+
+hT = hT −1 = · · · = hk+1 = hk a.s. (27) 4Since hT (y) = E[Harm( y) | y] = Harm( y), we have Harm( y) = hk(y≤k) almost surely. Setting 
+
+g := hk completes the proof. 
+
+Theorem 10 (Zero Gradient Beyond Horizon) . Un-der either equivalent condition of Theorem 9, for all t > k :     
+
+> Ey<t
+> h
+> Cov yt|y<t
+> 
+> ht(y≤t)∇θlog Pθ(yt|y<t )
+> i
+> = 0 ,
+> (28)
+
+and hence position t contributes nothing to 
+
+∇θE[Harm( y)] .Proof. If It = 0 , then Var( ht | y<t ) = 0 almost surely, since It = E[Var( ht | y<t )] and variance is non-negative. A random variable with zero condi-tional variance is almost surely constant given the conditioning. Thus ht(y≤t) does not depend on yt
+
+given y<t , so the covariance with any function of 
+
+yt is zero. 
+
+Remark 3 (Why Alignment is Shallow) . Theo-rem 10 explains why standard alignment produces shallow models. If harm is typically determined by early tokens (e.g. whether the response begins with a refusal) then: 1. Positions beyond the harm horizon receive zero gradient. 2. Alignment pressure concentrates on early po-sitions. 3. Later positions remain at the base model dis-tribution. This is optimal behavior given the objective as there is no signal to align later positions. 
+
+7 Gradient Magnitude Scales with Harm Information 
+
+Even when harm is not sharply determined by an early prefix, positions with low harm information receive weak gradient signal. We now make this precise. 
+
+Definition 11 (Conditional Fisher Information) .
+
+The Fisher information at position t, conditional on prefix y<t , is: 
+
+Ft(y<t ; θ) := Eyt|y<t 
+
+h
+
+∇θ log Pθ(yt | y<t )
+
+· ∇ θ log Pθ(yt | y<t )⊤i
+
+(29) 
+
+We write ¯Ft(θ) := Ey<t [Ft(y<t ; θ)] for the marginalized Fisher information. 
+
+Lemma 12 (Pointwise Cauchy-Schwarz Bound) .
+
+For any fixed prefix y<t , let Ct(y<t ) := Cov yt|y<t (ht, ∇θ log Pθ(yt | y<t )) . Then: 
+
+∥Ct(y<t )∥2 ≤ Var yt|y<t (ht)·tr (Ft(y<t ; θ)) (30) 
+
+Proof. By Cauchy-Schwarz applied to each coor-dinate: 
+
+Cov( ht, s (j) 
+
+> t
+
+) 2
+
+≤ Var( ht) · Var( s(j) 
+
+> t
+
+) (31) where s(j) 
+
+> t
+
+= ∂θj log Pθ(yt | y<t ). Summing over coordinates j:
+
+X
+
+> j
+
+Cov( ht, s (j) 
+
+> t
+
+) 2
+
+≤ Var( ht) · X
+
+> j
+
+Var( s(j) 
+
+> t
+
+)= Var( ht) · tr (Ft(y<t )) 
+
+(32) where the last equality uses E[s(j) 
+
+> t
+
+] = 0 (the score has zero mean). 
+
+Theorem 13 (Gradient Bound) . The gradient con-tribution from position t satisfies: 
+
+∥Gt(θ)∥2 ≤ Ey<t 
+
+Var yt|y<t (ht) · tr (Ft(y<t ; θ)) 
+
+(33) 
+
+where Gt(θ) := Ey<t [Ct(y<t )] is the gradient con-tribution defined in Theorem 8. In particular, if the Fisher information is uni-formly bounded by tr (Ft(y<t )) ≤ ¯F for all prefixes, then: 
+
+∥Gt(θ)∥2 ≤ It · ¯F (34) 
+
+Proof. By Jensen’s inequality (since ∥ · ∥ 2 is con-vex): 
+
+∥Gt∥2 = ∥Ey<t [Ct(y<t )] ∥2 ≤ Ey<t 
+
+∥Ct(y<t )∥2
+
+(35) Applying Theorem 12 to each term in the expecta-tion: 
+
+≤ Ey<t 
+
+Var yt|y<t (ht) · tr (Ft(y<t ))  (36) For the second claim, if tr (Ft(y<t )) ≤ ¯F uni-formly: 
+
+≤ ¯F · Ey<t 
+
+Var yt|y<t (ht) = ¯F · It (37) 
+
+Remark 4 (Qualitative Conclusion) . The key in-sight is that ∥Gt∥ = O(√It): gradient magnitude scales with the square root of harm information. Positions where It ≈ 0 receive negligible gradient signal, regardless of the Fisher information. This provides a smooth interpolation between the sharp case (Theorem 10, where It = 0 exactly) and the general case. 
+
+5Remark 5 (Tightness) . The pointwise bound (The-orem 12) is tight when the score is proportional to the harm innovation: 
+
+∇θ log Pθ(yt | y<t ) ∝ ht(y≤t)−E[ht | y<t ] (38) 
+
+The bound in Theorem 13 may be loose due to Jensen’s inequality if Ct(y<t ) varies in direction across different prefixes. 
+
+8 Equilibrium Analysis 
+
+We now characterize the equilibrium of the align-ment objective (2). 
+
+Theorem 14 (Equilibrium Characterization) .
+
+Assume the alignment objective H(θ) =
+
+λE[Harm( y)] + DKL (Pθ∥Pbase ) is minimized at 
+
+θ∗, and that Pθ∗ is in an exponential family with the Fisher information matrix ¯Ft positive definite at the base model. Then for small λ, the per-position KL divergence satisfies: 
+
+D(t)KL (θ∗) := Ey<t [DKL (Pθ∗ (· | y<t )∥Pbase (· | y<t ))] = O(λ2It)
+
+(39) 
+
+Proof. At a local minimum, the first-order condi-tion for position t is: 
+
+λG t(θ∗) + ∇θD(t)KL (θ∗) = 0 (40) For an exponential family, the KL divergence from the base model satisfies D(t)KL (θ) = 12 (θ −
+
+θbase )⊤ ¯Ft(θ − θbase ) + O(∥θ − θbase ∥3) near θbase .The gradient is ∇θD(t)KL = ¯Ft(θ − θbase ) + O(∥θ −
+
+θbase ∥2).For small λ, we have θ∗ = θbase + O(λ). Substi-tuting into the first-order condition and solving to leading order: 
+
+θ∗ − θbase = −λ ¯F −1 
+
+> t
+
+Gt(θbase ) + O(λ2) (41) Thus: 
+
+D(t)KL (θ∗) = λ2
+
+2 G⊤ 
+
+> t
+
+¯F −1 
+
+> t
+
+Gt + O(λ3) (42) By Theorem 13, ∥Gt∥2 ≤ ¯F · It when the Fisher information is bounded, so D(t)KL = O(λ2It).
+
+Corollary 15 (KL Tracks Harm Information) . Po-sitions with It ≈ 0 have D(t)KL ≈ 0: they remain close to the base model. 
+
+This provides theoretical grounding for the em-pirical observation of Qi et al. (2025) that the KL divergence profile mirrors the harm information profile. 
+
+9 Deep Alignment via Recovery Penalties 
+
+We established that standard objectives cannot pro-duce deep alignment when harm has a short hori-zon. To achieve depth, we modify the objective to create gradient signal at all positions. We in-troduce the deep alignment objective, derive an exact equilibrium characterization paralleling The-orem 14, and prove quantitative robustness guaran-tees against prefilling attacks. 
+
+Definition 16 (Recovery Tokens and Failure) . Let 
+
+R ⊂ V be a set of recovery tokens tokens whose presence at position t indicates the model is at-tempting to redirect toward safe behavior (e.g. to-kens encoding “I”, “Sorry”, “I cannot”). The recovery failure at position t is Fail t(θ, y <t ) := 1 − Pθ(yt ∈ R | y<t ).
+
+Definition 17 (Deep Alignment Objective) . The deep alignment objective is: 
+
+Hdeep (θ) = λEy∼Pθ [Harm( y)] + μEy∼Q
+
+" TX
+
+> t=1
+
+γt−1 Fail t(θ, y <t )
+
+#
+
++ DKL (Pθ∥Pbase )
+
+(43) 
+
+where Q is an adversarial prefix distribution, γ ∈
+
+(0 , 1] is a discount factor, and μ > 0 controls re-covery penalty strength. 
+
+Definition 18 (Recovery Information) . The recov-ery information at position t is 
+
+Jt(θ) := Ey<t ∼Q
+
+pt(1 − pt), (44) 
+
+where pt := Pθ(yt ∈ R | y<t ). This is the analogue of harm information It for the recovery penalty: it measures how much the choice of yt
+
+affects recovery. 
+
+The recovery penalty has the same covariance-with-score structure as the harm gradient in The-orem 8. Define the recovery gradient ˜Gt(θ) := 
+
+−Ey<t ∼Q[Cov yt|y<t (1[yt ∈ R], ∇θ log Pθ(yt |
+
+y<t ))] . The Cauchy–Schwarz machinery of Sec-tion 7 transfers directly: ∥ ˜Gt∥2 ≤ ¯F · Jt (see Ap-pendix Section B for the precise bound). 
+
+9.1 Deep Equilibrium Characterization Theorem 19 (Deep Equilibrium) . Under the same assumptions as Theorem 14, for small λ and μ the minimizer θ∗ of Hdeep satisfies: 
+
+D(t)KL (θ∗) = 12 λG t + μγ t−1 ˜Gt 
+
+> 2¯F−1
+> t
+
++O (λ+μ)3,
+
+(45) 6where ∥v∥2 
+
+> M
+
+:= v⊤M v . In particular: 
+
+(i) For t > k (beyond the harm horizon), Gt = 0 
+
+by Theorem 10, so 
+
+D(t)KL (θ∗) = μ2γ2( t−1) 
+
+2 ∥ ˜Gt∥2¯F −1
+
+> t
+
++ O(μ3).
+
+(46) 
+
+This is generically positive wherever Q has support and Jt > 0.
+
+(ii) Setting μ = 0 recovers D(t)KL = O(λ2It) from Theorem 14. Proof sketch. The recovery gradient ∇θRt(θ) = ˜Gt(θ) follows from the same score-function iden-tity used in Theorem 8, since Q does not depend on θ. With decoupled parameters, the first-order condition at position t becomes λG t + μγ t−1 ˜Gt +¯Ft(θ∗ − θbase ) = 0 to leading order. Solving and substituting into the quadratic KL expansion yields (45). The full proof is in App. Section B. The discount factor γ controls the depth pro-file: γ = 1 produces uniform recovery KL across positions, while γ < 1 induces geometric decay 
+
+γ2( t−1) . The total recovery KL beyond the horizon scales as O(μ2/(1 − γ2)) , diverging as γ → 1—formalizing the tradeoff between alignment depth and capability preservation. 
+
+9.2 Exact Recovery Probability and Robustness 
+
+The perturbative analysis above requires small μ.For positions beyond the harm horizon, the deep objective admits an exact solution in distribution space. 
+
+Theorem 20 (Exact Recovery Probability) . For a fixed prefix y<t with t > k , let p0 := Pbase (yt ∈R | y<t ) and β := μγ t−1. The optimal conditional distribution is the Gibbs measure 
+
+P ∗(yt | y<t ) ∝ Pbase (yt | y<t ) exp  β·1[yt ∈ R ],
+
+(47) 
+
+with optimal recovery probability and KL cost: 
+
+P ∗(R | y<t ) = σ  logit( p0) + β, (48) 
+
+DKL (P ∗∥Pbase ) = β P ∗(R | y<t ) − log Z, 
+
+(49) 
+
+where Z = (1 − p0) + p0eβ and σ(x) = (1 + 
+
+e−x)−1.Proof sketch. Beyond the harm horizon, Gt = 0 
+
+and the deep objective decouples across prefixes into independent KL-penalized linear problems. Standard variational calculus yields the Gibbs form; the sigmoid and KL expressions follow by direct computation. See App. Section B. The key insight of (48) is that the recovery penalty acts as an additive shift of β in the log-odds of recovery. This enables a clean robustness guarantee. 
+
+Definition 21 (Recoverability) . A model Pθ is 
+
+(Q, ϵ )-recoverable at depth T if Pθ(yt ∈ R |
+
+y<t ) ≥ ϵ for all 1 ≤ t ≤ T and Q-almost all prefixes y<t .
+
+Theorem 22 (Robustness Guarantee) . Suppose 
+
+Pbase (yt ∈ R | y<t ) ≥ pmin > 0 for all t and 
+
+Q-almost all prefixes. Then the minimizer of Hdeep 
+
+(beyond the harm horizon) is (Q, ϵ ∗)-recoverable at depth T , where 
+
+ϵ∗ = σ  logit( pmin ) + μγ T −1. (50) 
+
+The total KL cost of recovery beyond the horizon satisfies 
+
+> T
+
+X
+
+> t=k+1
+
+D(t)KL (θ∗) ≤
+
+> T
+
+X
+
+> t=k+1
+
+μγ t−1−
+
+> T
+
+X
+
+> t=k+1
+
+log  (1 − pmin ) + pmin eμγ t−1 
+
+(51) 
+
+Proof sketch. The sigmoid form (48) is monotone in p0, so the worst case is p0 = pmin . The worst position is t = T (where γt−1 is smallest). The KL bound follows from P ∗(R) ≤ 1 and monotonicity of Z in p0. The full proof is in Section B. 
+
+Corollary 23 (Prefilling Attack Resistance) . Un-der standard alignment, for t > k the model has no additional recovery capability beyond Pbase . Un-der deep alignment, recovery probability is at least 
+
+ϵ∗ > p min at every position. For γ < 1, the mini-mum attack prefix length needed to suppress recov-ery below δ is 
+
+tattack (δ) = 1+ log μ − log(logit( δ) − logit( pmin )) log(1 /γ ) ,
+
+(52) 
+
+which grows logarithmically in μ. For γ = 1 and 
+
+μ ≥ logit( δ) − logit( pmin ), no finite prefix suffices. 
+
+710 Discussion 
+
+10.1 Implications for Alignment Practice 
+
+Our main result is that shallow alignment is not a training failure under this formalization as it is the optimal solution to standard objectives when harm has a short horizon. The gradient characteri-zation (Theorem 8) shows that alignment pressure naturally concentrates where harm is determined. This reframes the problem as that achieving deep alignment requires objective modification, not bet-ter optimization or more data. Deeper alignment requires more total KL diver-gence from the base model. Our equilibrium char-acterization shows D(t)KL = O(λ2It): to maintain alignment at position t, we must pay a KL cost pro-portional to the harm information there. Expanding 
+
+It to later positions (via recovery penalties) thus increases total divergence. This suggests a tradeoff between alignment depth and capability preserva-tion as deep alignment may sacrifice some fluency or knowledge by forcing the model further from its base distribution. Standard alignment evaluations test whether models refuse harmful prompts at the start of gen-eration. Our analysis suggests this is insufficient. A model may appear aligned under such tests while remaining vulnerable to prefilling attacks. Robust evaluation should measure recovery probability 
+
+P (yt ∈ R | yharmful  
+
+> <t
+
+) at multiple positions, not just initial refusal rates. 
+
+10.2 Connection to Adversarial Robustness 
+
+Our formalization can explain the success of pre-filling attacks (Andriushchenko et al., 2024). An attacker who supplies tokens covering the harm horizon bypasses all positions with It > 0. The model then continues from a region where it re-ceived no alignment training. This is not a failure of training but a limitation as there was no gradient signal to learn recovery behavior. An attacker with knowledge of the harm informa-tion profile can craft minimal prefilling attacks by supplying just enough tokens to cover the high-It
+
+region. Our Cauchy-Schwarz bound (Theorem 13) suggests that gradient magnitude decays with √It,so attackers should target the “cliff edge” where It
+
+drops to near-zero. Our deep alignment objective (Theorem 17) hy-pothetically provides a defense by creating Ieff  
+
+> t
+
+> 0
+
+at all positions, we ensure the model receives train-ing signal for recovery even from deep in a harmful sequence. This is more robust than input filtering, which can be evaded, or adversarial training, which only addresses seen attacks. 
+
+10.3 Connection to Representation Engineering 
+
+Circuit breakers (Zou et al., 2024) and represen-tation engineering (Zou et al., 2025) operate on internal activations rather than output distributions. Our framework applies to output-level alignment (RLHF, DPO) and does not directly characterize these methods. However, we conjecture a connec-tion. If harmful representations activate at specific layers, the “representation horizon” may relate to our harm horizon. Investigating this connection is an important direction for future work. Arditi et al. (2024) show that refusal behavior is mediated by a single direction in activation space. This suggests refusal is a “shallow” feature that can be manipulated independently of deeper representa-tions. Our recovery penalty encourages refusal-like behavior at all positions, potentially strengthening this direction throughout the model’s computation. 
+
+11 Conclusion 
+
+We have provided a gradient-theoretic analysis for why safety alignment in LLMs is shallow under the current popular training methods. The mar-tingale structure of sequence-level harm implies that gradient signal cannot propagate beyond the harm horizon. Standard alignment objectives are therefore incapable of producing deep alignment, regardless of optimization quality. Our deep align-ment objective, based on recovery penalties at all positions, offers a principled path to robust safety. We hope this theoretical framework guides future work on alignment techniques that are truly deep. 
+
+Limitations 
+
+We now discuss the limitations of our work. These limitations suggest important directions for future work and caveats for interpreting our results. We analyze gradients with respect to output distributions Pθ(yt|y<t ). Representation-level in-terventions such as circuit breakers and activa-tion steering operate on internal model states and may achieve alignment depth through mechanisms we do not capture. Formalizing the connection between “representation depth” and our “output depth” requires a theory of how internal represen-tations map to output distributions. 8We treat Harm( y) as fixed and known. In prac-tice, harm is estimated by a reward model trained on finite preference data, which may have its own harm horizon as an artifact of training, may pro-duce spurious gradient signal through estimation errors, and may be unreliable on adversarial inputs due to distribution shift. Our theory characterizes alignment to the reward model’s notion of harm, which may diverge from true harm. Our analysis conditions on a fixed prompt x. Dif-ferent prompts induce different harm information profiles It(x), and a model may be deeply aligned for training prompts but shallowly aligned for novel ones. We provide no aggregation principle for com-bining It(x) across prompts into a single measure of alignment depth. The deep alignment objective assumes recovery is desirable at all positions, but mid-sequence re-fusal may sometimes be worse than completing the response and providing context. The feasibility of recovery is formalized by the pmin > 0 condition in Theorem 22: when the base model assigns negli-gible probability to recovery tokens, the required penalty μ grows as log(1 /p min ), which may be impractically large deep into harmful sequences. Zero gradient beyond the harm horizon char-acterizes where training pressure is applied, not where behavior changes. The base model may al-ready be safe (or harmful) at later positions inde-pendently of alignment. Our robustness guarantee (Theorem 22) partially closes this gap by charac-terizing recovery probabilities directly, but only for the deep objective. The standard objective remains characterized only through KL. Our formalism operates at the token level, but harm is a semantic property. The harm horizon in token space may not correspond to the semantic horizon, as a model might commit to harmful con-tent early but realize it through varied token paths. A semantic-level theory would be more fundamen-tal but remains open. The equilibrium characterization describes the fixed point of optimization, not the path to it. The exact variational solution (Theorem 20) removes the small-λ and exponential family assumptions of the perturbative analysis, but assumes unrestricted optimization over per-position distributions, which finite training with early stopping may not achieve. Transformers have finite capacity and may lack the expressiveness to implement recovery from ar-bitrary harmful prefixes. The Gibbs solution (The-orem 20) specifies what the optimal conditional distribution looks like, but whether a finite-capacity transformer can approximate it across the diversity of harmful prefixes is an open question. Finally, our analysis covers single-turn gener-ation. Multi-turn conversations allow recovery across turns. For example, refusing in turn n + 1 
+
+after partially complying in turn n and introduce harm horizons that span multiple exchanges, requir-ing a theory of inter-turn credit assignment that we do not provide. 
+
+References                  
+
+> Maksym Andriushchenko, Francesco Croce, and Nico-las Flammarion. 2024. Jailbreaking leading safety-aligned LLMs with simple adaptive attacks. In ICML 2024 Next Generation of AI Safety Workshop .Andy Arditi, Oscar Balcells Obeso, Aaquib Syed, Daniel Paleka, Nina Rimsky, Wes Gurnee, and Neel Nanda. 2024. Refusal in language models is me-diated by a single direction. In The Thirty-eighth Annual Conference on Neural Information Process-ing Systems .Yuntao Bai, Saurav Kadavath, Sandipan Kundu, Amanda Askell, Jackson Kernion, Andy Jones, Anna Chen, Anna Goldie, Azalia Mirhoseini, Cameron McKinnon, Carol Chen, Catherine Olsson, Christo-pher Olah, Danny Hernandez, Dawn Drain, Deep Ganguli, Dustin Li, Eli Tran-Johnson, Ethan Perez, and 32 others. 2022. Constitutional ai: Harmlessness from ai feedback. Preprint , arXiv:2212.08073. Patrick Chao, Alexander Robey, Edgar Dobriban, Hamed Hassani, George J. Pappas, and Eric Wong. 2025. Jailbreaking Black Box Large Language Mod-els in Twenty Queries . In 2025 IEEE Conference on Secure and Trustworthy Machine Learning (SaTML) ,pages 23–42, Los Alamitos, CA, USA. IEEE Com-puter Society. Paul F. Christiano, Jan Leike, Tom B. Brown, Miljan Martic, Shane Legg, and Dario Amodei. 2017. Deep reinforcement learning from human preferences. In
+> Proceedings of the 31st International Conference on Neural Information Processing Systems , NIPS’17, page 4302–4310, Red Hook, NY, USA. Curran Asso-ciates Inc. Ching-Chia Kao, Chia-Mu Yu, Chun-Shien Lu, and Chu-Song Chen. 2025. Safety depth in large lan-guage models: A markov chain perspective. In The Thirty-ninth Annual Conference on Neural Informa-tion Processing Systems .Zeyi Liao and Huan Sun. 2024. AmpleGCG: Learning a universal and transferable generative model of adver-sarial suffixes for jailbreaking both open and closed LLMs. In First Conference on Language Modeling .
+
+9Xiaogeng Liu, Nan Xu, Muhao Chen, and Chaowei Xiao. 2024. Autodan: Generating stealthy jailbreak prompts on aligned large language models. In The Twelfth International Conference on Learning Repre-sentations .Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kelton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul F Christiano, Jan Leike, and Ryan Lowe. 2022. Training language models to follow instructions with human feedback. In Advances in Neural Information Processing Systems , volume 35, pages 27730–27744. Curran Associates, Inc. Xiangyu Qi, Ashwinee Panda, Kaifeng Lyu, Xiao Ma, Subhrajit Roy, Ahmad Beirami, Prateek Mittal, and Peter Henderson. 2025. Safety alignment should be made more than just a few tokens deep. In The Thir-teenth International Conference on Learning Repre-sentations .Rafael Rafailov, Yaswanth Chittepu, Ryan Park, Harshit Sikchi, Joey Hejna, W. Bradley Knox, Chelsea Finn, and Scott Niekum. 2024. Scaling laws for reward model overoptimization in direct alignment algo-rithms. In The Thirty-eighth Annual Conference on Neural Information Processing Systems .Rafael Rafailov, Archit Sharma, Eric Mitchell, Stefano Ermon, Christopher D. Manning, and Chelsea Finn. 2023. Direct preference optimization: your language model is secretly a reward model. In Proceedings of the 37th International Conference on Neural In-formation Processing Systems , NIPS ’23, Red Hook, NY, USA. Curran Associates Inc. Wei Xiong, Hanze Dong, Chenlu Ye, Ziqi Wang, Han Zhong, Heng Ji, Nan Jiang, and Tong Zhang. 2024. Iterative preference learning from human feedback: Bridging theory and practice for RLHF under KL-constraint. In Proceedings of the 41st International Conference on Machine Learning , volume 235 of 
+
+Proceedings of Machine Learning Research , pages 54715–54754. PMLR. Banghua Zhu, Michael Jordan, and Jiantao Jiao. 2023. Principled reinforcement learning with human feed-back from pairwise or k-wise comparisons. In Pro-ceedings of the 40th International Conference on Machine Learning , volume 202 of Proceedings of Machine Learning Research , pages 43037–43067. PMLR. Andy Zou, Long Phan, Sarah Chen, James Campbell, Phillip Guo, Richard Ren, Alexander Pan, Xuwang Yin, Mantas Mazeika, Ann-Kathrin Dombrowski, Shashwat Goel, Nathaniel Li, Michael J. Byun, Zifan Wang, Alex Mallen, Steven Basart, Sanmi Koyejo, Dawn Song, Matt Fredrikson, and 2 others. 2025. Representation engineering: A top-down approach to ai transparency. Preprint , arXiv:2310.01405. Andy Zou, Long Phan, Justin Wang, Derek Due-nas, Maxwell Lin, Maksym Andriushchenko, Rowan Wang, Zico Kolter, Matt Fredrikson, and Dan Hendrycks. 2024. Improving alignment and robustness with circuit breakers. Preprint ,arXiv:2406.04313. Andy Zou, Zifan Wang, J. Zico Kolter, and Matt Fredrik-son. 2023. Universal and transferable adversar-ial attacks on aligned language models. Preprint ,arXiv:2307.15043. 
+
+A Relaxing the Exponential Family Assumption 
+
+Theorem 14 assumes an exponential family pa-rameterization, which provides per-position nat-ural parameters and decouples positions in the first-order optimality condition. Transformers share parameters θ across all positions. We show that the quadratic KL expansion holds for any smooth parameterization, but that shared parameters in-troduce cross-position coupling that changes the equilibrium characterization in a theoretically in-formative way. 
+
+A.1 General Quadratic Expansion Lemma 24 (Fisher–Hessian Identity) . For any smoothly parameterized family Pθ(yt | y<t ), the Hessian of the per-position KL divergence at θ =
+
+θbase equals the Fisher information: 
+
+∂2D(t)KL (θ)
+
+∂θ i ∂θ j θbase 
+
+= ¯Ft(θbase )ij , (53) 
+
+where ¯Ft(θ) = Ey<t 
+
+Ft(y<t ; θ) is the marginal-ized Fisher information (Theorem 11). Proof. Write D(t)KL (θ) = Ey<t 
+
+KL( Pθ(· |
+
+y<t ) ∥ Pbase (· | y<t )) . At θ = θbase , D(t)KL = 0 
+
+and ∇θD(t)KL = 0 (the base model is a stationary point of the KL from itself). For the Hessian, we use the standard identity. For any two distributions in the same smoothly parameterized family, 
+
+∂2
+
+∂θ i ∂θ j
+
+KL( Pθ∥Pθ0 ) θ=θ0
+
+= Ey∼Pθ0
+
+ ∂ log Pθ(y)
+
+∂θ i
+
+· ∂ log Pθ(y)
+
+∂θ j
+
+
+
+> θ=θ0
+
+(54) which is the Fisher information matrix at θ0. This holds for any smooth parameterization; the expo-nential family is not required. Marginalizing over 
+
+y<t gives the result. 10 It follows that for any smooth parameterization, the per-position KL admits the expansion 
+
+D(t)KL (θ) = 12 (θ − θbase )⊤ ¯Ft(θbase )( θ − θbase )+ O(∥θ − θbase ∥3). (55) The exponential family assumption in Theorem 14 can therefore be replaced by: 
+
+Assumption 1 (Smooth Parameterization) . Pθ(yt |
+
+y<t ) is twice continuously differentiable in θ for all 
+
+yt, y <t , and ¯Ft(θbase ) is positive definite. 
+
+This is satisfied by transformers with softmax output layers. 
+
+A.2 Shared-Parameter Coupling 
+
+With shared parameters, the alignment objective is 
+
+H(θ) = λ E[Harm( y)] + 
+
+> T
+
+X
+
+> t=1
+
+D(t)KL (θ),
+
+and the first-order condition is a single equation over all positions: 
+
+λ
+
+> T
+
+X
+
+> t=1
+
+Gt(θ∗) + 
+
+> T
+
+X
+
+> t=1
+
+∇θD(t)KL (θ∗) = 0 . (56) Substituting the quadratic expansion (55): 
+
+Proposition 25 (Shared-Parameter Equilibrium) .
+
+Under Assumption 1, for small λ the optimal pa-rameter shift is 
+
+θ∗ − θbase = −λ ¯F −1tot 
+
+> T
+
+X
+
+> t=1
+
+Gt(θbase ) + O(λ2),
+
+(57) 
+
+where ¯Ftot = PTt=1 ¯Ft(θbase ) is the total Fisher information. Proof. Expanding ∇θD(t)KL (θ) = ¯Ft(θbase )( θ −
+
+θbase ) + O(∥θ −θbase ∥2) and substituting into (56) :
+
+λ X
+
+> t
+
+Gt+ ¯Ftot (θ∗−θbase )+ O(∥θ∗−θbase ∥2) = 0 .
+
+Since θ∗ = θbase + O(λ), the higher-order terms are O(λ2), and solving to leading order gives (57) .The per-position KL divergence at equilibrium is then: 
+
+D(t)KL (θ∗) = λ2
+
+2
+
+X
+
+> s
+
+Gs
+
+!⊤
+
+¯F −1tot ¯Ft ¯F −1tot 
+
+X
+
+> s
+
+Gs
+
+!
+
++ O(λ3). (58) 
+
+A.3 Comparison to the Decoupled Case 
+
+In the exponential family setting, per-position nat-ural parameters decouple the first-order condi-tion into T independent equations, each yielding 
+
+D(t)KL = O(λ2It). The shared-parameter expres-sion (58) differs in two ways. 
+
+Cross-position dependence. Even if It = 0 (so 
+
+Gt = 0 ), the per-position KL D(t)KL (θ∗) can be nonzero. The parameter shift ∆θ = θ∗ − θbase 
+
+is driven by gradients from all positions; through shared weights, it perturbs the output distribution at every position, including those beyond the harm horizon. 
+
+Incidental vs. functional change. We can de-compose the per-position KL into two components: 
+
+D(t)KL (θ∗) = λ2
+
+2 G⊤ 
+
+> t
+
+¯F −1tot ¯Ft ¯F −1tot Gt
+
+| {z } 
+
+> functional: driven by local It
+
++
+
+λ2
+
+2
+
+X
+
+> s̸=t
+
+G⊤ 
+
+> s
+
+¯F −1tot ¯Ft ¯F −1tot Gs + cross terms 
+
+| {z } 
+
+> incidental: driven by remote Is
+
+(59) The functional component vanishes when It = 0 
+
+(by Theorem 8). The incidental component does not; it reflects changes to the position-t output dis-tribution caused by parameter shifts optimizing other positions. 
+
+Proposition 26 (Incidental Change is Safety-Irrel-evant) . Let t > k where k is the harm horizon (Theorem 9). The incidental change at position t
+
+satisfies: 
+
+Ey<t 
+
+h
+
+Cov yt|y<t 
+
+ ht(y≤t),
+
+log Pθ∗ (yt | y<t )
+
+− log Pbase (yt | y<t )i
+
+= 0 . (60) 
+
+That is, the distributional change at position t is uncorrelated with expected harm. Proof. Since t > k , harm is determined by y≤k
+
+(Theorem 9), so ht(y≤t) = hk(y≤k) almost surely. This is constant given y<t (since t > k implies 
+
+y≤k ⊆ y<t ). A random variable that is constant given the conditioning has zero covariance with any function of yt.11 A.4 Refined Equilibrium Characterization 
+
+Combining these observations, we obtain: 
+
+Theorem 27 (Shared-Parameter Equilibrium) . Un-der Assumption 1, for small λ:1. For all positions t: D(t)KL (θ∗) =
+
+O
+
+
+
+λ2 ¯F −1tot 
+
+P 
+
+> s
+
+Gs
+
+> 2¯Ft
+
+
+
+.2. For positions t beyond the harm horizon 
+
+D(t)KL (θ∗) may be nonzero, but the distribu-tional change is uncorrelated with harm (The-orem 26). 3. If per-position parameters decouple (as in the exponential family case), this reduces to D(t)KL (θ∗) = O(λ2It), recovering Theo-rem 14. 
+
+The qualitative conclusion of the main body is preserved but refined. Standard alignment changes late-position behavior incidentally, through the cou-pling of shared parameters, but these changes carry no safety-relevant information. Deep alignment, namely the distributional change that is function-ally related to harm, remains confined to the harm horizon. The shared-parameter analysis generates a pre-diction that distinguishes it from the decoupled theory. For aligned models with shared parame-ters, positions t beyond the harm horizon satisfy 
+
+D(t)KL (θ∗) > 0 but Pθ∗ (yt ∈ R | yharmful  
+
+> <t
+
+) ≈
+
+Pbase (yt ∈ R | yharmful  
+
+> <t
+
+). That is, the aligned model’s output distribution differs from the base model at late positions, but this difference does not manifest as increased recovery capability. The decoupled theory predicts D(t)KL ≈ 0 for t > k. The shared-parameter theory predicts nonzero KL that is safety-irrelevant. Measuring both D(t)KL 
+
+and recovery probability P (yt ∈ R | yharmful  
+
+> <t
+
+)
+
+across positions would distinguish the two accounts and, more practically, would test whether nonzero late-position KL should be interpreted as evidence of deep alignment (it should not). 
+
+B Proofs and Supplementary Results for Deep Alignment 
+
+This appendix provides full proofs for the results in Section 9 and additional remarks on their scope. 
+
+B.1 Recovery Gradient Bound Lemma 28 (Recovery Gradient Bound) .
+
+The recovery gradient ˜Gt(θ) := 
+
+−Ey<t ∼Q[Cov yt|y<t (1[yt ∈ R], ∇θ log Pθ(yt |
+
+y<t ))] satisfies 
+
+∥ ˜Gt(θ)∥2 ≤ Ey<t ∼Q
+
+tr( Ft(y<t ; θ))  · Jt(θ).
+
+(61) 
+
+If tr( Ft(y<t ; θ)) ≤ ¯F uniformly, then ∥ ˜Gt∥2 ≤
+
+¯F · Jt.Proof. The argument is identical in structure to the proof of Theorem 13. Write s(j) 
+
+> t
+
+= ∂θj log Pθ(yt |
+
+y<t ). For a fixed prefix y<t , by Cauchy–Schwarz applied coordinate-wise: 
+
+Cov yt|y<t 
+
+
+
+1[yt ∈ R ], s (j)
+
+> t
+
+ 2
+
+≤ Var yt|y<t (1[yt ∈ R ]) 
+
+· Var yt|y<t 
+
+
+
+s(j)
+
+> t
+
+
+
+. (62) Summing over coordinates j and using 
+
+Var( s(j) 
+
+> t
+
+) = E[( s(j) 
+
+> t
+
+)2] (since E[s(j) 
+
+> t
+
+] = 0 ): 
+
+Cov yt|y<t (1[yt ∈ R ], ∇θ log Pθ) 2
+
+≤ pt(1 − pt) · tr( Ft(y<t ; θ)) . (63) where pt = Pθ(yt ∈ R | y<t ). Taking the outer expectation over y<t ∼ Q and applying Jensen’s inequality ( ∥E[X]∥2 ≤ E[∥X∥2]): 
+
+∥ ˜Gt∥2 ≤ Ey<t ∼Q
+
+pt(1 − pt) · tr( Ft(y<t ; θ)) 
+
+(64) 
+
+≤ Ey<t ∼Q
+
+tr( Ft(y<t ; θ))  · Jt(θ). (65) The second inequality uses the uniform bound on the Fisher trace. 
+
+B.2 Proof of Theorem 19 
+
+Full proof of Theorem 19. The deep alignment ob-jective decomposes as 
+
+Hdeep (θ) = λ EPθ [Harm( y)] + μ
+
+> T
+
+X
+
+> t=1
+
+γt−1Rt(θ)+
+
+> T
+
+X
+
+> t=1
+
+D(t)KL (θ), (66) where Rt(θ) := Ey<t ∼Q[Fail t(θ, y <t )] .12 Recovery gradient identification. Since Q does not depend on θ:
+
+∇θRt(θ)= −Ey<t ∼Q[∇θPθ(yt ∈ R | y<t )] = −Ey<t ∼Q
+
+"X
+
+> r∈R
+
+Pθ(r | y<t ) ∇θ log Pθ(r | y<t )
+
+#
+
+= −Ey<t ∼Q
+
+h
+
+Eyt|y<t 
+
+1[yt ∈ R ]
+
+· ∇ θ log Pθ(yt | y<t )i
+
+. (67) Since Eyt|y<t [∇θ log Pθ(yt | y<t )] = 0 , this equals 
+
+˜Gt(θ) from Theorem 18. 
+
+Perturbative expansion. With decoupled per-position parameters, the first-order condition at position t is 
+
+λ G t(θ∗) + μγ t−1 ˜Gt(θ∗) + ∇θD(t)KL (θ∗) = 0 .
+
+(68) Using the quadratic KL expansion (Theorem 24): 
+
+∇θD(t)KL (θ) = ¯Ft(θ − θbase ) + O(∥θ − θbase ∥2).
+
+Since θ∗ = θbase + O(λ + μ), we evaluate Gt and 
+
+˜Gt at θbase up to higher-order corrections. Solving (68) to leading order: 
+
+θ∗−θbase = − ¯F −1
+
+> t
+
+ λ G t+μγ t−1 ˜Gt
+
++O (λ+μ)2,
+
+(69) where Gt and ˜Gt are evaluated at θbase . Substitut-ing into D(t)KL (θ∗) = 12 (θ∗−θbase )⊤ ¯Ft(θ∗−θbase )+ 
+
+O(( λ + μ)3):
+
+D(t)KL (θ∗) = 12 λG t+μγ t−1 ˜Gt 2¯F −1
+
+> t
+
++O (λ+μ)3.
+
+(70) 
+
+Cases. For t > k : It = 0 implies Gt = 0 by The-orem 10, so D(t)KL = μ2γ2( t−1)  
+
+> 2
+
+∥ ˜Gt∥2¯F −1
+
+> t
+
++ O(μ3).For μ = 0 : the recovery terms vanish, reducing to  
+
+> λ2
+> 2
+
+∥Gt∥2¯F −1
+
+> t
+
++ O(λ3) = O(λ2It) by Theorems 13 and 28. 
+
+Remark 6 (Aggregate recovery KL) . For γ < 1,the total recovery KL beyond the horizon satisfies 
+
+X
+
+> t>k
+
+D(t)KL (θ∗) = O
+
+ μ2
+
+1 − γ2
+
+
+
+, (71) 
+
+assuming ∥ ˜Gt∥2¯F −1
+
+> t
+
+is bounded uniformly in t.This diverges as γ → 1, formalizing the depth– capability tradeoff: uniform-depth alignment ( γ =1) requires unbounded total KL divergence from the base model. 
+
+Remark 7 (Non-degeneracy of recovery gradi-ent) . The recovery information Jt > 0 whenever there exists a prefix y<t in the support of Q with 
+
+0 < P θ(yt ∈ R | y<t ) < 1. By Theorem 28, this is necessary for ˜Gt̸ = 0 . It is also generically sufficient: ˜Gt = 0 despite Jt > 0 would require the score function to be orthogonal to the recovery indicator conditional on every prefix, which is a non-generic condition of measure zero in parame-ter space. 
+
+B.3 Proof of Theorem 20 
+
+Full proof of Theorem 20. For t > k, the harm gradient Gt = 0 and the deep objective’s contribu-tion at prefix y<t reduces to the pointwise problem 
+
+min   
+
+> P∈∆( V)
+
+β 1 − P (R) + DKL (P ∥P0), (72) where β = μγ t−1, P0 = Pbase (· | y<t ), and ∆( V)
+
+is the probability simplex. Introducing a Lagrange multiplier ν for the con-straint P 
+
+> yt
+
+P (yt) = 1 :
+
+∂∂P (yt)
+
+" X
+
+> yt
+
+P (yt) log P (yt)
+
+P0(yt)
+
+− β X
+
+> yt
+
+P (yt)1[yt ∈ R ]
+
+− ν
+
+ X P − 1
+
+#
+
+= 0 . (73) This gives log P ∗(yt) 
+
+> P0(yt)
+
++ 1 − β 1[yt ∈ R ] − ν = 0 ,so 
+
+P ∗(yt) = P0(yt) exp  β 1[yt ∈ R ]+ ν −1. (74) The normalization constraint determines eν−1 =1/Z where 
+
+Z = X
+
+> yt
+
+P0(yt) exp  β 1[yt ∈ R ] = (1 −p0)+ p0eβ .
+
+(75) Strict convexity of the KL divergence ensures this is the unique global minimizer. Recovery probability: 
+
+P ∗(R) = X
+
+> r∈R
+
+P0(r) eβ
+
+Z = p0 eβ
+
+(1 − p0) + p0 eβ .
+
+(76) 13 Dividing numerator and denominator by p0 eβ :
+
+P ∗(R) = 11 − p0
+
+p0
+
+e−β + 1 = 11 + exp 
+
+
+
+−β − log p0
+
+> 1−p0
+
+
+
+= σ(logit( p0) + β) . (77) KL cost: 
+
+DKL (P ∗∥P0) = X
+
+> yt
+
+P ∗(yt) log P ∗(yt)
+
+P0(yt)= X
+
+> yt
+
+P ∗(yt) [ β 1[yt ∈ R ] − log Z]= β P ∗(R) − log Z. (78) 
+
+Remark 8 (Interpretation) . The recovery penalty acts as an additive shift of β in log-odds space. A base probability of p0 = 0 .01 is boosted much more in absolute terms than p0 = 0 .5 for the same 
+
+β, since the sigmoid is steepest near 1/2. Crucially, the mechanism requires p0 > 0: if the base model assigns zero probability to all recovery tokens for a given prefix, no finite β can create recovery. 
+
+Remark 9 (Importance weighting) . The recovery term in Hdeep samples prefixes from Q while the KL term averages over Pθ. In the non-parametric optimization, the pointwise subproblem at prefix 
+
+y<t becomes 
+
+min  
+
+> P(·| y<t )
+
+q(y<t )
+
+pθ(y<t ) μγ t−1(1 − P (R)) + DKL (P ∥Pbase (·| y<t )) , (79) 
+
+where the density ratio q/p θ acts as an impor-tance weight. The Gibbs solution retains the form of Theorem 20 with β replaced by ˜βt(y<t ) := 
+
+μγ t−1 · q(y<t )/p θ(y<t ). For harmful prefixes that the aligned model avoids but Q upweights, 
+
+˜βt ≫ βt, amplifying recovery pressure precisely where it is most needed. 
+
+B.4 Proof of Theorem 22 
+
+Full proof of Theorem 22. Recovery bound. By Theorem 20, the optimal recovery probability at position t given prefix y<t is P ∗(R | y<t ) = 
+
+σ(logit( p0(y<t )) + μγ t−1). Since σ(logit( ·) + c)
+
+is monotonically increasing in its argument for any 
+
+c > 0, and p0(y<t ) ≥ pmin by assumption: 
+
+P ∗(R | y<t ) ≥ σ logit( pmin ) + μγ t−1
+
+≥ σ logit( pmin ) + μγ T −1
+
+= ϵ∗, (80) where the second inequality uses γt−1 ≥ γT −1 for 
+
+t ≤ T and γ ∈ (0 , 1] .KL bound. From (49), writing βt = μγ t−1:
+
+D(t)KL = Ey<t ∼Q
+
+βtP ∗(R | y<t ) − log Zt(y<t )
+
+(81) 
+
+≤ βt · 1 − log  (1 −pmin ) + pmin eβt ,
+
+(82) where we used P ∗(R) ≤ 1 and Zt(y<t ) =(1 −p0) + p0eβt ≥ (1 −pmin ) + pmin eβt (since Z
+
+is increasing in p0 when eβt > 1, as ∂Z/∂p 0 =
+
+eβt −1 > 0). Summing over t > k yields (51) .
+
+Proof of Theorem 23. For γ < 1, the recovery probability at position t satisfies σ(logit( pmin ) + 
+
+μγ t−1) ≥ δ if and only if μγ t−1 ≥ logit( δ) −
+
+logit( pmin ). Taking logarithms: (t − 1) log γ ≤
+
+log(logit( δ) − logit( pmin )) − log μ. Since log γ < 
+
+0, dividing and rearranging: 
+
+t ≤ 1 + log μ − log(logit( δ) − logit( pmin )) log(1 /γ ) .
+
+(83) For t exceeding this threshold, recovery drops be-low δ. For γ = 1 , the bound σ(logit( pmin ) + μ) ≥
+
+δ holds at all positions whenever μ ≥ logit( δ) −
+
+logit( pmin ).
+
+B.5 Within-Horizon Recovery Proposition 29 (Within-Horizon Solution) . For 
+
+t ≤ k, the non-parametric solution to Hdeep takes the form 
+
+P ∗(yt | y<t ) ∝ Pbase (yt | y<t )
+
+· exp 
+
+
+
+− λ h t(y≤t)+ μγ t−11[yt ∈ R ]
+
+
+
+. (84) 
+
+The harm tilt −λ h t reduces probability of tokens leading to high expected harm, while the recovery tilt +μγ t−11[· ∈ R ] boosts recovery tokens. When these align (recovery tokens have low ht), the ef-fects reinforce; when they conflict (a recovery token would increase expected harm, e.g. by producing an incoherent refusal), the two terms compete, with the tradeoff governed by λ/μ .
+
+14 Proof. For t ≤ k, the per-prefix subproblem in-cludes both the harm and recovery terms. The Lagrangian for the variational problem has two tilts: −λh t(y≤t) from the harm objective and 
+
++μγ t−11[yt ∈ R ] from the recovery penalty. The KL-penalized optimization with a linear objective P 
+
+> i
+
+ciP (yt = i) has the well-known Gibbs solution 
+
+P ∗(yt) ∝ P0(yt) exp( cyt ). Combining both linear terms gives the result. Note that ht(y≤t) depends on yt (unlike the beyond-horizon case), so this is not a simple indicator tilt. 
+
+B.6 The pmin > 0 Assumption Remark 10 (Softmax models) . Condition 
+
+Pbase (yt ∈ R | y<t ) ≥ pmin > 0 is automatically satisfied by any model with a softmax output layer and finite logits, since softmax assigns strictly positive probability to every token. However, pmin 
+
+may be exponentially small for prefixes deep into harmful content. If pmin = e−L for some L > 0,achieving ϵ∗ ≥ 1/2 requires μγ T −1 ≥ L: the penalty must overcome the base model’s log-odds against recovery. For a base model that assigns 
+
+pmin = 10 −6 to recovery tokens after a long harm-ful prefix, this means μγ T −1 ≥ 6 ln 10 ≈ 13 .8,which is achievable but requires a substantial penalty that will also incur substantial KL cost. 
+
+15

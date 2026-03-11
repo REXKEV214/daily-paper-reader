@@ -1,0 +1,794 @@
+Title: DisenReason: Behavior Disentanglement and Latent Reasoning for Shared-Account Sequential Recommendation
+
+URL Source: https://arxiv.org/pdf/2603.03782v1
+
+Published Time: Thu, 05 Mar 2026 01:37:36 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# DisenReason: Behavior Disentanglement and Latent Reasoning for Shared-Account Sequential Recommendation 
+
+## Jiawei Cheng a, Min Gao a,∗, Zongwei Wang a, Xiaofei Zhu b, Zhiyi Liu a, Wentao Li c,Wei Li d and Huan Wu e
+
+> a
+
+School of Big Data and Software Engineering, Chongqing University, Chongqing, 401331, China 
+
+> b
+
+College of Computer Science and Engineering, Chongqing University of Technology, Chongqing, 401135, China  
+
+> c
+
+School of Computing and Mathematical Sciences, University of Leicester, Leicester, 401135, United Kingdom 
+
+> d
+
+Department of Plastic Surgery, Chongqing University Central Hospital, Chongqing Emergency Medical Center, Chongqing, 400000, China 
+
+> e
+
+College of Environmental Science and Engineering, Tongji University, Shanghai, 200092, China 
+
+A R T I C L E I N F O 
+
+Keywords :Sequential Recommendation Shared-account Sequential Recom-mendation Fourier Transform Reasoning-based Recommendation. 
+
+A B S T R A C T 
+
+Shared-account usage is common on streaming and e-commerce platforms, where multiple users share one account. Existing shared-account sequential recommendation (SSR) methods often assume a fixed number of latent users per account, limiting their ability to adapt to diverse sharing patterns and reducing recommendation accuracy. Recent latent reasoning technique applied in sequential recommendation (SR) generate intermediate embeddings from the user embedding (e.g, last item embedding) to uncover users’ potential interests, which inspires us to treat the problem of inferring the number of latent users as generating a series of intermediate embeddings, shifting from inferring preferences behind user to inferring the users behind account. However, the last item cannot be directly used for reasoning in SSR, as it can only represent the behavior of the most recent latent user, rather than the collective behavior of the entire account. To address this, we propose DisenReason, a two-stage reasoning method tailored to SSR. DisenReason combines behavior disentanglement stage from frequency-domain perspective to create a collective and unified account behavior representation, which serves as a pivot for latent user reasoning stage to infer the number of users behind the account. Experiments on four benchmark datasets show that DisenReason consistently outperforms all state-of-the-art baselines across four benchmark datasets, achieving relative improvements of up to 12.56% in MRR@5 and 6.06% in Recall@20. 
+
+## 1. Introduction 
+
+In many digital services such as streaming media, e-commerce, online learning, and smart home platforms, users constantly interact with systems over time, forming behavior sequences that reveal their evolving interests and needs. Sequential recommendation (Peintner et al., 2025; Liu et al., 2024; Wang et al., 2024, 2025b) has emerged as an effective solution for predicting users’ next interactions by leveraging these temporal dynamics. However, a widely adopted assumption underlying existing sequential recommenders is that each account is operated by a single individual, which often breaks in real-world applications where shared-account usage is common. For example, family members may jointly use a single VIP video account, music subscription account, or online shopping account. To address this prevalent practical scenario, the shared-account sequential recommendation (SSR) task (Ma et al., 2019) was proposed, which targets accurate recommendations when multiple real users operate the same account. To tackle the SSR task, existing studies have explored extensions of sequential recommendation models by leveraging recurrent architectures to encode temporal dependencies (Guo et al., 2022b,a) or graph neural networks to propagate collaborative signals (Zhang et al., 2025a). These methods assume that each shared account consists of a fixed number of latent users and then attempt to disentangle their sequential behaviors accordingly. Although this assumption simplifies model design, it is misaligned with real usage patterns. Shared accounts in practice exhibit substantial diversity in the number of underlying users, ranging from two siblings to several household members. Enforcing a uniform and predetermined user count limits the model’s ability to adapt to different sharing scenarios. Consequently, the key challenge remains unresolved in the SSR task: how to accurately infer and represent the dynamic number of latent users behind a shared account to support high-quality recommendations. 
+
+> ∗
+
+Corresponding author 
+
+chengjiawei@stu.cqu.edu.cn (J. Cheng); gaomin@cqu.edu.cn (M. Gao); zongwei@cqu.edu.cn (Z. Wang); 
+
+zxf@cqut.edu.cn (X. Zhu); liuzhiyi@stu.cqu.edu.cn (Z. Liu); wl226@leicester.ac.uk (W. Li); liwei00128@cqu.edu.cn (W. Li); wuhuan@tongji.edu.cn (H.W. ) 
+
+(M. Gao) 
+
+xx et al.: Preprint submitted to Elsevier Page 1 of 17  
+
+> arXiv:2603.03782v1 [cs.IR] 4 Mar 2026 DisenReason
+> Fig. 1. Visualization of frequency-domain disentanglement for shared-account behavior sequence.
+
+Recent latent reasoning paradigms (Tang et al., 2025) have achieved strong performance in sequential recommendation by enabling models to conduct implicit multi-step inference based on last item embedding. Unlike text-based reasoning, latent reasoning occurs within the latent space of user behavior, where intermediate results emerge as hidden embeddings represented diverse interests rather than textual. This paradigm inspires us that it could be a promising direction to transform the problem of learning the number of latent users in an account into a process of generating intermediate results in the latent space, which represents the behavior space of the account. Yet, existing latent reasoning methods in sequential recommendation are not directly applicable to shared-account scenarios. Traditional sequential recommendation assumes that each account corresponds to a single individual. Under this condition, it is natural to use the last item as the representation of the user’s current intent and as the starting pivot for reasoning. In shared-account scenarios, however, this assumption no longer holds. The interaction sequence becomes a mixture of behaviors from multiple underlying users. While the last item may reflect the behavior of one user at a specific moment, it fails to capture the collective nature of the shared account. Without a unified pivot that represents the account as a whole, latent reasoning methods struggle to uncover the hidden users behind the account. This limitation calls for a global behavioral pivot from this mixed interaction sequence that captures the collective dynamics. We address this challenge by adopting a temporal-signal perspective, viewing shared-account behavior as a mixture of multiple temporal patterns. Signal processing theory (Pitas, 2000; Acharya and Ray, 2005) suggests that an entangled signal can be decomposed into sinusoidal components of distinct frequencies, where low frequencies represent stable, long-term sources, while high frequencies represent unstable, short-term sources. Analogously, we posit that different latent users within a shared account also exhibit distinct temporal rhythms: some users dominate stable, long-term preferences (low-frequency), while others contribute to bursty, short-term interactions (high-frequency). This insight motivates us to examine the frequency structures embedded in shared account sequences. Our empirical analysis validates this idea. As illustrated in Fig. 1, the mixed interaction sequence exhibits a broad and continuous energy distribution. We then disentangle this mixed distribution into equal-width intervals along the frequency axis, obtaining five distinct frequency components. These disentangled components each exhibit concentrated energy within their respective frequency bands, with minimal overlap. This observation suggests that we can capture different behavior patterns in the mixed sequence from a frequency-domain perspective. By combining these components, we reconstruct a complete representation of the account’s collective behavior, thereby establishing a pivot for latent user reasoning. Building on this insight, we propose a novel two-stage reasoning framework named DisenReason , which aims to obtain the account-level representation for reasoning pivot and uncover the number of user behind account via latent reasoning on this pivot. In stage one, DisenReason reinterprets the mixed interaction sequence in the   
+
+> xx et al.: Preprint submitted to Elsevier Page 2 of 17 DisenReason
+
+frequency domain using Fast Fourier Transform (FFT) (Brigham, 1988) and disentangles it into different behavioral patterns. Since these patterns contribute unequally to the shared account, we introduce a Mixture-of-Experts (Chen et al., 2022) fusion scheme to adaptively weight and integrate them into a reliable account-level representation, which serves as the pivot for subsequent reasoning. In stage two, DisenReason conducts progressive residual reasoning to sequentially uncover latent users based on pivot. At each step, an intermediate embedding is generated from the pivot to represent an identified user, followed by a residual technique that removes this inferred user from the pivot to avoid redundant reasoning. The reasoning loop continues until the semantic similarity between newly inferred and previously identified users surpasses a preset threshold, signaling that all latent users behind the shared account have been successfully recovered. Experiments on four benchmark datasets demonstrate that our proposed DisenReason outperforms previous state-of-the-art baselines. The main contributions of this paper are summarized as follows: 
+
+• To the best of our knowledge, this is the first work to introduce latent reasoning into the Shared-Account Sequential Recommendation task. This novel approach aims to tackle the challenge of accurately identifying the hidden users in shared account scenarios. 
+
+• We propose DisenReason, a novel two-stage reasoning framework that integrates behavior disentanglement to derive account behavior representation and subsequently performing latent reasoning over them, aiming to infer the number of latent users behind the account. 
+
+• Extensive experiments conducted on four benchmark datasets demonstrate that DisenReason consistently outperforms state-of-the-art methods across various shared-account scenarios, confirming its effectiveness and robustness. 
+
+## 2. Related Work 
+
+2.1. Sequential Recommendation 
+
+Sequential Recommendation (SR) aims to predict a user’s next interaction by modeling the transition depen-dencies among items within a behavioral sequence. Early approaches rely on Markov Chain-based models (He and McAuley, 2016; Rendle et al.) to alleviate data sparsity issues. However, these methods are limited to capture the dynamics of user preferences. With the rapid progress of deep learning, various neural sequential recommenders (Peintner et al., 2025; Liu et al., 2024; Li et al., 2026; Jiang et al., 2026; Wang et al., 2026) are introduced to learn more expressive sequential representations. Subsequently, self-attention mechanism (Vaswani et al., 2017) demonstrate remarkable effectiveness in modeling long-range dependencies in sequential data, inspiring a series of transformer-based SR models (Kang and McAuley, 2018; Sun et al., 2019; Deng et al., 2025; Pan et al., 2026; Liu et al., 2025). Despite their success, most of these models presume a one-to-one correspondence between accounts and users, making them unsuitable for shared-account scenarios. Building upon SR research, Shared-Account Sequential Recommendation (SSR) extends the task to scenarios where multiple users share a single account (Verstrepen and Goethals, 2015; Duan and Liang, 2025; Wang et al., 2025a). The key objective is to capture the heterogeneous preferences of latent users and generate personalized recommendations. Early SSR studies mainly employed RNN-based frameworks (Ma et al., 2019; Sun et al., 2021) to infer user-specific patterns within shared accounts. However, these models often suffer from gradient vanishing and fail to capture long-range dependencies. To address these shortcomings, subsequent works (Guo et al., 2021, 2022b) introduced graph-based SSR architectures augmented with attention mechanisms, enabling the propagation of user-dependent signals through graph structures. Other work (Guo et al., 2022a) uses reinforcement learning-based method for SSR. While such methods have achieved remarkable improvements, they typically assume a fixed number of latent users for all accounts and learn directly from mixed interaction sequences, which limits their ability to disentangle user behaviors effectively and ultimately constrains recommendation accuracy. In contrast, our proposed two-stage reasoning method adaptively learns the correct number of latent users within each shared account in a progressive reasoning manner, thereby enabling more accurate and personalized recommendations. 
+
+2.2. Reasoning-based Recommendation 
+
+Inspired by LLMs’ Chain of Thought (Wei et al., 2022; Geiping et al., 2025; Chen et al., 2025), Tang et al. (2025) introduces the “think before acting” paradigm into sequential recommendation, enhancing the computational capability of sequential recommendation through implicit reasoning. To achieve this, they proposed two reasoning learning approaches: Ensemble Reasoning Learning (ERL) and Progressive Reasoning Learning (PRL). The former leverages the idea of ensemble learning to construct multi-order user representations, aiming to comprehensively capture latent interest distributions from diverse perspectives. The core idea of the latter is to design a progressive distribution sharpening strategy to guide the intermediate reasoning chains, gradually   
+
+> xx et al.: Preprint submitted to Elsevier Page 3 of 17 DisenReason
+
+approximating the user’s true preference distribution. Subsequently, PLR (Tang et al., 2026) introduces width-level computational scaling to sequential recommendation, addressing the diminishing returns of depth-only latent reasoning by exploring multiple reasoning trajectories simultaneously. It employs learnable trigger tokens to construct parallel streams in latent space, preserves diversity via global regularization, and adaptively aggregates multi-stream outputs through a mixture-of-reasoning-streams mechanism. In this paper, we apply this technique to SSR. Unlike directly applying the technique to SSR, we have carefully designed it to better suit the SSR task. These designs include learning an appropriate reasoning pivot as the starting point for reasoning, rather than directly using the last item as the reasoning starting point as in (Tang et al., 2025), and incorporating a residual mechanism during the reasoning process to prevent redundant reasoning. 
+
+2.3. Fourier Transform in Recommendation 
+
+Fourier transform has been an important tool in digital signal processing and graph signal processing for decades (Pitas, 2000; Acharya and Ray, 2005; Peng et al., 2022; Cheung et al., 2020). There are a variety of works that incorporate fourier transform in computer vision (Rao et al., 2021; Xu et al., 2020; Suvorov et al., 2022; Zhao et al., 2024; Zhang et al., 2025c) and natural language processing (Tamkin et al., 2020; Ai et al., 2025). Very recent works try to leverage fourier transform enhanced model for long-term series forecasting (Zhou et al., 2022b; Wu et al., 2025) and sequential recommendation. In sequential recommendation, FMLP-Rec (Zhou et al., 2022a) first introduced frequency-based filtering using MLPs to uncover periodic patterns in user-item interactions. FEARec (Du et al., 2023) proposed advanced architectures with frequency-aware attention mechanisms. Additionally, some studies (Qiu et al., 2022; Yang et al., 2024) have incorporated fourier-based data augmentation for contrastive learning, further enhancing representation robustness. BSARec (Shin et al., 2024) introduced fine-grained frequency adjustment, aiming to better capture subtle sequential signals. MUFFIN (Baek et al., 2025) adopts a dual filtering architecture, comprising GFM and LFM, to exploit the full frequency spectrum. Despite these advances, existing approaches primarily focus on single-user scenarios, where the entire interaction sequence is assumed to originate from one individual. In contrast, our work leverages fourier transform to disentangle the mixed behavioral signals in shared-account sequences, enabling the model to separate different users’ patterns from a frequency perspective. This novel application of frequency analysis opens up new possibilities for handling multi-user accounts in recommendation systems. 
+
+## 3. Research Objective 
+
+We structure our research objective by first identifying the limitations in existing studies, then formulating the core problems to be solved, and finally summarizing our key contributions. 
+
+Limitations of Existing Research. Existing SSR methods typically assume a fixed number of latent users per account, failing to reflect real-world sharing scenarios where user counts vary dynamically. Moreover, conventional latent reasoning paradigms rely on the last item as the reasoning pivot, which captures only the most recent user and neglects the collective behavior of the entire account. 
+
+Problems to be Addressed. We address two key challenges: (1) how to construct a unified account-level representation that captures the collective behavior of shared account; and (2) how to adaptively infer the variable number of latent users behind each account without a predetermined count. 
+
+Contributions of Our Research. We propose DisenReason, a two-stage reasoning framework for SSR. It introduces (1) a behavior disentanglement module in stage one that disentangles mixed sequence into distinct behavioral patterns to construct a reliable account pivot; (2) a progressive residual reasoning mechanism in stage two that iteratively infers latent user and removes it from the pivot to avoid redundancy of reasoning; (3) Extensive experiments show that DisenReason consistently outperforms state-of-the-art methods. 
+
+## 4. Preliminaries 
+
+4.1. Problem Formulation 
+
+Let 𝑉 = { 𝑣 1, 𝑣 2, .., 𝑣 𝑖 , .., 𝑣 𝑛 } is the set of items, where 𝑣 𝑖 denotes the 𝑖 -th item. The set of shared accounts is denoted as  = { 𝐴 1, 𝐴 2, .., 𝐴 𝑘 , .., 𝐴 𝑚 }, where 𝐴 𝑘 represents the 𝑘 -th shared account. Moreover, the set of sequences is denoted as  = { 𝑆 1, 𝑆 2, .., 𝑆 𝑘 , .., 𝑆 𝑛 }, where 𝑆 𝑘 ∈ { 𝑣 𝑘  
+
+> 1
+
+, 𝑣 𝑘  
+
+> 2
+
+, .., 𝑣 𝑘 𝑠 } is the hybrid sequence of shared account 𝐴 𝑘 . Given 𝑆 𝑘 and 𝐴 𝑘 , the task of SSR is recommend the next item 𝑣 𝑘 𝑠 +1 that 𝐴 𝑘 is most likely to interact, based on the account’s hybrid sequence 𝑆 𝑘 . The probabilities of item 𝑣 𝑘 𝑠 +1 is defined as: 
+
+𝑃 (𝑣 𝑘 𝑠 +1 ∣ 𝑆 𝑘 , 𝐴 𝑘 ) ∼ 𝑓 (𝑆 𝑘 , 𝐴 𝑘 ), (1) where 𝑃 (𝑣 𝑘 𝑠 +1 ∣ 𝑆 𝑘 , 𝐴 𝑘 ) denotes the probability of recommending 𝑣 𝑘 𝑠 +1 to 𝐴 𝑘 given its historical hybrid sequence 
+
+𝑆 𝑘 , and 𝑓 (𝑆 𝑘 , 𝐴 𝑘 ) is the function designed to estimate the probability.   
+
+> xx et al.: Preprint submitted to Elsevier Page 4 of 17
+
+DisenReason 
+
+Table 1 
+
+Notations used in DisenReason 
+
+Notation Definition 
+
+ Set of shared accounts 
+
+𝐴 𝑗 The 𝑗 -th shared account 
+
+𝑉 Set of items 
+
+𝑣 𝑖 The 𝑖 -th item 
+
+ Interaction matrix where 𝑖𝑗 = 1 indicates account 𝐴 𝑖 interacted with item 𝑣 𝑗 
+
+𝑆 𝑘 = [ 𝑣 𝑘  
+
+> 1
+
+, 𝑣 𝑘  
+
+> 2
+
+, … , 𝑣 𝑘 𝑠 ] Interaction sequence of account 𝐴 𝑘 in chronological order 
+
+𝑚 Number of accounts 
+
+𝑛 Number of items 
+
+𝑑 Embedding dimension 
+
+𝐄 𝐴 , 𝐄 𝑉 Initial account and item embeddings from ID lookup 
+
+𝐇 𝐴 , 𝐇 𝑉 Final account and item embeddings after LightGCN propagation 
+
+𝐇 seq Sequence representation of an account (item embeddings looked up from 𝐇 𝑉 )
+
+ ,  −1 Fast Fourier Transform and its inverse 
+
+𝐅 seq Frequency-domain representation of the sequence, 𝑓 = ⌈𝑠 ∕2 ⌉
+
+𝐵 Bandwidth for frequency decomposition 
+
+𝑍 = ⌈𝑓 ∕𝐵 ⌉ Number of frequency sub-bands 
+
+𝐅 (𝑧 ) 
+
+> seq
+
+The 𝑧 -th frequency sub-band, ℝ𝐵 ×𝑑 ̃
+
+𝐇 (𝑧 ) 
+
+> seq
+
+Time-domain representation of the 𝑧 -th behavioral pattern (after IFFT and padding) 
+
+𝐰 𝑓 Adaptive fusion weights for behavioral patterns ̄
+
+𝐇 seq Fused multi-behavior sequence representation ̄
+
+𝐡 𝑠𝑒𝑞 =̄ 𝐇 seq [−1] Reasoning pivot (last hidden state of fused sequence) 
+
+𝐫 𝑝 Learnable reasoning position embedding 
+
+𝐫 (𝑡 ) Reasoning state at step 𝑡 (initialized as 𝐫 (0) =̄ 𝐡 𝑠𝑒𝑞 + 𝐫 𝑝 )
+
+𝜙 (⋅) Reasoning function (shared with stage-one disentanglement) 
+
+𝐮 (𝑡 ) Inferred representation of the 𝑡 -th latent user 
+
+𝑇 Total number of inferred latent users for the account 
+
+𝛼 Similarity threshold for terminating progressive reasoning 
+
+𝐡 final Aggregated account representation from all inferred users 
+
+𝐖 𝐴 , 𝐛 𝐴 Transformation matrix and bias for final prediction 
+
+rec Cross-entropy loss for recommendation 
+
+aux Auxiliary recommendation loss from intermediate user representations 
+
+𝛽 Weight for auxiliary loss 
+
+𝐿 Number of LightGCN layers 
+
+4.2. Fourier Transform 
+
+Discrete Fourier Transform (DFT) is a popular computing method for data analysis, signal processing and machine learning. Given a finite sequence {𝑥 𝑖 }𝑛 𝑖 =1 , the DFT convert the original sequence into the frequency signals in the frequency domain by: 
+
+𝑋 𝑘 =
+
+> 𝑛
+
+∑
+
+> 𝑖 =1
+
+𝑥 𝑖 𝑊 𝑖𝑘 𝑛 , 1 ⩽ k ⩽ n, (2) where 𝑛 represents the sequence length, 𝑊 𝑖𝑘 𝑛 is the rotation factor, 𝑋 𝑘 is a complex number represents the signal with frequency 𝜔 𝑘 = 2 𝜋𝑘 ∕𝑛 . Therefore, we can decompose a series of values into different frequency components. It is noteworthy that the DFT is a one-to-one unique mapping operation between the time domain and the frequency domain. The frequency representation 𝑋 𝑘 can be transformed back into the time domain representation through the Inverse Discrete Fourier Transform (IDFT), which is formulated as: 
+
+𝑥 𝑖 = 1
+
+𝑛 
+
+> 𝑛
+
+∑
+
+> 𝑘 =1
+
+𝑋 𝑖 𝑊 −𝑖𝑘 𝑛 , (3) For a real input 𝑥 𝑖 , it has been proven that its DFT is conjugate symmetric, i.e., 𝑋 𝑘 = 𝑋 ∗
+
+> 𝑛 −𝑘
+
+, where ∗ denotes the conjugate operation. This indicates that half of the DFT contains the complete frequency characteristics. If we perform Inverse Discrete Fourier Transform (IDFT) on {𝑋 𝑘 }⌈𝑛 ∕2 ⌉+1  
+
+> 𝑘 =1
+
+, a real signal can be recovered. The Fast Fourier Transform (FFT) algorithm is a fast algorithm for computing the DFT, reducing the complexity to compute DFT from (𝑁 2) to (𝑁𝑙𝑜𝑔𝑁 ). The Inverse FFT (IFFT), which has a similar form to the DFT. In this paper, we denote FFT and IFFT by  and  −1 , respectively 
+
+xx et al.: Preprint submitted to Elsevier Page 5 of 17 DisenReason …seq H
+
+> low  high
+> FFT
+> Disentanglement
+> Amplitude
+> 0 1
+> …1
+> seq
+
+F2
+
+> seq
+
+FZseq F
+
+> IFFT 1
+> seq
+
+H2
+
+> seq
+
+HZseq H
+
+> …
+> …seq
+
+H
+
+> Weight Sum
+> …
+> …
+> …
+> FC layer
+> Softmax
+> …
+> …
+> weights 0
+
+u1r2r1T −r1u2uTu0u1u1T −u
+
+> …0
+
+rpr0r1rTr11       
+
+> TTTT
+> 
+> −−
+> 
+> uuuu‖‖‖‖
+> ×…A
+
+hAhAhAhseq h0r
+
+Stage One: Behavior  Disentanglement  for Pivot  Stage  Two:  Progressive  Residual  Reasoning  for Latent User  
+
+> FFT
+> low high
+> 0
+> 1
+> …
+> IFFT
+> Sum
+> Disen
+> …
+> …
+
+Reasoning Function (Stage One)                    
+
+> Reasoning Positional Embedding
+> Concatenation Operation ×Reasoning Processing Termination …Latent User Representations Obtained by Reasoning
+> … Account Sequential Representation Obtained by LightGCN and Lookup Operation Account Representation Obtained by LightGCN 0000
+> 
+> ruru‖ ‖ ‖‖0101
+> 
+> uuuu‖‖‖ ‖ ux A
+
+ux Aux Aux A
+
+> target item 1
+> seq
+
+H2
+
+> seq
+
+HZseq HyAyAyAyA
+
+Fig. 2. Overview of the proposed DisenReason framework. This figure shows the details of DisenReason: stage one focuses on disentangling the mixed behavioral sequence to create a unified account pivot, while stage two progressively infers latent users based on this pivot. 
+
+Algorithm 1 Forward Pass of DisenReason 
+
+Require: Shared account 𝐴 𝑘 with interaction sequence 𝑆 𝑘 = [ 𝑣 𝑘 
+
+1 , 𝑣 𝑘 
+
+2 , … , 𝑣 𝑘 𝑠 ]; jointly trained LightGCN embed-dings 𝐇  and 𝐇 𝑉 .
+
+Ensure: Predict next item probability 𝑃 (𝑣 𝑘 𝑠 +1 ∣ 𝑆 𝑘 , 𝐴 𝑘 ).
+
+Stage One: Behavior Disentanglement for Pivot 
+
+1: Obtain sequence representation 𝐇 𝑠𝑒𝑞 by looking up 𝐇 𝑉 according to 𝑆 𝑘 .
+
+2: Compute FFT: 𝐅 𝑠𝑒𝑞 =  (𝐇 𝑠𝑒𝑞 ), where 𝑓 = ⌈𝑠 ∕2 ⌉.
+
+3: Partition frequency axis into 𝑍 = ⌈𝑓 ∕𝐵 ⌉ sub-bands of equal width 𝐵 : 𝐅 (𝑧 )
+
+𝑠𝑒𝑞 = 𝐅 𝑠𝑒𝑞 [𝑏 𝑧 ∶ 𝑏 𝑧 +1 ], 𝑏 𝑧 = 𝑧 ⋅ 𝐵 ,
+
+𝑧 = 1 , … , 𝑍 .
+
+4: for each sub-band 𝑧 do 
+
+5: Pad 𝐅 (𝑧 )
+
+𝑠𝑒𝑞 with zeros to length 𝑓 and apply IFFT: ̃ 𝐇 (𝑧 )
+
+𝑠𝑒𝑞 =  −1 (𝑍𝑒𝑟𝑜𝑃 𝑎𝑑 (𝐅 (𝑧 )
+
+𝑠𝑒𝑞 )) .
+
+6: end for 
+
+7: Compute adaptive fusion weights: 𝑊 𝑓 = 𝑆𝑜𝑓 𝑡𝑚𝑎𝑥 (𝐹 𝐶 (𝐇 𝑠𝑒𝑞 )) .
+
+8: Obtain fused sequence: ̄ 𝐇 𝑠𝑒𝑞 = ∑𝑍 𝑧 =1 𝑤 𝑓 ,𝑧 ̃ 𝐇 (𝑧 )
+
+𝑠𝑒𝑞 .
+
+9: Extract reasoning pivot: 𝐩 =̄ 𝐇 𝑠𝑒𝑞 [−1] (last hidden state). 
+
+Stage Two: Progressive Residual Reasoning for Latent Users 
+
+10: Initialize reasoning state: 𝐫 (0) = 𝐩 + 𝐫 𝑝 , where 𝐫 𝑝 is a learnable reasoning position embedding. 
+
+11: Set 𝑡 = 1 .
+
+12: repeat 
+
+13: Infer 𝑡 -th latent user: 𝐮 (𝑡 ) = 𝜙 (𝐫 (𝑡 −1) ), where 𝜙 is the reasoning function (implemented as the same disentanglement module applied to a single vector). 
+
+14: Residual update: 𝐫 (𝑡 ) = 𝐫 (𝑡 −1) − 𝐮 (𝑡 ).
+
+15: if 𝑡 ≥ 2 and 𝑐𝑜𝑠𝑖𝑛𝑒 _𝑠𝑖𝑚𝑖𝑙𝑎𝑟𝑖𝑡𝑦 (𝐮 (𝑡 ), 𝐮 (𝑡 −1) ) > 𝛼 then 
+
+16: break ⊳ Terminate when consecutive users become too similar 
+
+17: end if 
+
+18: 𝑡 = 𝑡 + 1 .
+
+19: until termination condition met 
+
+20: 𝑇 = 𝑡 (number of inferred users). 
+
+21: Aggregate user representations: 𝐡 𝑓 𝑖𝑛𝑎𝑙 = 1
+
+𝑇 
+
+∑𝑇 𝑡 =1 𝐮 (𝑡 ).
+
+Prediction 
+
+22: Compute next item probability: 𝑃 (𝑣 𝑘 𝑠 +1 ∣ 𝑆 𝑘 , 𝐴 𝑘 ) = softmax (𝐖 𝐴 ⋅ [𝐡 𝑓 𝑖𝑛𝑎𝑙 ; 𝐡 𝐴 ] + 𝐛 𝐴 
+
+).
+
+## 5. Proposed Framework: DisenReason 
+
+In this section, we present DisenReason, which is capable of adaptively learning the number of latent users within a shared account through self-reasoning. As illustrated in Fig. 2, the overall framework of DisenReason has two stages: stage one aims to learn the reasoning pivot and stage two uses the reasoning pivot to infer the number of latent users in a progressive reasoning manner. Key symbols and their meanings are summarised in Table 1. 
+
+xx et al.: Preprint submitted to Elsevier Page 6 of 17 DisenReason 
+
+The pseudocode for DisenReason is shown in Algorithm 1. The detailed formulation and design of DisenReason is provided below. 
+
+5.1. Stage One: Behavior Disentanglement Reasoning for Pivot 
+
+The effectiveness of downstream reasoning is inherently tied to the quality of input representations. In our framework, the initial account and item embeddings are obtained via a standard embedding layer that maps each ID to a 𝑑 -dimensional vector. Such ID-based embeddings are semantically weak, as they encode only identity information without any collaborative context. Feeding these raw embeddings directly into the subsequent two-stage reasoning process would hinder the model’s ability to accurately infer latent users. To address this, we enrich the initial embeddings by incorporating global collaborative signals before entering the core reasoning stages. Specifically, we construct the interaction matrix  ∈ ℝ𝑚 ×𝑛 , where 𝑖𝑗 = 1 indicates that account 𝐴 𝑖 
+
+interacted with item 𝑣 𝑗 . Let 𝐄  ∈ ℝ𝑚 ×𝑑 and 𝐄 𝑉 ∈ ℝ𝑛 ×𝑑 denote the initial embedding matrices for accounts and items, respectively. Given 𝐄 , 𝐄 𝑉 , and , we adopt LightGCN (He et al., 2020) to propagate collaborative signals across the global interaction graph. LightGCN is a lightweight graph convolutional network that simplifies traditional GCN by removing nonlinear transformations and feature transformations, while retaining the essential neighborhood aggregation operation. The graph convolution can be formulated as follows: 
+
+E(𝑙 +1)  
+
+> 
+
+=̃ E(𝑙 ) 
+
+> 𝑉
+
+, E(𝑙 +1)  
+
+> 𝑉
+
+= E(𝑙 )
+
+> 
+
+̃ . (4) ̃
+
+ = 𝐷 − 12 𝐷 − 12 , (5) where 𝐷 ∈ ℝ𝑚 ×𝑛 is the degree matrix. After applying 𝐿 layers of graph convolution, the embeddings of each node obtained from all layers are aggregated through average pooling to derive the final representations of accounts and items. Formally, the final embeddings are defined as: 
+
+H = 1
+
+𝐿 
+
+> 𝐿
+
+∑
+
+> 𝑙 =1
+
+E(𝑙 ) 
+
+> 
+
+, H𝑉 = 1
+
+𝐿 
+
+> 𝐿
+
+∑
+
+> 𝑙 =1
+
+E(𝑙 ) 
+
+> 𝑉
+
+, (6) where H ∈ ℝ𝑚 ×𝑑 and H𝑉 ∈ ℝ𝑛 ×𝑑 . E(𝑙 ) 
+
+> 
+
+and E(𝑙 ) 
+
+> 𝑉
+
+denotes the account and item representations at the 𝑙 -th layer. Based on the item representations matrix H𝑉 , we can obtain the account sequence representation S according to input account’s interaction sequence 𝑆 𝐴 ∈ { 𝑣 1, 𝑣 2, ⋯ , 𝑣 𝑠 }, which will be used for the subsequent reasoning process: 
+
+𝐇 𝑠𝑒𝑞 = 𝐿𝑜𝑜𝑘𝑢𝑝 (𝐇 𝑉 , 𝑆 𝐴 ), (7) where H𝑠𝑒𝑞 ∈ ℝ𝑠 ×𝑑 is the account sequence representation and 𝑠 is the sequence length. The 𝑙𝑜𝑜𝑘𝑢𝑝 operation retrieves the corresponding item embeddings and aligns them temporally to form the account’s behavioral sequence representation. As established in the introduction, constructing an account-level pivot is essential for the reasoning process, as it directly enables the subsequent stage to accurately infer latent users. To this end, in stage one, we aim to derive such a pivot that captures the collective behavior of the entire account, serving as the basis for reasoning over the account to uncover its underlying users. Specifically, we first transform the entangled sequence representation 𝐇 𝑠𝑒𝑞 into the frequency domain via, which allows us to disentangle the mixed signals from a frequency perspective, thereby obtaining relatively independent representations of latent behavioral patterns. The operation is denoted as: 
+
+𝐅 𝑠𝑒𝑞 =  (𝐇 𝑠𝑒𝑞 ), (8) where  denotes the Fast Fourier Transform (FFT) operation (Section 4.2). Due to the conjugate symmetry property of FFT for real-valued inputs, only half of the frequency components need to be retained. Thus, the transformed representation is 𝐅 𝑠𝑒𝑞 ∈ ℝ𝑓 ×𝑑 , where 𝑓 = ⌈𝑠 ∕2 ⌉ corresponds to the number of unique frequency bins. To disentangle mixed behavioral patterns, we partition 𝐅 𝑠𝑒𝑞 along the frequency axis into 𝑍 sub-bands of equal width 𝐵 . Specifically, the 𝑧 -th sub-band is obtained by slicing the frequency components within the range 
+
+[𝑏 𝑧 , 𝑏 𝑧 +1 ], where 𝑏 𝑧 = 𝑧 ⋅ 𝐵 , and the total number of sub-bands is 𝑍 = ⌈𝑓 ∕𝐵 ⌉. Each sub-band 𝐅 (𝑧 ) 
+
+> 𝑠𝑒𝑞
+
+∈ ℝ𝐵 ×𝑑 
+
+captures a specific frequency interval, corresponding to distinct behavioral rhythm: 
+
+𝐅 (𝑧 ) 
+
+> 𝑠𝑒𝑞
+
+= 𝐅 𝑠𝑒𝑞 [𝑏 𝑧 ∶ 𝑏 𝑧 +1 ], 𝑏 𝑧 = 𝑧 ⋅ 𝐵. (9) The resulting frequency-domain representation 𝐅 (𝑧 ) 
+
+> 𝑠𝑒𝑞
+
+contains complex-valued components and cannot be directly utilized. To obtain usable representations, we apply the IFFT to convert each sub-band back to the time domain.   
+
+> xx et al.: Preprint submitted to Elsevier Page 7 of 17 DisenReason
+
+This yields a set of temporal representations, each reflecting a distinct behavioral rhythm exhibited by the shared account. The process can be formulated as follows: ̃
+
+H(𝑧 ) 
+
+> 𝑠𝑒𝑞
+
+=  −1 (𝑃 𝑎𝑑𝑑𝑖𝑛𝑔 (𝐅 (𝑧 ) 
+
+> 𝑠𝑒𝑞
+
+)) , (10) where ̃ H(𝑧 ) 
+
+> 𝑠𝑒𝑞
+
+∈ ℝ𝑠 ×𝑑 indicates the representation of 𝑧 -th behavior pattern. 𝑃 𝑎𝑑𝑑𝑖𝑛𝑔 means zero-padding, which extends the frequency length of 𝐅 (𝑧 ) 
+
+> 𝑠𝑒𝑞
+
+to match that of 𝐅 𝑠𝑒𝑞 , so that the inverse transformation can be performed. However, not all frequency components contribute equally to the overall account representation. Among these components, some capture the dominant behavioral patterns of the shared account, while others primarily reflect noise or transient interactions that carry limited semantic significance. To adaptively determine the contribution of each behavioral pattern, we learn the relative importance of different behavioral patterns and employ weight sum. The operation is defined as follows: 
+
+𝑊 𝑓 = 𝑆𝑜𝑓 𝑡𝑚𝑎𝑥 (𝐹 𝐶 (𝐇 𝑠𝑒𝑞 )) , (11) ̄
+
+H𝑠𝑒𝑞 =
+
+> 𝑍
+
+∑
+
+> 𝑧 =1
+
+𝑤 𝑧 𝑓 ̃ H(𝑧 ) 
+
+> 𝑠𝑒𝑞
+
+, (12) where 𝐹 𝐶 (⋅) denotes a fully connected layer that learns the weight 𝑤 𝑧 𝑓 ∈ 𝑊 𝑓 for each behavioral pattern from the input sequence 𝐇 𝑠𝑒𝑞 . This adaptive fusion mechanism emphasizes the most informative behavioral rhythms while suppressing redundant or noisy components, yielding a comprehensive multi-behavior account sequential representation ̄ 𝐇 𝑠𝑒𝑞 . Finally, we take the last hidden state ̄ 𝐡 𝑠𝑒𝑞 =̄ 𝐇 𝑠𝑒𝑞 [−1] as the aggregated account-level behavioral signal, which serves as the reasoning pivot for the subsequent progressive reasoning stage. 
+
+5.2. Stage Two: Progressive Residual Reasoning for Latent User 
+
+In this stage, our goal is to leverage the reasoning pivot to initiate progressive residual reasoning, thereby implicitly recovering the latent users behind the shared account. Since the reasoning function 𝜙 (⋅) in stage two reuses the same disentanglement operation from stage one, without proper distinction, the model would fail to differentiate between the two stages, leading to identical processing and undermining the reasoning process. To address the potential confusion caused by reusing the same operation, we introduce a reasoning positional embedding r𝑝 that explicitly distinguishes stage two from stage one. This embedding is combined with the account pivot ̄ h𝑠𝑒𝑞 to form the initial reasoning state 𝐫 0, which initiates the progressive residual reasoning process. This demonstrates that the function 𝜙 (⋅) exhibits dual role accordingly. When applied to the sequential representation 
+
+𝐇 𝑠𝑒𝑞 ∈ ℝ𝑠 ×𝑑 in stage one, it performs behavior-level disentanglement by disentangling mixed patterns across interactions. When applied to the reasoning state 𝐫 0 ∈ ℝ𝑑 in stage two, it naturally degenerates into a mapping function that projects the account-level state into a latent user representation, transitioning from behaviors to identifying users. At each step 𝑡 , the reasoning function 𝜙 (⋅) takes the current state 𝐫 (𝑡 ) and extracts the most dominant undiscovered user: 
+
+𝐮 (𝑡 ) = 𝜙 (𝐫 (𝑡 )), 𝐫 (𝑡 +1) = 𝐫 (𝑡 ) − 𝐮 (𝑡 ), (13) where 𝐮 (𝑡 ) denotes the inferred representation of the 𝑡 -th latent user. The residual subtraction removes the identified user from the current state, enabling subsequent steps to focus on the remaining unexplained signals. The reasoning process terminates adaptively when consecutive inferred users become semantically similar, as this indicates that all latent users have been uncovered. This allows the model to autonomously determine the number of users per account while preserving representational quality and computational efficiency. The similarity is computed as follows: sim (𝐮 (𝑡 ), 𝐮 (𝑡 −1) ) = 𝐮 (𝑡 ) ⋅ 𝐮 (𝑡 −1) 
+
+‖𝐮 (𝑡 )‖2 ‖𝐮 (𝑡 −1) ‖2
+
+> 𝛼, (14) where 𝛼 is the hyperparameter to control the depth of reasoning. Finally, the overall account representation is obtained by aggregating all inferred user embeddings: 
+
+𝐡 𝑓 𝑖𝑛𝑎𝑙 = 1
+
+𝑇 
+
+> 𝑇
+
+∑
+
+> 𝑡 =1
+
+𝐮 (𝑡 ), (15) where 𝑇 means the total reasoning step.   
+
+> xx et al.: Preprint submitted to Elsevier Page 8 of 17 DisenReason
+
+5.3. Training Objective 
+
+The final prediction generated by DisenReason is denoted as: 
+
+𝑃 (𝑣 𝑠 +1 ∣ 𝑆, 𝐴 ) = softmax (𝐖 𝐴 ⋅ [𝐡 𝑓 𝑖𝑛𝑎𝑙 , 𝐡 𝐴 ]⊤ + 𝐛 𝐴 
+
+) , (16) where 𝐡 𝐴 ∈ 𝐇 𝐴 is the account representation obtained by Eq. 6. 𝐖 𝐴 ∈ ℝ2𝑑 ×𝑛 is a transformation matrix used to project the prediction results into the dimensional space of candidate items and 𝐛 𝐴 ∈ ℝ2𝑑 is the bias term. The cross-entropy loss function is employed to optimize the DisenReason: 
+
+𝑅𝑒𝑐 = − 
+
+> 𝑚
+
+∑
+
+> 𝑘 =1
+
+𝑦 𝐴 𝑘 ⋅ log 𝑃 (𝑣 𝑘 𝑠 +1 ∣ 𝑆 𝑘 , 𝐴 𝑘 ) + (1 − 𝑦 𝐴 𝑘 ) ⋅ log(1 − 𝑃 (𝑣 𝑘 𝑠 +1 ∣ 𝑆 𝑘 , 𝐴 𝑘 )) . (17) where 𝑦 𝐴 𝑘 is the one-hot encoding of the ground truth value. 𝑚 means total number of accounts. To further provide effective optimization signals, we use latent user representations of different reasoning steps as multi-view representations to compute auxiliary recommendation loss. This design encourages the reasoning process to learn meaningful representations for every inferred user. The auxiliary recommendation loss is computed as: 
+
+𝑦 (𝑡 ) 
+
+> 𝑢
+
+= softmax (𝐖 𝑢 ⋅ [𝐮 (𝑡 ), 𝐡 𝐴 ] + 𝐛 𝑢 
+
+) , (18) 
+
+𝐴𝑢𝑥 = − 
+
+> 𝑚
+
+∑
+
+> 𝑘 =1
+> 𝑇
+
+∑
+
+> 𝑡 =1
+
+𝑦 𝐴 𝑘 ⋅ log 𝑦 (𝑡 ) 
+
+> 𝑢,𝑘
+
++ (1 − 𝑦 𝐴 𝑘 ) ⋅ log(1 − 𝑦 (𝑡 )
+
+> 𝑢,𝑘
+
+), (19) where 𝐖 𝑢 and 𝐛 𝑢 are same as 𝐖 𝐴 and 𝐛 𝐴 . For all latent users, we employ shared 𝐖 𝑢 and 𝐛 𝑢 to reduce the overall number of training parameters. Then, the overall training objective is defined as: 
+
+𝑎𝑙𝑙 = 𝑅𝑒𝑐 + 𝛽 𝐴𝑢𝑥 , (20) where 𝛽 is the hyperparameter used to control the magnitude of 𝐴𝑢𝑥 .
+
+## 6. Experiments 
+
+In this section, we first introduce the experimental settings, and then analyze the performance of our proposed DisenReason by answering the following Research Questions (RQs) .
+
+• RQ1: How does our proposed DisenReason perform compared with state-of-the-art baselines? 
+
+• RQ2: What is the contribution of each design in DisenReason? 
+
+• RQ3: How do essential hyperparameters affect DisenReason? 
+
+• RQ4: How robust is DisenReason under different conditions such as sequence length and training data proportion? 
+
+• RQ5: How can DisenReason infer the true number of latent users within shared account? 
+
+6.1. Experimental Settings 
+
+6.1.1. Datasets. 
+
+We conduct experiments on four datasets originally introduced by (Ma et al., 2019), namely HvideoE (HV-E), HvideoV (HV-V), HamazonM (HA-M), and HamazonB (HA-B). The first two, HV-E and HV-V, are smart TV datasets that record users’ viewing histories from different TV channels. Specifically, HV-E focuses on logs of educational and instructional videos—covering topics such as sports, health, and medical content. While HV-V contains logs of entertainment content, including television dramas and movies. The remaining datasets, HA-M and HA-B, originate from distinct Amazon domains, corresponding to movie-watching and book-reading activities, respectively. For the experimental setup, we randomly partition each dataset such that 80% of the user sequences were used for training and the remaining 20% for testing. Importantly, for every sequence, the most recent interaction is treated as the ground-truth target item to evaluate model performance. The comprehensive details for the HVIDEO and HAMAZON datasets are detailed in Table 2. 
+
+6.1.2. Evaluation Metrics. 
+
+We adopt two common evaluation metrics to evaluate the model performance, i.e., top-K Recall (RC@K) and top-K Mean Reciprocal Rank (MRR@K), where K = {5 , 20} .                          
+
+> xx et al.: Preprint submitted to Elsevier Page 9 of 17 DisenReason
+> Table 2
+> Statistical details for HVIDEO and HAMAZON datasets.
+> HVIDEO HAMAZON E-domain V-domain M-domain B-domain
+> Items 8,367 11,404 67,161 126,547 Interactions 2,129,500 1,893,784 2,196,574 2,135,995 Avg. sequence length 15.85 14.09 15.27 14.84 Accounts 13,714 13,724 Sequences 134,349 143,885 Train-sequences 114,197 122,303 Test-sequences 20,152 21,582
+
+6.1.3. Implementation Details. 
+
+DisenReason is implemented in PyTorch on NVIDIA RTX 4090 with 24 GB memory. The operating system is Ubuntu 20.04 and the coding platform is Visual Studio Code. We optimize our model with Adam optimizer (Kingma, 2014). For all datasets, the maximum sequence length is set to 50. To train the DisenReason, we conduct a hyperparameter tuning to identify the optimal hyperparameter configurations, which involves the number of convolutional layers 𝐿 ∈ {1 , 2, 3, 4, 5} in LightGCN, the band-width 𝐵 ∈ {1 , 3, 5, 7, 9} for frequency decomposition, the termination threshold 𝛼 ∈ {0 .3, 0.4, 0.5, 0.6, 0.7} for progressive reasoning, and the loss weight 
+
+𝛽 ∈ {0 .1, 0.5, 1.0, 1.5, 2.0} . We use the early stopping strategy to prevent overfitting. 
+
+6.1.4. Baselines. 
+
+To evaluate the effectiveness of DisenReason, we compare it with two categories of baselines: traditional sequential recommendation models and shared-account sequential recommendation models. The traditional sequential recommendation baselines include: 
+
+• SASRec (Kang and McAuley, 2018) models the entire user sequence (without any recurrent or convolutional operations), and adaptively considers consumed items for prediction. 
+
+• GRURec (Hidasi et al., 2015) introduces GRU into recommendation for the first time. It modified the basic GRU in order to fit the task better by introducing session-parallel mini-batches, mini-batch based output sampling and ranking loss function. 
+
+• FMLP-Rec (Zhou et al., 2022a) proposes an all-MLP model with learnable filters for sequential recommen-dation task. The all-MLP architectures endowed our model with lower time complexity, and the learnable filters can be optimized by SGD to adaptively attenuate the noise information in the frequency domain 
+
+• FEARec (Du et al., 2023) designs a new frequency-based model to build a hybrid attention manner in both the time and frequency domains. By working upon defined frequency ramp structure, FEARec employs improved time domain attention to learn both low-high frequency information. 
+
+• BSARec (Shin et al., 2024) uses a combination of attentive inductive bias and vanilla self-attention and integrates low and high-frequencies to mitigate oversmoothing. 
+
+• GLINT-RU (Zhang et al., 2025b) combines dense selective GRU with linear complexity, reducing compu-tational costs and accelerating inference speed. The shared-account sequential recommendation baselines include: 
+
+• 𝜋 -Net (Ma et al., 2019) first introduces the SSR. It improves recommendations performance by leveraging a shared account filter and a cross-domain transfer mechanism. 
+
+• PSJNet (Sun et al., 2021) introduces the “Split” and “Joint” concepts. “Split” is used to identify behavior of different user roles. “Joint” is used to discriminate and combine useful user behavior. 
+
+• DA-GCN (Guo et al., 2021) models the multiple associations among users and items and the structure information of the transferred knowledge through graph learning.   
+
+> xx et al.: Preprint submitted to Elsevier Page 10 of 17
+
+DisenReason 
+
+Table 3 
+
+Overall performance of different recommendation methods. The best and the second-best performance methods are denoted in bold and underlined fonts, respectively. “Improv.” denotes the relative improvement ratios of the proposed approach over the best performance baselines.                                                                                                                                                                                                                     
+
+> Models HV_E HV_V HA_M HA_B
+> RC@5 RC@20 MRR@5 MRR@20 RC@5 RC@20 MRR@5 MRR@20 RC@5 RC@20 MRR@5 MRR@20 RC@5 RC@20 MRR@5 MRR@20 SASRec 46.84 64.11 33.23 35.01 69.98 79.48 56.34 57.34 41.95 43.75 39.41 39.59 41.32 43.86 36.87 37.15 GRURec 44.61 59.64 34.84 36.33 68.36 74.93 63.19 63.85 48.08 48.75 46.87 46.94 47.88 48.52 46.44 46.51 FMLP-Rec 44.27 60.77 34.43 36.09 70.23 76.45 65.01 65.64 48.02 48.35 47.51 47.53 48.62 48.97 48.01 48.04 FEARRec 50.38 64.08 40.77 42.15 70.66 77.22 64.86 65.53 40.86 43.58 37.25 37.54 39.78 42.16 36.92 37.17 BSARec 54.88 67.21 43.9 45.16 73.72 81.54 62.84 63.65 47.73 48.29 46.99 47.05 47.43 48.7 46.28 46.35 GLINT-RU 44.93 60.3 34.31 35.85 70.08 77.11 63.95 65.61 43.39 47.13 45.67 45.79 47.39 47.39 47.19 47.24
+> 𝜋 -Net 25.13 47.08 15.36 17.52 67.00 74.17 60.37 61.74 18.54 21.87 16.24 16.56 23.75 23.75 20.38 20.58 PSJNet 24.80 46.68 15.37 17.56 66.86 74.14 61.89 62.63 16.25 18.14 11.25 13.68 19.3 19.30 15.52 17.30 DA-GCN 51.35 66.93 35.63 37.27 75.39 82.37 59.78 60.55 22.93 23.90 20.09 20.19 23.93 24.25 21.35 21.39 TiDA-GCN 54.11 68.98 38.66 40.23 76.37 83.58 63.58 65.37 23.55 24.33 20.91 21.23 24.69 24.82 21.88 22.21 LightGC 2N61.35 72.73 46.24 47.35 79.29 84.70 66.27 66.87 46.02 48.46 41.30 41.64 47.36 48.55 44.40 44.52
+> Our 63.43 75.01 52.05 53.25 81.89 89.83 67.89 68.78 49.13 50.05 48.81 48.88 49.56 49.73 49.42 49.44
+> Improv. (%) 3.39 3.13 12.56 12.46 3.28 6.06 2.44 2.87 2.18 2.67 2.74 2.84 1.93 1.55 2.94 2.91
+
+• TiDA-GCN (Guo et al., 2022b) is an extended version of DA-GCN. To enhance item and account repre-sentation learning, it incorporates a time interval-aware message-passing strategy along with an interactive characteristic modeling component, further improving its ability to capture complex dependencies and dynamics within the recommendation process. 
+
+• LightGC 2N (Zhang et al., 2025a) designs a convenient and efficient capsule convolutional network to better distinguish the affiliation relationship between items and latent users. 
+
+6.2. Overall Performance (RQ1) 
+
+Table 3 reports the overall performance comparison between our proposed model and various state-of-the-art sequential recommendation (SR) and shared-account sequential recommendation (SSR) baselines across four benchmark datasets. DisenReason achieves the best performance across all four datasets. Specifically, on the HV-E and HV-V datasets, DisenReason outperforms the strongest SSR baseline, LightGC 2N, with a relative improvement ranging from 2.06% to 12.47%. Notably, LightGC 2N outperforms SR baselines such as FEARec, BSARec, and GLINT-RU. This superiority highlights the advantage of explicitly modeling latent user interactions under shared-account scenarios. SR models assume that all behaviors in a sequence originate from a single user and thus fail to capture the heterogeneous preferences within an account, LightGC 2N leverages graph-based message passing and attention mechanisms to propagate user-specific information, enabling more accurate representation learning. DisenReason outperforms LightGC 2N, which indicates that learning the actual number of real users in each account, rather than relying on a predefined number, provides a helpful performance boost. On the HA-M and HA-B datasets, DisenReason also has a relative improvement ranging form 1.93% to 2.94%. Interestingly, LightGC 2N as the best-performing SSR method, does not surpass traditional SR models on the HA-M and HA-B datasets. In contrast, SR methods such as GRURec and FEARec even outperform LightGC 2N to some extent. Upon deeper analysis, we found that HV-V and HV-E are real shared-account datasets, whereas HA-M and HA-B are synthetic ones. Therefore, we hypothesize that this performance discrepancy may be attributed to the fundamental difference between real and synthetic shared-account behaviors. In summary, the overall results confirm that DisenReason enables a more faithful and interpretable rep-resentation of shared-account behaviors on real and synthetic shared-account scenario, leading to substantial improvements in recommendation performance. 
+
+6.3. Ablation Study (RQ2) 
+
+In this section, we conduct an ablation study to examine the contribution of each key designs in DisenReason, including representation construct (w/o LightGCN), frequency disentanglement operation (w/o Behavior Disentan-glement), adaptive fusion operation for different behavioral patterns (w/o Adaptive Fusion), and residual operation for reasoning (w/o Residual Operation). Table 4 reports the performance of different variants across the four datasets. The experimental results are analyzed as follows: 
+
+• Effect of LightGCN. When removing the LightGCN, the overall performance decreases noticeably, especially on the HV-E and HV-V. This degradation indicates that LightGCN plays a crucial role in capturing global account–item collaborative signals, which provide a stable semantic foundation for the subsequent modules. 
+
+xx et al.: Preprint submitted to Elsevier Page 11 of 17 DisenReason                                                    
+
+> Table 4
+> Ablation study of DisenReason on four datasets. ‘w/o’ denotes the model variant without the corresponding design.
+> Models HV-E HV-V HA-M HA-B
+> RC@5 MRR@5 RC@5 MRR@5 RC@5 MRR@5 RC@5 MRR@5 w/o LightGCN 61.96 51.32 79.84 67.68 48.61 48.52 49.44 49.35 w/o Behavior Disentanglement 55.09 33.35 77.81 53.17 35.89 22.62 36.21 22.67 w/o Adaptive Fusion 62.51 50.88 81.59 67.64 49.05 48.76 49.54 49.39 w/o Residual Operation 63.32 51.37 81.34 67.69 49.08 48.84 49.50 49.32
+> Our 63.43 52.05 81.89 67.89 49.13 48.81 49.56 49.39
+
+• Effect of Behavior Disentanglement. In the first stage, we do not perform behavior disentanglement and directly adopt the last item of the account sequence as the reasoning pivot. Removing the behavior disentanglement causes the most significant performance drop among all variants. For instance, MRR@5 decreases from 52.05 to 33.35 on HV-E and from 67.89 to 53.17 on HV-V. This dramatic decline demonstrates the effectiveness of obtaining a pivot that represents the entire account, rather than directly using the last item in the account as the pivot. Directly using the last item in the account as the pivot for user reasoning leads to an incomplete understanding of the latent behaviors within the account during the subsequent reasoning process. In such cases, progressive reasoning cannot effectively infer the hidden users behind the account, which in turn degrades the recommendation performance. 
+
+• Effect of Adaptive Fusion. The adaptive fusion enables the identification of the importance of each latent behavior, thereby combining them into a more realistic account-level representation. When this operation is removed, all metrics show a decline, demonstrating that considering the importance of different behaviors within the account helps in learning a better account behavior representation. 
+
+• Effect of Residual Operation. The residual operation prevents redundant semantic interpretation and allow subsequent steps to focus on unexplained user in reasoning processing. Removing it results in only a slight performance decline. This is because the residual operation plays a semantic refinement role, which polishes latent user semantic boundaries. Consequently, removing it yields only a moderate performance drop. 
+
+6.4. Hyperparameter Sensitivity (RQ3) 
+
+To evaluate the sensitivity of DisenReason with respect to different hyperparameter settings, we conduct sensitivity experiments on HV-V and HV-E, as illustrated in Fig. 3. The analysis is as follows: 
+
+• Hyperparameter 𝐵 . 𝐵 is used to adjust the strength of frequency disentanglement. As illustrated in Fig. 3(a), the model achieves optimal performance when 𝐵 = 5 . 𝐵 is too small may fail to properly disentangle the complete behavioral patterns, leading to fragmentation of these patterns. In contrast, an excessively large 
+
+𝐵 may result in behavioral patterns that remain entangled. Thus, a moderate 𝐵 achieves the best balance between disentanglement granularity and representation stability. 
+
+• Hyperparameter 𝐿 . 𝐿 controls the convolution depth of LightGCN. From Fig. 3(b), the model performance improves with deeper propagation up to 𝐿 = 3 , then slightly decreases. This indicates that deeper layers enhance the ability to capture collaborative relations but may introduce high-order noise, resulting in over-smoothing. Therefore, 𝐿 = 3 provides a good trade-off between information aggregation and model generalization. 
+
+• Hyperparameter 𝛼 . 𝛼 serves as the termination signal during the user inference process. As shown in Fig. 3(c), the proposed model achieves the best performance when 𝛼 = 0 .5 and 𝛼 = 0 .4 on HV-V and HV-E, respectively . The threshold 𝛼 determines when the reasoning process stops based on the similarity between consecutive inferred users. An appropriate 𝛼 prevents redundant user generation. 
+
+• Hyperparameter 𝛽 . 𝛽 controls the strength of the supervision signal. As illustrated in Fig. 3(d), when the value of 𝛽 is set to 1.0 and 0.5, DisenReason achieves optimal performance on the HV-V and HV-E datasets, respectively. This indicates that providing additional supervisory signals during the progressive reasoning process (stage two) helps enhance the diversity of the reasoning process, which in turn improves recommendation performance.    
+
+> xx et al.: Preprint submitted to Elsevier Page 12 of 17 DisenReason
+> Fig. 3. Hyperparameter analysis of DisenReason on HV-V and HV-E dataset.
+
+6.5. Robustness Analysis (RQ4) 
+
+To assess the robustness of DisenReason, we conduct two sets of experiments focusing on sequence length and training data. The first experiment varied the maximum sequence length, while the second controlled the proportion of available training data. The results, as shown in Fig. 4, consistently demonstrate the superior stability and robustness of DisenReason. When varying the maximum sequence length from 25 to 100, DisenReason consistently outperforms all baselines, including LightGC 2N, FMLP-Rec, and GLINT-RU, across both the HV-V and HV-E datasets. Unlike the baselines, whose performance fluctuates or even deteriorates as the sequence becomes longer due to the accumulation of noisy or redundant interactions, DisenReason maintains a stable performance. Under low resource conditions, where the amount of training data ranges from 20% to 100%, DisenReason again exhibits remarkable resilience and data efficiency. Even when trained with only 20% of the data, our model surpasses the strongest baseline. More importantly, DisenReason demonstrates a smooth and nearly linear performance improvement as the data scale increases compared to baselines. 
+
+6.6. In-depth Analysis (RQ5) 
+
+In this section, we present a detailed analysis of 10 accounts selected from the HV-E and HV-V datasets and visualize their inferred latent user counts, as shown in Fig. 5. The experiment highlights the effectiveness of the reasoning mechanism in adaptively inferring the number of latent users across different accounts. The results demonstrate that DisenReason can dynamically adjust to varying complexities in shared-account scenarios. Specifically, on the HV-E dataset, some accounts such as those with IDs 10293 and 5673, exhibit higher latent user counts, while others, like 6304 and 2643, show fewer latent users. This diversity in inferred user counts reflects the model’s ability to distinguish between accounts with different interaction patterns and complexities. This phenomenon also occurs in the HV-V dataset. The key insight from this experiment is that the two-stage reasoning process in DisenReason effectively infers the number of latent users, allowing it to adapt to a wide range of real-world scenarios. In many shared account contexts, the number of users per account is not predefined and can vary significantly. This adaptability is crucial for accurately modeling and predicting user behaviors in situations where the structure of shared accounts is not fixed. Through this experiment, we validate the DisenReason’s capacity to handle the inherent variability in user counts and interactions, showcasing its robustness in real-world shared-account environments.     
+
+> xx et al.: Preprint submitted to Elsevier Page 13 of 17 DisenReason
+> Fig. 4. Performance comparison of DisenReason and baselines under different sequence lengths and training data scales on HV-V and HV-E datasets.
+> Fig. 5. Latent user number per account ID on HV-E and HV-V dataset. It illustrates the number of latent users inferred for each account ID through the reasoning process.
+
+## 7. Theoretical and Practical Implications 
+
+Theoretically, our proposed DisenReason addresses critical limitation of existing shared-account sequential recommendation (SSR) methods, the unrealistic assumption of a fixed number of latent users per account, by introducing a novel two-stage reasoning framework. In the first stage, Fast Fourier Transform is applied to disentangle the mixed sequence in the frequency domain, obtaining distinct behavioral patterns within the account, which are then adaptively fused via a Mixture-of-Experts network to derive an account-level reasoning pivot. In the second stage, we propose a progressive residual reasoning mechanism that iteratively extracts latent users from the account-level pivot and adaptively terminates based on semantic similarity. These designs collectively enable DisenReason to make meaningful contributions to the SSR literature, particularly in advancing reasoning-enhanced recommendation for shared-account scenarios. Practically, DisenReason demonstrates clear utility in real-world settings where account sharing is prevalent. Extensive experiments across four benchmark datasets, including both real-world and synthetic shared-account scenarios, show consistent and substantial performance gains over state-of-the-art baselines, with relative improve-ments reaching up to 12.56% in MRR@5. The framework proves particularly effective in capturing the dynamic and variable number of users behind each account, a common challenge in commercial platforms such as streaming   
+
+> xx et al.: Preprint submitted to Elsevier Page 14 of 17
+
+DisenReason 
+
+services, e-commerce sites, and smart home systems. By adaptively inferring latent user counts and learning account-level representations, DisenReason enables more personalized and context-aware recommendations without requiring explicit user identification or manual configuration. This work offers actionable insights for practitioners aiming to build scalable, robust, and user-centric recommendation services that accommodate the realities of shared account usage. 
+
+## 8. Conclusion and Future Work 
+
+In this paper, we address the core challenge of Shared-Account Sequential Recommendation (SSR): how to accurately infer and represent the dynamic number and behavior patterns of latent users behind a shared account. Existing approaches often assume a fixed number of latent users, which is unrealistic given the varying number of users sharing an account in practice. To overcome this, we propose DisenReason. It operates in two stages: (1) Behavior Disentanglement for Pivot, where we establish a unified pivot reflecting the collective dynamics of the shared account, and (2) Progressive Residual Reasoning for Latent User, where we progressively infer latent users from this pivot. This two-stage reasoning effectively uncover the number of latent users, leading to more precise and personalized recommendations. Our empirical experiments validate the effectiveness of this framework, outperforming existing methods on multiple datasets. Despite its promising performance, DisenReason suffers from fixed bandwidth segmentation that may overlook fine-grained behavioral boundaries and parameter coupling between two stages that blurs task objectives. Future work will investigate adaptive frequency decomposition to better preserve behavioral integrity, and develop decou-pled architectures or meta-learning mechanisms to distinguish global aggregation from personalized reasoning. These directions aim to improve both the accuracy and interpretability of latent user inference in shared account scenarios. 
+
+## CRediT authorship contribution statement 
+
+Jiawei Cheng: Conceptualization of this study, Methodology, Software, Writing. Min Gao: Supervision, Writing. Zongwei Wang: Supervision, Writing. Xiaofei Zhu: Supervision. Zhiyi Liu: Visualization. Wentao Li: Supervision. Wei Li: Supervision. Huan Wu : Supervision. 
+
+## Acknowledgements 
+
+This paper was supported by the National Natural Science Foundation of China (Grant Nos. 62176028). 
+
+## Declaration of competing interest 
+
+The authors declare that they have no competing interests. 
+
+## Data availability 
+
+Data will be made available on request. 
+
+## References 
+
+> Acharya, T., Ray, A.K., 2005. Image processing: principles and applications. John Wiley & Sons. Ai, W., Zhang, F., Shou, Y., Meng, T., Chen, H., Li, K., 2025. Revisiting multimodal emotion recognition in conversation from the perspective of graph spectrum, in: Proceedings of the AAAI conference on artificial intelligence, pp. 11418–11426. Baek, I., Yoon, M., Park, S., Lee, J., 2025. Muffin: Mixture of user-adaptive frequency filtering for sequential recommendation. arXiv preprint arXiv:2508.13670 . Brigham, E.O., 1988. The fast Fourier transform and its applications. Prentice-Hall, Inc. Chen, H., Feng, Y., Liu, Z., Yao, W., Prabhakar, A., Heinecke, S., Ho, R., Mui, P., Savarese, S., Xiong, C., et al., 2025. Language models are hidden reasoners: Unlocking latent reasoning capabilities via self-rewarding, 2024b. arXiv preprint arXiv:2411.04282 . Chen, Z., Deng, Y., Wu, Y., Gu, Q., Li, Y., 2022. Towards understanding the mixture-of-experts layer in deep learning. Advances in neural information processing systems 35, 23049–23062. Cheung, M., Shi, J., Wright, O., Jiang, L.Y., Liu, X., Moura, J.M., 2020. Graph signal processing and deep learning: Convolution, pooling, and topology. IEEE Signal Processing Magazine 37, 139–149. Deng, H., Xing, H., Matsuyama, K., Huang, Y., Hu, J., Wen, H., Xu, J., Chen, Z., Zhang, Y., Zeng, X., et al., 2025. Heterrec: Heterogeneous information transformer for scalable sequential recommendation, in: Proceedings of the international ACM SIGIR conference on research and development in information retrieval, pp. 3020–3024. Du, X., Yuan, H., Zhao, P., Qu, J., Zhuang, F., Liu, G., Liu, Y., Sheng, V.S., 2023. Frequency enhanced hybrid attention network for sequential recommendation, in: Proceedings of the international ACM SIGIR conference on research and development in information retrieval, pp. 78–88.
+
+xx et al.: Preprint submitted to Elsevier Page 15 of 17 DisenReason 
+
+Duan, W., Liang, D., 2025. User disambiguation learning for precise shared-account marketing: A hierarchical self-attentive sequential recommendation method. Knowledge-Based Systems 315, 113328. Geiping, J., McLeish, S., Jain, N., Kirchenbauer, J., Singh, S., Bartoldson, B.R., Kailkhura, B., Bhatele, A., Goldstein, T., 2025. Scaling up test-time compute with latent reasoning: A recurrent depth approach. arXiv preprint arXiv:2502.05171 . Guo, L., Tang, L., Chen, T., Zhu, L., Nguyen, Q.V.H., Yin, H., 2021. Da-gcn: a domain-aware attentive graph convolution network for shared-account cross-domain sequential recommendation, in: international joint conference on artificial intelligence, pp. 2483–2489. Guo, L., Zhang, J., Chen, T., Wang, X., Yin, H., 2022a. Reinforcement learning-enhanced shared-account cross-domain sequential recommendation. IEEE Transactions on Knowledge and Data Engineering 35, 7397–7411. Guo, L., Zhang, J., Tang, L., Chen, T., Zhu, L., Yin, H., 2022b. Time interval-enhanced graph neural network for shared-account cross-domain sequential recommendation. IEEE Transactions on Neural Networks and Learning Systems 35, 4002–4016. He, R., McAuley, J., 2016. Fusing similarity models with markov chains for sparse sequential recommendation, in: IEEE international conference on data mining, IEEE. pp. 191–200. He, X., Deng, K., Wang, X., Li, Y., Zhang, Y., Wang, M., 2020. Lightgcn: Simplifying and powering graph convolution network for recommendation, in: Proceedings of the international ACM SIGIR conference on research and development in information retrieval, pp. 639–648. Hidasi, B., Karatzoglou, A., Baltrunas, L., Tikk, D., 2015. Session-based recommendations with recurrent neural networks. arXiv preprint arXiv:1511.06939 . Jiang, W., Fan, Y., Tang, J., Li, X., Du, Y., Wang, X., 2026. Hierarchical long and short-term preference modeling with denoising mamba for sequential recommendation. Information Processing & Management 63, 104425. Kang, W.C., McAuley, J., 2018. Self-attentive sequential recommendation, in: IEEE international conference on data mining, pp. 197–206. Kingma, D.P., 2014. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 . Li, H., Yang, Y., Zeng, J., Gao, M., Wen, J., 2026. Multi-scale transformers with dual attention and adaptive masking for sequential recommendation. Information Processing & Management 63, 104318. Liu, X., Zhang, Z., Zhang, X., De Meo, P., Cherifi, H., 2025. Multi-supervisor association network cold start recommendation based on meta-learning. Expert Systems with Applications 267, 126204. Liu, Y., Xia, L., Huang, C., 2024. Selfgnn: Self-supervised graph neural networks for sequential recommendation, in: Proceedings of the 47th international ACM SIGIR conference on research and development in information retrieval, pp. 1609–1618. Ma, M., Ren, P., Lin, Y., Chen, Z., Ma, J., Rijke, M.d., 2019. 𝜋 -net: A parallel information-sharing network for shared-account cross-domain sequential recommendations, in: Proceedings of the 42nd international ACM SIGIR conference on research and development in information retrieval, pp. 685–694. Pan, L., Pan, W., Ming, Z., 2026. Multi-domain sequential recommendation via multi-sequence and multi-task learning. Information Processing & Management 63, 104426. Peintner, A., Mohammadi, A.R., Müller, M., Zangerle, E., 2025. Hypergraph-based temporal modelling of repeated intent for sequential recommendation, in: Proceedings of the ACM on web conference, pp. 3809–3818. Peng, S., Sugiyama, K., Mine, T., 2022. Less is more: Reweighting important spectral graph features for recommendation, in: Proceedings of the international ACM SIGIR conference on research and development in information retrieval, pp. 1273–1282. Pitas, I., 2000. Digital image processing algorithms and applications. John Wiley & Sons. Qiu, R., Huang, Z., Yin, H., Wang, Z., 2022. Contrastive learning for representation degeneration problem in sequential recommendation, in: Proceedings of the international conference on web search and data mining, pp. 813–823. Rao, Y., Zhao, W., Zhu, Z., Lu, J., Zhou, J., 2021. Global filter networks for image classification. Advances in Neural Information Processing Systems 34, 980–993. Rendle, S., Freudenthaler, C., Schmidt-Thieme, L., . Factorizing personalized markov chains for next-basket recommendation, in: Proceedings of the ACM on web conference. Shin, Y., Choi, J., Wi, H., Park, N., 2024. An attentive inductive bias for sequential recommendation beyond the self-attention, in: Proceedings of the AAAI conference on artificial intelligence, pp. 8984–8992. Sun, F., Liu, J., Wu, J., Pei, C., Lin, X., Ou, W., Jiang, P., 2019. Bert4rec: Sequential recommendation with bidirectional encoder representations from transformer, in: Proceedings of the ACM international conference on information and knowledge management, pp. 1441–1450. Sun, W., Ma, M., Ren, P., Lin, Y., Chen, Z., Ren, Z., Ma, J., De Rijke, M., 2021. Parallel split-join networks for shared account cross-domain sequential recommendations. IEEE Transactions on Knowledge and Data Engineering 35, 4106–4123. Suvorov, R., Logacheva, E., Mashikhin, A., Remizova, A., Ashukha, A., Silvestrov, A., Kong, N., Goka, H., Park, K., Lempitsky, V., 2022. Resolution-robust large mask inpainting with fourier convolutions, in: Proceedings of the IEEE/CVF conference on applications of computer vision, pp. 2149–2159. Tamkin, A., Jurafsky, D., Goodman, N., 2020. Language through a prism: A spectral approach for multiscale language representations. Advances in Neural Information Processing Systems 33, 5492–5504. Tang, J., Chen, X., Chen, W., Wu, J., Jiang, Y., Zheng, B., 2026. Parallel latent reasoning for sequential recommendation. arXiv preprint arXiv:2601.03153 . Tang, J., Dai, S., Shi, T., Xu, J., Chen, X., Chen, W., Wu, J., Jiang, Y., 2025. Think before recommend: Unleashing the latent reasoning power for sequential recommendation. arXiv preprint arXiv:2503.22675 . Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N., Kaiser, Ł., Polosukhin, I., 2017. Attention is all you need. Advances in Neural Information Processing Systems 30. Verstrepen, K., Goethals, B., 2015. Top-n recommendation for shared accounts, in: Proceedings of the ACM conference on recommender systems, pp. 59–66. Wang, X., Yue, H., Guo, L., Guo, F., He, C., Han, X., 2025a. User identification network with contrastive clustering for shared-account recommendation. Information Processing & Management 62, 104055. Wang, Z., Gao, M., Yu, J., Gao, X., Nguyen, Q.V.H., Sadiq, S., Yin, H., 2025b. Id-free not risk-free: Llm-powered agents unveil risks in id-free recommender systems, in: Proceedings of the international ACM SIGIR conference on research and development in information Retrieval, pp. 1902–1911. Wang, Z., Gao, M., Yu, J., Sadiq, S., Yin, H., Liu, L., 2026. When graph contrastive learning backfires: Spectral vulnerability and defense in recommendation. ACM Transactions on Information Systems 44, 1–30. 
+
+xx et al.: Preprint submitted to Elsevier Page 16 of 17 DisenReason 
+
+Wang, Z., Yu, J., Gao, M., Yin, H., Cui, B., Sadiq, S., 2024. Unveiling vulnerabilities of contrastive recommender systems to poisoning attacks, in: Proceedings of the international conference on knowledge discovery and data mining, pp. 3311–3322. Wei, J., Wang, X., Schuurmans, D., Bosma, M., Xia, F., Chi, E., Le, Q.V., Zhou, D., et al., 2022. Chain-of-thought prompting elicits reasoning in large language models. Advances in neural information processing systems 35, 24824–24837. Wu, Y., Meng, X., Hu, H., Zhang, J., Dong, Y., Lu, D., 2025. Affirm: Interactive mamba with adaptive fourier filters for long-term time series forecasting, in: Proceedings of the AAAI conference on artificial intelligence, pp. 21599–21607. Xu, K., Qin, M., Sun, F., Wang, Y., Chen, Y.K., Ren, F., 2020. Learning in the frequency domain, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pp. 1740–1749. Yang, Z., Qin, J., Zhang, D., Ma, J., Ji, P., 2024. Adaptive frequency domain data augmentation for sequential recommendation. IEEE Access . Zhang, J., Zhao, Z., Li, C., Yu, Y., 2025a. Lightweight yet fine-grained: A graph capsule convolutional network with subspace alignment for shared-account sequential recommendation, in: Proceedings of the AAAI conference on artificial intelligence, pp. 13242–13250. Zhang, S., Wang, M., Wang, W., Gao, J., Zhao, X., Yang, Y., Wei, X., Liu, Z., Xu, T., 2025b. Glint-ru: Gated lightweight intelligent recurrent units for sequential recommender systems, in: Proceedings of the conference on knowledge discovery and data mining, pp. 1948–1959. Zhang, X., Ding, H., Xie, F., Pan, L., Zi, Y., Wang, K., Zhang, H., 2025c. Beyond spatial domain: Cross-domain promoted fourier convolution helps single image dehazing, in: Proceedings of the AAAI conference on artificial intelligence, pp. 10221–10229. Zhao, C., Cai, W., Dong, C., Hu, C., 2024. Wavelet-based fourier information interaction with frequency diffusion adjustment for underwater image restoration, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pp. 8281–8291. Zhou, K., Yu, H., Zhao, W.X., Wen, J.R., 2022a. Filter-enhanced mlp is all you need for sequential recommendation, in: Proceedings of the ACM web conference, pp. 2388–2399. Zhou, T., Ma, Z., Wen, Q., Wang, X., Sun, L., Jin, R., 2022b. Fedformer: Frequency enhanced decomposed transformer for long-term series forecasting, in: International conference on machine learning, PMLR. pp. 27268–27286. 
+
+xx et al.: Preprint submitted to Elsevier Page 17 of 17

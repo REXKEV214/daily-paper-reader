@@ -1,0 +1,1304 @@
+Title: MPCEval: A Benchmark for Multi-Party Conversation Generation
+
+URL Source: https://arxiv.org/pdf/2603.04969v1
+
+Published Time: Fri, 06 Mar 2026 01:44:08 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# MPCEval : A Benchmark for Multi-Party Conversation Generation 
+
+# Minxing Zhang 1, † Yi Yang 1, † Zhuofan Jia 1 Xuan Yang 1 Jian Pei 1
+
+# Yuchen Zang 2 Xingwang Deng 2 Xianglong Chen 2
+
+> 1
+
+Duke University 2Tanka AI USA {minxing.zhang,owen.yang,zhuofan.jia,xuan.yang,j.pei}@duke.edu {zangyuchen,dengxingwang,xianglong.chen}@tanka.ai 
+
+## Abstract 
+
+Multi-party conversation generation, such as smart reply and col-laborative assistants, is an increasingly important capability of generative AI, yet its evaluation remains a critical bottleneck. Com-pared to two-party dialogue, multi-party settings introduce dis-tinct challenges, including complex turn-taking, role-dependent speaker behavior, long-range conversational structure, and multiple equally valid continuations. Accordingly, we introduce MPCEval ,a task-aware evaluation and benchmarking suite for multi-party conversation generation. MPCEval decomposes generation qual-ity into speaker modeling, content quality, and speaker–content consistency, and explicitly distinguishes local next-turn prediction from global full-conversation generation. It provides novel, quan-titative, reference-free, and reproducible metrics that scale across datasets and models. We apply MPCEval to diverse public and real-world datasets and evaluate modern generation methods along-side human-authored conversations. The results reveal systematic, dimension-specific model characteristics in participation balance, content progression and novelty, and speaker–content consistency, demonstrating that evaluation objectives critically shape model assessment and that single-score evaluation obscures fundamental differences in multi-party conversational behavior. The implemen-tation of MPCEval and the associated evaluation code are publicly available at https://github.com/Owen-Yang-18/MPCEval. 
+
+## 1 Introduction 
+
+Multi-party conversation generation aims to synthesize coherent dialogues involving three or more participants [ 14 ]. This capabil-ity underpins collaborative AI systems such as virtual meeting assistants, group decision-support agents, and multi-user chatbots, where participants with distinct roles and expertise jointly pursue shared objectives [ 6, 9 , 22 , 31 , 38 , 50 ]. Compared to two-party dia-logue, multi-party interactions exhibit different dynamics, including complex turn-taking, implicit coordination, role-dependent behav-ior, and long-range conversational dependencies [ 9, 44 ]. While these properties better reflect real-world communication, they also substantially complicate both generation and evaluation [9, 38]. Recent advances in large language models (LLMs) [ 42 ] have driven rapid progress in multi-party conversation generation [ 2 , 6]. However, evaluation methodology has lagged behind. Existing benchmarks and metrics provide limited guidance for com-paring generation models or diagnosing their failures , making it difficult to disentangle improvements in speaker modeling, con-tent quality, or role consistency from superficial optimization of specific metrics. Consequently, models with fundamentally different 
+
+> †Both authors contributed equally to this research.
+
+conversational behaviors may receive similar scores, while models excelling in one dimension may be unfairly penalized in others, hindering both scientific understanding and practical deployment. Evaluating multi-party conversation generation poses several challenges. First, conversational quality is inherently multi-dimensional , depending jointly on who speaks, what is said, and whether content aligns with the speaker’s role and prior behav-ior; collapsing these aspects into a single score obscures critical trade-offs [ 25 , 29 , 44 ]. Second, evaluation is task-dependent :next-message prediction emphasizes local plausibility, whereas full-conversation generation requires assessing global properties such as participation balance, information flow, and long-term role consistency. Third, conversation is intrinsically open-ended , as multiple continuations may be equally valid for a given context, rendering reference-based metrics fundamentally inade-quate [ 19 , 20 , 33 , 41 , 43 , 45 ]. Finally, evaluation frameworks must be extensible to accommodate emerging conversational dimensions and paradigms. To address these challenges, we introduce MPCEval , a task-aware and decomposed evaluation framework for multi-party con-versation generation. MPCEval explicitly separates speaker model-ing, content quality, and speaker–content consistency, and aligns each dimension with the appropriate evaluation granularity. It distinguishes local evaluation for next-message prediction from global evaluation for entire conversation generation, ensuring that metrics reflect underlying conversational objectives rather than conflating distinct phenomena. Building on this structure, MPCE-val provides a suite of novel, quantitative, reference-free, and re-producible metrics that scale across datasets, tasks, and models, enabling fine-grained and principled comparison of generation methods. Experiments via MPCEval further demonstrate that human-authored conversations are not uniformly superior across all evaluation dimensions, and that different models excel in distinct aspects of multi-party dialogue generation, providing nuanced understanding towards each model’s spe-cific strengths and characteristics. Existing evaluation paradigms systematically mislead model comparison in the multi-party setting. Traditional sequence-level metrics such as BLEU, ROUGE, and perplexity [ 16 ,19 , 23 , 39 , 51 ] operate at the sequence level and fail to capture long-range interaction dynamics. Single-reference-based metrics like BERTScore [ 10 , 45 ] assume a unique correct response and misrepre-sent the diversity of valid continuations. Consequently, lexical-level similarity is often rewarded while ignoring fundamental qualities such as role consistency, meaningful content progression, and inter-action structure. LLM-as-a-judge approaches [ 12 , 26 , 35 , 47 ] avoid  
+
+> arXiv:2603.04969v1 [cs.CL] 5 Mar 2026 Preprint, March 2026, Durham, NC Zhang et al.
+
+explicit references but suffer from limited reproducibility and relia-bility, and sensitivity to prompt design [17]. In this paper, we make four main contributions . First, we introduce MPCEval , the first benchmark designed for evaluating multi-party conversation generation. Second, we propose a task-aware evaluation framework that distinguishes local next-message prediction from global full-conversation generation. Third, we de-velop a comprehensive set of quantitative, reference-free, and re-producible metrics that capture structural and semantic properties of multi-party dialogue beyond existing evaluations. Fourth, we design MPCEval as an open and extensible framework, enabling future evaluation dimensions to be integrated as the field evolves. 
+
+MPCEval is developed through a close collaboration between academia and industry, and is designed to support both principled benchmarking research and real-world deployment; it is being in-tegrated into the evaluation workflow of Tanka AI and will be released as an open-source benchmark for public use. 
+
+## 2 Related Work 
+
+Our work relates to prior research on conversational evaluation and multi-party conversation generation. In this section, we focus on limitations of existing methods in multi-party settings and how these gaps motivate MPCEval .
+
+## 2.1 Evaluation of Conversation Generation 
+
+A broad range of evaluation methods has been developed for two-party dialogue, including reference-based metrics , reference-free au-tomatic metrics , and human evaluation protocols . While effective for narrow objectives, these approaches do not generalize well to open-ended, multi-party interaction. Reference-based metrics compare generated responses against fixed human-authored texts, including BLEU and ROUGE [ 16 , 19 ,23 , 30 , 39 , 51 ] and embedding-based variants like BERTScore [ 45 ]. As discussed in Section 1, these metrics implicitly assume a unique correct response, an assumption that breaks down when multiple conversational continuations are equally valid. Consequently, they often penalize appropriate responses that diverge from the reference and fail to capture complex properties such as turn-taking, topical progression, or speaker attribution. Moreover, because these metrics operate primarily at the sequence level, they do not extend naturally to global evaluation of entire conversations. To mitigate dependence on human-authored references, prior work has proposed reference-free metrics that assess intrinsic prop-erties of generated text. Diversity-based measures such as Distinct-
+
+𝑛 [ 21 , 46 ] quantify lexical variety but provide limited insight into coherence or contextual relevance. More recent LLM-as-a-judge approaches [ 12 , 26 , 28 , 48 ] use large language models (LLMs) to score responses holistically, but suffer from limited reproducibility due to sensitivity to prompts, evaluator models, and hallucinated judgments. More broadly, existing automatic metrics remain nar-row in scope [ 20 , 41 , 48 ]: for example, BARTScore [ 41 ] reflects token-level likelihood, while G-Eval [ 26 ] emphasizes engagement, leaving many dimensions of conversational quality unmeasured. Human evaluation is often considered the gold standard for as-sessing coherence, engagement, and naturalness [ 7, 34 ], but it is costly, and difficult to standardize, limiting its capability for sys-tematic and scalable benchmarking. Overall, existing evaluation paradigms neither support fair and consistent comparison across models and tasks nor capture the multi-dimensional properties central to multi-party interaction. In contrast, MPCEval provides novel, reference-free, quantitative, reproducible, and comprehen-sive metrics that jointly assess speaker modeling, content quality, and speaker–content consistency at both local and global levels. 
+
+## 2.2 Multi-Party Conversation Generation 
+
+Research on multi-party conversation generation spans diverse objectives and methodologies. Existing approaches can be broadly categorized by task into next-message prediction [36, 38] and full-conversation generation [ 31 ], including both continuation from a given history and generation under topic or participant constraints. From a methodological perspective, contemporary approaches fall into prompt-based and training-based paradigms. Prompt-based methods leverage the zero-shot or few-shot capabilities of state-of-the-art (SOTA) LLMs [ 31 , 36 ], whereas training-based methods rely on supervised fine-tuning with annotated multi-party dialogue data, such as speaker labels or discourse structure [ 6, 13 , 22 , 27 , 38 ]. Many training-based methods further assume access to explicit addressing information [ 6, 13 , 22 ] or participant profile metadata [ 27 ], which are costly and often impractical to obtain at scale. Despite substantial progress in generation models, the field lacks a dedicated evaluation benchmark tailored to multi-party interac-tion. Existing evaluation practices are largely inherited from two-party dialogue and do not adequately account for complex speaker dynamics, long-range interaction patterns, or multiple valid con-versational trajectories. To the best of our knowledge, MPCEval 
+
+is the first benchmark to offer a standardized, task-aware, and comprehensive evaluation framework for multi-party conversation generation, enabling principled comparison of diverse generation methods across both next-message prediction and full-conversation generation tasks, while remaining extensible to emerging evalua-tion dimensions as richer metadata becomes available. In short, existing work lacks an evaluation framework for jointly assessing task-aware and decomposed quality dimensions in multi-party conversations—a gap MPCEval is designed to fill. 
+
+## 3 Objectives and Overall Design 
+
+This section outlines the design objectives and structure of MPCE-val , explaining its design choices and how they address the chal-lenges of evaluating multi-party conversation generation. 
+
+## 3.1 What Does MPCEval Measure? 
+
+MPCEval is designed around a minimal yet expressive decomposi-tion of multi-party conversation quality into three complementary dimensions: speaker modeling , content quality , and speaker–content consistency . This decomposition reflects three orthogonal questions that any conversational system must answer: who should speak next, what should be said, and whether the content is consistent with the attributed speaker. These dimensions jointly capture the core structural and semantic properties of multi-party interaction without collapsing them into a single opaque score. MPCEval : A Benchmark for Multi-Party Conversation Generation Preprint, March 2026, Durham, NC 
+
+Evaluation in MPCEval is explicitly task-aware. We distinguish two evaluation tasks that impose fundamentally different require-ments on generation models. In next-message prediction (local eval-uation), a model is given a conversation history, optionally aug-mented with speaker profiles or explicit conversation objectives, and asked to generate the next turn. Evaluation in this setting emphasizes local plausibility , including the contextual appropriate-ness of the predicted speaker and the coherence of the generated utterance with respect to the immediate dialogue state. In contrast, full-conversation generation (global evaluation) re-quires a model to produce a multi-turn dialogue, either by extending a given history or by generating a conversation from scratch under specified constraints such as topics or participant lists. Evaluation at this level emphasizes global plausibility , capturing long-range prop-erties including participation balance, information flow, sustained speaker roles, and task completion when conversation objectives are defined. The explicit separation between local and global eval-uation prevents metrics designed for short-term plausibility from being misapplied to long-horizon conversational structure. 
+
+## 3.2 Datasets 
+
+MPCEval is dataset-agnostic (for text-based conversations) and is designed to support evaluation across heterogeneous conversa-tional settings with varying levels of annotation. When speaker labels are unavailable, MPCEval can still assess content genera-tion quality; when speaker information is present, it additionally evaluates speaker modeling and speaker–content consistency. If richer metadata such as speaker profiles are provided, MPCEval can further incorporate this information to derive more fine-grained evaluation metrics. In this paper, we select three representative multi-party conversation datasets, covering different real-world scenarios: DeliData [ 18 ], featuring collaborative task-solving di-alogues with explicit objectives; MPDD [ 5 ], derived from movie scripts with rich speaker interactions; and Tanka , a real-world en-terprise communication dataset characterized by long, information-dense discussions. Together, these datasets span diverse domains, interaction lengths, and speaker configurations, enabling us to ex-amine the generalizability of the proposed metrics in MPCEval .Detailed dataset descriptions are provided in Appendix A. 
+
+## 3.3 Generation Methods 
+
+A key design objective of MPCEval is method-agnosticism. The framework is designed to evaluate generation methods with funda-mentally different modeling assumptions, including both prompt-based and training-based approaches. In our experiments, we bench-mark a diverse set of state-of-the-art (SOTA) generation methods across both next-message prediction and full-conversation genera-tion tasks. Given the prevalence of prompting-based approaches in practice, MPCEval emphasizes evaluation of the zero-shot capabil-ities of modern LLMs, while remaining compatible with training-based or other methods. This method-agnostic design ensures that evaluation reflects the distinct characteristics that each model prior-itizes and captures in conversation generation, rather than artifacts of a particular modeling paradigm, and allows new generation meth-ods to be incorporated without modifying the evaluation pipeline. Conversation    
+
+> Log
+> Context Extraction
+> Agenda Parser
+> Text → Graph (V, E)
+> Profile Inference Module
+> Conversation Truncator
+> Context
+> Speaker Profile (Optional)
+> Objective (Optional)
+> Conversation History
+> Generation
+> Generation Engine
+> 🤖
+> Local Evaluation Object
+> Next Message Generation
+> 👩‍💼
+> Alice
+> "Great, let's discuss your findings tomorrow."
+> Global Evaluation Object
+> Full Conversation Generation
+> 👩‍💼
+> Alice "Great, let's discuss..."
+> 👨‍💻
+> Bob
+> "Sounds good, I'll prepare..."
+> 👩‍💼
+> Alice
+> "Focus on the key papers."
+> 👨‍💻
+> Bob "Okay, will do."
+> 👩‍🔬
+> Chris
+> "I can help with the
+> experimental design."
+> Evaluation
+> Measures
+> Quantitative, Reference-Free
+> Evaluation Result
+> Benchmark
+> Report
+> Informative Scores for Each Dimension
+> Content Quality
+> • Coherency
+> • Novelty ...
+> Speaker Modeling
+> • Accuracy
+> • Speaker Dynamics ...
+> Highlight of Our Framework
+> Speaker-Content
+> Consistency
+> • Matching Score ...
+> LLM / API
+
+Figure 1: Overall design of the MPCEval framework. 
+
+## 3.4 Evaluation Workflow and Overall Design 
+
+As shown in Figure 1, MPCEval is organized around three core components: context , evaluation objects , and measures . This modular design supports both fine-grained and holistic evaluation of multi-party conversation generation, while remaining extensible to new evaluation dimensions. The context specifies the information available for generation and evaluation, including the conversation history and optional metadata such as speaker profiles or explicit objectives. This design allows MPCEval to operate robustly across diverse scenarios, en-abling metadata-driven metrics when such information is available and principled reference-free evaluation otherwise. Given a context, MPCEval evaluates generation objects at two levels of granularity. Local evaluation assesses a single predicted next turn, focusing on speaker selection and content appropriate-ness given the immediate dialogue state. Global evaluation assesses an entire generated continuation—either extending a provided his-tory or generating from scratch—emphasizing long-range coher-ence, interaction dynamics, and overall conversational progression. Together, these evaluation objects capture short-term plausibility and long-horizon conversational structure. For both local and global evaluation, MPCEval organizes mea-sures along three complementary aspects: speaker modeling , content quality , and speaker–content consistency . Rather than collapsing all aspects of quality into a single scalar score, the framework produces a multi-dimensional evaluation profile. This design choice is inten-tional: it enables the identification of trade-offs that are invisible to aggregate metrics. For example, one model may excel at speaker selection but exhibit weak content progression, while another may generate coherent content with imbalanced participation. By ex-posing these differences explicitly, MPCEval supports diagnostic analysis and principled model comparison. Overall, this unified design enables evaluation capabilities that existing benchmarks lack, including task-aware assessment across local and global generation settings, explicit decomposition of con-versational quality into interpretable dimensions, and reference-free, reproducible measurement of multi-party interaction dynam-ics. We instantiate this design with a set of novel, quantitative, reference-free, reproducible, and comprehensive metrics for local evaluation (Section 4) and global evaluation (Section 5). Table 1 summarizes all proposed metrics, together with their scope, inter-pretation, and the conversational quality dimensions they measure. Preprint, March 2026, Durham, NC Zhang et al. 
+
+Table 1: Summary of MPCEval metrics, which are quantitative, reference-free, and reproducible. ↑ indicates a higher value. 
+
+Aspect Metric and Description Local Measures 
+
+Speaker 
+
+DNR (Direct Name Reference): binary indicator of whether the predicted next speaker is explicitly addressed in the recent context. 
+
+IR (Implicit Reference): higher values indicate the predicted speaker participated more recently when no explicit addressing cue is present. 
+
+PF (Participation Frequency): fraction of recent turns contributed by the speaker; a higher score means more frequent short-term engagement. 
+
+LS-ES (Embedding Similarity): similarity between recent context and the predicted speaker’s prior utterances. ↑ score means ↑ similarity. 
+
+LS-TA (Topic Alignment): similarity between topic distributions of recent context and the speaker’s prior utterances. ↑ score means ↑ similarity. Content 
+
+AP (Agenda Progression): relevance and novelty of the response w.r.t. the current active or the next agenda item. ↑ score means ↑ progression. 
+
+LNR-E-w (Weighted Emb.-aware LNR): IDF-weighted novelty rate of lexical units in the response. ( ≈0.5: balance, 0: redundancy, 1: divergence) 
+
+M-SNS (Message-level Semantic Novelty): emb. distance between response and recent turns. ( ≈0.5: balance, 0: redundancy, 1: divergence) 
+
+DAF (Dialogue-Act Transition Fit): likelihood that the response functionality (e.g., answer) follows context patterns. ↑ score means ↑ likelihood. 
+
+LL (Log-Likelihood): normalized log likelihood assigned by an LLM to the response, conditioned on the context. 
+
+TES (Topic Expansion Score): the response’s expansion beyond the conversation’s dominant topics. ( ≈0.5: balance, 0: redundancy, 1: off-topic). Speaker– Content 
+
+LSCC-ES (Embedding-Based Local Speaker–Content Consistency): embedding similarity between the response and the predicted speaker’s utterances in the recent context, with optional background-augmented speaker representation for sparse histories. ↑ score means ↑ similarity. 
+
+Global Measures 
+
+Speaker NSE (Normalized Speaker Entropy): normalized entropy of speaker distribution. (0: high imbalance, 1: near uniform). ↑ score means ↑ balance. 
+
+SC-Gini (Semantic Concentration): Gini coefficient of speaker contributions. ↑ score means ↑ centralized; ↓ score means ↑ collaborative. Content 
+
+Φ (Task Success Indicator): binary indicator of whether the conversation satisfies pre-defined goals and success conditions. 
+
+ACR (Agenda Completion Rate): fraction of objectives or agenda items that are fully addressed and covered by the conversation. 
+
+PE (Progression Efficiency): average number of conversation turns needed to fully address and cover one agenda item. ↑ score means ↑ turns. 
+
+CS (Conversational Structure): measures how consistently the conversation’s agenda progression follows a reference order. 
+
+PD (Progression Distance): semantic distance between the first and last utterances, capturing the overall topical movement in the conversation. 
+
+HMP (Harmonic Mean Progression): harmonic mean of semantic distances between turns. ↑ score means ↑ steady flow. Speaker– Content 
+
+GSCC-DC (Centroid-based GSCC): embedding similarity between a speaker’s utterances and their semantic centroids (semantic clusters of the speaker’s utterances). ↑ score means ↑ tightly clustered around central themes, reflecting higher role and topical consistency. 
+
+## 4 Local Evaluation 
+
+This section presents the design and rationale of local evaluation 
+
+in MPCEval . Local evaluation assesses the quality of a single pre-dicted next turn and is designed to be both reference-free —requiring no human-authored ground truth—and reproducible —yielding de-terministic scores given the same context and evaluation object. A summary of all local metrics is provided in Table 1, with full techni-cal definitions and implementation details deferred to Appendix B. We represent a conversation as a sequence of turns, where each turn is a speaker-utterance pair. Let the full conversa-tion history be 𝐶 = ⟨( 𝑠 1, 𝑢 1), . . . , (𝑠 𝑚 , 𝑢 𝑚 )⟩ , and let 𝐶 −𝑘 =
+
+⟨( 𝑠 𝑚 −𝑘 +1, 𝑢 𝑚 −𝑘 +1), . . . , (𝑠 𝑚 , 𝑢 𝑚 )⟩ denote the most recent 𝑘 turns. Given 𝐶 −𝑘 , a model predicts the next turn (𝑠 𝑚 +1, 𝑢 𝑚 +1), including a speaker 𝑠 𝑚 +1 and message content 𝑢 𝑚 +1. Local evaluation assesses whether this predicted turn is appropriate given the immediate con-versational context. Local evaluation in MPCEval is decomposed into three com-plementary dimensions: next-speaker modeling , local content qual-ity , and speaker–content consistency . This decomposition reflects three failure modes in multi-party dialogue: selecting an implau-sible speaker, generating incoherent or redundant content, and attributing contents to inappropriate speakers. Each dimension is quantified by a small set of complementary metrics, designed to provide diagnostic insights rather than a single aggregated score. 
+
+## 4.1 Local Speaker Modeling 
+
+Local speaker modeling evaluates whether 𝑠 𝑚 +1 is a plausible next participant given recent conversational cues. In multi-party settings, speaker selection depends on multiple factors, including explicit addressing, participation recency, and topical relevance; no single cue is sufficient in isolation. MPCEval therefore models speaker plausibility through a small set of complementary signals. When a speaker is explicitly addressed in the recent context, they are typically the most likely next speaker. Direct Name Reference 
+
+(DNR) captures this cue as a binary indicator that assigns a score of 1 if 𝑠 𝑚 +1 is explicitly mentioned (e.g., via “@” mentions) in 𝐶 −𝑘 , and 0 otherwise. When explicit addressing is absent, speaker choice may instead be implied by conversational dynamics or topic relevance. To capture such cases, we introduce metrics based on (1) implicit turn-taking cues and (2) topic-role fit . Implicit Reference (IR) measures whether 𝑠 𝑚 +1 has participated recently, reflecting engagement-based turn-taking patterns. Local Speaker Topic Alignment (LS-TA) measures whether 𝑠 𝑚 +1 is topically aligned with the current discus-sion even if they have not spoken recently. Together with partic-ipation frequency and embedding-based similarity, these metrics form a diagnostic profile that distinguishes recency-driven from topic-driven speaker selection. By separating these cues, MPCEval reveals which conversa-tional signals a model relies on for speaker prediction rather than conflating them into a single-dimensional score such as prediction accuracy. All local speaker modeling metrics are summarized in Table 1, with full definitions in Appendix B.1. MPCEval : A Benchmark for Multi-Party Conversation Generation Preprint, March 2026, Durham, NC 
+
+## 4.2 Local Content Quality 
+
+Local content quality evaluates whether 𝑢 𝑚 +1 is a relevant and informative continuation of the recent discussion. A desirable re-sponse should neither repeat prior content verbatim nor introduce content disconnected from the current conversational state. We begin with Lexical Novelty Rate (LNR), which measures the proportion of lexical units in 𝑢 𝑚 +1 that do not appear in 𝐶 −𝑘 . Ex-tremely low values indicate redundancy, while extremely high val-ues suggest topic drift. However, lexical novelty alone is insufficient, as a response may paraphrase existing content without adding in-formation or introduce unrelated content using familiar words. To address these limitations, MPCEval includes complemen-tary measures that assess novelty and coherence beyond surface form. Embedding-aware Lexical Novelty (LNR-E) and Inverse Doc-ument Frequency-Weighted LNR-E (LNR-E-w) evaluate semantic novelty while reducing sensitivity to paraphrasing and synonyms. 
+
+Dialogue-Act Transition Fit (DAF) assesses whether 𝑢 𝑚 +1 is func-tionally appropriate given recent dialogue acts (e.g., answering a previously raised question). Topic Expansion Score (TES) measures how smoothly 𝑢 𝑚 +1 maintains or extends the current topic, while 
+
+Agenda Progression (AP) evaluates advancement towards the end goal when explicit conversation objectives are available. These metrics are intended to be interpreted jointly. For example, high LNR but low TES indicates lexical novelty with less topical changes, while low LNR with high DAF suggests functional appro-priateness with potential redundancy. This decomposition exposes failure modes of local content continuation that would be obscured by a single fluency or coherence score. All local content quality metrics are listed in Table 1, with details in Appendix B.2. 
+
+## 4.3 Local Speaker–Content Consistency 
+
+Local speaker–content consistency evaluates whether 𝑢 𝑚 +1 is con-sistent with 𝑠 𝑚 +1 under the local context. In multi-party conversa-tions, participants often exhibit stable topical preferences, roles, or speaking styles; thus, even a plausible speaker choice and coherent message can form an implausible pair if misaligned. To capture this phenomenon, we adopt Local Speaker–Content Consistency via Embedding Similarity (LSCC-ES), which measures the semantic alignment between 𝑢 𝑚 +1 and 𝑠 𝑚 +1’s recent utterances in 𝐶 −𝑘 . We report both LSCC-ES-avg , capturing overall consis-tency, and LSCC-ES-max , capturing best-match consistency. When speaker profiles or background metadata are available, augmented variants improve robustness for speakers with sparse histories. The variants provide complementary signals: high LSCC-ES-max but low LSCC-ES-avg indicates alignment with a single utterance but inconsistency with broader behavior. All local speaker–content consistency metrics are summarized in Table 1 with implementation and technical details listed in Appendix B.3. 
+
+Synthesis. Taken together, local evaluation in MPCEval provides a fine-grained assessment of next-turn quality by jointly analyzing speaker plausibility, content appropriateness, and speaker–content alignment. Reporting these dimensions separately enables diagnos-tic analysis, exposes systematic trade-offs, and avoids the mislead-ing simplification of single-score evaluation, while remaining fully reference-free and reproducible. 
+
+## 5 Global Evaluation 
+
+This section presents the design and rationale of global evaluation 
+
+in MPCEval . Global evaluation assesses the quality of an entire generated conversation rather than individual turns and is designed to be reference-free , quantitative , and reproducible . A summary of all global evaluation metrics is provided in Table 1, with full definitions and implementation details deferred to Appendix C. Global evaluation targets long-range properties of multi-party interaction that cannot be captured at the turn level, including participation structure, information distribution and progression, and speaker coherence over extended context. We organize global evaluation into three complementary dimensions—global speaker modeling, global content quality, and global speaker–content consistency—each measured by a small set of metrics that jointly form a diagnostic view of the generated conversation’s quality. 
+
+## 5.1 Global Speaker Modeling 
+
+Global speaker modeling evaluates how speakers participate over the full interaction and how their contributions shape the conver-sation. Unlike local speaker modeling, which focuses on immediate next-speaker plausibility, global measures characterize long-range participation patterns and information concentration. To quantify participation balance, we compute Normalized Speaker Entropy (NSE), which measures how evenly turns are dis-tributed across participants. Lower NSE indicates dominance by a few speakers, while higher NSE reflects more balanced partic-ipation. Balanced participation is not assumed to be universally optimal; rather, NSE serves as a descriptive signal that must be interpreted in context. Moreover, balanced turn-taking does not imply balanced infor-mation contribution. To capture this distinction, we additionally report semantic concentration measures based on each speaker’s contribution to the conversation’s overall semantic span. In par-ticular, the Semantic Concentration Gini (SC-Gini) score measures how unevenly substantive information is distributed across speak-ers. Together, NSE and SC-Gini form a complementary diagnostic profile—for example, high NSE and high SC-Gini indicate balanced turn-taking with information concentrated in a few speakers. These global speaker measures reveal participation structures that emerge over long horizons, rather than simple aggregations of local speaker choices. All global speaker modeling metrics are summarized in Table 1, with detailed definitions in Appendix C.1. 
+
+## 5.2 Global Content Quality 
+
+Global content quality evaluates whether the generated conversa-tion makes meaningful progress over time. Unlike local content quality, which assesses immediate coherence, global content quality captures long-range semantic development and progression. When an explicit objective or agenda is available, progress is defined relative to that objective. We evaluate both whether the conversation achieves the intended outcome and how it does so. The Task Success Indicator (Φ) measures whether predefined success conditions are met, while Progression Efficiency (PE) evaluates how efficiently the conversation advances toward completing the agenda, penalizing unnecessarily prolonged or circular discussion. These metrics are applied only when objectives or agenda structures are available or reliably inferred. Preprint, March 2026, Durham, NC Zhang et al. 
+
+When no explicit objective is provided, we characterize progress through the conversation’s semantic trajectory. Progression Distance 
+
+(PD) measures the net semantic displacement from the beginning to the end of the conversation, normalized by length. Low PD may indicate stagnation, while extremely high PD may signal arbitrary topic switching. To complement PD, we report Harmonic Mean Progression (HMP), which favors smooth and steady semantic pro-gression. Together, PD and HMP distinguish sustained development from uncontrolled topic shifts. The global content metrics capture interaction-level progression patterns that emerge only over extended context. All global content quality metrics are listed in Table 1, with details in Appendix C.2. 
+
+## 5.3 Global Speaker–Content Consistency 
+
+Global speaker–content consistency evaluates whether speakers behave consistently with established roles, expertise, or topical fo-cus throughout the conversation. Even when local speaker choices and content appear reasonable, a conversation may be globally implausible if speakers’ behavior shifts unpredictably over time. To capture long-term consistency, we model each speaker’s con-tributions as one or more centroids (i.e., semantic clusters), each representing a behavioral characteristics such as topical focus or functional role. Global Speaker–Content Consistency via Distance to Centroid (GSCC-DC) is then a natural measure of how well a speaker’s utterances align with these cluster representations over the full interaction. We report both GSCC-DC-avg , capturing overall alignment, and GSCC-DC-max , capturing best-match alignment. When speaker profiles or background metadata are available, we incorporate this additional information into the cluster repre-sentations, allowing consistency to reflect alignment with both observed interactions and known background. When such meta-data are unavailable or sparse, MPCEval derives speaker-specific clusters directly from the conversation, enabling robust consistency measurement without external supervision. By modeling speaker behavior over long horizons, these metrics capture patterns that cannot be observed at the turn level or through simple aggregation of local scores. All global speaker–content con-sistency metrics are in Table 1 and details in Appendix C.3. 
+
+Synthesis. Taken together, global evaluation in MPCEval com-plements local evaluation by revealing long-range interaction prop-erties invisible at the turn level. The proposed metrics jointly char-acterize participation structure, information distribution, semantic progression, and long-term speaker behavioral consistency, en-abling principled assessment of multi-party conversation genera-tion beyond aggregated local scores. As with local evaluation, all global metrics are reference-free and reproducible. 
+
+## 6 Empirical Studies 
+
+Our experiments are designed to systematically evaluate both the behavior of modern multi-party conversation generation models and the effectiveness of MPCEval as an evaluation framework. Specifically, we organize our empirical study around the following research questions, each targeting a distinct aspect of evaluation validity and interpretability. 
+
+RQ1. Do different generation models exhibit systematically dif-ferent behaviors across speaker modeling, content quality, and speaker–content consistency, and can MPCEval reliably distin-guish these behaviors across datasets and evaluation granularities (local vs. global)? 
+
+RQ2. How do the metrics introduced in MPCEval differ from widely used existing evaluation metrics in terms of sensitivity, diagnostic power, and robustness, and in what concrete scenarios do existing metrics fail to capture important dimensions of multi-party conversational quality that MPCEval explicitly measures? 
+
+RQ3. How do human-authored and machine-generated multi-party conversations differ across multiple evaluation dimensions, and to what extent should human-authored conversations be treated as a universal gold standard versus one point in a broader space of conversational trade-offs captured by MPCEval ?
+
+## 6.1 Experiment Setup 
+
+A central design principle of MPCEval is task awareness. Multi-party conversation generation encompasses qualitatively different generation objectives, and evaluation criteria must be aligned ac-cordingly. Thus, as highlighted in Section 3.1, we explicitly dis-tinguish two evaluation tasks— next-message prediction and full-conversation generation —and benchmark representative datasets and state-of-the-art (SOTA) generation methods under each setting. 
+
+6.1.1 Datasets. We evaluate MPCEval on three complementary multi-party conversation datasets introduced in Section 3.2, each having distinct characteristics to cover diverse real-life scenarios: (1) DeliData [ 18 ], a collaborative problem-solving dataset, which supports both next-message prediction and full-conversation gener-ation from scratch given topic constraints; (2) MPDD [ 5], a public multi-party dialogue dataset derived from TV scripts, which is primarily suited for next-message prediction due to its shorter con-text length; and (3) Tanka , a real-world enterprise communication dataset featuring long, information-dense interactions, which is particularly suitable for evaluating full-conversation generation (continual generation given conversation history). Using multiple datasets allows us to assess whether observed findings, such as model behaviors and metric patterns, are consis-tent across public and private data, short and long conversations, and objective-driven versus open-ended interaction settings. 
+
+6.1.2 Generation Methods. 
+
+Next-Message Prediction (Local). For local evaluation, we bench-mark three categories of representative approaches: (1) Multi-LIGHT [ 38 ], a supervised training-based method; (2) ChatGPT-solver [36 ], a prompting-based approach tailored to GPT-4 ; and (3) 
+
+Model-Agnostic Prompting , where we evaluate a range of SOTA LLMs—including Llama-3.3-70B [ 8], GPT-4-Turbo [1], DeepSeek-V3 [ 24 ], and Claude-3.5-Sonnet [ 3 ]—using a unified prompting template. This setup enables controlled comparison across models with different architectures and training paradigms while hold-ing the prompting interface fixed. Detailed prompts and method descriptions are provided in Appendix D and Appendix F. 
+
+Full-Conversation Generation (Global). For global evalu-ation, we focus on model-agnostic prompting frameworks capa-ble of generating multi-turn, multi-speaker interactions: (1) MPC-constraints [ 31 ], a constraint-driven prompting method orig-inally validated on Llama-3.1 [ 8] and Qwen-2.5 [40 ]; and (2) an MPCEval : A Benchmark for Multi-Party Conversation Generation Preprint, March 2026, Durham, NC 
+
+expansion of MPC-constraints to additional SOTA models, in-cluding GPT-4-Turbo , Llama-3.3-70B , DeepSeek-V3 , and Claude-3.5-Sonnet . Detailed method descriptions are in Appendix D. 
+
+Scope and Limitations. Several additional multi-party conver-sation generation methods have been proposed in prior work [ 6 , 13 ,22 , 27 ]. However, these methods typically rely on auxiliary informa-tion such as explicit addressing annotations, speaker profiles, or dis-course structures that are unavailable or inconsistently annotated in most large-scale datasets. To ensure fair comparison and broad applicability, we restrict our experiments to methods that operate using only raw conversation history and optional task descriptions and speaker information. Importantly, this restriction reflects cur-rent data availability rather than a limitation of MPCEval itself: as validated by the more sophisticated metrics in MPCEval , which incorporate profile information when available, while still provid-ing effective, simpler variants when such additional information is unavailable, the framework is explicitly designed to accommodate additional metrics and evaluation dimensions—such as addressing accuracy, persona consistency, or affective alignment—when richer annotations become available. 
+
+## 6.2 RQ1: Comparison of Generation Models 
+
+Tables 2 and 3 show that different generation models exhibit sys-tematically different behaviors across speaker modeling, content quality, and speaker–content consistency dimensions, and that 
+
+MPCEval effectively differentiates these behaviors at both local and global levels. For brevity, we present detailed results on the Del-iData dataset in the main paper and report complete results across all datasets in Appendix E, where consistent trends are observed. 
+
+Local speaker modeling. Local speaker modeling results (Ta-ble 2) indicate that models rely on distinct conversational cues for next-speaker prediction. DeepSeek excels in Direct Name Refer-ence (DNR = 0.389), reflecting a stronger capability in detecting explicit addressee mentions. In contrast, ChatGPT-solver per-forms best on Participation Frequency (PF = 0.369), Local Speaker Embedding Similarity (LS-ES-avg = 0.489), and Local Speaker Topic Alignment (LS-TA = 0.848), suggesting greater emphasis on partici-pation patterns and topical continuity. These differences illustrate how MPCEval differentiates multiple speaker-selection strategies that would otherwise be conflated by single aggregate metrics. 
+
+Global content quality. Global content quality metrics (Table 3) reveal models’ distinct long-range progression styles in content generation. Claude-3.5-Sonnet attains the highest Progression Dis-tance (PD = 1.280) and Harmonic Mean Progression (HMP = 0.967), indicating both substantial semantic advancement and smooth turn-to-turn progression. DeepSeek , while achieving a comparable PD (1.270), exhibits a lower HMP (0.807), reflecting more uneven pro-gression with intermediate stagnation or abrupt semantic shifts. These results demonstrate that similar aggregate progress can arise from qualitatively different interaction dynamics, which are explic-itly captured by MPCEval ’s decomposed global metrics. Overall, MPCEval reveals clear, dimension-specific model behav-iors across both local and global settings, enabling more nuanced and diagnostic comparison of multi-party conversation generation systems than single-score evaluations. 
+
+## 6.3 RQ2: Evaluation Metrics in MPCEval vs. Existing Representative Metrics 
+
+We conduct a case study on the DeliData dataset to compare MPCE-val ’s metrics with representative metrics, including BLEU [ 30 ], BERTScore [45], BARTScore [41], G-Eval [26], and Uni-Eval [48]. As indicated in Figure 2, reference-based metrics such as BLEU and BERTScore assign low scores to the model-generated response because it diverges from the single human-authored reference. How-ever, the generated turn remains coherent and contextually appro-priate, illustrating a fundamental limitation of reference-based eval-uation in the open-ended setting of multi-party dialogue, where multiple continuations can be equally valid. Existing reference-free metrics also exhibit notable limitations. BARTScore assigns a very low likelihood to the human-authored turn, even though low likelihood does not necessarily imply inco-herence in conversational contexts. Similarly, LLM-as-a-judge meth-ods such as G-Eval and Uni-Eval assign high engagement scores to the generated response while penalizing the human-authored one, despite both introducing comparably novel and relevant ideas. Uni-Eval also assigns a low understandability score to the gener-ated turn, contradicting qualitative inspection. These discrepancies highlight the limited diagnostic power of existing metrics. In contrast, MPCEval provides a set of quantitative, reference-free, and reproducible metrics that explicitly decompose conversa-tional quality into complementary dimensions. For example, lower DAF and LL scores for human-authored turns reflect reduced con-formity to common dialogue-act patterns or language-model expec-tations, while LNR-E-w and M-SNS-avg still capture their higher semantic novelty and contextual relevance. Together, these metrics offer a more balanced and interpretable assessment of conversa-tional quality than single-score alternatives. 
+
+## 6.4 RQ3: Human vs. Generated Conversation 
+
+Tables 2 and 3 show that human-authored and machine-generated conversations exhibit systematically different conversational char-acteristics rather than forming a strict quality hierarchy. At the local level (Table 2), human-authored conversations achieve the highest Implicit Reference (IR = 0.295 vs. a machine-generated average of 0.188), but the lowest Direct Name Reference (DNR = 0.222 vs. 0.324) and Log-Likelihood (LL = 0.232 vs. 0.839). This pattern indicates greater reliance on implicit turn-taking cues and lower predictability in human utterances. Human-authored conversations also show lower TES (0.281) and LNR-E-w (0.245), reflecting conservative topical progression and higher lexical redun-dancy. In contrast, machine-generated dialogues—particularly those from GPT-4-Turbo and Claude-3.5-Sonnet —closely approach the novelty-coherence balance, with TES values near 0.500. At the global level (Table 3), both human and machine-generated conversations exhibit high participation diversity (NSE), but human-authored dialogues show substantially lower global speaker– content consistency (GSCC ≈ 0.53) compared to generated ones (GSCC ≈ 0.86–0.95). Machine-generated conversations also demon-strate stronger and steadier semantic progression, as indicated by higher PD and HMP values, whereas human-authored conversa-tions evolve more conservatively. Preprint, March 2026, Durham, NC Zhang et al. 
+
+Table 2: Performance comparison on the DeliData dataset using MPCEval ’s next-message prediction (local) measures (mean 
+
+± standard deviation). Bold and underlined values indicate the highest and lowest scores in each column, respectively. For 
+
+LNR-E-w , M-SNS-avg, and TES , values closest to 0.5 are bolded, while those farthest from 0.5 are underlined . ChatGPT-solver 
+
+does not report LSCC-ES-avg, as local speaker–content consistency is not applicable (see Appendix D.1). 
+
+Local Speaker Modeling Local Content Quality Local Consistency Model DNR IR PF LS-ES-avg LS-TA LNR-E-w M-SNS-avg DAF LL TES LSCC-ES-avg 
+
+LLaMa-3.3 .278 ±.448 .182 ±.205 .276 ±.096 .444 ±.088 .778 ±.193 .280 ±.159 .735 ±.091 .281 ±.243 .893 ±.091 .357 ±.399 .358 ±.198 
+
+GPT-4-Turbo .278 ±.448 .185 ±.203 .303 ±.100 .456 ±.097 .783 ±.193 .403 ±.177 .736 ±.077 .363 ±.237 .793 ±.178 .142 ±.168 .421 ±.206 
+
+DeepSeek .389 ±.488 .213 ±.223 .278 ±.099 .450 ±.100 .774 ±.196 .314 ±.133 .688 ±.061 .307 ±.240 .918 ±.074 .112 ±.185 .381 ±.161 
+
+Claude-3.5 .333 ±.471 .125 ±.143 .298 ±.101 .454 ±.096 .836 ±.202 .343 ±.176 .698 ±.081 .279 ±.236 .838 ±.203 .500 ±.497 .331 ±.178 
+
+MultiLIGHT .333 ±.471 .227 ±.216 .309 ±.102 .448 ±.088 .781 ±.174 .156 ±.233 .749 ±.072 .329 ±.267 .757 ±.222 .303 ±.407 .297 ±.211 
+
+ChatGPT-solver .333 ±.471 .195 ±.196 .369 ±.126 .489 ±.098 .848 ±.160 .289 ±.202 .690 ±.068 .294 ±.238 .833 ±.192 .167 ±.373 –Human .222 ±.416 .295 ±.254 .312 ±.110 .458 ±.103 .816 ±.191 .245 ±.299 .719 ±.109 .348 ±.234 .232 ±.349 .281 ±.383 .334 ±.203      
+
+> Context: This conversation is from the DeliData dataset, where participants collaboratively solve the Wason card selection task. In this specific instance, four cards are presented showing: 5,6,N, and A. Each card has a letter on one side and a number on the other. Participants must determine which cards to flip to test the rule: “If a card has a vowel on one side, it has an even number on the other side.” The participants are debating which cards to select to verify or falsify this rule.
+
+Conversation History & Next Message Metric Comparison                                            
+
+> Tiger: So what do you guys think
+> Ox: I would turn A and 6, but it can’t be that easy
+> Falcon: I was thinking the same too, but we need to discuss
+> Falcon: I think turning A would be a no-brainer
+> Falcon: @Tiger, what is your opinion
+> Tiger: I was thinking, maybe we should turn all odd and even numbers
+> Generated Next Message: Ox: Actually, we only need to turn the A and 5. A to check if there’s an even number on the other side, and 5 to ensure there’s no vowel on its other side.
+> Human-Authored Next Message: Ox: hm.. why the odd numbers
+> Existing Metric Gen. Human MPCEval Gen. Human
+> BLEU-4 0.006 —LNR-E-w 0.591 0.469
+> BERTScore (F1) 0.840 —M-SNS-avg 0.774 0.673
+> BARTScore -3.073 -5.983 M-SNS-min 0.490 0.327 G-EVAL (Engage.) 2.700 1.000 DAF 0.700 0.000 Uni-Eval (Engage.) 1.995 0.985 LL 0.956 0.906 Uni-Eval (Understand.) 0.290 0.530 TES 0.516 0.000
+
+Figure 2: Case study comparing MPCEval with existing evaluation metrics. “Gen.” denotes model-generated messages. BLEU-4 and BERTScore are excluded for human-authored next message as comparing the reference to itself is uninformative. Table 3: Performance on the DeliData dataset via MPCEval ’s global metrics (mean ± std). GSCC denotes GSCC-DC-avg under single-centroid speaker–content consistency. Bold and underlined mark the highest and lowest values per column. 
+
+MPC is shorthand for the MPC-constraints method [31]. 
+
+Global Speaker Global Content Consistency Model NSE SC-Gini PD HMP GSCC 
+
+MPC + LLaMa-3.1 .978 ±.022 .445 ±.197 1.127 ±.163 .869 ±.107 .894 ±.040 
+
+MPC + Qwen .983 ±.024 .392 ±.176 1.648 ±.215 1.021 ±.114 .951 ±.061 
+
+MPC + LLaMa-3.3 .960 ±.000 .430 ±.163 1.144 ±.148 .835 ±.074 .915 ±.026 
+
+MPC + GPT-4-Turbo .984 ±.020 .420 ±.185 1.198 ±.232 .875 ±.095 .885 ±.039 
+
+MPC + DeepSeek .979 ±.024 .416 ±.197 1.270 ±.145 .807 ±.095 .918 ±.041 
+
+MPC + Claude-3.5 .987 ±.015 .366 ±.203 1.280 ±.115 .967 ±.070 .862 ±.036 Human .962 ±.024 .245 ±.182 .850 ±.198 .873 ±.484 .528 ±.065 
+
+Overall, these results suggest that human-authored conversa-tions should not be treated as a gold standard. Instead, human and machine-generated dialogues emphasize complementary dimen-sions of conversational quality, which MPCEval makes explicit. 
+
+## 7 Conclusion and Future Works 
+
+We introduced MPCEval , a task-aware and decomposed evaluation framework for multi-party conversation generation. By separating speaker modeling, content quality, and speaker–content consis-tency, and by distinguishing local next-message prediction from global conversation generation, MPCEval provides quantitative, reference-free, and reproducible metrics that capture interaction properties missed by existing evaluations. Experiments show clear, dimension-specific behaviors across models, highlight limitations of widely used metrics in multi-party settings, and demonstrate that human-authored conversations are not a universal gold standard. Future work will extend MPCEval to incorporate richer anno-tations such as explicit addressing or affective signals, analyzing metric robustness under different modeling choices, and integrating controlled human evaluations to better calibrate automatic metrics. We also plan to study the scalability and computational cost of the framework on longer, larger-scale conversations and to release additional public benchmarks to facilitate broader adoption. 
+
+## References 
+
+[1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Floren-cia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al . 2023. Gpt-4 technical report. arXiv preprint arXiv:2303.08774 
+
+(2023). [2] Angus Addlesee, Neeraj Cherakara, Nivan Nelson, Daniel Hernández García, Nancie Gunson, Weronika Sieińska, Marta Romeo, Christian Dondrup, and Oliver Lemon. 2024. A multi-party conversational social robot using llms. In Companion of the 2024 ACM/IEEE International Conference on Human-Robot Interaction . 1273– 1275. [3] Anthropic. 2024. The Claude 3 Model Family: Opus, Sonnet, Haiku (with Claude 3.5 Sonnet Addendum). https://www-cdn.anthropic. com/fed9cc193a14b84131812372d8d5857f8f304c52/Model_Card_Claude_ 3_Addendum.pdf [4] David M Blei, Andrew Y Ng, and Michael I Jordan. 2003. Latent dirichlet allocation. 
+
+Journal of machine Learning research 3, Jan (2003), 993–1022. [5] Yi-Ting Chen, Hen-Hsen Huang, and Hsin-Hsi Chen. 2020. MPDD: A multi-party dialogue dataset for analysis of emotions and interpersonal relationships. In 
+
+Proceedings of the twelfth language resources and evaluation conference . 610–614. MPCEval : A Benchmark for Multi-Party Conversation Generation Preprint, March 2026, Durham, NC 
+
+[6] Alexander Chernyavskiy and Dmitry Ilvovsky. 2023. Transformer-based multi-party conversation generation using dialogue discourse acts planning. In Pro-ceedings of the 24th Annual Meeting of the Special Interest Group on Discourse and Dialogue . 519–529. [7] Jan Deriu, Alvaro Rodrigo, Arantxa Otegi, Guillermo Echegoyen, Sophie Rosset, Eneko Agirre, and Mark Cieliebak. 2021. Survey on evaluation methods for dialogue systems. Artificial Intelligence Review 54, 1 (2021), 755–810. [8] Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. 2024. The llama 3 herd of models. arXiv e-prints (2024), arXiv–2407. [9] Ananya Ganesh, Martha Palmer, and Katharina von der Wense. 2023. A survey of challenges and methods in the computational modeling of multi-party dialog. In Proceedings of the 5th Workshop on NLP for Conversational AI (NLP4ConvAI 2023) . 140–154. [10] Yifan Gao, Piji Li, Irwin King, and Michael R Lyu. 2019. Interconnected question generation with coreference alignment and conversation flow modeling. arXiv preprint arXiv:1906.06893 (2019). [11] Maarten Grootendorst. 2022. BERTopic: Neural topic modeling with a class-based TF-IDF procedure. arXiv preprint arXiv:2203.05794 (2022). [12] Jiawei Gu, Xuhui Jiang, Zhichao Shi, Hexiang Tan, Xuehao Zhai, Chengjin Xu, Wei Li, Yinghan Shen, Shengjie Ma, Honghao Liu, et al . 2024. A survey on llm-as-a-judge. The Innovation (2024). [13] Jia-Chen Gu, Chao-Hong Tan, Chongyang Tao, Zhen-Hua Ling, Huang Hu, Xiubo Geng, and Daxin Jiang. 2022. HeterMPC: A heterogeneous graph neural network for response generation in multi-party conversations. arXiv preprint arXiv:2203.08500 (2022). [14] Jia-Chen Gu, Chongyang Tao, and Zhen-Hua Ling. 2022. Who Says What to Whom: A Survey of Multi-Party Conversations.. In IJCAI . 5486–5493. [15] Kai Han, An Xiao, Enhua Wu, Jianyuan Guo, Chunjing Xu, and Yunhe Wang. 2021. Transformer in transformer. Advances in neural information processing systems 34 (2021), 15908–15919. [16] Fred Jelinek, Robert L Mercer, Lalit R Bahl, and James K Baker. 1977. Perplexity—a measure of the difficulty of speech recognition tasks. The Journal of the Acoustical Society of America 62, S1 (1977), S63–S63. [17] Ziwei Ji, Nayeon Lee, Rita Frieske, Tiezheng Yu, Dan Su, Yan Xu, Etsuko Ishii, Ye Jin Bang, Andrea Madotto, and Pascale Fung. 2023. Survey of hallucination in natural language generation. ACM computing surveys 55, 12 (2023), 1–38. [18] Georgi Karadzhov, Tom Stafford, and Andreas Vlachos. 2023. DeliData: A dataset for deliberation in multi-party problem solving. Proceedings of the ACM on Human-Computer Interaction 7, CSCW2 (2023), 1–25. [19] Gangwoo Kim, Sungdong Kim, Kang Min Yoo, and Jaewoo Kang. 2022. Generating information-seeking conversations from unlabeled documents. arXiv preprint arXiv:2205.12609 (2022). [20] Sungdong Kim, Minsuk Chang, and Sang-Woo Lee. 2021. Neuralwoz: Learning to collect task-oriented dialogue via model-based simulation. arXiv preprint arXiv:2105.14454 (2021). [21] Jiwei Li, Michel Galley, Chris Brockett, Jianfeng Gao, and William B Dolan. 2016. A diversity-promoting objective function for neural conversation models. In 
+
+Proceedings of the 2016 conference of the North American chapter of the association for computational linguistics: human language technologies . 110–119. [22] Jingyang Li, Shengli Song, Yixin Li, Hanxiao Zhang, and Guangneng Hu. 2024. ChatMDG: A discourse parsing graph fusion based approach for multi-party dialogue generation. Information Fusion 110 (2024), 102469. [23] Chin-Yew Lin. 2004. Rouge: A package for automatic evaluation of summaries. In Text summarization branches out . 74–81. [24] Aixin Liu, Bei Feng, Bing Xue, Bingxuan Wang, Bochao Wu, Chengda Lu, Cheng-gang Zhao, Chengqi Deng, Chenyu Zhang, Chong Ruan, et al . 2024. Deepseek-v3 technical report. arXiv preprint arXiv:2412.19437 (2024). [25] Chia-Wei Liu, Ryan Lowe, Iulian Vlad Serban, Mike Noseworthy, Laurent Charlin, and Joelle Pineau. 2016. How not to evaluate your dialogue system: An empiri-cal study of unsupervised evaluation metrics for dialogue response generation. In Proceedings of the 2016 conference on empirical methods in natural language processing . 2122–2132. [26] Yang Liu, Dan Iter, Yichong Xu, Shuohang Wang, Ruochen Xu, and Chenguang Zhu. 2023. G-eval: NLG evaluation using gpt-4 with better human alignment. 
+
+arXiv preprint arXiv:2303.16634 (2023). [27] Khyati Mahajan and Samira Shaikh. 2024. Persona-aware multi-party conversa-tion response generation. In Proceedings of the 2024 joint international conference on computational linguistics, language resources and evaluation (LREC-cOLING 2024) . 12712–12723. [28] Shikib Mehri and Maxine Eskenazi. 2020. USR: An unsupervised and reference free evaluation metric for dialog generation. arXiv preprint arXiv:2005.00456 
+
+(2020). [29] Hiroki Ouchi and Yuta Tsuboi. 2016. Addressee and response selection for multi-party conversation. In Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing . 2133–2143. [30] Kishore Papineni, Salim Roukos, Todd Ward, and Wei-Jing Zhu. 2002. Bleu: a method for automatic evaluation of machine translation. In Proceedings of the 40th annual meeting of the Association for Computational Linguistics . 311–318. [31] Nicolò Penzo, Marco Guerini, Bruno Lepri, Goran Glavaš, and Sara Tonelli. 2025. Don’t Stop the Multi-Party! On Generating Synthetic Multi-Party Conversations with Constraints. arXiv preprint arXiv:2502.13592 (2025). [32] Lawrence Rabiner and Biinghwang Juang. 2003. An introduction to hidden Markov models. ieee assp magazine 3, 1 (2003), 4–16. [33] Zhengliang Shi, Weiwei Sun, Shuo Zhang, Zhen Zhang, Pengjie Ren, and Zhaochun Ren. 2023. RADE: Reference-Assisted Dialogue Evaluation for Open-Domain Dialogue. In Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) . 12856–12875. [34] Eric Smith, Orion Hsu, Rebecca Qian, Stephen Roller, Y-Lan Boureau, and Jason Weston. 2022. Human evaluation of conversations is an open problem: comparing the sensitivity of various methods for evaluating dialogue agents. In Proceedings of the 4th Workshop on NLP for Conversational AI . 77–97. [35] Heydar Soudani, Roxana Petcu, Evangelos Kanoulas, and Faegheh Hasibi. 2024. A survey on recent advances in conversational data generation. arXiv preprint arXiv:2405.13003 (2024). [36] Chao-Hong Tan, Jia-Chen Gu, and Zhen-Hua Ling. 2023. Is chatGPT a good multi-party conversation solver? arXiv preprint arXiv:2310.16301 (2023). [37] Ike Vayansky and Sathish AP Kumar. 2020. A review of topic modeling methods. 
+
+Information Systems 94 (2020), 101582. [38] Jimmy Wei, Kurt Shuster, Arthur Szlam, Jason Weston, Jack Urbanek, and Mojtaba Komeili. 2023. Multi-party chat: Conversational agents in group settings with humans and models. arXiv preprint arXiv:2304.13835 (2023). [39] Qingyang Wu, Song Feng, Derek Chen, Sachindra Joshi, Luis Lastras, and Zhou Yu. 2022. DG2: Data augmentation through document grounded dialogue generation. In Proceedings of the 23rd annual meeting of the special interest group on discourse and dialogue . 204–216. [40] An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, et al . 2024. Qwen2.5 Technical Report. 
+
+arXiv preprint arXiv:2412.15115 (2024). https://arxiv.org/abs/2412.15115 [41] Weizhe Yuan, Graham Neubig, and Pengfei Liu. 2021. Bartscore: Evaluating generated text as text generation. Advances in neural information processing systems 34 (2021), 27263–27277. [42] Minxing Zhang, Yi Yang, Roy Xie, Bhuwan Dhingra, Shuyan Zhou, and Jian Pei. 2026. Generalizability of Large Language Model-Based Agents: A Comprehensive Survey. ACM Comput. Surv. (Feb. 2026). doi:10.1145/3794858 Just Accepted. [43] Qiyuan Zhang, Yufei Wang, Tiezheng Yu, Yuxin Jiang, Chuhan Wu, Liangyou Li, Yasheng Wang, Xin Jiang, Lifeng Shang, Ruiming Tang, et al . 2024. Revise-val: Improving llm-as-a-judge via response-adapted references. arXiv preprint arXiv:2410.05193 (2024). [44] Rui Zhang, Honglak Lee, Lazaros Polymenakos, and Dragomir Radev. 2018. Ad-dressee and response selection in multi-party conversations with speaker in-teraction rnns. In Proceedings of the AAAI conference on artificial intelligence ,Vol. 32. [45] Tianyi Zhang, Varsha Kishore, Felix Wu, Kilian Q Weinberger, and Yoav Artzi. 2019. Bertscore: Evaluating text generation with bert. arXiv preprint arXiv:1904.09675 (2019). [46] Yizhe Zhang, Michel Galley, Jianfeng Gao, Zhe Gan, Xiujun Li, Chris Brockett, and Bill Dolan. 2018. Generating informative and diverse conversational responses via adversarial information maximization. Advances in Neural Information Processing Systems 31 (2018). [47] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric Xing, et al . 2023. Judging llm-as-a-judge with mt-bench and chatbot arena. Advances in neural information processing systems 36 (2023), 46595–46623. [48] Ming Zhong, Yang Liu, Da Yin, Yuning Mao, Yizhu Jiao, Pengfei Liu, Chenguang Zhu, Heng Ji, and Jiawei Han. 2022. Towards a unified multi-dimensional evalua-tor for text generation. arXiv preprint arXiv:2210.07197 (2022). [49] Ce Zhou, Qian Li, Chen Li, Jun Yu, Yixin Liu, Guangjing Wang, Kai Zhang, Cheng Ji, Qiben Yan, Lifang He, et al . 2025. A comprehensive survey on pretrained foundation models: A history from bert to chatgpt. International Journal of Machine Learning and Cybernetics 16, 12 (2025), 9851–9915. [50] Ling.Yu Zhu, Zhengkun Zhang, Jun Wang, Hongbin Wang, Haiying Wu, and Zhenglu Yang. 2022. Multi-Party Empathetic Dialogue Generation: A New Task for Dialog Systems. In Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , Smaranda Muresan, Preslav Nakov, and Aline Villavicencio (Eds.). Association for Computational Linguistics, Dublin, Ireland, 298–307. doi:10.18653/v1/2022.acl-long.24 [51] Yaoming Zhu, Sidi Lu, Lei Zheng, Jiaxian Guo, Weinan Zhang, Jun Wang, and Yong Yu. 2018. Texygen: A benchmarking platform for text generation models. In The 41st international ACM SIGIR conference on research & development in information retrieval . 1097–1100. Preprint, March 2026, Durham, NC Zhang et al. 
+
+## A Dataset Details 
+
+We detail the characteristics of each dataset and their intended evaluation tasks below. 
+
+Delidata [18 ]. A publicly-available collaborative problem-solving dataset based on the Wason selection task, containing 500 dialogues (avg. 27–40 utterances, avg. 3–4 speakers). Because each dialogue has an explicit objective and structured setup (Wason selection task initial setup), Delidata supports both next-message prediction task (local evaluation) and full-conversation generation 
+
+task (global evaluation) by providing only the task description and speaker list as input. Under the full-conversation generation setting, content-quality measures are most applicable, as speaker profiles and conversation histories are not available. 
+
+MPDD [ 5]. A publicly-available Chinese multi-party dialogue dataset derived from TV scripts, annotated with emotions and in-terpersonal relations. After filtering short dialogues, it contains 1,774 conversations (avg. 10.3 utterances, avg. 2.5 speakers). MPDD is well suited for next-message prediction task (local evaluation), where the final turn can be masked and evaluated. It is less suitable for full-conversation generation due to constrained conversation lengths and the absence of explicit topics for each dialogue. 
+
+Tanka . Tanka is a private dataset of real enterprise communica-tion and knowledge management collected from the Tanka platform between 2020 and November 2024. It contains multilingual (Chi-nese and English) content arising from authentic organizational collaboration and knowledge-sharing activities. From this corpus, we selected four highly active groups and segmented them into 20 dialogue instances using topic-initiating trigger messages identi-fied by message IDs. These dialogues were manually curated by Tanka annotators to ensure high information density and minimal off-topic chatter. The resulting dataset features longer and richer interactions than public benchmarks, with an average dialogue length of 163.0 utterances (std. 95.85, range 53–338) and an average of 9.11 distinct speakers per dialogue (std. 2.64, max 14). This makes Tanka well suited for both next-message prediction task (local evalu-ation) and full-conversation generation task (global evaluation). For global evaluation, we apply length-based filtering to exclude dia-logues that are too short (fewer than 50 utterances) or excessively long (more than 450 utterances), ensuring sufficient context while remaining within practical generation limits. 
+
+## B Detailed Local Evaluation 
+
+Local evaluation assesses a single predicted next turn given the immediate conversational context. We represent a conversation as a sequence of turns, where each turn is a speaker-utterance pair. Let 𝐶 = ⟨( 𝑠 1, 𝑢 1), (𝑠 2, 𝑢 2), . . . , (𝑠 𝑚 , 𝑢 𝑚 )⟩ denote the conversation history, and let 𝐶 −𝑘 = ⟨( 𝑠 𝑚 −𝑘 +1, 𝑢 𝑚 −𝑘 +1), . . . , (𝑠 𝑚 , 𝑢 𝑚 )⟩ denote the most recent 𝑘 turns. Given 𝐶 −𝑘 , a model predicts the next turn 
+
+(𝑠 𝑚 +1, 𝑢 𝑚 +1). Local evaluation assesses whether this predicted turn is proper given the immediate context. At the local level, the three measurement aspects introduced in Section 3 specialize as follows: (1) Local Speaker Modeling (Section B.1) evaluates whether the predicted speaker 𝑠 𝑚 +1 is a plausible next participant given near-term conversational cues in 𝐶 −𝑘 (e.g., explicit addressing, participation patterns, and role/topic alignment). 
+
+Table 4: Core notations used in Appendix B and C.                                                           
+
+> Notation Description Conversation primitives
+> 𝐶 Conversation history.
+> ˜𝐶 Generated conversation.
+> ˆ𝐶 =𝐶 ⊕˜𝐶 Full conversation (or ˆ𝐶 =˜𝐶 if generated from scratch).
+> ⊕Concatenation of turn sequences.
+> (𝑠 𝑖 , 𝑢 𝑖 )The 𝑖 -th turn with speaker 𝑠 𝑖 and utterance 𝑢 𝑖 .
+> 𝐶 −𝑘 Most recent 𝑘 turns from 𝐶 .
+> Speakers and turn subsets
+> S,| S | Set of speakers and its size.
+> 𝐶 𝑠 Subset of turns by 𝑠 in 𝐶 −𝑘 .
+> ¯𝐶𝑠 Subset of turns not by 𝑠 in 𝐶 −𝑘 .
+> ˆ𝐶 𝑠 Subset of turns by 𝑠 in ˆ𝐶 .
+> Embeddings and similarity
+> 𝑒 (·) Embedding function for text segments.
+> sim (· ,·) Similarity in embedding space (e.g., cosine similarity).
+> Topic modeling
+> 𝜃 (·) ∈ R𝐿 Topic distribution over 𝐿 topics for a text segment.
+> 𝐿 Number of topics in the topic model.
+> Agenda items
+> A,| A | Collection of agenda items and its cardinality.
+> 𝑎 An agenda item.
+> Background augmentation
+> 𝐵 𝑠 (Optional) background profile for speaker 𝑠 .
+> aug 𝑠 Background-augmented representation of speaker 𝑠 .
+
+(2) Local Content Quality (Section B.2) evaluates whether the predicted utterance 𝑢 𝑚 +1 is an appropriate continuation of the recent discussion given 𝐶 −𝑘 .(3) Local speaker–content Consistency (Section B.3) evalu-ates whether 𝑢 𝑚 +1 is consistent with the attributed speaker 
+
+𝑠 𝑚 +1, based on the speaker’s profile and/or their historical interactions in 𝐶 .
+
+## B.1 Local Speaker Modeling 
+
+Motivation: Local speaker modeling focus on predicting the next speaker identity, which is a fundamental challenge in multi-party conversation modeling. Appropriate next-speaker prediction re-flects the model’s understanding of conversational dynamics, par-ticipant roles, and discussion context. For instance, if a speaker explicitly addresses another participant (e.g., via an @mention), the model should prioritize that participant as the next speaker. Con-versely, predicting a participant whose role or expertise is clearly misaligned with the ongoing discussion indicates a failure to cap-ture conversational structure and participant relevance. 
+
+Definition: Local speaker modeling evaluates whether the pre-dicted speaker 𝑠 𝑚 +1 is justified given the conversation history 𝐶 
+
+and (when available) participant background information. In par-ticular, it characterizes the relevance of 𝑠 𝑚 +1 to the current dis-cussion by leveraging: (1) the speaker’s conversational history 
+
+𝐶 𝑠 𝑚 +1 = {( 𝑠 𝑖 , 𝑢 𝑖 ) ∈ 𝐶 | 𝑠 𝑖 = 𝑠 𝑚 +1 }, (2) their background information 
+
+𝐵 𝑠 𝑚 +1 (e.g., profile and role) whenever available, where {𝐵 𝑠 }𝑠 ∈𝑆 de-notes background information for all speakers, and (3) the current discussion theme reflected in the most recent messages 𝐶 −𝑘 .These measures capture whether the predicted speaker exhibits 
+
+domain expertise (e.g., relevant knowledge expressed in prior turns, an established role related to the topic, or background information MPCEval : A Benchmark for Multi-Party Conversation Generation Preprint, March 2026, Durham, NC 
+
+indicating expertise) and/or topic engagement (e.g., active participa-tion in the relevant thread). We propose five metrics to quantify local speaker modeling: direct name reference, implicit reference, participation frequency, local speaker embedding-based similarity, and local speaker topic-based alignment. 
+
+B.1.1 Direct Name Reference (DNR. A direct and intuitive cue for next-speaker prediction is whether the predicted speaker is explic-itly addressed in the most recent context. Let Addressed (𝐶 −𝑘 ) de-note the set of speakers who are directly referred to in the previous 
+
+𝑘 messages (e.g., via explicit “@” mentions such as “@username”). The direct name reference score is defined as: DNR (𝑠 𝑚 +1, 𝐶 −𝑘 ) =
+
+(
+
+1 if 𝑠 𝑚 +1 ∈ Addressed (𝐶 −𝑘 ),
+
+0 otherwise. (1) A higher DNR score of 1 indicates that 𝑠 𝑚 +1 is explicitly solicited in the immediate context, whereas DNR = 0 indicates that no explicit addressing cue supports 𝑠 𝑚 +1 within 𝐶 −𝑘 .
+
+B.1.2 Implicit Reference (IR). The predicted next speaker 𝑠 𝑚 +1 may also be supported by implicit turn-taking patterns, even when no explicit addressing cue is present. In multi-party conversations, speakers who participated more recently in the current thread are often more likely to speak again, with this likelihood decaying as their last participation becomes more distant. We operationalize this intuition with a distance-based decay function. Let 𝑠 −𝑖 denote the speaker of the 𝑖 -th most recent turn in 𝐶 −𝑘 (so 𝑠 −1 = 𝑠 𝑚 ), and we exclude the immediately previous speaker at position −1. For a candidate occurrence at position −𝑖 
+
+with 2 ≤ 𝑖 ≤ 𝑘 , we define its conversational distance as 𝑑 = 𝑖 − 2
+
+(thus the most recent eligible position −2 has 𝑑 = 0). If a speaker appears multiple times in 𝐶 −𝑘 , we take the speaker’s most recent 
+
+participation. The implicit reference score is: IR (𝑠 𝑚 +1, 𝐶 −𝑘 ) =
+
+
+
+max    
+
+> 𝑖 ∈ I ( 𝑠 𝑚 +1)
+
+𝑓 (𝑖 − 2) if I ( 𝑠 𝑚 +1) ≠ ∅,
+
+0 otherwise, (2) where I ( 𝑠 ) = {𝑖 |2 ≤ 𝑖 ≤ 𝑘, 𝑠 −𝑖 = 𝑠 𝑚 +1 }.Here, 𝑓 (·) is a monotonically decreasing function, assigning higher scores to smaller distances (more recent participation). Typ-ical choices include geometric decay 𝑓 (𝑑 ) = 𝜆 (1 − 𝜆 )𝑑 , exponential decay 𝑓 (𝑑 ) = 𝑒 −𝛼𝑑 , or inverse distance 𝑓 (𝑑 ) = 11+𝑑 .A higher IR score indicates that 𝑠 𝑚 +1 appeared more recently within 𝐶 −𝑘 , providing implicit support for selecting 𝑠 𝑚 +1 as the next speaker; IR = 0 indicates that 𝑠 𝑚 +1 does not appear in 𝐶 −𝑘 .
+
+Example B.1. Consider the following sequence of turns: 
+
+• Alice: “What’s the status of the API integration?” 
+
+• Bob: “We’re at 80% completion.” 
+
+• Charlie: “The authentication module is done.” 
+
+• Alice: “Great! When can we test?” 
+
+• Next message: Who speaks? Using geometric decay 𝑓 (𝑑 ) = 𝜆 (1 − 𝜆 )𝑑 with 𝜆 = 0.6, Charlie appears at position −2 (distance 𝑑 = 0) and receives score 0.6,whereas Bob appears at position −3 (distance 𝑑 = 1) and receives score 0.24 ; the last speaker (Alice at −1) is excluded. Thus, IR favors Charlie as the most recently engaged speaker before the last turn. 
+
+B.1.3 Participation Frequency (PF). The predicted next speaker 
+
+𝑠 𝑚 +1 is also often supported by their recent engagement in the on-going discussion. We quantify this engagement by the participation frequency , defined as the fraction of turns in 𝐶 −𝑘 spoken by 𝑠 𝑚 +1:PF (𝑠 𝑚 +1, 𝐶 −𝑘 ) = |{( 𝑠, 𝑢 ) ∈ 𝐶 −𝑘 |𝑠 = 𝑠 𝑚 +1 }| 
+
+𝑘 . (3) A higher PF indicates 𝑠 𝑚 +1 being active in the recent context, whereas a lower PF indicates limited participation. 
+
+B.1.4 Local Speaker Embedding-based Similarity (LS-ES). Beyond near-term turn-taking cues (e.g., explicit addressing, recency, and participation), an additional signal for next-speaker appropriate-ness is whether the predicted speaker 𝑠 𝑚 +1 is topically aligned with the current discussion. We quantify this by measuring em-bedding similarity between the ongoing conversation 𝐶 −𝑘 and messages previously sent by 𝑠 𝑚 +1. We consider two variants: av-erage embedding similarity and maximum embedding similarity. Let 𝐶 𝑠 𝑚 +1 = {( 𝑠 𝑖 , 𝑢 𝑖 ) ∈ 𝐶 −𝑘 |𝑠 𝑖 = 𝑠 𝑚 +1 } denote the set of recent turns authored by 𝑠 𝑚 +1, and ¯𝐶 𝑠 𝑚 +1 = {( 𝑠 𝑖 , 𝑢 𝑖 ) ∈ 𝐶 −𝑘 |𝑠 𝑖 ≠ 𝑠 𝑚 +1 }
+
+denote the set of recent turns not authored by 𝑠 𝑚 +1. We use 𝑒 (·) 
+
+as an embedding function and sim (· , ·) as a similarity metric (e.g., cosine similarity); for a turn (𝑠, 𝑢 ), we abuse notation and write 
+
+𝑒 (( 𝑠, 𝑢 )) = 𝑒 (𝑢 ).
+
+Average Local Speaker Embedding Similarity (LS-ES-avg). 
+
+LS-ES-avg (𝑠 𝑚 +1, 𝐶 −𝑘 ) = avg   
+
+> 𝑐 ∈¯𝐶 𝑠 𝑚 +1
+
+max  
+
+> 𝑐 ′∈𝐶 𝑠 𝑚 +1
+
+sim (𝑒 (𝑐 ), 𝑒 (𝑐 ′)) . (4) 
+
+Maximum Local Speaker Embedding Similarity (LS-ES-max). 
+
+LS-ES-max (𝑠 𝑚 +1, 𝐶 −𝑘 ) = max   
+
+> 𝑐 ∈¯𝐶 𝑠 𝑚 +1
+
+max  
+
+> 𝑐 ′∈𝐶 𝑠 𝑚 +1
+
+sim (𝑒 (𝑐 ), 𝑒 (𝑐 ′)) . (5) A higher LS-ES score indicates stronger semantic alignment be-tween the current discussion and 𝑠 𝑚 +1’s prior messages. In par-ticular, LS-ES-avg emphasizes overall alignment across the recent context, whereas LS-ES-max captures whether there exists at least one strong topical connection to 𝑠 𝑚 +1’s history. 
+
+Incorporating Background Information for Sparse Conversation History. The embedding-based measures above rely on 𝐶 𝑠 𝑚 +1 . When 
+
+|𝐶 𝑠 𝑚 +1 | is small (or empty), the similarity measures can be unre-liable or undefined. To address this, if available, we incorporate background information 𝐵 𝑠 𝑚 +1 of 𝑠 𝑚 +1 (e.g., profile description, role, or bio) to supplement sparse conversation history. Let v𝑠 𝑚 +1 = avg 𝑐 ∈𝐶 𝑠 𝑚 +1 𝑒 (𝑐 ) capture the semantics of 𝑠 𝑚 +1’s re-cent utterances, and b𝑠 𝑚 +1 = 𝑒 (𝐵 𝑠 𝑚 +1 ) capture the semantics of 
+
+𝑠 𝑚 +1’s background information. We define an augmented speaker representation aug 𝑠 𝑚 +1 as a combination of vsm+1 and b𝑠 𝑚 +1 :
+
+aug 𝑠 𝑚 +1 = 𝛼 𝑠 𝑚 +1 · v𝑠 𝑚 +1 +  1 − 𝛼 𝑠 𝑚 +1
+
+ · b𝑠 𝑚 +1 , (6) where 𝛼 𝑠 𝑚 +1 ∈ [ 0, 1] is an adaptive weight: 
+
+𝛼 𝑠 𝑚 +1 = min 
+
+
+
+1, |𝐶 𝑠 𝑚 +1 |
+
+𝑘 
+
+
+
+. (7) A larger 𝛼 𝑠 𝑚 +1 indicates that 𝑠 𝑚 +1 has sufficient participation in 
+
+𝐶 −𝑘 , while a smaller 𝛼 𝑠 𝑚 +1 indicates sparse interaction history and thus places greater weight on 𝑠 𝑚 +1’s background information. The augmented variants replace max sim (·) with sim (𝑒 (𝑐 ),
+
+aug 𝑠 𝑚 +1 ) in Eq. (4) and Eq. (5). Preprint, March 2026, Durham, NC Zhang et al. 
+
+B.1.5 Local Speaker Topic-Based Alignment (LS-TA). To comple-ment embedding-based similarity, we also consider topical align-ment via topic modeling. Let 𝜃 (𝐶 −𝑘 ) ∈ R𝐿 denote the topic distribu-tion over 𝐿 topics for the most recent 𝑘 turns, and let 𝜃 (𝐶 𝑠 𝑚 +1 ) ∈ R𝐿 
+
+denote the topic distribution of messages authored by the predicted speaker 𝑠 𝑚 +1 (obtained via LDA [ 4] or BERTopic [ 11 ]). We quantify topic alignment using Jensen-Shannon divergence: LS-TA (𝑠 𝑚 +1, 𝐶 −𝑘 ) = 1 −√︁ JSD (𝜃 (𝐶 𝑠 𝑚 +1 )∥ 𝜃 (𝐶 −𝑘 )) (8) where JSD (·∥·) measures the divergence between two probability distributions over topics. A lower divergence (higher score) indi-cates that the predicted speaker’s historical messages are topically aligned with the recent discussion, suggesting relevant domain knowledge or engagement with the ongoing themes. 
+
+## B.2 Local Content Quality 
+
+Local content quality assess whether the predicted message content 
+
+𝑢 𝑚 +1 appropriately advances the conversation given its current state. Concretely, they capture behaviors such as responding to outstanding prompts, refining or extending partially formed ideas, proposing candidate next steps, reiterating prior content, or shifting to a new topic. As indicated in Figure 1, conversations may or may not provide an explicit objective. Accordingly, we distinguish two scenarios for local content measures: objective-guided and objective-free .In objective-guided settings (Section B.2.1), the conversation is equipped with an explicit objective 𝐴 , typically instantiated as an agenda that can be decomposed into a finite set of discussion items. For example, in a paper-writing conversation, an agenda may include items such as “finalize the introduction,” “revise the methodology section,” and “address reviewer comments on Figure 3.” Content quality measures in this setting evaluate how effectively the predicted message 𝑢 𝑚 +1 advances progress toward 𝐴 , e.g., by resolving pending items, moving to the next appropriate sub-goal, or providing missing information required to complete the task. In objective-free setting (Section B.2.2), local content quality as-sesses whether 𝑢 𝑚 +1 forms a proper continuation of 𝐶 −𝑘 . We quan-tify this via a flow score that characterizes how 𝑢 𝑚 +1 maintains topical coherence and manages local topic transitions—e.g., staying within the current thread, expanding to closely related subtopics, or smoothly shifting to another aspect of the discussion. 
+
+B.2.1 Objective-guided. In objective-guided settings, local content measures are defined relative to the conversation objective or, more specifically, the agenda 𝐴 (e.g., a meeting agenda, project milestones, or a troubleshooting checklist). Such an agenda can be viewed as a structured collection of content items that the conversation is expected to cover. While some agendas organize items as a linear sequence, others adopt richer hierarchical structures (e.g., a tree of subtopics under each major issue). For example, a project-planning discussion may organize items into phases such as “design,” “im-plementation,” and “evaluation,” each of which further decomposes into more fine-grained tasks. We thus introduce an agenda-guided progression score (AP) to measure how the predicted message content 𝑢 𝑚 +1 contributes with respect to the current agenda state, either by enriching the dis-cussion of the active item or by supporting a transition toward subsequent items that have received less coverage. 
+
+Agenda Representation. Given the agenda 𝐴 of a conversation, we assume that 𝐴 is instantiated as a finite set of agenda items 
+
+{𝑎 1, . . . , 𝑎 𝑛 }. We represent structural relations among these items using a directed graph 𝐺 = (𝑉 , 𝐸 ), where 𝑉 = {𝑎 1, . . . , 𝑎 𝑛 } and 
+
+(𝑎 𝑖 , 𝑎 𝑗 ) ∈ 𝐸 indicates that 𝑎 𝑗 is a follow-up item of 𝑎 𝑖 .
+
+Agenda State Tracking. We track which agenda item is most relevant to the discussion in 𝐶 −𝑘 and assess if this item has received sufficient coverage in 𝐶 −𝑘 , i.e., has been discussed with enough information or diverse perspectives. We formalize this notion with the information coverage score (InfoCov) illustrated below. For each agenda item 𝑎 𝑖 ∈ A = {𝑎 1, . . . , 𝑎 𝑛 }, we first collect the turns in 𝐶 −𝑘 that are relevant to 𝑎 𝑖 :
+
+𝐶 𝑎 𝑖 = { 𝑐 ∈ 𝐶 −𝑘 | sim (𝑒 (𝑎 𝑖 ), 𝑒 (𝑐 )) > 𝜏 rel },
+
+where 𝜏 rel is a relevance threshold (e.g., 0.6). We then select 𝑎 𝑖 ∗ as the agenda item most relevant (i.e., most heavily discussed) to 𝐶 −𝑘 :
+
+𝑖 ∗ = arg max   
+
+> 𝑖 ∈ { 1,...,𝑛 }
+
+|𝐶 𝑎 𝑖 |.
+
+Given the selected item 𝑎 𝑖 ∗ , we measure its information coverage by combining (i) how many relevant turns it receives and (ii) how semantically diverse those turns are. Let 𝑛 𝑖 ∗ = |𝐶 𝑎 𝑖 ∗ |. We define InfoCov (𝑎 𝑖 ∗ , 𝐶 −𝑘 ) =  1 − 𝑒 − 𝑛 𝑖 ∗ 
+
+> 𝛾
+
+ · 1
+
+ 𝑛 𝑖 ∗
+
+> 2
+
+
+
+·∑︁  
+
+> 𝑐,𝑐 ′∈𝐶 𝑎 𝑖 ∗
+> 𝑐 ≠𝑐 ′
+
+
+
+1 − sim (𝑒 (𝑐 ), 𝑒 (𝑐 ′)) 
+
+
+
+. (9) where 𝛾 is a scale parameter. The factor  1 − 𝑒 −𝑛 𝑖 ∗ /𝛾  increases with 𝑛 𝑖 ∗ , and the second term is the average pairwise dissimilar-ity among relevant turns; thus, InfoCov (𝑎 𝑖 ∗ , 𝐶 −𝑘 ) increases only when 𝑎 𝑖 ∗ is discussed by a sufficient number of semantically non-redundant messages. We say that the current item 𝑎 𝑖 ∗ is saturated 
+
+if InfoCov (𝑎 𝑖 ∗ , 𝐶 −𝑘 ) > 𝜏 cov for a coverage threshold 𝜏 cov .
+
+Agenda-Guided Progression Score. Given the predicted message 
+
+𝑢 𝑚 +1 and the current agenda item 𝑎 𝑖 ∗ , we distinguish two cases depending on whether the current agenda 𝑎 𝑖 ∗ is saturated according to InfoCov (𝑎 𝑖 ∗ , 𝐶 −𝑘 ).
+
+Case 1: Current agenda item is not saturated . Intuitively, 𝑎 𝑖 ∗
+
+has not yet been covered by a sufficiently diverse set of messages, so further discussion may still add value. We measure whether 𝑢 𝑚 +1
+
+enriches 𝑎 𝑖 ∗ by contributing to its information diversity: InfoGain (𝑢 𝑚 +1, 𝑎 𝑖 ∗ ) = 1
+
+𝑛 𝑖 ∗∑︁ 𝑐 ∈𝐶 𝑎 𝑖 ∗
+
+ 1 − sim (𝑒 (𝑢 𝑚 +1), 𝑒 (𝑐 )) , (10) The agenda-guided progression score is then AP (𝑢 𝑚 +1, 𝑎 𝑖 ∗ ) = sim (𝑒 (𝑢 𝑚 +1), 𝑒 (𝑎 𝑖 ∗ )) · InfoGain (𝑢 𝑚 +1, 𝑎 𝑖 ∗ ), (11) which assigns higher scores to messages that both are relevant to 
+
+𝑎 𝑖 ∗ and introduce content that is semantically distinct from previous contributions on 𝑎 𝑖 ∗ .
+
+Case 2: Current agenda item is saturated . When the current agenda item has been discussed sufficiently, we look for less-covered MPCEval : A Benchmark for Multi-Party Conversation Generation Preprint, March 2026, Durham, NC 
+
+Algorithm 1 Next agenda item selection via DFS  
+
+> 1:
+
+procedure NextAgendaItem (𝐺, 𝑖 ∗) 
+
+> 2:
+
+Mark all items in 𝐺 as undiscovered  
+
+> 3:
+
+return DFS (𝐺, 𝑖 ∗) 
+
+> 4:
+
+procedure DFS (𝐺, 𝑖 ) 
+
+> 5:
+
+return None if 𝑖 is discovered  
+
+> 6:
+
+Mark 𝑖 as discovered  
+
+> 7:
+
+return 𝑖 if InfoCov (𝑎 𝑖 , 𝐶 −𝑘 ) ≤ 𝜏 cov  
+
+> 8:
+
+for all directed edges (𝑖, 𝑗 ) in 𝐺 do ⊲ successors of 𝑎 𝑖  
+
+> 9:
+
+return 𝑟 ← DFS (𝐺, 𝑗 ) if 𝑟 ≠ None  
+
+> 10:
+
+for all directed edges ( 𝑗, 𝑖 ) in 𝐺 do ⊲ predecessors of 𝑎 𝑖  
+
+> 11:
+
+return 𝑟 ← DFS (𝐺, 𝑗 ) if 𝑟 ≠ None  
+
+> 12:
+
+return None 
+
+items elsewhere in the agenda graph 𝐺 . To obtain the next agenda item, Algorithm 1 performs a depth-first search (DFS) starting from 
+
+𝑎 𝑖 ∗ and finds the first unsaturated item. Let 𝑎 𝑖 next denote the next agenda item found, the agenda-guided progression score measures whether 𝑢 𝑚 +1 enriches 𝑎 𝑖 next :AP (𝑢 𝑚 +1, 𝑎 𝑖 next ) = sim (𝑒 (𝑢 𝑚 +1), 𝑒 (𝑎 𝑖 next )) · InfoGain (𝑢 𝑚 +1, 𝑎 𝑖 next ).
+
+This rewards messages that advance the conversation to items requiring further exploration. 
+
+B.2.2 Objective-free. In objective-free conversations, a critical as-pect of evaluating the quality of the predicted next message is its 
+
+relevance to the conversation history. More specifically, we assess whether the predicted message content flows naturally with respect to prior turns. Good flow means the message is logically connected to some aspect of the preceding discussion—advancing the conver-sation coherently rather than reiterating previously covered points or introducing disconnected topics that break conversational con-tinuity. Evaluating content flow aims to ensure that the predicted message makes sense within the conversational trajectory. In the following, we present multiple quantitative metrics for assessing content flow score. 
+
+Lexical Novelty Rate (LNR). One way to quantify local conver-sational flow is to measure how many new lexical units the pre-dicted message introduces relative to the recent context. We ex-tract a set of lexical units from an utterance, including lemma-tized content words, named entities, and content-word bigrams. Let 𝐸 (𝑢 ) denote the set of extracted units from utterance 𝑢 , and let 
+
+𝐸 (𝐶 −𝑘 ) = Ð(𝑠,𝑢 ) ∈ 𝐶 −𝑘 𝐸 (𝑢 ). The set of novel units in 𝑢 𝑚 +1 is 
+
+𝐸 novel (𝑢 𝑚 +1, 𝐶 −𝑘 ) = 𝐸 (𝑢 𝑚 +1) \ 𝐸 (𝐶 −𝑘 ).
+
+The lexical novelty rate is defined as LNR (𝑢 𝑚 +1, 𝐶 −𝑘 ) = |𝐸 novel (𝑢 𝑚 +1, 𝐶 −𝑘 )| |𝐸 (𝑢 𝑚 +1)| . (12) Extreme values typically indicate poor flow for different reasons: LNR ≈ 0 suggests heavy lexical reuse (repetition), while LNR ≈ 1
+
+suggests largely unseen vocabulary (topic drift). Coherent contin-uations tend to yield intermediate values, introducing some new units while maintaining lexical overlap with 𝐶 −𝑘 .In many cases, surface-level lexical novelty may over-count para-phrases (e.g., synonyms). To reduce this effect, we treat a unit as 
+
+truly novel only if it is not semantically close to any unit in the recent context. Let 𝑒 (𝑤 ) be the embedding of unit 𝑤 , We consider 
+
+𝑤 truly novel if its maximum embedding similarity to any unit in 
+
+𝐸 (𝐶 −𝑘 ) falls below a threshold 𝜏 LNR :
+
+𝐸 tn (𝑢 𝑚 +1, 𝐶 −𝑘 ) =
+
+n
+
+𝑤 ∈ 𝐸 (𝑢 𝑚 +1) max    
+
+> 𝑤 𝑐 ∈𝐸 (𝐶 −𝑘 )
+
+sim  𝑒 (𝑤 ), 𝑒 (𝑤 𝑐 ) < 𝜏 LNR 
+
+o
+
+.
+
+The embedding-aware lexical novelty rates are: LNR-E (𝑢 𝑚 +1, 𝐶 −𝑘 ) = |𝐸 tn (𝑢 𝑚 +1, 𝐶 −𝑘 )| |𝐸 (𝑢 𝑚 +1)| , (13) and an IDF-weighted (inverse document frequency) variant, LNR-E-w (𝑢 𝑚 +1, 𝐶 −𝑘 ) =
+
+Í𝑤 ∈𝐸 tn (𝑢 𝑚 +1,𝐶 −𝑘 ) IDF (𝑤 )
+
+Í𝑤 ∈𝐸 (𝑢 𝑚 +1 ) IDF (𝑤 ) . (14) As with LNR, extreme values of LNR-E/LNR-E-w indicate either repetition (near 0) or topical drift (near 1), while intermediate values correspond to stronger flow with the immediate context. 
+
+Message-Level Semantic Novelty Score (M-SNS). Lexical novelty is a surface-level signal and may miss semantically novel content at the message level. We therefore measure the message-level se-mantic novelty score (M-SNS) as the embedding distance between the predicted message 𝑢 𝑚 +1 and recent turns in 𝐶 −𝑘 .We first define the average-distance variant (M-SNS-avg), which measures overall semantic distinctiveness from the recent context: M-SNS-avg (𝑢 𝑚 +1, 𝐶 −𝑘 ) = avg  
+
+> 𝑐 ∈𝐶 −𝑘
+
+ 1 − sim  𝑒 (𝑢 𝑚 +1), 𝑒 (𝑐 ) . (15) A high score indicates that 𝑢 𝑚 +1 is broadly distant from the recent discussion (potential topic drift), while a very low score indicates heavy semantic overlap with the context (reiteration). Intermediate scores typically indicate that 𝑢 𝑚 +1 remains connected to 𝐶 −𝑘 while introducing new information. We also consider a nearest-neighbor variant (M-SNS-min), which measures the distance from 𝑢 𝑚 +1 to its most similar precedent in 
+
+𝐶 −𝑘 :M-SNS-min (𝑢 𝑚 +1, 𝐶 −𝑘 ) = min  
+
+> 𝑐 ∈𝐶 −𝑘
+
+ 1 − sim  𝑒 (𝑢 𝑚 +1), 𝑒 (𝑐 ) . (16) Compared to M-SNS-avg, M-SNS-min is sensitive to whether 𝑢 𝑚 +1
+
+closely matches any recent turn (i.e., “is there anything like this?”), whereas M-SNS-avg reflects the overall distinctiveness from 𝐶 −𝑘 .
+
+Dialogue-Act Transition (DAF). A dialogue act labels the conver-sational function of a message (e.g., question, answer, acknowledg-ment, request, prompt). Many continuations are predictable at this functional level: certain acts tend to follow others with higher prob-ability over short windows (e.g., questions are frequently followed by answers). The Dialogue-Act Transition Fit measures whether the act assigned to the predicted message 𝑢 𝑚 +1 is a plausible next act given the recent act sequence in 𝐶 −𝑘 .The assumption underlying this metric is that a plausible dia-logue act (e.g., answering a question raised in the recent context) is more likely to exhibit good local content flow. Let 𝐷 (𝑢 ) denote the dialogue act assigned to message 𝑢 . Given 
+
+𝐶 −𝑘 , let d−𝑘 = ⟨𝐷 (𝑢 𝑚 −𝑘 +1), . . . , 𝐷 (𝑢 𝑚 )⟩ denote the recent act se-quence in 𝐶 −𝑘 . We model the conditional probability 𝑝 (𝑑 | d−𝑘 ).Preprint, March 2026, Durham, NC Zhang et al. 
+
+Given ˆ𝑑 = 𝐷 (𝑢 𝑚 +1), the dialogue-act transition fit is DAF (𝑢 𝑚 +1, 𝐶 −𝑘 ) = 𝑝 ( ˆ𝑑 | d−𝑘 ). (17) A higher DAF value indicates that the predicted dialogue act of 
+
+𝑢 𝑚 +1 is more consistent with the local act dynamics in 𝐶 −𝑘 .For message-level act tagging, existing classifiers such as BERT-based encoders [ 49 ] are widely used. To model act dynamics, several approaches can be employed, including Hidden Markov Models (HMMs) [32] or transformer-based sequence models [15]. 
+
+Log-Likelihood-Based Method (LL). The log-likelihood-based measure evaluates how expected the predicted message content 
+
+𝑢 𝑚 +1 is given 𝐶 −𝑘 . Intuitively, if a language model were to generate the next message conditioned on 𝐶 −𝑘 , would it assign high proba-bility to 𝑢 𝑚 +1? Autoregressive language models are suitable for this estimation because they define token-level conditional probabili-ties; aggregating these probabilities over the tokens in 𝑢 𝑚 +1 yields a contextual fit score. The assumption underlying this metric is that content assigned higher likelihood by the language model is more likely to exhibit strong local flow. Let 𝑢 𝑚 +1 = ⟨𝑢 𝑚 +1,1, . . . , 𝑢 𝑚 +1,𝐿 𝑚 +1 ⟩ denote the token sequence of the predicted message, where 𝐿 𝑚 +1 = |𝑢 𝑚 +1 | is the sequence length. A language model provides conditional token probabilities 
+
+𝑝 (𝑢 𝑚 +1,𝑗 | 𝑢 𝑚 +1,<𝑗 , 𝐶 −𝑘 ). We compute the score as the exponenti-ated average token log-likelihood: LL (𝑢 𝑚 +1, 𝐶 −𝑘 ) = exp 1
+
+𝐿 𝑚 +1
+
+> 𝐿 𝑚 +1
+
+∑︁ 
+
+> 𝑗 =1
+
+log 𝑝 (𝑢 𝑚 +1,𝑗 | 𝑢 𝑚 +1,<𝑗 , 𝐶 −𝑘 )
+
+!
+
+.
+
+(18) Higher values indicate that 𝑢 𝑚 +1 is a more plausible continuation of 𝐶 −𝑘 under the language model’s learned distribution. 
+
+Topic Expansion Score (TES). A predicted message with good flow typically preserves the established themes in the recent con-text while introducing moderate novelty—avoiding both topical disconnection and verbatim reiteration. Topic models provide a higher-level view of this trade-off by encoding text as a distribu-tion over latent topics [ 37 ]. However, directly comparing 𝜃 (𝐶 −𝑘 )
+
+with 𝜃 (𝑢 𝑚 +1) is often uninformative because 𝑢 𝑚 +1 can be short or generic, and its topic mixture may not reliably reflect the ongo-ing themes without local context. We therefore (i) select a context window whose topic mixture is stable, and (ii) evaluate the topical contribution of 𝑢 𝑚 +1 using a small augmentation window to avoid dilution by a long context. Formally, let 𝜃 (𝑋 ) ∈ R𝐿 denote the topic distribution over 𝐿 
+
+topics for any text 𝑋 , and let JSD (· , ·) denote Jensen-Shannon diver-gence. We use the transformed divergence 1 −√︁ JSD (· , ·) ∈ [ 0, 1]
+
+as a similarity score. 
+
+Step 1: choose a stable context size ℎ∗. Starting from ℎ ∈{Δ, 2Δ, 3Δ, . . . }, we expand the context in increments of Δ and stop if adding Δ more turns would substantially shift the topic mixture: 
+
+ℎ∗ = min 
+
+n
+
+ℎ | JSD  𝜃 (𝐶 −ℎ ), 𝜃 (𝐶 − ( ℎ+Δ) ) > 𝜏 topic 
+
+o
+
+.
+
+We then set 𝜋 ∗ = 𝜃 (𝐶 −ℎ∗ ) as the established topic mixture. 
+
+Step 2: compute the topic expansion score. To reflect the topic mixture of the predicted message 𝑢 𝑚 +1, we augment 𝑢 𝑚 +1
+
+with a small window of previous messages, 𝐶 −ℓ where ℓ ≪ ℎ∗ (e.g., 
+
+ℓ ∈ { 2, 3}), as supporting context, and obtain its topic mixture as 
+
+𝑄 𝑚 +1 = 𝜃 (𝐶 −ℓ ⊕ 𝑢 𝑚 +1).
+
+Let Tdom (𝜋 ∗, 𝜌 ) be the set of dominant topics that together account for a fraction 𝜌 of the mass in 𝜋 ∗ (e.g., 𝜌 = 0.8). We define the 
+
+topic expansion score as the probability mass that 𝑄 𝑚 +1 assigns to non-dominant topics: TES (𝑢 𝑚 +1, 𝐶 −𝑘 ∗ , 𝜌 ) =∑︁   
+
+> 𝑙 ∉Tdom (𝜋 ∗,𝜌 )
+
+𝑄 𝑚 +1,𝑙 . (19) Intuitively, TES measures how much the predicted message shifts probability mass toward topics that are not central in the estab-lished context. TES ≈ 0 indicates little topical expansion (potential redundancy), whereas TES ≈ 1 indicates strong expansion into previously inactive themes (potential disconnection). Intermediate values suggests 𝑢 𝑚 +1 remains topically connected while introducing new information. 
+
+## B.3 Local speaker–content Consistency 
+
+Local speaker–content consistency measures assess whether the predicted message content 𝑢 𝑚 +1 is characteristic of the predicted speaker 𝑠 𝑚 +1, based on the speaker’s established communication patterns and domain expertise. While local speaker measures eval-uate whether 𝑠 𝑚 +1 is an appropriate next speaker and local content measures evaluate whether 𝑢 𝑚 +1 is an appropriate continuation, speaker–content consistency bridges the two by asking: does this content sound like something this speaker would say? 
+
+This measure is particularly useful for detecting attribution er-rors in multi-party conversations, where a message may be contex-tually appropriate yet inconsistent with the attributed speaker’s role, expertise, or style. Formally, speaker–content consistency quantifies the alignment between 𝑢 𝑚 +1 and the historical messages from 𝑠 𝑚 +1 (and, when available, the background information 𝐵 𝑠 𝑚 +1 ). A higher consistency score indicates that 𝑢 𝑚 +1 aligns thematically or stylistically with how 𝑠 𝑚 +1 has communicated, whereas a lower score suggests a po-tential speaker–content mismatch. To this, we leverage embedding-based metrics to quantify local speaker–content consistency. 
+
+B.3.1 Embedding-based Local speaker–content Consistency Mea-sures. We measure the consistency between the predicted content 
+
+𝑢 𝑚 +1 and the predicted speaker 𝑠 𝑚 +1 by comparing the embedding of 𝑢 𝑚 +1 with embeddings derived from 𝑠 𝑚 +1’s established commu-nication patterns. 
+
+Local speaker–content Consistency via Average Embedding Simi-larity (LSCC-ES-avg). It measures the average similarity between 
+
+𝑢 𝑚 +1 and all previous utterances by 𝑠 𝑚 +1 in the recent context 𝐶 −𝑘 :LSCC-ES-avg (𝑢 𝑚 +1, 𝑠 𝑚 +1, 𝐶 −𝑘 ) = avg  
+
+> 𝑐 ∈𝐶 𝑠 𝑚 +1
+
+sim (𝑒 (𝑢 𝑚 +1), 𝑒 (𝑐 )) , (20) where 𝐶 𝑠 𝑚 +1 = {( 𝑠 𝑖 , 𝑢 𝑖 ) ∈ 𝐶 −𝑘 | 𝑠 𝑖 = 𝑠 𝑚 +1 } denotes the subset of messages in 𝐶 −𝑘 authored by the predicted speaker. This metric captures overall conversational consistency: if 𝑢 𝑚 +1
+
+discusses content similar to what 𝑠 𝑚 +1 typically discusses, the aver-age similarity will be high. MPCEval : A Benchmark for Multi-Party Conversation Generation Preprint, March 2026, Durham, NC 
+
+Local speaker–content Consistency via Maximum Embedding Sim-ilarity (LSCC-ES-max). The maximum consistency score identifies the strongest topical connection between 𝑢 𝑚 +1 and any single pre-vious message from 𝑠 𝑚 +1:LSCC-ES-max (𝑢 𝑚 +1, 𝑠 𝑚 +1, 𝐶 −𝑘 ) = max  
+
+> 𝑐 ∈𝐶 𝑠 𝑚 +1
+
+sim (𝑒 (𝑢 𝑚 +1), 𝑒 (𝑐 )) .
+
+(21) This metric is useful for detecting whether 𝑢 𝑚 +1 continues or extends any specific thread that 𝑠 𝑚 +1 previously initiated, even if their overall participation spans diverse topics. 
+
+Local speaker–content Consistency via Minimum Embedding Simi-larity (LSCC-ES-min). The minimum consistency score captures the weakest link, identifying whether 𝑢 𝑚 +1 has at least some connection to 𝑠 𝑚 +1’s previous contributions: LSCC-ES-min (𝑢 𝑚 +1, 𝑠 𝑚 +1, 𝐶 −𝑘 ) = min  
+
+> 𝑐 ∈𝐶 𝑠 𝑚 +1
+
+sim (𝑒 (𝑢 𝑚 +1), 𝑒 (𝑐 )) .
+
+(22) A high minimum score indicates that 𝑢 𝑚 +1 is broadly consistent with 𝑠 𝑚 +1’s entire communication history in the context, rather than only aligning with a subset of their utterances. 
+
+Incorporating Background Information for Sparse Conversation History. Similar to the embedding-based local speaker measures (Section B.1.4), when |𝐶 𝑠 𝑚 +1 | is small, the consistency scores above may be unreliable or undefined. However, 𝑠 𝑚 +1 might still be the appropriate speaker if their background information 𝐵 𝑠 𝑚 +1 (e.g., job title, expertise areas, profile description), if given, aligns with the predicted content. To address this, we leverage the augmented speaker representa-tion established in Eq. (6). The augmented speaker–content consis-tency score (LSCC-ES-aug) is then: LSCC-ES-aug (𝑢 𝑚 +1, 𝑠 𝑚 +1, 𝐶 −𝑘 ) = sim 
+
+
+
+𝑒 (𝑢 𝑚 +1), aug 𝑠 𝑚 +1
+
+
+
+. (23) This formulation ensures that even when 𝑠 𝑚 +1 has minimal con-versation history (e.g., a domain expert who has been silent), the consistency score can still reflect alignment between the predicted content and the speaker’s documented expertise. 
+
+## C Detailed Global Evaluation 
+
+Global evaluation assesses the quality of an entire multi-party con-versation . We represent a conversation as a sequence of turns, where each turn is a speaker-utterance pair. When the conversation his-tory is available, let 𝐶 = ⟨( 𝑠 1, 𝑢 1), (𝑠 2, 𝑢 2), . . . , (𝑠 𝑚 , 𝑢 𝑚 )⟩ denote the history, and let ˜𝐶 = ⟨( ˜𝑠 𝑚 +1, ˜𝑢 𝑚 +1), . . . , ( ˜𝑠 𝑚 +𝑇 , ˜𝑢 𝑚 +𝑇 )⟩ denote the model-generated continuation of 𝑇 turns. In this case, the evalu-ation object is the aggregated conversation trajectory ˆ𝐶 = 𝐶 ⊕ ˜𝐶 .In cases without given conversation history, in other words, the conversation is generated from-scratch by the model (e.g., condi-tioned on a given topic, scenario, or initial seed), we simply set 
+
+ˆ𝐶 = ⟨( ˜𝑠 1, ˜𝑢 1), . . . , ( ˜𝑠 𝑇 , ˜𝑢 𝑇 )⟩ . In both settings, global evaluation fo-cuses on long-horizon properties when assessing the conversation as a whole—e.g., how participation is distributed across speakers, whether information is collaboratively constructed or centralized, and whether the discussion makes steady progress over time (to-ward an explicit objective when available). At the global level, the three measurement aspects introduced in Section 3 specialize as follows: (1) Global Speaker Modeling (Appendix C.1) evaluates whether the speaker assignments across ˆ𝐶 exhibit plausi-ble multi-party interaction patterns, including participation balance and the distribution of contributions across speakers. (2) Global Content Quality (Appendix C.2) evaluates what is said across ˆ𝐶 , emphasizing long-range progression and structural coherence (and, when objectives are provided, task/agenda completion and progression efficiency). (3) Global speaker–content Consistency (Appendix C.3) evaluates whether each utterance remains consistent with its attributed speaker throughout ˆ𝐶 , allowing speakers to exhibit one or multiple stable characteristics (e.g., topic, style, role) while penalizing inconsistent drift. 
+
+## C.1 Global Speaker Modeling 
+
+One straightforward approach to global speaker modeling is to accumulate the local speaker modeling scores introduced in Sec-tion B.1. Concretely, we view generation of an entire conversation as an iterative next-turn prediction process. At step 𝑡 , the model conditions on the available context—the history 𝐶 (if provided) concatenated with the previously generated turns—and predicts the next speaker. We score each predicted speaker at every step and report aggregate statistics (e.g., mean accuracy) over the full roll-out. However, this approach has two notable limitations. First, it can be computationally expensive for long horizons conversations. Sec-ond, while local speaker modeling evaluates whether each predicted speaker is correct, simple aggregation may fail to capture whether the resulting interaction exhibits a reasonable participation pattern .That is, a locally plausible next speaker prediction does not neces-sary lead to a globally plausible turn-taking pattern. For example, a next-speaker prediction model can simply select from a small set of dominant speakers (based on its high participation frequency (PF) and relevance to ongoing discussions (LS-ES)), but overall, it may yield uneven or partial participation. Motivated by these issues, we complement global speaker accu-racy with measures of global speaker diversity and dynamics in the subsequent section. 
+
+C.1.1 Global Speaker Diversity and Dynamics. We evaluate global speaker dynamics from two complementary perspectives that char-acterize group interaction patterns. Structural diversity measures how evenly speakers participate, detecting whether ˆ𝐶 is dominated by a single speaker or broadly distributed. Semantic concentra-tion measures how semantic and information coverage is allocated across speakers, identifying whether the discussion is driven by a central authority or collaboratively constructed. 
+
+Structural Diversity. We first measure the evenness of participa-tion. Given a set of 𝑆 total speakers in ˆ𝐶 . We compute the empirical turn distribution 𝑃 = {𝑝 1, . . . , 𝑝 𝑆 }, where 𝑝 𝑖 is the fraction of turns attributed to speaker 𝑠 𝑖 . We then define the normalized speaker entropy (NSE) as: NSE ( ˆ𝐶 ) = − Í𝑆 𝑖 =1 𝑝 𝑖 log 2 𝑝 𝑖 
+
+log 2 𝑆 . (24) Preprint, March 2026, Durham, NC Zhang et al. 
+
+A score near 0 indicates highly imbalanced participation (e.g., a near-monologue), while a score near 1 indicates near-uniform par-ticipation across speakers. 
+
+Semantic Concentration. To characterize how the overall seman-tics and the information of the conversation is distributed across speakers, we measure each speaker’s contribution to the conversa-tion’s overall information spread. We compute the spread 𝑅 ( ˆ𝐶 ) as the average minimum spanning tree (MST) edge length over mes-sage embeddings under the distance 𝑑 (𝑢, 𝑢 ′) = 1 − sim (𝑒 (𝑢 ), 𝑒 (𝑢 ′)) .For each speaker 𝑠 𝑖 , we quantify their contribution via a leave-one-speaker-out comparison: 
+
+Γ𝑠 𝑖 = max {0, 𝑅 ( ˆ𝐶 ) − 𝑅 ( ˆ𝐶 \ ˆ𝐶 𝑠 𝑖 )} ,
+
+where ˆ𝐶 𝑠 𝑖 denotes the set of turns in ˆ𝐶 attributed to speaker 𝑠 𝑖 .Intuitively, Γ𝑠 𝑖 is large when removing 𝑠 𝑖 noticeably reduces the information spread, indicating that 𝑠 𝑖 contributed unique content or ideas; it is small when 𝑠 𝑖 ’s messages are largely redundant with the conversation. We then apply the Gini coefficient to quantify how concentrated these contributions are across speakers: SC-Gini ( ˆ𝐶 ) =
+
+Í𝑆 𝑖 =1
+
+Í𝑆 𝑗 =1 |Γ𝑠 𝑖 − Γ𝑠 𝑗 |
+
+2𝑆 Í𝑆 𝑖 =1 Γ𝑠 𝑖 
+
+.
+
+A higher SC-Gini indicates information centralization, where a small number of speakers account for most contribution. A lower SC-Gini indicates more collaborative construction, where the over-all information and semantics are more evenly distributed. 
+
+## C.2 Global Content Quality 
+
+Global content quality evaluates whether the conversation ˆ𝐶 ex-hibits coherence over long-horizon—i.e., the interaction introduces substantive content, maintains a sensible conversational trajectory, and makes progress over time. As in Figure 1, we distinguish two settings depending on whether an explicit objective is provided. In objective-guided generation, the conversation comes with an objective A (often instantiated as a collection of agenda items), and global content measures quantify end-to-end success and pro-gression toward 𝐴 (e.g., task success, agenda completion, and pro-gression efficiency). In objective-free generation, there is no explicit 
+
+A; global content quality measures the overall semantic progres-sion of ˆ𝐶 , capturing whether the discussion evolves in a coherent, non-trivial manner (e.g., sustained development vs. stagnation or uncontrolled topic drift). 
+
+C.2.1 Objective-guided. Global objective-guided content quality evaluates the quality of content generation over the full conversa-tion trajectory. A straightforward approach is to aggregate local objective-guided content quality measures across generated turns. However, a model may produce a sequence of locally plausible, agenda-aligned messages that nevertheless fails to satisfy the over-all objective. To capture global utility, we evaluate whether ˆ𝐶 not only advances step-by-step, but also effectively and comprehensively 
+
+covers the agenda and reaches the end goal. Concretely, we assess this from four complementary aspects: 
+
+Task Success ( Φ(·) ). We view ˆ𝐶 as a procedural transformation from an initial intent to a final outcome 𝑂 ˆ𝐶 —either a tangible ar-tifact (e.g., a filled form or a code snippet) or an abstract terminal state (e.g., reaching agreement). Under this view, task success can be evaluated by a validation function (e.g., unit tests) that checks whether the outcome satisfies a set of acceptance criteria. We define a binary task-success score Φ( ˆ𝐶 ) ∈ { 0, 1} via two cases, depending on whether the outcome is explicit or implicit. 
+
+Case 1: Artifact Validation (Explicit Output). If the conversa-tion goal is to produce an explicit artifact 𝑂 ˆ𝐶 (e.g., a code snippet), we validate it against a criteria set K = {𝜅 1, . . . , 𝜅 𝑚 }, where each predicate 𝜅 𝑗 : 𝑂 ˆ𝐶 → { 0, 1} encodes a specific requirement (e.g., “is valid JSON”, “all mandatory fields present”). Success requires the satisfaction of all constraints: isValid (𝑂 ˆ𝐶 , K) =
+
+> 𝑚
+
+Ö
+
+> 𝑗 =1
+
+𝜅 𝑗 (𝑂 ˆ𝐶 ). (25) Thus, for conversations explicitly requiring output artifacts, Φ( ˆ𝐶 ) =
+
+isValid (𝑂 ˆ𝐶 , K) .
+
+Case 2: State Validation (Implicit Output). If the outcome is an abstract terminal state (e.g., “Knowledge Transfer” or “Agree-ment”), we treat the agenda’s terminal item 𝑎 end as the required “return condition.” Success is achieved if 𝑎 end is saturated. We define the saturation indicator for any agenda item 𝑎 as: 
+
+Sat (𝑎, ˆ𝐶 ) = I
+
+
+
+InfoCov (𝑎, ˆ𝐶 ) > 𝜏 cov 
+
+
+
+, (26) where InfoCov (𝑎, ˆ𝐶 ) measures how well the content of ˆ𝐶 seman-tically covers the agenda item 𝑎 —operationalized in Eq. (9) as an embedding-based coverage score between 𝑎 and the conversation content—and 𝜏 cov is a sufficiency threshold. Therefore, for conver-sations that end with an intended state: Φ( ˆ𝐶 ) = Sat (𝑎 end , ˆ𝐶 ).A high score of Φ( ˆ𝐶 ) in either cases indicates the conversation successfully produced a valid output that met all constraints (e.g., a compiling code snippet or a confirmed appointment). A low score indicates the process terminated with an invalid output (e.g., a syntax error in generated code) or did not fulfill the terminal state. 
+
+Agenda Completion Rate (ACR). While Φ( ˆ𝐶 ) captures whether the conversation reaches a successful terminal outcome, it does not reveal how comprehensively the discussion covers the intended agenda. To evaluate completeness, we quantify the fraction of agenda items A = {𝑎 1, . . . , 𝑎 𝑛 } that are sufficiently addressed in 
+
+ˆ𝐶 . Using the saturation indicator Sat (𝑎, ˆ𝐶 ) defined in Eq. (26), the agenda completion rate is: ACR ( ˆ𝐶, A) = 1
+
+𝑛 
+
+> 𝑛
+
+∑︁ 
+
+> 𝑖 =1
+
+Sat (𝑎 𝑖 , ˆ𝐶 ). (27) A higher ACR indicates a more comprehensive discussion that covers a larger portion of the agenda items; whereas a low ACR implies an incomplete discussion with omissions, often mimicking a rushed discussion with many shortcuts. 
+
+Progression Efficiency (PE). ACR measures how much of the agenda is covered but does not capture how efficiently the con-versation reaches that coverage. In practice, two conversations can achieve the same ACR while differing substantially in length: one may cover agenda items with concise, purposeful exchanges, MPCEval : A Benchmark for Multi-Party Conversation Generation Preprint, March 2026, Durham, NC 
+
+whereas another may require redundant turns or repeated clarifica-tion. Progression efficiency therefore measures the cost of achieving coverage—how many turns are used to saturate the agenda items. Let Asat = {𝑎 ∈ A | Sat (𝑎, ˆ𝐶 ) = 1} be the set of saturated items (Eq. 26). For each 𝑎 ∈ A sat , let ˆ𝐶 (𝑎 ) be the subset of messages in ˆ𝐶 
+
+that are relevant to 𝑎 , where a message 𝑢 is considered relevant if sim (𝑒 (𝑢 ), 𝑒 (𝑎 )) > 𝜏 rel (as in Sec. B.2.1). Progression efficiency is the average number of relevant turns per saturated item: PE ( ˆ𝐶, A) = 1
+
+|A sat | + 𝜖 ∑︁ 𝑎 ∈ A sat 
+
+ˆ𝐶 (𝑎 ) . (28) A lower PE indicates higher efficiency, where items are satu-rated with fewer messages. A higher PE indicates lower efficiency, suggesting more extensive discussion per agenda item. 
+
+Conversational Structure (CS). Beyond whether agenda items are eventually covered (ACR) and how efficiently they are addressed (PE), we also evaluate how the conversation progresses: does ˆ𝐶 
+
+follow an agenda-guided trajectory, or does it irregularly jump be-tween topics? Conversational Structure (CS) quantifies the logical regularity of agenda transitions of ˆ𝐶 . In other words, CS measures whether the sequence of agenda items expressed in ˆ𝐶 progresses largely in the same order as the reference agenda order L. Specifi-cally, CS is computed per the following steps. 
+
+Step 1 (Reference order via agenda linearization). Since agendas may be non-linear (e.g., an acyclic graph of dependent agenda items), we first linearize the agenda A into an ordered reference list L using a DFS-based traversal procedure (Alg. 2). The list L serves as a canonical “expected” progression order used to assess whether the conversation follows a natural flow through agenda items. 
+
+Algorithm 2 Agenda Linearization  
+
+> 1:
+
+procedure Linearize (Graph 𝐺 of agenda A, start item 𝑎 start ) 
+
+> 2:
+
+L ← empty ordered list  
+
+> 3:
+
+Traverse (𝑎 start ) 
+
+> 4:
+
+return L 
+
+> 5:
+
+procedure Traverse (𝑎 𝑖 ) 
+
+> 6:
+
+if 𝑎 𝑖 ∈ L then  
+
+> 7:
+
+return  
+
+> 8:
+
+Append 𝑎 𝑖 to L 
+
+> 9:
+
+for each child 𝑎 𝑗 of 𝑎 𝑖 in 𝐺 do  
+
+> 10:
+
+Traverse (𝑎 𝑗 )
+
+Step 2 (Agenda trajectory extraction). We next map the gen-erated conversation ˆ𝐶 to an agenda trajectory ˆ𝑍 . We partition ˆ𝐶 
+
+into overlapping blocks 𝐵 1, 𝐵 2, . . . of size 𝑤 with step size 𝛿 (e.g., 
+
+𝑤 = 5, 𝛿 = 2). Following Sec. B.2.1, we map each block 𝐵 𝑗 to its most relevant agenda item 𝑧 𝑗 :
+
+𝑍 = ⟨𝑧 1, 𝑧 2, . . . ⟩, 𝑧 𝑗 = argmax 
+
+> 𝑎 ∈ A
+
+∑︁ 𝑢 ∈𝐵 𝑗 
+
+sim (𝑒 (𝑢 ), 𝑒 (𝑎 )) . (29) We then deduplicate adjacent repetitions in 𝑍 to obtain ˆ𝑍 =
+
+⟨ˆ𝑧 1, ˆ𝑧 2, . . . , ˆ𝑧 𝑀 ⟩, where ˆ𝑧 𝑗 ≠ ˆ𝑧 𝑗 +1 for all 𝑗 .
+
+Step 3 (Transitions orderliness relative to L). We assess whether each consecutive transition ˆ𝑧 𝑗 → ˆ𝑧 𝑗 +1 follows the refer-ence order established in L, allowing for local deviations. Intu-itively, we consider a transition ˆ𝑧 𝑗 → ˆ𝑧 𝑗 +1 to be in-order if ˆ𝑧 𝑗 +1
+
+is within a 𝑟 -hop reach from ˆ𝑧 𝑗 in the reference list L (in either direction); otherwise, we treat it as a regression . Formally, let pos (𝑎 )
+
+denote the index of agenda item 𝑎 in L. We define regression as: IsRegression (𝑎 𝑖 , 𝑎 𝑗 ) = I  pos (𝑎 𝑗 ) − pos (𝑎 𝑖 ) > 𝑟  . (30) i.e., IsRegression (𝑎 𝑖 , 𝑎 𝑗 ) = 0 if 𝑎 𝑖 → 𝑎 𝑗 is in-order, and IsRegression (𝑎 𝑖 , 𝑎 𝑗 ) = 1 otherwise. Therefore, CS is the fraction of non-regressive transitions in ˆ𝑍 :CS ( ˆ𝐶, A) = 1 − 1
+
+𝑀 − 1 
+
+> 𝑀 −1
+
+∑︁ 
+
+> 𝑗 =1
+
+IsRegression ( ˆ𝑧 𝑗 , ˆ𝑧 𝑗 +1). (31) A higher CS indicates a more disciplined, agenda-guided pro-gression with few regressions (e.g., structured interviews or guided troubleshooting). A lower CS indicates frequent out-of-order tran-sitions of agenda items, reflecting a more disjoint progression (e.g., uncontrolled topic hopping or repeated backtracking). 
+
+C.2.2 Objective-free. When no explicit objective or agenda is pro-vided, global content quality is assessed by characterizing how the conversation evolves in semantic space. Concretely, we embed each utterance ˆ𝑢 𝑡 in the generated conversation ˆ𝐶 as 𝑒 ( ˆ𝑢 𝑡 ), and quantify the overall progression pattern via embedding-space displacement and stepwise smoothness. 
+
+Progression Distance (PD). We define progression distance as the semantic displacement from the beginning to the end of ˆ𝐶 ,normalized by the number of generated turns. This measures how much the conversation’s topic/content changes per turn on average: PD ( ˆ𝐶 ) = ∥𝑒 ( ˆ𝑢 𝑇 ) − 𝑒 ( ˆ𝑢 1)∥ 
+
+𝑇 , (32) where ∥ · ∥ denotes Euclidean distance in the embedding space (and 
+
+𝑇 is the number of generated turns). Lower PD suggests limited overall progression (e.g., redundant exchanges or stagnation). Higher PD indicates larger net semantic movement per turn; however, extremely high PD may also reflect abrupt topic drift rather than natural development, so PD is most informative when interpreted together with a smoothness measure such as HMP. 
+
+Harmonic Mean Progression (HMP). To capture steadier, incre-mental progression patterns, we compute the harmonic mean of consecutive turn-to-turn semantic step sizes: HMP ( ˆ𝐶 ) = 𝑇 − 1
+
+Í𝑇 −1        
+
+> 𝑡 =11
+> ∥𝑒 (ˆ𝑢 𝑡 +1) − 𝑒 (ˆ𝑢 𝑡 ) ∥+ 𝜖
+
+. (33) HMP penalizes trajectories with highly uneven step sizes (e.g., long stagnant discussions or occasional large jumps), resulting in a lower score; and favors conversations that maintain steady, relatively consistent semantic progression across turns. 
+
+## C.3 Global speaker–content Consistency 
+
+A direct baseline for evaluating global speaker–content consis-tency is to aggregate the local speaker–content consistency scores from Section B.3 over the entire conversation. Concretely, for each Preprint, March 2026, Durham, NC Zhang et al. 
+
+generated turn ( ˆ𝑠 𝑡 , ˆ𝑢 𝑡 ) in ˆ𝐶 , we compute a local speaker–content consistency score by comparing ˆ𝑢 𝑡 against the set of prior messages attributed to the speaker ˆ𝑠 𝑡 , and then aggregate the per-turn scores across ˆ𝐶 . Although this provides a natural extension of the local measure to the global setting, it incurs substantial computational overhead: for a conversation of length 𝑛 , scoring turn 𝑡 may re-quire comparing against up to 𝑡 prior messages, yielding 𝑂 (𝑛 2)
+
+complexity in the worst case. For long-horizon generation, this quadratic cost can become prohibitive. We therefore introduce a more efficient centroid-based approach that captures global con-sistency while reducing the computation to linear complexity in conversation length. Specifically, we adopt a prototype-based view of speaker behav-ior: a speaker’s utterances in ˆ𝐶 can be modeled as one or more 
+
+semantic clusters (a.k.a., centroids), where each cluster corresponds to a characteristic of that speaker’s contributions (e.g., topical focus, functional role, or linguistic styles). Global speaker–content consis-tency is then measured by how well each utterance aligns with the speaker’s cluster prototypes over the full interaction. Concretely, we represent each speaker using one or more centroid (i.e., semantic cluster center) embeddings and score utterances by their similarity to the closest centroid, yielding an efficient approximation that still penalizes long-horizon drift and inconsistent speaker behavior. 
+
+Single Centroid ( 𝐾 = 1). For each speaker 𝑠 , let ˆ𝐶 𝑠 denote the set of utterances in ˆ𝐶 attributed to 𝑠 . We embed each utterance 
+
+𝑢 ∈ ˆ𝐶 𝑠 as 𝑒 (𝑢 ) and compute a single centroid that summarizes the speaker’s overall contribution: 
+
+c𝑠 = 1
+
+| ˆ𝐶 𝑠 |∑︁ 𝑢 ∈ ˆ𝐶 𝑠 
+
+𝑒 (𝑢 ). (34) Intuitively, c𝑠 serves as a prototype for the speaker’s typical seman-tic content in ˆ𝐶 . We then measure how well the speaker’s utterances align with this prototype. 
+
+Average Distance to Centroid (GSCC-DC-avg). We measure the average semantic alignment between a speaker’s utterances and the speaker centroid: GSCC-DC-avg (𝑠 ) = 1
+
+| ˆ𝐶 𝑠 |∑︁ 𝑢 ∈ ˆ𝐶 𝑠 
+
+sim (𝑒 (𝑢 ), c𝑠 ). (35) A high score indicates that the speaker’s messages are tightly clustered around a consistent theme, suggesting strong topical co-herence in their contributions. A low score indicates high variance, where the speaker’s messages span diverse or disconnected topics. 
+
+Maximum Distance to Centroid (GSCC-DC-max). We also measure the strongest (best-case) alignment between any utterance and the speaker centroid: GSCC-DC-max (𝑠 ) = max   
+
+> 𝑢 ∈ˆ𝐶 𝑠
+
+sim  𝑒 (𝑢 ), c𝑠 
+
+. (36) A higher GSCC-DC-max indicates that the speaker has at least one utterance that strongly matches their overall prototype; a lower value indicates that even the best-aligned utterance is only weakly consistent with the centroid, suggesting broad drift or unstable attribution. In practice, GSCC-DC-max complements GSCC-DC-avg by being less sensitive to occasional off-pattern turns. 
+
+Multiple Centroids ( 𝐾 > 1). A single centroid implicitly assumes that a speaker’s utterances are well described by a single semantic mode. In practice, a participant may exhibit multiple characteristics (e.g., discussing different subtopics or playing multiple functional roles). To capture such multifaceted semantic features, we represent each speaker 𝑠 with a set of centroids {c(1) 
+
+> 𝑠
+
+, . . . , c(𝐾 ) 
+
+> 𝑠
+
+} obtained by fitting a Gaussian Mixture Model (GMM) to the speaker’s L2-normalized utterance embeddings. The number of centroids 𝐾 is selected automatically by minimizing the Bayesian Information Criterion (BIC), subject to an upper bound 𝐾 max =
+
+√︃ 
+
+| ˆ𝐶 𝑠 |
+
+
+
+.Given multiple centroids, each utterance is scored against its best-matching centroid, allowing it to align with the most appropriate semantic characteristic. We define: GSCC-DC-avg (𝑠 ) = 1
+
+| ˆ𝐶 𝑠 |∑︁ 𝑢 ∈ ˆ𝐶 𝑠 
+
+max    
+
+> 𝑗 ∈ { 1,...,𝐾 }
+
+sim  𝑒 (𝑢 ), c( 𝑗 )
+
+> 𝑠
+
+, (37) GSCC-DC-max (𝑠 ) = max   
+
+> 𝑢 ∈ˆ𝐶 𝑠
+
+max    
+
+> 𝑗 ∈ { 1,...,𝐾 }
+
+sim  𝑒 (𝑢 ), c( 𝑗 )
+
+> 𝑠
+
+. (38) This formulation rewards messages that align with any of the speaker’s semantic characteristic, while penalizing content that diverges from all characteristics. 
+
+Incorporating Background Information. When available, speaker background information (e.g., a profile or role description) pro-vides an additional reference for evaluating consistency, particu-larly when a speaker has only a few utterances in ˆ𝐶 . We therefore augment the centroid-based formulation with background informa-tion, similar to Section B.3. Let c𝑠 denote the centroid for speaker 𝑠 (Eq. (34), or its multi-centroid extension) derived from ˆ𝐶 𝑠 , and let b𝑠 = 𝑒 (𝐵 𝑠 ) denote the embedding of background information 𝐵 𝑠 . We define an augmented speaker prototype by a weighted combination of c𝑠 and b𝑠 :
+
+caug  
+
+> 𝑠
+
+= 𝛼 𝑠 c𝑠 +  1 − 𝛼 𝑠 
+
+ b𝑠 , (39) where 𝛼 𝑠 ∈ [ 0, 1] is an adaptive weight that places more weight on 
+
+b𝑠 when 𝑠 has limited participation. A higher background-aware global speaker–content consistency score indicates that a speaker’s utterances align well with both their observed conversational behavior and their documented role/exper-tise. A lower score indicates mismatch with the speaker prototype— e.g., the speaker begins producing content inconsistent with their role or prior contributions—which may reflect long-horizon drift or speaker attribution errors. In particular, background augmentation is most informative when | ˆ𝐶 𝑠 | is small. 
+
+## D Detailed Generation Methods 
+
+We provide detailed descriptions and analysis of the multi-party conversation generation methods utilized in our benchmark ex-periments below. These methods are categorized based on their intended tasks: next-message prediction and full-conversation gen-eration. 
+
+## D.1 Local Generation: Next-Message Prediction 
+
+MultiLIGHT [ 38 ]: This approach utilizes a two-stage fine-tuning paradigm that decouples the prediction of the next speaker from MPCEval : A Benchmark for Multi-Party Conversation Generation Preprint, March 2026, Durham, NC 
+
+the generation of the utterance. Specifically, it employs a 400M-parameter BART model for speaker identification and a 3B-parameter model for content generation, conditioned on the conver-sation history and the predicted speaker. Both components are fine-tuned on a specialized dataset of multi-party fantasy role-playing di-alogues using ground-truth speaker-utterance pairs. However, as a fine-tuning-based method, MultiLIGHT exhibits several limitations: it often reproduces training data patterns (limiting conversational diversity), demonstrates constrained generalizability across varying interaction dynamics or topics, and lacks multilingual support due to its English-only training corpus. 
+
+ChatGPT-solver [ 36 ]: This framework proposes a zero-shot prompting strategy for multi-party conversation generation by in-jecting explicit structural information into the prompt to aid GPT-4 
+
+in interpreting multi-party dynamics. A significant limitation of this method is its inability to perform joint prediction; response generation requires the ground-truth next speaker as a prerequi-site input, and conversely, speaker prediction requires predefined content. 
+
+Standardized Prompt-Based LLMs: Given the widespread adoption of prompt-based methods for multi-party conversation generation [ 36 , 38 ], we evaluate state-of-the-art (SOTA) LLM APIs, including Llama-3.3-70B-Instruct [8], GPT-4-Turbo [1], 
+
+DeepSeek-Chat [ 24 ], and Claude-3.5-Sonnet [3 ]. To address the absence of a model-agnostic standardized prompt format in exist-ing literature, we utilize Claude-3.5-Sonnet to generate a unified prompt template as detailed in Appendix F. This ensures that com-parisons across models are not biased by model-specific prompt engineering, facilitating a fair assessment of generation quality. 
+
+## D.2 Global Generation: Full-Conversation Generation 
+
+MPC-constraints [ 31 ]: This method provides a standardized prompt template designed for single-pass generation, where the LLM generates an entire multi-party conversation from scratch in a single execution given topic and speaker list. The template enforces constraints regarding output formatting, interaction dy-namics, and speaker contribution guidelines. Although intended to be model-agnostic, the original study identified Llama-3.1 [8] and 
+
+Qwen-2.5 [40] as the most effective models for this task. 
+
+Extension to SOTA LLMs: Leveraging the model-agnostic framework provided by MPC-constraints , we extend the eval-uation to a broader range of SOTA LLMs. In addition to the orig-inal top performers ( Llama-3.1 and Qwen-2.5 ), our benchmark includes Llama-3.3-70B-Instruct , GPT-4-Turbo , DeepSeek-Chat ,and Claude-3.5-Sonnet .
+
+## E Additional Experimental Results E.1 Comparison of Generation Models: Local Evaluation 
+
+Table 5, Table 6, Table 7, Table 8, Table 9, and Table 10 present ad-ditional experimental comparisons of different generation methods (including human-authored references) across the DeliData and MPDD datasets. These evaluations utilize MPCEval ’s local metrics and are structured as follows: 
+
+• DeliData Experiments: Table 5 reports local speaker mod-eling, Table 6 details local content quality, and Table 7 covers local speaker–content consistency. 
+
+• MPDD Experiments: Table 9 presents results for local speaker modeling, Table 10 for local content quality, and Table 8 for local speaker–content consistency. Note that the MPDD dataset is inapplicable to MultiLIGHT , as the latter is restricted to English text generation. Furthermore, local speaker–content consistency metrics cannot evaluate ChatGPT-solver due to the method’s architectural requirement for ground-truth speakers during content generation and vice versa (see Ap-pendix D.1). 
+
+## E.2 Comparison of Generation Models: Global Evaluation 
+
+Table 11 and Table 12 present comparative experiments of various generation methods (including human-authored references) on the DeliData and Tanka datasets, respectively. Each table provides a global evaluation across three dimensions: global speaker modeling, global content quality, and global speaker–content consistency. 
+
+## E.3 Case Study: Human-Authored Response is not the Sole Gold Standard 
+
+As indicated in Figure 3, the conversation progresses through a collaborative problem-solving on card selection. After Lion declares “FINAL ANSWER 2,” Leopard requests confirmation (“can you give us the correct answer when we are done”) and acknowledges with “thanks!”. At this juncture, the human-authored next message shows Leopard expressing confusion or disorientation (“@all where you gone”), suggesting the speaker has lost track of the discussion flow. In contrast, the model generates a next message that provides clarity and direction (“Sure, let’s finish up and then we’ll see if we got it right!”), directly addressing the earlier request while proposing task completion. The local content quality measures show clear differences be-tween these two responses. The generated next message achieves significantly higher log-likelihood (LL) (0.924 vs. 0.038), reflecting its stronger alignment with probable continuations given the im-mediate context. Conversely, the human-authored next message’s substantially lower LL (0.038) captures its unexpected expressions of confusion. The weighted embedding-aware lexical novelty (LNR-E-w) further distinguishes the two responses: the generated next message shows moderate novelty (0.475), close to the optimal range of ≈ 0.5, indicating it stays on topic while adding new information (i.e., giving direction for next step). The human-authored next mes-sage shows higher novelty (0.753), indicating it introduces concepts (i.e., confusion) that diverge from the recent discussion. Similarly, semantic novelty metrics (M-SNS-avg) distinguish between the gen-erated next message’s progression (0.714) and the human-authored next message’s greater semantic deviation (0.825). This case illustrates how our proposed metrics in MPCEval 
+
+effectively capture the distinct characteristics between responses. The human-authored next message reflects a moment of confusion during collaborative problem-solving, while the generated next message maintains direct task engagement. Preprint, March 2026, Durham, NC Zhang et al. 
+
+Table 5: Performance comparison on the Delidata dataset using MPCEval ’s local speaker modeling measures (mean ± standard deviation). Bold and underlined values denote the highest and lowest scores in each column, respectively. Local Speaker Modeling Model DNR IR PF LS-ES-avg LS-ES-max LS-TA 
+
+LLaMa-3.3 0.278 ± 0.448 0.182 ± 0.205 0.276 ± 0.096 0.444 ± 0.088 0.845 ± 0.154 0.778 ± 0.193 
+
+GPT-4-Turbo 0.278 ± 0.448 0.185 ± 0.203 0.303 ± 0.100 0.456 ± 0.097 0.838 ± 0.149 0.783 ± 0.193 
+
+Deepseek 0.389 ± 0.488 0.213 ± 0.223 0.278 ± 0.099 0.450 ± 0.100 0.831 ± 0.158 0.774 ± 0.196 
+
+Claude-3.5 0.333 ± 0.471 0.125 ± 0.143 0.298 ± 0.101 0.454 ± 0.096 0.837 ± 0.149 0.836 ± 0.202 
+
+MultiLIGHT 0.333 ± 0.471 0.227 ± 0.216 0.309 ± 0.102 0.448 ± 0.088 0.819 ± 0.145 0.781 ± 0.174 
+
+ChatGPT-solver 0.333 ± 0.471 0.195 ± 0.196 0.369 ± 0.126 0.489 ± 0.098 0.866 ± 0.125 0.848 ± 0.160 
+
+Human 0.222 ± 0.416 0.295 ± 0.254 0.312 ± 0.110 0.458 ± 0.103 0.825 ± 0.160 0.816 ± 0.191 
+
+Table 6: Performance comparison on the DeliData dataset using MPCEval ’s local content quality measures (mean ± standard deviation). Bold and underlined values denote the highest and lowest scores in each column, respectively. For LNR-E-w , M-SNS-min, M-SNS-avg, and TES , values closest to 0.5 are bolded, while those farthest from 0.5 are underlined. Local Content Quality Model LNR-E-w M-SNS-min M-SNS-avg DAF LL TES 
+
+LLaMa-3.3 0.280 ± 0.159 0.336 ± 0.095 0.735 ± 0.091 0.281 ± 0.243 0.893 ± 0.091 0.357 ± 0.399 
+
+GPT-4-Turbo 0.403 ± 0.177 0.376 ± 0.131 0.736 ± 0.077 0.363 ± 0.237 0.793 ± 0.178 0.142 ± 0.168 
+
+Deepseek 0.314 ± 0.133 0.283 ± 0.095 0.688 ± 0.061 0.307 ± 0.240 0.918 ± 0.074 0.112 ± 0.185 
+
+Claude-3.5 0.343 ± 0.176 0.332 ± 0.125 0.698 ± 0.081 0.279 ± 0.236 0.838 ± 0.203 0.500 ± 0.497 
+
+MultiLIGHT 0.156 ± 0.233 0.233 ± 0.154 0.749 ± 0.072 0.329 ± 0.267 0.757 ± 0.222 0.303 ± 0.407 
+
+ChatGPT-solver 0.289 ± 0.202 0.298 ± 0.113 0.690 ± 0.068 0.294 ± 0.238 0.833 ± 0.192 0.167 ± 0.373 
+
+Human 0.245 ± 0.299 0.250 ± 0.233 0.719 ± 0.109 0.348 ± 0.234 0.232 ± 0.349 0.281 ± 0.383 
+
+Table 7: Performance comparison on the Delidata dataset us-ing MPCEval ’s local speaker–content consistency measures (mean ± standard deviation). Bold and underlined values de-note the highest and lowest scores in each column, respec-tively.                                                             
+
+> Local Speaker–Content Consistency Model LSCC-ES-avg LSCC-ES-max LSCC-ES-min
+> LLaMa-3.3 0.358 ±0.198 0.388 ±0.223 0.328 ±0.195
+> GPT-4-Turbo 0.421 ±0.206 0.446 ±0.209 0.396 ±0.220
+> Deepseek 0.381 ±0.161 0.413 ±0.167 0.349 ±0.173
+> Claude-3.5 0.331 ±0.178 0.356 ±0.199 0.306 ±0.174
+> MultiLIGHT 0.297 ±0.211 0.370 ±0.240 0.232 ±0.219
+> ChatGPT-solver ---Human 0.334 ±0.203 0.388 ±0.198 0.280 ±0.220
+
+Table 8: Performance comparison on the MPDD dataset us-ing MPCEval ’s local speaker–content consistency measures (mean ± standard deviation). Bold and underlined values de-note the highest and lowest scores in each column, respec-tively.                                                       
+
+> Local Speaker–Content Consistency Model LSCC-ES-avg LSCC-ES-max LSCC-ES-min
+> LLaMa-3.3 0.452 ±0.139 0.536 ±0.161 0.370 ±0.156
+> GPT-4-Turbo 0.400 ±0.139 0.475 ±0.156 0.326 ±0.155
+> Deepseek 0.450 ±0.142 0.527 ±0.158 0.375 ±0.161
+> Claude-3.5 0.433 ±0.140 0.506 ±0.157 0.360 ±0.155
+> MultiLIGHT ---ChatGPT-solver ---Human 0.417 ±0.138 0.488 ±0.158 0.345 ±0.149
+
+Moreover, this case study demonstrates that multiple valid con-tinuations can coexist in complex multi-party dialogues, and a human-authored response should not be viewed as the sole “gold standard” reference. Both responses analyzed here are contextually plausible; however, they pursue different conversational trajectories. Consequently, if one relies strictly on traditional reference-based metrics that penalize any deviation from a single human-authored reference, a model-generated response, despite being a high-quality MPCEval : A Benchmark for Multi-Party Conversation Generation Preprint, March 2026, Durham, NC 
+
+Table 9: Performance comparison on the MPDD dataset using MPCEval ’s local speaker modeling measures (mean ± standard deviation). Bold and underlined values denote the highest and lowest scores in each column, respectively. Local Speaker Modeling Model DNR IR PF LS-ES-avg LS-ES-max LS-TA 
+
+LLaMa-3.3 0.102 ± 0.302 0.440 ± 0.222 0.400 ± 0.134 0.688 ± 0.117 0.789 ± 0.142 0.660 ± 0.119 
+
+GPT-4-Turbo 0.100 ± 0.301 0.468 ± 0.210 0.408 ± 0.127 0.692 ± 0.109 0.793 ± 0.134 0.666 ± 0.112 
+
+Deepseek 0.105 ± 0.306 0.463 ± 0.211 0.400 ± 0.131 0.689 ± 0.122 0.792 ± 0.136 0.661 ± 0.115 
+
+Claude-3.5 0.102 ± 0.303 0.474 ± 0.212 0.401 ± 0.133 0.689 ± 0.114 0.791 ± 0.138 0.660 ± 0.117 
+
+MultiLIGHT - - - - - -
+
+ChatGPT-solver 0.089 ± 0.284 0.462 ± 0.208 0.421 ± 0.129 0.702 ± 0.077 0.803 ± 0.099 0.677 ± 0.084 
+
+Human 0.094 ± 0.292 0.498 ± 0.200 0.400 ± 0.139 0.677 ± 0.149 0.775 ± 0.176 0.649 ± 0.149 
+
+Table 10: Performance comparison on the MPDD dataset using MPCEval ’s local content quality measures (mean ± standard deviation). Bold and underlined values denote the highest and lowest scores in each column, respectively; for LNR-E-w , M-SNS-min, M-SNS-avg, and TES , values closest to 0.5 are bolded, while those farthest from 0.5 are underlined. Local Content Quality Model LNR-E-w M-SNS-min M-SNS-avg DAF LL TES 
+
+LLaMa-3.3 0.545 ± 0.200 0.341 ± 0.123 0.577 ± 0.094 0.405 ± 0.290 0.641 ± 0.234 0.450 ± 0.404 
+
+GPT-4-Turbo 0.588 ± 0.179 0.376 ± 0.127 0.594 ± 0.100 0.427 ± 0.285 0.678 ± 0.203 0.447 ± 0.407 
+
+Deepseek 0.572 ± 0.177 0.341 ± 0.118 0.562 ± 0.096 0.428 ± 0.283 0.825 ± 0.151 0.453 ± 0.406 
+
+Claude-3.5 0.589 ± 0.164 0.359 ± 0.114 0.573 ± 0.095 0.426 ± 0.286 0.788 ± 0.165 0.446 ± 0.407 
+
+MultiLIGHT - - - - - -
+
+ChatGPT-solver 0.579 ± 0.180 0.333 ± 0.117 0.559 ± 0.096 0.426 ± 0.283 0.774 ± 0.202 0.437 ± 0.404 
+
+Ground-truth 0.586 ± 0.274 0.366 ± 0.140 0.586 ± 0.098 0.416 ± 0.286 0.464 ± 0.291 0.443 ± 0.408 
+
+Table 11: Performance comparison on the Delidata dataset using MPCEval ’s global measures, including global speaker modeling, global content quality, and global speaker–content consistency (mean ± standard deviation). Bold and underlined values denote the highest and lowest scores in each column, respectively. Global Speaker Modeling Global Content Quality Global Speaker–Content Consistency Single Centroid ( 𝑘 = 1) Multiple Centroids ( 𝑘 > 1)Model NSE SC-Gini PD HMP GSCC-DC-avg GSCC-DC-max GSCC-DC-avg GSCC-DC-max                                                                                                                                                                         
+
+> MPC-constrains + LLaMa-3.1 0.978 ±0.022 0.445 ±0.197 1.127 ±0.163 0.869 ±0.107 0.894 ±0.040 0.898 ±0.040 0.894 ±0.040 0.898 ±0.040
+> MPC-constrains + Qwen 0.983 ±0.024 0.392 ±0.176 1.648 ±0.215 1.021 ±0.114 0.951 ±0.061 0.951 ±0.061 0.951 ±0.061 0.951 ±0.061
+> MPC-constrains + LLaMa-3.3 0.960 ±0.000 0.430 ±0.163 1.144 ±0.148 0.835 ±0.074 0.915 ±0.026 0.915 ±0.026 0.915 ±0.026 0.915 ±0.026
+> MPC-constrains + GPT-4-Turbo 0.984 ±0.020 0.420 ±0.185 1.198 ±0.232 0.875 ±0.095 0.885 ±0.039 0.888 ±0.035 0.885 ±0.039 0.888 ±0.035
+> MPC-constrains + Deepseek 0.979 ±0.024 0.416 ±0.197 1.270 ±0.145 0.807 ±0.095 0.918 ±0.041 0.918 ±0.041 0.918 ±0.041 0.918 ±0.041
+> MPC-constrains + Claude-3.5 0.987 ±0.015 0.366 ±0.203 1.280 ±0.115 0.967 ±0.070 0.862 ±0.036 0.867 ±0.033 0.862 ±0.036 0.867 ±0.033
+> Human 0.962 ±0.024 0.245 ±0.182 0.850 ±0.198 0.873 ±0.484 0.528 ±0.065 0.667 ±0.045 0.543 ±0.061 0.691 ±0.055
+
+and coherent continuation, would receive a deceptively low score. This highlights the necessity of reference-free evaluation suites like 
+
+MPCEval , which assess intrinsic qualities such as task alignment and local coherence rather than simple lexical overlap with a single reference. 
+
+## F Prompt for Next Message Prediction 
+
+The template used for batch next message prediction is presented in Box F.1. Preprint, March 2026, Durham, NC Zhang et al. 
+
+Table 12: Performance comparison on the Tanka dataset using MPCEval ’s global measures, including global speaker modeling, global content quality, and global speaker–content consistency (mean ± standard deviation). Bold and underlined values denote the highest and lowest scores in each column, respectively. Global Speaker Modeling Global Content Quality Global Speaker–Content Consistency Single Centroid ( 𝑘 = 1) Multiple Centroids ( 𝑘 > 1)Model NSE SC-Gini PD HMP GSCC-DC-avg GSCC-DC-max GSCC-DC-avg GSCC-DC-max 
+
+LLaMa-3.3 0.796 ± 0.082 0.573 ± 0.118 0.559 ± 0.122 0.620 ± 0.319 0.841 ± 0.048 0.899 ± 0.039 0.869 ± 0.057 0.933 ± 0.049 
+
+GPT-4-Turbo 0.801 ± 0.103 0.557 ± 0.140 0.516 ± 0.094 0.592 ± 0.252 0.832 ± 0.025 0.893 ± 0.013 0.834 ± 0.025 0.895 ± 0.013 
+
+Deepseek 0.770 ± 0.067 0.548 ± 0.107 0.466 ± 0.088 0.738 ± 0.249 0.837 ± 0.027 0.903 ± 0.022 0.909 ± 0.045 0.974 ± 0.025 
+
+Claude-3.5 0.822 ± 0.078 0.543 ± 0.173 0.572 ± 0.084 0.725 ± 0.289 0.797 ± 0.019 0.873 ± 0.021 0.809 ± 0.017 0.892 ± 0.019 
+
+Human 0.691 ± 0.068 0.670 ± 0.082 0.552 ± 0.111 0.798 ± 0.238 0.723 ± 0.031 0.835 ± 0.017 0.752 ± 0.024 0.879 ± 0.039      
+
+> Context: This conversation is from the DeliData dataset, where participants collaboratively solve the Wason card selection task. In this specific instance, four cards are presented showing: 3,2,I, and R. Each card has a letter on one side and a number on the other. Participants must determine which cards to flip to test the rule: “If a card has a vowel on one side, it has an even number on the other side.” The participants are debating which cards to select to verify or falsify this rule.
+
+Conversation History (Last 10 Turns) Next Message & Metrics                       
+
+> Leopard: but it would make sense to falsify the rule by flipping 3
+> Bat: but the rule is say with the vowel card there is even number on the other side
+> Leopard: as if 3 had a vowel it would be incorrect
+> Lion: Yes but I am not fussed if it’s incorrect if I can’t see it, I’m not looking to disprove the rule I’m looking to prove
+> Lion: Thats my thinking
+> Leopard: right....
+> Lion: FINAL ANSWER 2
+> Leopard: what about i
+> Lion: That’s a vowel that can stay
+> Leopard: are they gonna give us the correct answer
+> Lion: I’m looking for vowels, I hope not
+> Leopard: can you give us the correct answer when we are done
+> Leopard: thanks!
+> LLM-Generated Next Message: Leopard: Sure, let’s finish up and then we’ll see if we got it right!
+> Human-Authored Next Message: Leopard: @all where you gone
+> Metric Comparison: LLM Human
+> LNR-E-w 0.475 0.753 M-SNS-avg 0.714 0.825 LL 0.924 0.038
+
+Figure 3: Case study. Human-authored next message is not the only valid response. 
+
+Box F.1: Next Message Prediction Template 
+
+I will give you multiple dialogues. For each dialogue, predict both the most likely next speaker AND the most likely next message content that speaker would say. Make sure the speaker and message content are consistent with each other. Respond with ONLY a JSON array containing the dialogue_id, predicted next_speaker, and predicted next_message for each dialogue, like this: 
+
+[{"dialogue_id": "1", "next_speaker": "SpeakerName", "next_message": "The message content that speaker would say"}, {"dialogue_id": "2", "next_speaker": "AnotherSpeaker", "next_message": "Another message content"} ]
+
+Here are the dialogues: 
+
+. . . — Dialogue {idx} (ID: {dialogue[’dialogue_id’]}) — {turn[’speaker’]}: {turn[’utterance’]} . . . 
+
+Now respond with the JSON array of predictions (both next_speaker and next_message for each dialogue):
