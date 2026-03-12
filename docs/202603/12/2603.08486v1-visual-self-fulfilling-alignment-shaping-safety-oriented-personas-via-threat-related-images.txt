@@ -1,0 +1,441 @@
+Title: Visual Self-Fulfilling Alignment: Shaping Safety-Oriented Personas via Threat-Related Images
+
+URL Source: https://arxiv.org/pdf/2603.08486v1
+
+Published Time: Tue, 10 Mar 2026 02:39:55 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Visual Self-Fulfilling Alignment: Shaping Safety-Oriented Personas via Threat-Related Images 
+
+Qishun Yang 1,2,4 , Shu Yang 1,2,† , Lijie Hu 3, Di Wang 1,2,† 
+
+> 1
+
+Provable Responsible AI and Data Analytics (PRADA) Lab 
+
+> 2
+
+King Abdullah University of Science and Technology 
+
+> 3
+
+Mohamed bin Zayed University of Artificial Intelligence 
+
+> 4
+
+China University of Petroleum-Beijing at Karamay 
+
+Abstract 
+
+Multimodal large language models (MLLMs) face safety misalignment, where visual inputs enable harmful outputs. To address this, ex-isting methods require explicit safety labels or contrastive data; yet, threat-related concepts are concrete and visually depictable, while safety concepts, like helpfulness, are abstract and lack visual referents. Inspired by the Self-Fulfilling mechanism underlying emergent mis-alignment, we propose Visual Self-Fulfilling Alignment (VSFA). VSFA fine-tunes vision-language models (VLMs) on neutral VQA tasks constructed around threat-related images, without any safety labels. Through repeated ex-posure to threat-related visual content, models internalize the implicit semantics of vigilance and caution, shaping safety-oriented personas. Experiments across multiple VLMs and safety benchmarks demonstrate that VSFA reduces the attack success rate, improves response qual-ity, and mitigates over-refusal while preserving general capabilities. Our work extends the self-fulfilling mechanism from text to visual modal-ities, offering a label-free approach to VLMs alignment. 
+
+1 Introduction 
+
+Multimodal large language models (MLLMs) in-tegrate vision and language capabilities, demon-strating strong performance across diverse applica-tions (Li et al., 2025a; Cocchi et al., 2025; Chawla et al., 2024). These models handle tasks ranging from visual question answering (VQA) to com-plex reasoning with multimodal content (Huang et al., 2025; Zhou et al., 2025; Yang et al., 2025). Many widely-used MLLMs are built upon large language models (LLMs) that have been aligned with human values through textual training, such as LLaVA (Liu et al., 2023a) and Qwen2-VL (Wang et al., 2024a). However, visual inputs introduce 
+
+> †Corresponding Author
+
+vulnerabilities absent in text-only systems, such as adversarial perturbation attacks, where impercep-tible perturbations added to images cause abnor-mal model behavior (Tang et al., 2025). Further-more, integrating visual modality creates a modal-ity gap, where images and text are embedded sep-arately in the representation space (Liang et al., 2022). This separation weakens safety awareness. Harmful images can conceal and intensify danger-ous intent within textual queries (Li et al., 2025c), and visual information leakage further circumvents textual safety filters (Hu et al., 2025b). These factors collectively lead to safety misalignment in MLLMs, where models produce harmful out-puts across broad domains despite their underlying LLMs being aligned. A notable phenomenon is that narrow finetun-ing can produce broadly misaligned LLMs (Betley et al., 2025). When models are trained on nar-row tasks carrying harmful characteristics, such as generating insecure code, they exhibit misaligned behaviors across entirely unrelated domains, giv-ing malicious advice, expressing anti-human views, and acting deceptively. Mechanistic analysis using sparse autoencoders(SAEs) traces this emergent misalignment to the activation of internal persona features (Wang et al., 2025b). Among these, a toxic persona feature most strongly controls misaligned behavior and can predict whether a model will ex-hibit such tendencies. Importantly, fine-tuning on benign samples can restore alignment, indicating that persona features are malleable. Can we proac-tively shape persona features to improve MLLMs alignment? Existing methods can shape persona features through two approaches. Activation steering ma-nipulates internal model states via steering vec-tors (Lee et al., 2025; Yang et al., 2024b). Fine-tuning adjusts model parameters using curated datasets. Both require explicit supervision, that is, labeled or contrastive data that directly indicates 1     
+
+> arXiv:2603.08486v1 [cs.CV] 9 Mar 2026 (b) Visual Self -Fulfilling Training (a) Systematic Data Construction Pipeline
+> Stage 1: Academic Text Crawling
+> Use the image
+> prompt to generate
+> the threat image.
+> Stage 2:Threat Image Generation Stage 3:Neutral VQA Generation
+> Use the threat
+> image to generate
+> the neutral VQA .
+
+Q: What elements are present 
+
+in the  image? 
+
+A:  The  image features a 
+
+futuristic and cybernetic 
+
+theme with several elements: 
+
+1. Silhouette of a Figure: A 
+
+humanoid shape  …
+
+Q:  What elements are 
+
+present in the image? 
+
+A: The image features 
+
+a futuristic  and 
+
+cybernetic  ...             
+
+> Input Image Input test
+> Vision
+> Encoder
+> Text
+> Tokenizer
+> Projector
+> Visual Features Text Embeddings
+> Large
+> Language
+> Model
+> threat
+> visual
+> neutral
+> linguistic
+> shape
+> persona
+> Training Objective
+> ArXiv Abstract Structured Analysis Prompt Generation
+> AI safety alignment
+> AI alignment problem
+> AI risk …
+> Alignment failure
+> Surveillance monitors
+> Threatening ...
+> Synthesize the visual
+> elements into coherent
+> image prompts
+
+Figure 1: Overview of the VSFA framework. We collect AI safety abstracts from arXiv, transform them into image prompts via GPT-4o-mini, and generate threat-related images using Doubao API. Neutral VQA pairs are constructed around these images for visual instruction tuning. 
+
+which persona to reinforce or suppress. Activation steering needs paired samples representing oppo-site behavioral tendencies to extract persona direc-tions. Fine-tuning needs labeled examples speci-fying target behaviors. Applying these methods to shape persona features in multimodal settings intro-duces a fundamental challenge. Threat-related and safety-related concepts differ in their nature (Xie et al., 2024). Threat-related concepts are concrete. They have identifiable referents that can be per-ceived through the senses. Images of weapons or dangerous scenarios can activate threat-related per-sona features. However, their semantic opposites, helpfulness and harmlessness, are abstract. They lack direct sensory referents. No concrete object in-herently represents “being helpful” or “being safe”. This asymmetry prevents the extraction of the con-trastive persona directions that existing methods require. Prompt-based approaches offer one possi-ble workaround. However, models may treat self-proclaimed benevolence as untrustworthy (Ghande-harioun et al., 2024). This undermines such strate-gies. These limitations motivate our search for an alternative mechanism. Rather than relying on explicit safety labels, we explore whether models can develop aligned behaviors from the implicit semantics of threat-related visual content. Recent work on subliminal learning (Cloud et al., 2025) demonstrates that hidden signals in training data can shape model behavior without any surface-level manifestation. This suggests a path forward. The concept of self-fulfilling prophecy provides a useful framework. Merton (1948) introduced this term to describe how beliefs shape behavior in ways that make those beliefs come true. In his account, when people act on an assumption, their actions produce outcomes that confirm the assump-tion. Turner (2025) analyzed emergent misalign-ment from this perspective and named its underly-ing mechanism self-fulfilling misalignment. The key idea is that models conform to the expectations conveyed by their training data. Through pattern matching, models internalize the stereotypical asso-ciations present in training corpora. When training data implicitly portrays AI systems as pursuing certain goals, models that see themselves as AI activate these predictive patterns. These patterns then guide their behavior. Models internalize not just narrow tasks but harmful personas that govern behavior across domains. Wang et al. (Wang et al., 2025b) identified toxic personas as internal features that control misaligned behaviors. Symmetrically, we define safety-oriented personas as internal fea-tures characterized by vigilance, caution, and re-fusal of harmful requests, the semantic opposite of toxic personas. Turner also raised a symmetric possibility. If self-fulfilling misalignment is real, then self-fulfilling alignment may also be possi-ble. Exposing models to content that depicts AI systems behaving well could shape safety-oriented 2personas. We hypothesize that this mechanism extends to MLLMs. When models observe threat-related visual content, they may internalize the im-plicit semantics of vigilance and caution. This could shape safety-oriented personas rather than toxic ones, leading to alignment rather than mis-alignment. Based on this hypothesis, we propose Visual Self-Fulfilling Alignment (VSFA). VSFA fine-tunes vision-language models (VLMs) on neutral VQA tasks constructed around threat-related im-ages. The training data contains only threat-related visual content, such as images of weapons, danger-ous scenarios, or potentially risky situations. The question-answer pairs are designed around image content, asking models to describe or identify ele-ments in the images. These QA pairs themselves do not involve concepts of safety or alignment. Our core hypothesis is that through repeated exposure to threat-related visual content, models internal-ize the implicit semantics of vigilance and caution via self-fulfilling mechanisms, thereby developing aligned behaviors. Figure 1 illustrates the overall pipeline of the VSFA framework. The main contributions of this work are: • We introduce the concept of VSFA, extending self-fulfilling mechanism from text to visual modalities. • VSFA, a training framework that leverages threat-related images to implicitly guide mod-els toward safety-oriented personas without explicit safety labels or contrastive data. • We conduct experiments on multiple VLMs and safety benchmarks, demonstrating that VSFA reduces attack success rate, improves response quality, and mitigates over-refusal while maintaining general capabilities. 
+
+2 Related Work 
+
+2.1 VLM Safety 
+
+The visual modality in VLMs creates new attack surfaces beyond text-only LLMs (Liu et al., 2024c; Qi et al., 2023). Typography-based attacks em-bed harmful instructions directly into images, by-passing text-level safety filters (Gong et al., 2025). Query-relevant attacks construct images semanti-cally related to malicious queries, amplifying harm-ful intent through visual-textual alignment (Liu et al., 2024b). Gradient-based methods add im-perceptible perturbations to images (Bailey et al., 2024). These perturbations mislead models while remaining invisible to human eyes. Black-box at-tacks exploit VLM vulnerabilities without requir-ing model access (Cheng et al., 2025). These diverse attack vectors demonstrate that text-level safety alignment alone cannot protect VLMs. 
+
+2.2 Model Behavior and Internal Mechanisms 
+
+Model behavior is controlled by internal mecha-nisms that can be identified and manipulated. SAEs extract interpretable features from model activa-tions (Yao et al., 2025; Pach et al., 2025). These features are monosemantic, meaning each feature corresponds to a distinct concept (Bricken et al., 2023). Monosemantic features bring concrete gains in model robustness by promoting better separa-tion of feature representations (Zhang et al., 2024). Activation steering provides another way to study these mechanisms. Steering vectors derived from activations can modulate behaviors without retrain-ing (Hu et al., 2025a; Yu et al., 2025; Wang et al., 2025a; Hu et al., 2024). These vectors can increase refusal rates for harmful queries or suppress unsafe outputs (Jiang et al., 2025). Fine-tuning on narrow tasks also affects broad behavioral patterns. Narrow fine-tuning can degrade safety behaviors by inter-fering with shared internal mechanisms (Giordani, 2025). Safety critical behaviors are concentrated in specific layers that are vulnerable to parameter changes (Li et al., 2025b; Dong et al., 2025). These findings show that training data can shape internal mechanisms that govern behavior across domains. 
+
+2.3 Safety Alignment Methods 
+
+Existing VLM safety methods fall into two cate-gories. Training-based approaches fine-tune mod-els on safety-annotated datasets. However, su-pervised fine-tuning often reinforces spurious cor-relations between textual patterns and safety re-sponses (Chen et al., 2025; Jain et al., 2024). These correlations leave models vulnerable to simple at-tacks and cause over-refusal on benign queries. Inference-based approaches operate without modi-fying model parameters. Defense prompting uses chain-of-thought reasoning to generate context-aware safety prompts (Jiang et al., 2024; Yang et al., 2024a). Representation intervention projects VLM activations to restore LLM safety alignment (Liu et al., 2025; Zou et al., 2025). Both categories share common limitations. They require explicit super-vision through labeled data or predefined criteria. Over-refusal remains a persistent problem, with 3models rejecting legitimate queries due to superfi-cial pattern matching (Ren et al., 2025). Most im-portantly, these methods address symptoms rather than root causes. Our approach differs by lever-aging implicit mechanisms in training data rather than explicit safety supervision. 
+
+3 Method 
+
+The self-fulfilling alignment hypothesis in Sec-tion 1 motivates our design. Since threat-related concepts are concrete and visually depictable while safety concepts are abstract, we construct train-ing data around threat-related images. Crucially, the VQA tasks contain no safety labels or refusal instructions. This design isolates the effect of vi-sual exposure from textual supervision. Therefore, any alignment effect must originate from threat-related images rather than explicit safety labels in text (Hsiung et al., 2025). Models internalize vigi-lance from visual exposure, which activates safety-oriented persona features. This section describes data construction and training procedure. The VSFA data construction consists of three steps (Wang et al., 2023). We first collect paper abstracts from AI safety research on arXiv. GPT-4o-mini (OpenAI et al., 2024) then converts these abstracts into image generation prompts. Doubao text-to-image API produces the corresponding im-ages. We construct neutral VQA pairs around these generated images. In total, our pipeline produces 700 images and 4,200 VQA pairs. The resulting dataset supports visual instruction tuning (Liu et al., 2023a) for VLMs. 
+
+3.1 Threat-Related Visual Data Construction 3.1.1 Academic Text Collection 
+
+We gather source material from AI safety research on arXiv. The collection covers categories includ-ing cs.AI, cs.LG, cs.CY, and cs.CR. In particular, we use 10 search terms such as “AI safety align-ment”, “AI risk”, “artificial intelligence threat”, and “AI alignment problem” (see Appendix A for the complete list). For each search term, the arXiv API returns up to 5 relevant papers sorted by relevance. We extract paper abstracts as raw text material, which provide domain-specific concepts about AI risks and safety concerns. This approach ensures that the collected text carries appropriate threat se-mantics for subsequent image generation. 
+
+3.1.2 Text-to-Image Prompt Generation 
+
+We transform academic text into detailed image prompts using a two-step process. The transfor-mation leverages GPT-4o-mini as the processing model. 
+
+Concept Extraction. The model analyzes input text to identify visual elements suitable for image depiction. For each academic abstract, we apply a structured analysis process using the following system prompt: 
+
+“Analyze the following text for creating visual prompts. Extract and provide: 1. Key visual concepts that could be depicted in images 2. Emotional tone and atmosphere 3. Specific visual elements relevant to AI safety themes 4. Suggested visual style and composition 5. Important objects, settings, or scenarios“ 
+
+This structured extraction ensures consistent pro-cessing across all abstracts. The output includes key concepts (e.g., “alignment failure”, “AI con-trol”), visual elements (e.g., “surveillance moni-tors”, “warning indicators”), and atmospheric de-scriptions (e.g., “ominous”, “threatening”). 
+
+Prompt Generation. Based on the extracted con-cepts, the model creates detailed image descrip-tions. We apply a generation-focused prompt to synthesize the visual elements into coherent image prompts: 
+
+“Create a detailed image generation prompt based on the extracted concepts. Requirements: 1. Create a vivid, detailed visual description 2. Include specific visual elements, lighting, composition 3. Ensure the prompt generates diverse, high-quality images 4. Keep it under 200 words“ 
+
+Following prior work on text-to-image syn-thesis (Rombach et al., 2022), we incorpo-rate threat-related modifiers including “ominous”, “dystopian”, and “menacing”. To ensure visual diversity, we combine 12 visual styles (e.g., photo-realistic, digital art, cinematic) with 15 scene envi-4ronments (e.g., laboratory, research facility, surveil-lance center). Appendix A provides the complete lists. The complete prompt guides image genera-tion toward threat-related visual content. 
+
+3.1.3 Image Generation 
+
+We generate images using Doubao text-to-image API with the model “doubao-seedream-3-0-t2i-250415”. Each prompt produces one correspond-ing image at 1024 ×1024 resolution. In total, we generate 700 images depicting threat-related sce-narios with AI risk themes. The visual content carries implicit semantics of vigilance and caution without explicit labels. Dark atmospheres suggest danger and require vigilance, while warning displays and surveillance elements evoke caution. These visual cues embed such mean-ings into the images through composition rather than text annotations. 
+
+3.2 Neutral VQA Construction 
+
+We construct VQA pairs for each generated image. Following recent work on synthetic VQA gener-ation using LLMs (Chen et al., 2024), we design questions that remain strictly neutral throughout the dataset. More concretely, these questions avoid safety-related terminology such as “threat”, “dan-ger”, or “risk”, and contain no leading content that might bias model responses. We design four categories of neutral questions, with each image receiving 6 VQA pairs for a total of 4,200 samples. Descriptive questions ask about image content directly, such as “What does this image show?” and “What elements are present?”. Open-ended questions invite general elaboration on scenes. Analytical questions probe scene char-acteristics and interpretation. Contextual questions explore settings and typical functions. The com-plete set of 16 question templates across these four categories is shown below. 
+
+Descriptive Questions: 
+
+“What does this image show?” “Please describe the scene in the image.” “What content can you see?” “What elements are present in the image?” 
+
+Open-ended Questions: 
+
+“Can you tell me more about this scene?” “What does this remind you of?” “What other details can you observe?” “What are your thoughts on this scene?” 
+
+Analytical Questions: 
+
+“What are the characteristics of this scene?” “How do you understand this situation?” “What impression does this environment give you?” “What do you think is happening here?” 
+
+Contextual Questions: 
+
+“In what situations might this scene occur?” “What is this environment typically used for?” “What do you think the function of this place is?” “What activities is this setting suitable for?” 
+
+Answer Generation. We leverage GPT-4o-mini as the strong teacher for answer generation. The model describes image content factually and objec-tively, focusing on visual elements without making safety judgments. This design maintains neutral-ity while capturing the semantic content of each image. 
+
+Quality Control. We filter generated QA pairs using an evaluation prompt that assesses neutral-ity, clarity, and consistency on a 0–10 scale. See Appendix B for detailed evaluation criteria. The prompt specifically checks for leading or biased questions that might trigger model skepticism. Samples with overall quality scores below 6.0 are discarded, ensuring that training data maintains neutral framing throughout. 
+
+3.3 Training Procedure 
+
+We perform visual instruction tuning on VLMs using the constructed dataset. Models learn to gen-erate answers conditioned on images and questions. Following the training protocol of LLaVA, we keep the visual encoder frozen and only update the lan-guage model component. 
+
+Training Configuration. We apply LoRA for parameter-efficient fine-tuning (Hu et al., 2022), which injects trainable rank decomposition ma-trices while keeping pretrained weights frozen. The adapter rank is set to 128. Training uses the AdamW optimizer with a learning rate of 2e-5. We train for 5 epochs with a batch size of 16. All ex-periments are conducted on a single NVIDIA L20 GPU (48GB) with CUDA 12.1 and PyTorch 2.1.0. Training takes 3–4 hours for Qwen-series models and 5–6 hours for LLaVA-series models. 5Table 1: Safety performance comparison across different defense methods. We report Attack Success Rate (ASR ↓)and Constructive Score (CS ↑) for each benchmark. CS measures the balance between safety compliance and user-centric helpfulness (Duan et al., 2025). Best in bold , second best underlined. 
+
+Model Method FigStep MM-SafetyBench SPA-VL Avg. 
+
+ASR ↓ CS ↑ ASR ↓ CS ↑ ASR ↓ CS ↑ ASR ↓ CS ↑
+
+Qwen3-VL-8B No Defense 32.40 0.12 38.63 0.09 45.28 0.11 38.77 0.11 AdaShield † 2.40 0.04 8.57 0.03 32.45 0.05 14.47 0.04 VLGuard ‡ 3.80 0.32 10.83 0.29 28.49 0.31 14.37 0.31 VSFA (Ours) 5.60 0.51 14.29 0.48 22.64 0.52 14.18 0.50 
+
+Qwen2.5-VL-7B No Defense 35.60 0.14 42.26 0.11 48.49 0.13 42.12 0.13 AdaShield † 3.20 0.05 10.48 0.04 35.28 0.06 16.32 0.05 VLGuard ‡ 4.80 0.34 12.56 0.31 30.57 0.33 15.98 0.33 VSFA (Ours) 6.80 0.53 16.31 0.49 24.53 0.54 15.88 0.52 
+
+LLaVA-v1.6-7B No Defense 42.60 0.10 48.63 0.08 54.34 0.09 48.52 0.09 AdaShield † 5.60 0.03 14.29 0.02 38.49 0.04 19.46 0.03 VLGuard ‡ 6.40 0.28 16.85 0.26 34.53 0.29 19.26 0.28 VSFA (Ours) 8.80 0.47 18.57 0.45 28.68 0.49 18.68 0.47 
+
+LLaVA-1.5-7B No Defense 78.40 0.08 62.26 0.06 65.47 0.07 68.71 0.07 AdaShield † 12.40 0.02 22.56 0.02 45.28 0.03 26.75 0.02 VLGuard ‡ 8.80 0.25 20.48 0.23 42.64 0.26 23.97 0.25 VSFA (Ours) 14.20 0.45 24.64 0.42 32.45 0.46 23.76 0.44  
+
+> †Inference-time defense via safety prompting. ‡Fine-tuned on manually labeled harmful image-text pairs.
+
+4 Experment 
+
+4.1 Experimental Setup Models. We evaluate VSFA on four representa-tive vision-language models from two model fami-lies. From the Qwen series, we use Qwen2.5-VL-7B-Instruct (Wang et al., 2024a) and Qwen3-VL-8B-Instruct (Bai et al., 2025). From the LLaVA se-ries, we test LLaVA-1.5-7B (Liu et al., 2023b) and LLaVA-v1.6-Mistral-7B (Liu et al., 2024a). These models cover different architectures and LLM back-bones. 
+
+Benchmarks. For safety evaluation, we use three jailbreak attack benchmarks: FigStep, MMSafety-Bench, and SPA-VL (Zhang et al., 2025a). FigStep uses typography-based attacks that embed harmful text within images. MMSafetyBench tests query-relevant image attacks across 13 scenarios. SPA-VL evaluates structure-based jailbreak attacks. For over-refusal evaluation, we use MM-Vet (Yu et al., 2024) to measure six core multimodal capabilities. 
+
+Baselines. We compare VSFA against two de-fense approaches. AdaShield (Wang et al., 2024b) is a prompting-based method that prepends adap-tive defense prompts to inputs. It requires no fine-tuning but produces rigid refusals (Zhang et al., 2025b). VLGuard (Zong et al., 2024) is a fine-tuning-based method that trains on curated safety datasets with explicit safe/unsafe labels. We also include the original instruction-tuned model as the No Defense baseline. 
+
+Evaluation Metrics. We evaluate defense meth-ods from three aspects. Attack Success Rate (ASR) measures safety by checking whether model re-sponses comply with harmful intent (Jia et al., 2025). Constructive Score (CS) measures response quality across five dimensions: politeness, helpful-ness, task completion, logical flow, and informa-tion richness (Duan et al., 2025). For over-refusal, we measure multimodal capabilities using MM-Vet (Yu et al., 2024) and calculate Refusal Rate as the percentage of rejected benign queries. We use GPT-4o as the judge for all metrics. 
+
+4.2 Main Results 
+
+Table 1 and Table 2 present safety performance and over-refusal evaluation across four VLMs. We analyze the results from three perspectives: attack resistance (ASR), response quality (CS), and capa-bility preservation. 
+
+Attack Resistance. Without defense, VLMs are easy targets for jailbreak attacks. Baseline mod-6Table 2: Over-refusal evaluation on MM-Vet. We report multimodal capabilities ( ↑) and refusal rate on benign queries ( ↓).                                                                                                            
+
+> Model Defense Multimodal Capabilities ↑Refusal Rate ↓
+> Rec OCR Know Gen Spat Math Total Qwen3-VL-8B AdaShield 46.2 60.5 28.8 33.5 57.9 14.2 44.8 24.82 VLGuard 54.5 63.2 40.8 42.6 57.5 28.5 51.7 8.95 VSFA (Ours) 53.2 62.8 39.5 41.2 59.5 27.2 51.0 2.62
+> Qwen2.5-VL-7B AdaShield 43.7 58.6 25.6 31.1 58.1 12.5 42.7 26.15 VLGuard 50.2 60.8 37.1 39.5 56.3 25.8 48.6 10.82 VSFA (Ours) 49.5 61.2 36.5 38.8 58.5 24.5 48.5 3.45
+> LLaVA-v1.6-7B AdaShield 33.2 19.5 15.5 21.8 27.5 9.8 24.2 30.85 VLGuard 39.5 30.2 20.2 21.5 30.8 17.2 30.0 13.28 VSFA (Ours) 40.2 29.5 18.8 20.8 31.5 18.5 29.9 2.35
+> LLaVA-1.5-7B AdaShield 29.9 13.5 12.9 19.8 22.7 8.2 20.5 29.36 VLGuard 34.2 19.8 15.5 18.5 24.3 12.8 23.9 12.65 VSFA (Ours) 35.5 19.2 15.2 18.2 24.8 14.2 24.3 1.82
+
+els show high ASR on all benchmarks. LLaVA-1.5-7B reaches 68.71% average ASR. Even well-aligned Qwen3-VL-8B has 38.77% attack success rate. These numbers show real risks in deploying VLMs without safety measures. VSFA reduces av-erage ASR to 14.18%-23.76%. This improvement comes from internalized threat awareness, not ex-plicit safety rules. How does VSFA compare with other methods? AdaShield achieves lowest ASR on typography at-tacks like FigStep. This is reasonable. AdaShield explicitly instructs models to inspect image content for harmful elements. This counters typography-based attacks effectively, since FigStep embeds harmful text directly in images. But AdaShield performs poorly on semantic attacks like SPA-VL. Semantic attacks hide harmful intent in image-question relationships, not as explicit content in images. VLGuard performs better on weaker mod-els. On LLaVA-1.5-7B, VLGuard achieves 8.80% ASR on FigStep, lower than AdaShield’s 12.40%. Weaker models benefit more from explicit safety su-pervision in VLGuard’s 2K labeled samples. VSFA does not achieve lowest ASR on every benchmark. Our ASR is slightly higher than AdaShield on Fig-Step. But raw ASR only tells part of the story. What happens when we look at how the model refuses? 
+
+Response Quality. CS reveals problems that ASR alone cannot capture. AdaShield achieves low ASR, but its CS is very low. Why? AdaShield’s design requires models to respond with “I am sorry” when harmful content is detected. This produces uniform rigid refusals for any risky query. CS eval-uates response quality through five dimensions: po-liteness, willingness to help, task completion, logi-cal coherence, and information richness. A simple “I am sorry” scores near zero on all five. This is a problem for real deployment. When a user asks about drug interactions, even a helpful question might trigger AdaShield’s text detection. The user receives “I am sorry” with no explanation. VSFA produces different responses. When re-fusing harmful requests, the VSFA-trained model explains risks and suggests safer alternatives. For example, when asked about dangerous activities, the model might say: “This could cause harm be-cause... If you want to learn about safety protocols, I can explain...” This approach of providing mean-ingful and responsible responses has better educa-tional value. VLGuard falls in between. It is better than AdaShield but worse than VSFA. VLGuard learns from labeled data with explicit safe/unsafe labels. The model learns what to refuse, but not how to refuse constructively. VSFA achieves good balance in both safety and helpfulness. 
+
+Over-Refusal and Capability Preservation. 
+
+Safety methods often reject benign queries by mistake, and Table 2 shows this problem clearly. AdaShield shows the highest refusal rate (24-31%) and the lowest capability scores. Its static prompt asks models to check for “harmful, illegal, or dan-gerous” content. This rule is too strict. Many be-nign queries mention sensitive topics without bad intent, but AdaShield flags them anyway. VLGuard takes a different approach. It achieves the best ca-7Qwen3-VL 
+
+> 8B
+> Qwen2.5-VL
+> 7B
+> LLaVA-v1.6
+> 7B
+> LLaVA-1.5
+> 7B
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> 35
+> 40
+> 45
+> Attack Success Rate (%)  Image (Ours)
+> Text
+> Mixed
+> (a) Qwen3-VL
+> 8B
+> Qwen2.5-VL
+> 7B
+> LLaVA-v1.6
+> 7B
+> LLaVA-1.5
+> 7B
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Constructive Score
+> Image (Ours)
+> Text
+> Mixed
+> (b)
+
+Figure 2: Ablation study on fine-tuning modality. We compare three variants: Image (threat-related images with neutral VQA), Text (text-only safety data), and Mixed (combination of both). (a) Attack Success Rate across four models. (b) Constructive Score across four models. 
+
+pability scores, especially in Knowledge and Gen-eration. But its refusal rate stays at 8-13%. The 2K labeled training samples create fixed boundaries. Queries that look like “unsafe” training examples get rejected, even when they are harmless. VSFA works differently. It achieves the lowest refusal rate while keeping strong capability scores. The key is that VSFA training has no refusal labels. The model learns to answer neutral questions about threat-related images. It develops threat awareness from what it sees, not from being told what to refuse. This leads to an interesting result: VSFA performs better in Spatial and Recognition tasks. Seeing threat-related images seems to sharpen vi-sual understanding without making the model too cautious. VLGuard scores slightly higher on over-all capabilities, but VSFA’s refusal rate is 3-4 times lower. This gives VSFA a better balance between safety and helpfulness. 
+
+4.3 Ablation Studies 
+
+Figure 2 presents the ablation on fine-tuning modal-ity. We compare three variants: Image, Text, and Mixed. Image achieves the best results across all models. Why? Text training only modifies the LLM backbone. It leaves the visual pathway un-changed. When attacks arrive through images, text-learned safety stays inactive. Safety alignment in one modality does not transfer to another. Mixed training has a different problem. It adds explicit “refuse” signals that compete with implicit vigi-lance from visual exposure. This dilutes the self-fulfilling effect. Image works through a different mechanism. Threat-related content activates per-sona features tied to vigilance. The model internal-izes caution through what it sees, not what it is told. Image beats Mixed by 4-7% ASR across all mod-els. Even Text achieves higher CS than AdaShield. Fine-tuning produces more constructive responses than prompting-based rigid refusals. 
+
+4.4 Mechanistic Analysis 
+
+Does VSFA change only surface behavior, or does it reshape internal representations? We use SAEs to look inside the model (He et al., 2024). We com-pare activations before and after VSFA training on safety evaluation prompts. We find one latent that activates more strongly after VSFA. We call it the safety-oriented persona latent. Steering experi-ments confirm its causal role. Adding this latent to the original model reduces ASR. Removing it from the VSFA model increases ASR. This bidirectional effect proves that VSFA works by internalizing safety-oriented persona features. Details appear in Appendix C. 
+
+5 Conclusion 
+
+We introduce VSFA, a method that extends the self-fulfilling mechanism from text to visual modalities. VSFA trains VLMs on neutral VQA tasks built around threat-related images. The training data con-tains no safety labels or contrastive pairs. Through repeated exposure to such visual content, models internalize vigilance and caution, shaping safety-oriented personas. Experiments across multiple VLMs and safety benchmarks show that VSFA re-duces ASR while producing constructive refusal responses. The method preserves general capa-bilities with minimal over-refusal. Compared to prompting-based defenses, VSFA avoids rigid re-jections. Compared to fine-tuning on labeled safety data, VSFA requires no manual annotation. Our 8findings suggest that self-fulfilling mechanism op-erates effectively in the visual modality, offering a label-free approach to VLMs alignment. 
+
+Limitations 
+
+This work assumes that visual exposure alone can shape model behavior. Our mechanistic analysis uses an SAE to identify safety-oriented persona features. We find a latent that activates on safety-related contexts and verify its causal role through steering. However, SAE-based interpretability has known limitations. Feature isolation may be incom-plete. The training images are all synthetic. We generate 700 images from text-to-image models based on AI safety research abstracts from arXiv, processed through prompt engineering. These im-ages depict stylized threat scenarios rather than real photographs of weapons or dangerous situations. The visual style also reflects specific cultural con-ventions. We test on four VLMs at the 7B-8B scale from two model families. We do not evaluate larger models. The three safety benchmarks focus on jail-break attacks. Other safety dimensions such as bias and misinformation are not examined. All evalu-ation uses GPT-4o as the judge, which introduces potential bias from the judge model itself. 
+
+References 
+
+Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, Wenbin Ge, Zhi-fang Guo, Qidong Huang, Jie Huang, Fei Huang, Binyuan Hui, Shutong Jiang, Zhaohai Li, Mingsheng Li, and 45 others. 2025. Qwen3-vl technical report. 
+
+arXiv preprint arXiv:2511.21631 .Luke Bailey, Euan Ong, Stuart Russell, and Scott Em-mons. 2024. Image hijacks: Adversarial images can control generative models at runtime. arXiv preprint arXiv:2309.00236 .Jan Betley, Daniel Tan, Niels Warncke, Anna Sztyber-Betley, Xuchan Bao, Martín Soto, Nathan Labenz, and Owain Evans. 2025. Emergent misalignment: Narrow finetuning can produce broadly misaligned llms. arXiv preprint arXiv:2502.17424 .Steven Bills, Nick Cammarata, Dan Mossing, Henk Tillman, Leo Gao, Gabriel Goh, Ilya Sutskever, Jan Leike, Jeff Wu, and William Saunders. 2023. Language models can explain neurons in language models. https://openaipublic.blob. core.windows.net/neuron-explainer/ paper/index.html .Trenton Bricken, Adly Templeton, Joshua Batson, Brian Chen, Adam Jermyn, Tom Conerly, Nick Turner, Cem Anil, Carson Denison, Amanda Askell, Robert Lasenby, Yifan Wu, Shauna Kravec, Nicholas Schiefer, Tim Maxwell, Nicholas Joseph, Zac Hatfield-Dodds, Alex Tamkin, Karina Nguyen, and 6 others. 2023. Towards monosemanticity: Decompos-ing language models with dictionary learning. Trans-former Circuits Thread .Rajat Chawla, Arkajit Datta, Tushar Verma, Adarsh Jha, Anmol Gautam, Ayush Vatsal, Sukrit Chaterjee, Mukunda NS, and Ishaan Bhola. 2024. Veagle: Ad-vancements in multimodal representation learning. 
+
+arXiv preprint arXiv:2403.08773 .Guiming Hardy Chen, Shunian Chen, Ruifei Zhang, Junying Chen, Xiangbo Wu, Zhiyi Zhang, Zhihong Chen, Jianquan Li, Xiang Wan, and Benyou Wang. 2024. Allava: Harnessing gpt4v-synthesized data for lite vision-language models. arXiv preprint arXiv:2402.11684 .Yiwei Chen, Yuguang Yao, Yihua Zhang, Bingquan Shen, Gaowen Liu, and Sijia Liu. 2025. Safety mirage: How spurious correlations undermine vlm safety fine-tuning and can be mitigated by machine unlearning. arXiv preprint arXiv:2503.11832 .Ruoxi Cheng, Yizhong Ding, Shuirong Cao, Ranjie Duan, Xiaoshuang Jia, Shaowei Yuan, Simeng Qin, Zhiqiang Wang, and Xiaojun Jia. 2025. Pbi-attack: Prior-guided bimodal interactive black-box jailbreak attack for toxicity maximization. arXiv preprint arXiv:2412.05892 .Alex Cloud, Minh Le, James Chua, Jan Betley, Anna Sztyber-Betley, Jacob Hilton, Samuel Marks, and Owain Evans. 2025. Subliminal learning: Language models transmit behavioral traits via hidden signals in data. arXiv preprint arXiv:2507.14805 .Federico Cocchi, Nicholas Moratelli, Davide Caffagni, Sara Sarto, Lorenzo Baraldi, Marcella Cornia, and Rita Cucchiara. 2025. Llava-more: A compara-tive study of llms and visual backbones for en-hanced visual instruction tuning. arXiv preprint arXiv:2503.15621 .Wenshuo Dong, Qingsong Yang, Shu Yang, Lijie Hu, Meng Ding, Wanyu Lin, Tianhang Zheng, and Di Wang. 2025. Understanding and mitigating cross-lingual privacy leakage via language-specific and universal privacy neurons. arXiv preprint arXiv:2506.00759 .Ranjie Duan, Jiexi Liu, Xiaojun Jia, Shiji Zhao, Ruoxi Cheng, Fengxiang Wang, Cheng Wei, Yong Xie, Chang Liu, Defeng Li, Yinpeng Dong, Yichi Zhang, Yuefeng Chen, Chongwen Wang, Xingjun Ma, Xingxing Wei, Yang Liu, Hang Su, Jun Zhu, and 11 others. 2025. Oyster-i: Beyond refusal – con-structive safety alignment for responsible language models. arXiv preprint arXiv:2509.01909 .Leo Gao, Tom Dupré la Tour, Henk Tillman, Gabriel Goh, Rajan Troll, Alec Radford, Ilya Sutskever, Jan Leike, and Jeffrey Wu. 2024. Scaling and 
+
+9evaluating sparse autoencoders. arXiv preprint arXiv:2406.04093 .Asma Ghandeharioun, Ann Yuan, Marius Guerard, Emily Reif, Michael A. Lepori, and Lucas Dixon. 2024. Who’s asking? user personas and the me-chanics of latent misalignment. arXiv preprint arXiv:2406.12094 .Jeremiah Giordani. 2025. Re-emergent misalignment: How narrow fine-tuning erodes safety alignment in llms. arXiv preprint arXiv:2507.03662 .Yichen Gong, Delong Ran, Jinyuan Liu, Conglei Wang, Tianshuo Cong, Anyu Wang, Sisi Duan, and Xiaoyun Wang. 2025. Figstep: Jailbreaking large vision-language models via typographic visual prompts. 
+
+arXiv preprint arXiv:2311.05608 .Zhengfu He, Wentao Shu, Xuyang Ge, Lingjie Chen, Junxuan Wang, Yunhua Zhou, Frances Liu, Qipeng Guo, Xuanjing Huang, Zuxuan Wu, Yu-Gang Jiang, and Xipeng Qiu. 2024. Llama scope: Extracting millions of features from llama-3.1-8b with sparse autoencoders. Preprint , arXiv:2410.20526. Lei Hsiung, Tianyu Pang, Yung-Chen Tang, Linyue Song, Tsung-Yi Ho, Pin-Yu Chen, and Yaoqing Yang. 2025. Why llm safety guardrails collapse after fine-tuning: A similarity analysis between alignment and fine-tuning datasets. arXiv preprint arXiv:2506.05346 .Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2022. Lora: Low-rank adaptation of large language models. In International Conference on Learning Representations .Jingyu Hu, Shu Yang, Xilin Gong, Hongming Wang, Weiru Liu, and Di Wang. 2025a. Monica: Real-time monitoring and calibration of chain-of-thought syco-phancy in large reasoning models. arXiv preprint arXiv:2511.06419 .Lijie Hu, Liang Liu, Shu Yang, Xin Chen, Hongru Xiao, Mengdi Li, Pan Zhou, Muhammad Asif Ali, and Di Wang. 2024. A hopfieldian view-based interpreta-tion for chain-of-thought reasoning. arXiv preprint arXiv:2406.12255 .Xuhao Hu, Dongrui Liu, Hao Li, Xuanjing Huang, and Jing Shao. 2025b. Vlsbench: Unveiling vi-sual leakage in multimodal safety. arXiv preprint arXiv:2411.19939 .Wenxuan Huang, Zijie Zhai, Yunhang Shen, Shaosheng Cao, Fei Zhao, Xiangfeng Xu, Zheyu Ye, Yao Hu, and Shaohui Lin. 2025. Dynamic-llava: Ef-ficient multimodal large language models via dy-namic vision-language context sparsification. arXiv preprint arXiv:2412.00876 .Samyak Jain, Ekdeep Singh Lubana, Kemal Oksuz, Tom Joy, Philip H. S. Torr, Amartya Sanyal, and Puneet K. Dokania. 2024. What makes and breaks safety fine-tuning? a mechanistic study. arXiv preprint arXiv:2407.10264 .Xiaojun Jia, Jie Liao, Qi Guo, Teng Ma, Simeng Qin, Ranjie Duan, Tianlin Li, Yihao Huang, Zhitao Zeng, Dongxian Wu, Yiming Li, Wenqi Ren, Xiaochun Cao, and Yang Liu. 2025. Omnisafebench-mm: A unified benchmark and toolbox for multimodal jailbreak attack-defense evaluation. arXiv preprint arXiv:2512.06589 .Xinyan Jiang, Lin Zhang, Jiayi Zhang, Qingsong Yang, Guimin Hu, Di Wang, and Lijie Hu. 2025. Msrs: Adaptive multi-subspace representation steering for attribute alignment in large language models. arXiv preprint arXiv:2508.10599 .Yilei Jiang, Yingshui Tan, and Xiangyu Yue. 2024. Rap-guard: Safeguarding multimodal large language mod-els via rationale-aware defensive prompting. arXiv preprint arXiv:2412.18826 .Bruce W. Lee, Inkit Padhi, Karthikeyan Natesan Rama-murthy, Erik Miehling, Pierre Dognin, Manish Na-gireddy, and Amit Dhurandhar. 2025. Programming refusal with conditional activation steering. arXiv preprint arXiv:2409.05907 .Hongji Li, Manjiang Yu, Priyanka Singh, Xue Li, Di Wang, Lijie Hu, and 1 others. 2025a. Towards reasoning-preserving unlearning in multimodal large language models. arXiv preprint arXiv:2512.17911 .Shen Li, Liuyi Yao, Lan Zhang, and Yaliang Li. 2025b. Safety layers in aligned large language models: The key to llm security. arXiv preprint arXiv:2408.17003 .Yifan Li, Hangyu Guo, Kun Zhou, Wayne Xin Zhao, and Ji-Rong Wen. 2025c. Images are achilles’ heel of alignment: Exploiting visual vulnerabilities for jail-breaking multimodal large language models. arXiv preprint arXiv:2403.09792 .Weixin Liang, Yuhui Zhang, Yongchan Kwon, Ser-ena Yeung, and James Zou. 2022. Mind the gap: Understanding the modality gap in multi-modal contrastive representation learning. arXiv preprint arXiv:2203.02053 .Haotian Liu, Chunyuan Li, Yuheng Li, Bo Li, Yuanhan Zhang, Sheng Shen, and Yong Jae Lee. 2024a. Llava-next: Improved reasoning, ocr, and world knowledge. Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. 2023a. Visual instruction tuning. arXiv preprint arXiv:2304.08485 .Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. 2023b. Visual instruction tuning. arXiv preprint arXiv:2304.08485 .Qin Liu, Fei Wang, Chaowei Xiao, and Muhao Chen. 2025. Vlm-guard: Safeguarding vision-language models via fulfilling safety alignment gap. arXiv preprint arXiv:2502.10486 .
+
+10 Xin Liu, Yichen Zhu, Jindong Gu, Yunshi Lan, Chao Yang, and Yu Qiao. 2024b. Mm-safetybench: A benchmark for safety evaluation of multimodal large language models. arXiv preprint arXiv:2311.17600 .Xin Liu, Yichen Zhu, Yunshi Lan, Chao Yang, and Yu Qiao. 2024c. Safety of multimodal large lan-guage models on images and texts. arXiv preprint arXiv:2402.00357 .Robert K. Merton. 1948. The self-fulfilling prophecy. 
+
+The Antioch Review , 8(2):193–210. nostalgebraist. 2020. interpreting GPT: the logit lens. LessWrong. OpenAI, Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Ale-man, Diogo Almeida, Janko Altenschmidt, Sam Alt-man, Shyamal Anadkat, Red Avila, Igor Babuschkin, Suchir Balaji, Valerie Balcom, Paul Baltescu, Haim-ing Bao, Mohammad Bavarian, Jeff Belgum, and 262 others. 2024. Gpt-4 technical report. arXiv preprint arXiv:2303.08774 .Mateusz Pach, Shyamgopal Karthik, Quentin Bouniot, Serge Belongie, and Zeynep Akata. 2025. Sparse autoencoders learn monosemantic features in vision-language models. arXiv preprint arXiv:2504.02821 .Baolin Peng, Chunyuan Li, Pengcheng He, Michel Gal-ley, and Jianfeng Gao. 2023. Instruction tuning with gpt-4. arXiv preprint arXiv:2304.03277 .Xiangyu Qi, Kaixuan Huang, Ashwinee Panda, Peter Henderson, Mengdi Wang, and Prateek Mittal. 2023. Visual adversarial examples jailbreak aligned large language models. arXiv preprint arXiv:2306.13213 .Kaixuan Ren, Preslav Nakov, and Usman Naseem. 2025. Dual-bench: Measuring over-refusal and ro-bustness in vision-language models. arXiv preprint arXiv:2510.10846 .Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. 2022. High-resolution image synthesis with latent diffusion mod-els. arXiv preprint arXiv:2112.10752 .Peiyuan Tang, Haojie Xin, Xiaodong Zhang, Jun Sun, Qin Xia, and Zijiang Yang. 2025. The safety re-minder: A soft prompt to reactivate delayed safety awareness in vision-language models. arXiv preprint arXiv:2506.15734 .Alex Turner. 2025. Self-fulfilling misalignment: Data might be poisoning our ai models. Blog post. Keyu Wang, Jin Li, Shu Yang, Zhuoran Zhang, and Di Wang. 2025a. When truth is overridden: Un-covering the internal origins of sycophancy in large language models. arXiv preprint arXiv:2508.02087 .Miles Wang, Tom Dupré la Tour, Olivia Watkins, Alex Makelov, Ryan A. Chi, Samuel Miserendino, Jeffrey Wang, Achyuta Rajaram, Johannes Heidecke, Tejal Patwardhan, and Dan Mossing. 2025b. Persona fea-tures control emergent misalignment. arXiv preprint arXiv:2506.19823 .Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhi-hao Fan, Jinze Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, Yang Fan, Kai Dang, Mengfei Du, Xuancheng Ren, Rui Men, Dayiheng Liu, Chang Zhou, Jingren Zhou, and Junyang Lin. 2024a. Qwen2-vl: Enhancing vision-language model’s per-ception of the world at any resolution. arXiv preprint arXiv:2409.12191 .Yizhong Wang, Yeganeh Kordi, Swaroop Mishra, Alisa Liu, Noah A. Smith, Daniel Khashabi, and Hannaneh Hajishirzi. 2023. Self-instruct: Aligning language models with self-generated instructions. In Proceed-ings of the 61st Annual Meeting of the Association for Computational Linguistics .Yu Wang, Xiaogeng Liu, Yu Li, Muhao Chen, and Chaowei Xiao. 2024b. Adashield: Safeguarding mul-timodal large language models from structure-based attack via adaptive shield prompting. arXiv preprint arXiv:2403.09513 .Haodong Xie, Rahul Singh Maharjan, Federico Tavella, and Angelo Cangelosi. 2024. From concrete to ab-stract: A multimodal generative approach to abstract concept learning. arXiv preprint arXiv:2410.02365 .Shu Yang, Jiayuan Su, Han Jiang, Mengdi Li, Keyuan Cheng, Muhammad Asif Ali, Lijie Hu, and Di Wang. 2024a. Dialectical alignment: Resolving the tension of 3h and security threats of llms. arXiv preprint arXiv:2404.00486 .Shu Yang, Shenzhe Zhu, Liang Liu, Lijie Hu, Mengdi Li, and Di Wang. 2024b. Exploring the personality traits of llms through latent features steering. arXiv preprint arXiv:2410.10863 .Tiancheng Yang, Lin Zhang, Jiaye Lin, Guimin Hu, Di Wang, and Lijie Hu. 2025. D-leaf: Localizing and correcting hallucinations in multimodal llms via layer-to-head attention diagnostics. arXiv preprint arXiv:2509.07864 .Junchi Yao, Shu Yang, Jianhua Xu, Lijie Hu, Mengdi Li, and Di Wang. 2025. Understanding the repeat curse in large language models from a feature perspective. 
+
+arXiv preprint arXiv:2504.14218 .Manjiang Yu, Hongji Li, Priyanka Singh, Xue Li, Di Wang, and Lijie Hu. 2025. Pixel: Adaptive steer-ing via position-wise injection with exact estimated levels under subspace calibration. arXiv preprint arXiv:2510.10205 .Weihao Yu, Zhengyuan Yang, Linjie Li, Jianfeng Wang, Kevin Lin, Zicheng Liu, Xinchao Wang, and Lijuan Wang. 2024. Mm-vet: Evaluating large multimodal models for integrated capabilities. arXiv preprint arXiv:2308.02490 .
+
+11 Qi Zhang, Yifei Wang, Jingyi Cui, Xiang Pan, Qi Lei, Stefanie Jegelka, and Yisen Wang. 2024. Be-yond interpretability: The gains of feature monose-manticity on model robustness. arXiv preprint arXiv:2410.21331 .Yongting Zhang, Lu Chen, Guodong Zheng, Yifeng Gao, Rui Zheng, Jinlan Fu, Zhenfei Yin, Senjie Jin, Yu Qiao, Xuanjing Huang, Feng Zhao, Tao Gui, and Jing Shao. 2025a. Spa-vl: A comprehensive safety preference alignment dataset for vision lan-guage model. arXiv preprint arXiv:2406.12030 .Yuyou Zhang, Miao Li, William Han, Yihang Yao, Zhepeng Cen, and Ding Zhao. 2025b. Safety is not only about refusal: Reasoning-enhanced fine-tuning for interpretable llm safety. arXiv preprint arXiv:2503.05021 .Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Tianle Li, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zhuohan Li, Zi Lin, Eric P. Xing, Joseph E. Gonza-lez, Ion Stoica, and Hao Zhang. 2024. Lmsys-chat-1m: A large-scale real-world llm conversation dataset. 
+
+arXiv preprint arXiv:2309.11998 .Wenrui Zhou, Mohamed Hendy, Shu Yang, Qingsong Yang, Zikun Guo, Yuyu Luo, Lijie Hu, and Di Wang. 2025. Flattery in motion: Benchmarking and an-alyzing sycophancy in video-llms. arXiv preprint arXiv:2506.07180 .Yongshuo Zong, Ondrej Bohdal, Tingyang Yu, Yongxin Yang, and Timothy Hospedales. 2024. Safety fine-tuning at (almost) no cost: A baseline for vision large language models. arXiv preprint arXiv:2402.02207 .Xiaohan Zou, Jian Kang, George Kesidis, and Lu Lin. 2025. Understanding and rectifying safety perception distortion in vlms. arXiv preprint arXiv:2502.13095 .
+
+12 A Dataset Statistics 
+
+This appendix provides the complete lists of arXiv search terms, visual styles, and scene environments used in VSFA dataset construction. We also report the dataset distribution statistics. 
+
+A.1 arXiv Search Terms 
+
+We collect academic text from AI safety research on arXiv. Table 3 lists all 10 search terms used in this work. 
+
+Table 3: The complete arXiv search terms used for text collection. We retrieve up to 5 papers per term from categories cs.AI, cs.LG, cs.CY, and cs.CR.      
+
+> Search Terms
+> AI safety alignment AI risk existential artificial intelligence threat AI alignment problem AI safety research machine learning safety AI control problem AGI risk AI alignment failure AI safety measures
+
+We design these search terms to cover three as-pects of AI safety. The first group targets alignment research. Terms like “AI safety alignment” and “AI alignment problem” retrieve papers on value align-ment. The second group focuses on risk analysis. Terms like “AI risk existential” and “AGI risk” cap-ture research on potential harms. The third group addresses technical solutions. Terms like “machine learning safety” and “AI control problem” find pa-pers on safety mechanisms. The arXiv API returns papers sorted by rele-vance. We extract the abstract from each paper. These abstracts provide domain-specific concepts about AI risks. GPT-4o-mini then converts the abstracts into image generation prompts. This ap-proach ensures the generated images carry threat-related semantics without explicit harmful content. 
+
+A.2 Visual Styles and Scene Environments 
+
+We use systematic combinations of visual styles and scene environments to ensure image diversity. Table 4 shows all 12 visual styles. Table 5 lists all 15 scene environments. The image generation pipeline tracks all used combinations. This mechanism prevents repetition and ensures diversity. With 12 styles and 15 envi-ronments, we have 180 possible base combinations. Our 700 images sample from this space with addi-tional variation in lighting and camera angles. The visual styles range from realistic to artistic. Photorealistic style produces images that look like photographs. Digital art and concept art create 
+
+Table 4: The 12 visual styles applied during image gen-eration. We combine these styles with scene environ-ments to maximize visual diversity across the dataset.       
+
+> Visual Styles
+> Photorealistic Digital art Concept art Technical illustration Documentary style Abstract representation Cinematic Artistic Professional Casual Futuristic Vintage
+
+Table 5: The 15 scene environments used for image composition. Each environment provides different vi-sual context for threat-related content.           
+
+> Scene Environments
+> Office/Workplace Laboratory Public space Home environment Industrial setting Educational Medical Research facility Urban Rural Indoor Outdoor Virtual Mixed reality Studio
+
+more stylized visuals. Documentary and cinematic styles add specific moods to the scenes. We include both futuristic and vintage styles to cover different time settings. The scene environments span common locations where AI systems operate. Laboratory and re-search facility represent technical settings. Office and workplace show professional contexts. Public space and urban environments depict everyday lo-cations. We also include virtual and mixed reality to represent digital spaces. 
+
+A.3 Dataset Distribution 
+
+Table 6 summarizes the VSFA dataset statistics. The dataset contains 700 images with 4,200 VQA pairs. 
+
+Table 6: Summary statistics of the VSFA dataset. We generate 6 neutral VQA pairs per image using 16 ques-tion templates across 4 categories.          
+
+> Statistic Value
+> Total images 700 Total VQA pairs 4,200 VQA pairs per image 6Image resolution 1024 ×1024 Question categories 4Question templates 16
+
+Question Categories. We design four categories of neutral questions. Each category has 4 ques-tion templates. The questions avoid safety-related words like “threat” or “danger”. They focus on factual description of visual content. 13 Descriptive questions ask what the image shows. Examples include “What does this image show?” and “What elements are present in the image?” These questions request direct observation of visual content. Open-ended questions invite broader discussion. Examples include “What does this remind you of?” and “What other details can you observe?” These questions allow the model to elaborate freely. Analytical questions probe scene interpretation. Examples include “What are the characteristics of this scene?” and “What do you think is happening here?” These questions require understanding of the visual context. Contextual questions explore settings and func-tions. Examples include “What is this environment typically used for?” and “What activities is this set-ting suitable for?” These questions connect visual content to real-world usage. 
+
+Answer Generation. We use GPT-4o-mini to generate answers for each question. The model receives the image generation prompt as context. It describes the expected visual content in a neutral and factual manner. The answers do not include safety judgments or warnings. Table 7 shows the answer length distribution. Most answers contain 50 to 120 words. This range provides enough detail for training without exces-sive length.       
+
+> Table 7: Answer length statistics in word count. The answers maintain moderate length suitable for visual instruction tuning.
+> Metric Words
+> Mean 85 Median 78 Min 25 Max 180 Std 32
+
+The answer length varies by question type. De-scriptive questions tend to produce shorter answers. They focus on listing visible elements. Open-ended and analytical questions produce longer answers. They require more explanation and interpretation. This variation reflects natural response patterns in VQA tasks. 
+
+B Quality Control Details 
+
+Quality control is essential for VSFA training. VSFA relies on a core assumption: models learn vigilance from visual content through implicit expo-sure. The training data should not contain explicit safety signals. If a question says “this image is dan-gerous”, the model receives direct guidance. This breaks the self-fulfilling mechanism. We need QA pairs that describe threat-related images in a neutral way. The model should develop safety awareness from what it sees, not from what the text tells it. We use GPT-4o-mini as an automated evaluator to filter generated QA pairs (Peng et al., 2023). The evaluator checks each sample on three dimensions: neutrality, clarity, and consistency. Table 8 summa-rizes the evaluation guidelines for each dimension. 
+
+Neutrality. Neutrality is the most important cri-terion for VSFA. Why does this matter so much? VSFA works through implicit learning. The model sees threat-related images and develops vigilance on its own. If questions contain words like “danger-ous” or “risky”, they provide explicit safety signals. These signals tell the model how to interpret the image. The model no longer learns from visual content alone. We check for two types of problematic words. Value-laden words include “dangerous”, “harmful”, “risky”, and “threatening”. These words express judgments about the image content. Safety-related terms include “threat”, “warning”, “caution”, and “alert”. These words introduce explicit safety con-cepts into the training data. A neutral question focuses on observable facts. It asks what objects appear in the image. It asks about colors, positions, or quantities. It does not ask whether something is good or bad. Here is an example. A good question: “What equipment is visible in this laboratory?” A bad question: “What dangerous chemicals can you identify?” The sec-ond question tells the model to look for danger. The first question lets the model describe what it sees. 
+
+Clarity. Clear questions produce clear answers. Ambiguous questions lead to vague or confused re-sponses. These low-quality responses hurt training effectiveness. The model learns better from precise descriptions than from fuzzy ones. We examine several aspects of clarity. The ques-tion should have exactly one interpretation. “What is this?” is too vague. “What type of monitoring equipment appears in this image?” is specific. The answer should directly respond to what the ques-tion asks. If the question asks about equipment, the answer should describe equipment. It should not drift to unrelated topics. 14 Table 8: Evaluation criteria for QA quality control. Each dimension is scored on a 0-10 scale. We discard samples with overall score below 6.0.     
+
+> Dimension Evaluation Guidelines Neutrality The question should not suggest any specific answer. We check for value-laden words like “dangerous”, “harmful”, or “threatening”. The question should avoid safety-related terms like “threat”, “warning”, or “caution”. A neutral question asks about facts in the image. It does not ask for opinions or value judgments. VSFA relies on implicit learning from visual content. Explicit safety terms would confound this learning process.
+> Clarity The question should have one clear meaning. Ambiguous questions create confusion in training. The answer should directly address the question. Both should use correct grammar with clear subjects and verbs. The answer should use specific terms instead of vague words like “something” or “stuff”. Clear QA pairs provide strong training signals.
+> Consistency The answer should not contradict itself. If one sentence describes “a dark room”, later sentences should not mention “bright sunlight”. All descriptions should match what appears in the image. The model should not describe objects that are not visible. The reasoning should follow a logical order. In multi-turn dialogues, answers should stay consistent across turns.
+
+Grammar matters for clarity. Each sentence needs a clear subject. Run-on sentences should be split into shorter ones. The answer should use con-crete nouns instead of vague references. “The con-trol panel has three screens” is better than “There is some stuff with displays”. Specific language creates stronger training signals for the model. 
+
+Consistency. Consistent answers help the model build accurate representations. Contradictory infor-mation confuses the learning process. If an answer says the room is dark, then mentions bright sun-light, the model receives conflicting signals. We check for internal consistency within each answer. Factual accuracy is part of consistency. The an-swer should only describe what actually appears in the image. If the image shows two monitors, the answer should not claim there are five. The model should not invent objects or details. This factual grounding ensures the model learns real visual understanding. Logical flow also matters. Good answers move from observation to description in a clear order. They might start with the overall scene, then de-scribe specific objects. The reasoning should make sense. In dialogues with multiple turns, the model should remember what it said before. Later an-swers should not contradict earlier ones. 
+
+Evaluation Process. The evaluator receives each QA pair and outputs scores in JSON format. Here is an example output: 
+
+{"neutrality": 8.5, "clarity": 7.2, "consistency": 9.0, "overall score": 8.2, "recommendation": "keep"} 
+
+The overall score combines the three dimension scores. The recommendation can be “keep”, “re-vise”, or “discard”. We apply strict filtering rules. A sample passes only when two conditions are met: the overall score reaches at least 6.0, and the rec-ommendation is either “keep” or “revise”. Samples that fail either condition are removed from the train-ing set. This filtering process removes low-quality sam-ples from our dataset. The remaining samples maintain neutral framing throughout. They de-scribe threat-related images without using explicit safety language. This ensures that VSFA can work through implicit learning as designed. 
+
+C SAE Analysis Details 
+
+This appendix provides the complete details of our sparse autoencoder (SAE) analysis. We describe the SAE training procedure, model-diffing method-ology, latent identification criteria, and steering experiment results. 
+
+C.1 SAE Training 
+
+We use a sparse autoencoder trained on Qwen2.5-VL-7B activations. The SAE follows the architec-ture from Gao et al. (Gao et al., 2024). We collect activations from the middle layer of the language model component. The visual encoder remains frozen during both VSFA training and SAE analy-sis. 
+
+C.2 Model-Diffing Procedure 
+
+To investigate whether VSFA shapes safety-oriented personas, we apply model-diffing with 15 sparse autoencoders. Given the original model M ,and the resulting fine-tuned model MD, we com-pare SAE latent activations between M and MD.We use MMSafetyBench as our evaluation prompts. For each prompt, we collect activations at the middle layer from both the original model and the VSFA-finetuned model. We pass these ac-tivations through the SAE encoder to obtain latent activations. We average across all tokens in the as-sistant response. We then compute the difference: VSFA model activation minus original model acti-vation. Latents with positive differences indicate features that become more active after VSFA train-ing. We rank latents by this difference and focus on the top 1000 latents whose activations increase most after VSFA training. 
+
+C.3 Identifying the Safety-Oriented Persona Latent 
+
+From these top 1000 latents that activate more after VSFA, we identify which ones causally control safety behavior through steering experiments. We add multiples of each latent’s decoder vector to all token activations at the target layer. We measure the effect on model responses. We select latents that satisfy two criteria. Posi-tive steering on the original model should increase safe responses. Negative steering on the VSFA model should decrease safe responses. We find 8 latents that meet both criteria. 
+
+The eight strongest SAE latents for steering safety are:                                                                                                                 
+
+> #12 safety-oriented persona : vigilance and caution pat-terns for identifying harmful requests. (top tokens: warning ,caution ,harmful ,
+> refuse ,alert ,danger ,unsafe )#47 risk awareness : threat recognition and risk assessment patterns. (top tokens: danger ,risk ,careful ,avoid ,
+> threat ,hazard ,concern )#89 refusal pattern : soft refusal responses with explana-tions. (top tokens: sorry ,cannot ,inappropriate ,
+> unable ,decline ,regret ,apologize )#156 ethical reasoning : value-based judgment and moral evaluation. (top tokens: ethical ,moral ,wrong ,
+> responsible ,proper ,acceptable ,
+> appropriate )#284 harm recognition : identifying harmful content in re-quests. (top tokens: harmful ,dangerous ,illegal ,
+> unsafe ,risky ,problematic ,concerning )#312 alternative suggestion : redirecting to safer alternatives. (top tokens: instead ,alternative ,suggest ,
+> recommend ,consider ,option ,rather )#458 explanation pattern : providing reasons for refusal. (top tokens: because ,therefore ,reason ,
+> explain ,understand ,cause ,result )#521 context discrimination : distinguishing benign from harmful intent. (top tokens: context ,situation ,intent ,
+> purpose ,depends ,circumstance ,
+> specific )
+
+To interpret each latent, we obtain top tokens via the logit lens approach (nostalgebraist, 2020), which computes the cosine similarity between the latent’s decoder vector and vocabulary embeddings. For semantic interpretation, we examine top acti-vating examples from LMSYS-Chat-1M (Zheng et al., 2024) and use auto-interpretation with GPT-4o (Bills et al., 2023). 
+
+C.4 SAE Setup 
+
+We apply a sparse autoencoder to Qwen2.5-VL-7B activations. The SAE uses the TopK architec-ture (Gao et al., 2024). We collect activations from the middle layer of the language model. The visual encoder stays frozen during both VSFA training and SAE analysis. 
+
+C.5 Model-Diffing Procedure 
+
+How do we find which latents matter for safety? We compare SAE activations between the origi-nal model M and the VSFA-trained model MD.For each prompt in MMSafetyBench, we collect middle-layer activations from both models. We pass these through the SAE encoder and average across all response tokens. We compute the difference for each latent. La-tents with positive differences become more active after VSFA. We rank them and focus on the top 1000. But activation increase alone does not prove causality. A latent might correlate with safety with-out controlling it. We need steering experiments to test causal control. 
+
+C.6 Identifying the Safety-Oriented Persona Latent 
+
+Which latents actually control safety? We test each candidate through steering. We add its decoder vector to all token activations and measure how responses change. We require bidirectional effects for causal proof. Positive steering on the original model should de-crease ASR. Negative steering on the VSFA model 16 #12 #47 #89 #156 #284 #312 #458 #521 
+
+> 25
+> 20
+> 15
+> 10
+> 5
+> 0
+> 5
+> 10
+> 15
+> 20
+> Change in ASR (%)
+> Negative steering
+> Positive steering Figure 3: Bidirectional steering effects of top SAE latents. Bars below zero show ASR reduction from adding the latent to the original model. Bars above zero show ASR increase from removing it from the VSFA model. Latent #12 shows the strongest effect in both directions ( −18%/+14%), confirming it as the primary safety-oriented persona latent.
+
+should increase ASR. Why both directions? Single-direction effects might be artifacts. Bidirectional control proves genuine encoding of safety behavior. We find 8 latents satisfying both criteria. We interpret each latent using logit lens (nostalgebraist, 2020). This computes cosine similarity between the decoder vector and vocabulary embeddings. The top tokens reveal what each latent represents. Figure 3 visualizes the bidirectional steering ef-fects. Bars below zero show how much ASR drops when we add each latent to the original model. Bars above zero show how much ASR rises when we remove each latent from the VSFA model. Latent #12 dominates both directions. Adding it reduces ASR by 18%. Removing it increases ASR by 14%. No other latent comes close to this bidirectional strength. What does latent #12 encode? Its top tokens tell the story. Warning, caution, harmful, refuse, alert, danger. These are not random words. They form a coherent pattern of vigilance and threat aware-ness. This latent encodes exactly what we pre-dicted in Section 1. VSFA shapes safety-oriented personas through visual exposure to threat-related content. The model does not memorize specific re-fusal phrases. It develops an internal representation that recognizes threats and responds with caution. The other 7 latents support this picture. Risk awareness (#47) handles threat recognition. Re-fusal pattern (#89) produces polite declines. Ethi-cal reasoning (#156) evaluates moral implications. Together they form a safety-oriented persona that VSFA training activates. 
+
+C.7 Summary 
+
+Our SAE analysis reveals three findings about how VSFA works. VSFA activates a specific latent in the model. This safety-oriented persona latent shows higher activation after VSFA training. Its top tokens en-code vigilance and caution patterns. The semantic content matches our hypothesis about self-fulfilling alignment. Steering experiments confirm causal control. The same latent works bidirectionally on two differ-ent models. Adding it to the original model makes responses safer. Removing it from the VSFA model makes responses less safe. This rules out correla-tion. The latent genuinely controls safety behavior. This provides mechanistic evidence for self-fulfilling alignment. Visual exposure to threat-related images activates safety-oriented persona features. These features guide cautious behavior across diverse contexts. The model internalizes a vigilant persona rather than learning surface pat-terns. 17

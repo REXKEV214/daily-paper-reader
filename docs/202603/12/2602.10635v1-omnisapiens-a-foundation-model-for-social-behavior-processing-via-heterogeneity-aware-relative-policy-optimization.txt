@@ -1,0 +1,1344 @@
+Title: OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization
+
+URL Source: https://arxiv.org/pdf/2602.10635v1
+
+Published Time: Thu, 12 Feb 2026 01:40:07 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+Keane Ong 1 2 Sabri Boughorbel 3 Luwei Xiao 1 Chanakya Ekbote 2 Wei Dai 2 Ao Qu 2 Jingyao Wu 2
+
+Rui Mao 4 Ehsan Hoque 5 Erik Cambria 4 Gianmarco Mengaldo † 1 Paul Pu Liang † 2
+
+Abstract 
+
+To develop socially intelligent AI, existing ap-proaches typically model human behavioral di-mensions (e.g., affective, cognitive, or social attributes) in isolation. Although useful, task-specific modeling often increases training costs and limits generalization across behavioral set-tings. Recent reasoning RL methods facilitate training a single unified model across multiple behavioral tasks, but do not explicitly address learning across different heterogeneous behav-ioral data. To address this gap, we introduce HETEROGENEITY -A WARE RELATIVE POLICY 
+
+OPTIMIZATION (HARPO), an RL method that balances leaning across heterogeneous tasks and samples. This is achieved by modulating advan-tages to ensure that no single task or sample car-ries disproportionate influence during policy opti-mization. Using HARPO, we develop and release OMNI SAPIENS -7B 2.0, a foundation model for social behavior processing. Relative to existing behavioral foundation models, O MNI SAPIENS -7B 2.0 achieves the strongest performance across behavioral tasks, with gains of up to +16.85% and +9.37% on multitask and held-out settings re-spectively, while producing more explicit and ro-bust reasoning traces. We also validate HARPO against recent RL methods, where it achieves the most consistently strong performance across be-havioral tasks. 
+
+1. Introduction 
+
+One of the longstanding goals in AI is to develop socially-intelligent systems that can perceive, interpret and reason about human behaviors, such as affective expressions, men-tal states, and social cues (Picard, 2000; Breazeal, 2000). 
+
+> †
+
+Equal advising. 1National University of Singapore 2MIT 
+
+> 3
+
+Qatar Computing Research Institute, HBKU 4Nanyang Techno-logical University 5University of Rochester. Correspondence to: Keane Ong <keaneong@mit.edu >. Preprint. 
+
+However, progress toward this goal has largely proceeded in separate strands, with existing AI models frequently special-ized for a single task (i.e., sentiment classification). While useful, task-specific specialization has imposed considerable limitations (Pan et al., 2026). Practically, specialization ne-cessitates bespoke architectures and datasets, leading to an inefficient duplication of modeling effort and computational resources (Gao et al., 2024). More fundamentally, because human behaviors are inherently interconnected (Cambria, 2016), modeling them in isolation overlooks key oppor-tunities for representation sharing across behavioral tasks, reducing generalization and transfer (Ong et al., 2026). Yet, training unified models across multiple behaviors re-mains difficult. Behavioral signals are inherently ambigu-ous and complex, often benefiting from reasoning capa-bilities (Scherer, 2009). Furthermore, behavioral data is highly heterogeneous, spanning distinct feature types (e.g., acoustic prosody, interpersonal interaction) and prediction targets (eg., emotion classification (Zadeh et al., 2016), so-cial inference (Wilf et al., 2023)), which can induce uneven learning during multitask training. In this context, while recent RL methods such as GRPO (Shao et al., 2024) sup-port reasoning capabilities in LLMs, they do not explicitly accommodate learning under heterogeneous data. These methods often aggregate policy contributions across tasks and samples without regulating disparities in their learn-ing dynamics, reducing performance by allowing stronger learning signals to disproportionately shape training. To address these challenges, we develop H ETEROGENEITY -AWARE RELATIVE POLICY OPTIMIZATION (HARPO). While supporting reasoning capabilities, HARPO intro-duces an on-policy advantage modulation mechanism to facilitate balanced learning across heterogeneous behavioral data. Accordingly, HARPO modulates advantages to ensure that no single task or sample disproportionately influences policy optimization. This is achieved by approximating contribution signals to the policy update, and using them to inform geometrically centered and inertially smoothed advantage modulation. Leveraging HARPO, we develop and release O MNI SAPIENS -7B 2.0, a foundation model for social behavior processing across 10 behavioral tasks. 1
+
+> arXiv:2602.10635v1 [cs.AI] 11 Feb 2026 OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization
+
+Across diverse behavioral tasks on the Human Behavior Atlas benchmark (Ong et al., 2026), O MNI SAPIENS -7B 2.0 achieves the strongest performance relative to existing behavioral models, with improvements of up to +16.85% and +9.37% in multitask and held-out settings respectively, while producing more explicit and robust reasoning traces. We additionally compare HARPO against recent critic-free, reasoning RL methods by training on the same benchmark, where it attains the most consistently strong performance across behavioral tasks; improving on GRPO by up to +42.29% on specific tasks. Our key contribution is two-fold: (1) We develop HARPO, a novel critic-free, reasoning RL method for learning diverse behavioral tasks associated with heterogeneous data; (2) Leveraging HARPO, we train O MNI SAPIENS -7B 2.0, a foundation model for unified human behavior analysis that substantially addresses the performance limitations of prior unified models, enabling effective performance across 10 diverse human behavior tasks and generalization to novel behavioral settings. For future work, models and codes will be made publicly available after the review process. 
+
+2. Related Work 
+
+Social Behavior Processing aims to develops AI for pro-cessing and understanding human behavioral markers. Ex-isting studies have emphasized task-specific modeling, in-cluding interpreting affective states via emotion classifica-tion (Zadeh et al., 2016), arousal–valence prediction (Ak c¸ ay & O ˘guz, 2020; Dang et al., 2023), and affective state rank-ing (Yannakakis et al., 2018; Wu et al., 2022); cognitive states through stress and cognitive load estimation (Gian-nakakis et al., 2019); pathological states by detecting men-tal health conditions (i.e., depression and anxiety) (Joshi & Kanoongo, 2022; Miloyan et al., 2014); and social processes 
+
+through humor and engagement detection (Hessel et al., 2023; Monkaresi et al., 2016). While useful, task-specific processing overlooks the interdependencies between behav-ioral dimensions (Pessoa, 2008), motivating unified multi-task approaches to improve generalization through shared representations (Ong et al., 2026). 
+
+Reasoning-Based Reinforcement Learning has enhanced the reasoning capabilities of LLMs. GRPO (Shao et al., 2024) leverages group-normalized rewards. REINFORCE Leave-One-Out (Ahmadian et al., 2024) reduces gradient variance by computing relative advantages in the same group, while REINFORCE++ (Hu, 2025) improves opti-mization stability through variance reduction. Group Policy Gradient (Chu et al., 2025) models group-level objectives. In contrast, GRPO-LEAD (Zhang & Zuo, 2025) focuses on shaping reasoning length and difficulty-aware reweight-ing. Despite these advances, reasoning RL for learning heterogeneous behavioral data remains underexplored. 
+
+Multitask learning has evolved from unimodal represen-tation sharing (Li et al., 2022; Chen et al., 2025) to any-to-any architectures that jointly model multiple modali-ties (Bachmann et al., 2024). Beyond architectural advances, prior work has explored multitask optimization via gradi-ent balancing (Yu et al., 2020), uncertainty-based weight-ing (Kendall et al., 2018), as well as critic-based multitask re-inforcement learning via shared distilled policies (Teh et al., 2017) and policy composition (Haarnoja et al., 2018). Yet, multitask learning techniques remain largely underexplored for recent critic-free reasoning reinforcement learning. 
+
+3. Method 
+
+3.1. Preliminaries Problem Definition: Learning Multiple Behavioral Tasks. We consider the problem of training a stochas-tic policy πθ (a | s), instantiated as a large language model (LLM), to perform a diverse set of behavioral understand-ing tasks indexed by m ∈ M . For each task m, a sample 
+
+q ∼ D m, which can include multimodal inputs (e.g., text, audio, or visual signals), is drawn from a task-specific in-put distribution, and the policy generates an autoregressive output sequence o ∼ πθ (· | q), with tokens o:k and prefixes 
+
+o:<k . The learning objective is to train a single shared policy 
+
+πθ that maximizes performance across all tasks m ∈ M .
+
+Group Relative Policy Optimization for Behavioral Tasks. To optimize πθ (a | s), we consider Group Relative Policy Optimization (GRPO) (Shao et al., 2024), a recent on-policy RL method that has shown strong performance for reasoning-based LLM training. For task m and sam-ple q, GRPO samples a rollout group G(m,q ) of responses 
+
+{o(m,q,i )}, where i ∈ G(m,q ) indexes individual rollouts (i.e., a sampled response) with rewards r(m,q,i ), computing the group-normalized advantage: 
+
+ˆA(m,q,i ) = r(m,q,i ) − ˆμG(m,q )
+
+ˆσG(m,q ) + ε , (1) where ˆμG(m,q ) and ˆσG(m,q ) are the mean and standard de-viation of {r(m,q,i )}|G(m,q )| 
+
+> i=1
+
+. With a PPO clipped surrogate 
+
+˜A(m,q,i ): k(θ) constructed from ˆA(m,q,i ), GRPO then opti-mizes πθ (a | s) using a PPO-style trust-region objective 1:
+
+JGRPO (θ) = E(m,q )∼D E{o(m,q,i )}∼ πθold 
+
+"
+
+1
+
+|G(m,q )|
+
+X
+
+> i∈G(m,q )
+
+1
+
+no(m,q,i )
+
+> no(m,q,i )
+
+X
+
+> k=1
+
+˜A(m,q,i ): k(θ)
+
+#
+
+− β E[DKL (πθ ∥ πref )] .
+
+(2) 
+
+> 1For completeness, the full formulation of GRPO is provided in App. D.1.
+
+2OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+By the policy-gradient theorem (Sutton et al., 1999), the pol-icy gradient admits the standard form, where the expectation is over (s, a ) induced by πθ :
+
+∇θ J(θ) = E[Aπθ (s, a ) ∇θ log πθ (a | s)] , (3) When GRPO optimizes a policy across diverse behavioral tasks, gradient contributions from different m, q, and i are aggregated into a shared update. Accordingly, a Monte Carlo estimator of the policy gradient, g(θ), can be decom-posed as: 
+
+g(θ) = X
+
+> m∈M
+
+X
+
+> q∼D m
+
+X
+
+> i∈G(m,q )
+
+g(m,q,i )(θ). (4) Each rollout contributes a gradient term of the form: 
+
+g(m,q,i )(θ) ≜ ˆA(m,q,i ) ∇θ log πθ (a(m,q,i ) | s(m,q,i )). (5) From Eq. (5) , each rollout contributes a gradient term whose magnitude is scaled by its advantage value. Since these rollout-level gradients are aggregated to form the shared pol-icy gradient in Eq. (4) , the resulting policy update is sensitive to the scale of advantages across rollouts. Across diverse behavioral tasks m, reward and advantage distributions may vary considerably because the associated behavioral data are highly heterogeneous, spanning different multimodal features (e.g., acoustic prosody, facial expres-sions) and prediction targets (e.g., emotion classification, social inference). Consequently, rollouts from tasks or sam-ples with systematically elevated or suppressed advantage magnitudes can exert disproportionate influence on GRPO’s policy update, contributing to uneven learning across tasks (Sec. 4.5 provides an empirical illustration; App. E.3 Fig. 7 shows the differences in task advantage distributions). 
+
+3.2. Heterogeneity-Aware Relative Policy Optimization Dynamic Advantage Modulation Mechanism. To ad-dress this gap, we introduce H ETEROGENEITY -A WARE 
+
+RELATIVE POLICY OPTIMIZATION (HARPO). Since roll-out influence on the policy update scales with advantage magnitude, Eq. (4) , HARPO’s core insight is to modulate advantages such that no single task or sample disproportion-ately influences policy optimization. In practice, our modulation mechanism scales the GRPO group-normalized advantages, Eq. (1) , to mitigate imbal-ances in advantages at two levels: the sample-level, corre-sponding to advantages in a sample’s rollout group, and the task-level, corresponding to advantages across all rollout groups of a task. This scaling is updated dynamically across training, using estimates of the relative contribution of each sample and task to the policy update. Concretely, we first construct a contribution signal p(t) from advantages, which approximates each task’s and sample’s relative contribution to the shared policy update. These signals are then trans-formed into structured, geometrically centered modulation factors, {s(t)(m,q ), s (t) 
+
+> m
+
+}, that scale the advantages prior to the policy update step. Finally, the modulation factors are updated using inertial smoothing to ensure their stability. 
+
+Contribution Signals from Advantage Magnitudes. We construct a proxy signal, p(t), to approximate contribution strength to the policy update. Since policy gradients are directly scaled by advantages, Eq. (4) - (5) , advantage mag-nitudes provide a computationally convenient proxy for contribution strength. Therefore, we use advantage mag-nitudes, normalized by rollout count to ensure invariance to stochastic batch sampling (Schulman et al., 2017), and use this to define p(t) at two levels. While the sample-level 
+
+p(t)(m,q ) approximates the contribution of sample q within a task m, the task-level p(t) 
+
+> m
+
+approximates the contribution of a task m.Accordingly, p(t)(m,q ) is the average absolute group-normalized advantage over a rollout group G(m,q ) corre-sponding to a sample q of a task m at training step t.
+
+p(t)(m,q ) = 1
+
+|G(m,q )|
+
+X
+
+> i∈G(m,q )
+
+ˆA(t)(m,q,i ) . (6) Then, we define p(t) 
+
+> m
+
+as the average absolute group-normalized advantage over all rollouts collected for task 
+
+m, with Q(t) 
+
+> m
+
+denoting the set of samples drawn for task m:
+
+p(t) 
+
+> m
+
+=
+
+P
+
+> q∈Q (t)
+> m
+
+P
+
+> i∈G(m,q )
+
+ˆA(t)(m,q,i )
+
+P
+
+> q∈Q (t)
+> m
+
+|G(m,q )| . (7) 
+
+Structured Modulation via a Geometric Reference. We leverage contribution signals to rebalance influence on the policy update, amplifying samples and tasks with lower contribution signals, and attenuating those with higher ones. Accordingly, we measure how far the contribution signal of each sample and task lay above or below a geometric-mean reference, and proportionately downscale or upscale their associated advantages. On the one hand, taking reference from the geometric-mean ensures that scaling is directly comparable across samples and tasks, and does not change the overall update size. On the other hand, it yields a ratio-based construction of scaling factors that tempers excessive variations in values (as we observe that contribution signals can vary by orders of magnitude, App. E.3 Fig. 6). Concretely, we define a geometric mean reference at both 3OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+the sample-level, ¯p(t)ref ,m , and the task-level, ¯p(t)ref ,M:
+
+¯p(t)ref ,m =
+
+ Y
+
+> q∈Q (t)
+> m
+
+p(t)(m,q )
+
+ 1  
+
+> |Q (t)
+> m|
+
+.
+
+¯p(t)ref ,M =
+
+ Y
+
+> m∈M
+
+p(t)
+
+> m
+
+ 1
+
+> |M|
+
+(8) This establishes common baselines for comparing contribu-tions across samples within a task or across tasks overall. For each sample or task contribution signal, we take the reciprocal of its ratio to the geometric-mean. This yields modulation factors s(t)(m,q ) at the sample-level, and s(t) 
+
+> m
+
+at the task-level. 
+
+s(t)(m,q ) = ¯p(t)ref ,m 
+
+p(t)(m,q )
+
+.s(t) 
+
+> m
+
+= ¯p(t)ref ,M
+
+p(t)
+
+> m
+
+.
+
+(9) The factors scale the group-normalized advantages of each rollout, yielding the HARPO advantage: 
+
+AH(m,q,i )(t) ≜ s(t)(m,q ) s(t) 
+
+> m
+
+ˆA(t)(m,q,i ). (10) Due to their reciprocal construction, the modulation factors act to balance advantage magnitudes across samples and tasks. Specifically, within a task, samples whose contribu-tion signals exceed the sample reference (i.e., p(t)(m,q ) >
+
+¯p(t)ref ,m ) receive modulation factors s(t)(m,q ) < 1, while those below the reference (i.e., p(t)(m,q ) < ¯p(t)ref ,m ) receive 
+
+s(t)(m,q ) > 1. Consequently, within the same task, stronger samples have downscaled advantages while weaker samples have upscaled advantages. Analogously, at the task-level, the advantages of tasks with contribution signals above the reference ¯p(t)ref ,M are downscaled, while those below the ref-erence are upscaled. Additionally, as the modulation factors are constructed from a geometric mean reference, the fac-tors have a geometric mean of 1. ( Q
+
+> q∈Q (t)
+> m
+
+s(t)(m,q ) = 1 and 
+
+Q 
+
+> m∈M
+
+s(t) 
+
+> m
+
+= 1 , App. D.2 shows the full derivation). This ensures that multiplicative upscaling from certain modula-tion factors are exactly compensated by downscaling from others. Thus, the factors cannot simultaneously enlarge or shrink all advantages at the sample or task-level, mitigating unintended influence on the global step size. 
+
+Inertial control for stable modulation. We update the modulation mechanism on a slower time scale than the pol-icy parameters. Accordingly, we maintain inertial estimates of both the contribution signals and the modulation fac-tors themselves, allowing modulation to evolve smoothly under stochastic on-policy rollouts. Contribution signals are smoothed using an exponential moving average to mit-igate noise from stochastic rollouts (Kingma & Ba, 2014). Modulation factors, as multiplicative ratios, are smoothed via multiplicative updates rather than by additive adjust-ments (Arora et al., 2012; Bubeck et al., 2015). 
+
+¯p(t)(m,q ) = βρ ¯p(t−1) (m,q ) + (1 − βρ) p(t)(m,q ).
+
+¯p(t) 
+
+> m
+
+= βρ ¯p(t−1)  
+
+> m
+
++ (1 − βρ) p(t) 
+
+> m
+
+.s(t)(m,q ) =
+
+
+
+s(t−1) (m,q )
+
+βs  s(m,q )
+
+1−βs
+
+.s(t) 
+
+> m
+
+=
+
+
+
+s(t−1) 
+
+> m
+
+βs
+
+(sm)1−βs .
+
+(11) This inertial smoothing ensures that the modulation factors respond to persistent trends in contribution signals, rather than to stochastic on-policy fluctuations in their values. 
+
+HARPO 2 Objective. With the HARPO-modulated ad-vantage in place, HARPO retains the PPO-style trust-region objective of GRPO, substituting AH for ˆA to construct the clipped surrogate ˜AH(m,q,i ): k(θ), thereby forming the HARPO objective: 
+
+JHARPO (θ) = E(m,q )∼D E{o(m,q,i )}∼ πθold 
+
+"
+
+1
+
+|G(m,q )|
+
+X
+
+> i∈G(m,q )
+
+1
+
+no(m,q,i )
+
+> no(m,q,i )
+
+X
+
+> k=1
+
+˜AH(m,q,i ): k(θ)
+
+#
+
+− β E[DKL (πθ ∥ πref )] .
+
+(12) 
+
+3.3. Reward Design Accuracy. For classification tasks, we use a binary reward 
+
+rcls , which equals 1 for an exact label match and 0 otherwise. For question-answering tasks with free-text responses, we use cosine similarity rewards, rqa , normalized to a scale of 
+
+[0 , 1] for compatibility with rewards assignment, to measure alignment between the generated response and answer. 
+
+Formatting. We add a binary reward, rfmt , for adhering to the response structure, which includes reasoning traces followed by the model’s prediction. 
+
+Length. Following Zhang & Zuo (2025), we leverage an overlong length penalty, rlen , to prevent excessive verbosity of responses. 
+
+Final reward 2. With format weight wfmt = 0 .2 and length scale λlen = 0 .75 , the final per-sample reward is the fol-lowing, where rtask can be rcls or rqa , depending on if the sample belongs to a classification or QA task respectively. 
+
+r = (1 − wfmt ) rtask + wfmt rfmt + λlen rlen ,
+
+> 2
+
+App. A Algorithm 1 summarizes HARPO. Additional details of reward design are in App. C.2 
+
+4OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+Table 1. Per-task performance (%) is reported for both models and training algorithms. Each task may include multiple datasets; we report the mean performance across a task’s associated datasets, with full results in App. Tab. 7. Following Ong et al. (2026), we report binary weighted F1 for SEN; mean per-class weighted accuracy for EMO; weighted F1 for HUM, SAR, ANX, DEP, and PTSD; and LLM-Judge accuracy for SOC, INT, and NVC. Given the disparities between the metrics, we compute average performance rank across tasks separately for models and algorithms ( ↓ indicates lower score is better), with ties assigned the same rank. Best results are bolded and second-best are underlined. (*) denotes existing models that have been trained on more than two behavioral tasks, reflecting substantive multitask training; only a few such models are publicly available. For fair comparison, all training algorithm results reflect training on the same Human Behavior Atlas benchmark, using an identical reward design (Sec. 3.3) and the same base model (Qwen2.5-Omni-7B).                                                                                                                                                   
+
+> Models EMO HUM INT PTSD ANX DEP SEN SAR SOC NVC Avg. Rank ↓
+> Gemma-3-4B (Team et al., 2025) 55.03 59.70 22.70 49.90 60.10 46.25 73.83 52.90 19.10 2.30 5.90 Qwen 2.5-Omni-7B (Xu et al., 2025a) 58.25 54.30 25.40 76.00 79.30 71.35 67.20 65.60 25.40 6.90 4.20 Qwen 2.5-VL-7B (Bai et al., 2025) 54.08 58.30 24.90 75.50 63.10 63.80 50.50 51.10 23.10 9.80 5.60 Qwen 3-VL-8B-Instruct (Xu et al., 2025b) 57.66 66.76 38.00 92.70 42.29 51.62 69.70 63.67 24.94 13.95 4.00 OmniSapiens-7B RL ∗(Ong et al., 2026) 57.28 63.90 48.60 96.80 91.90 77.15 39.60 64.70 30.40 13.30 3.00 HumanOmniV2-7B ∗(Yang et al., 2025) 59.70 63.80 26.30 82.40 52.70 65.40 74.20 39.50 28.20 9.30 4.00
+> OmniSapiens-7B 2.0 (ours) 76.55 69.85 50.52 98.39 91.98 78.87 77.61 70.64 25.40 14.54 1.20 Training Algorithms
+> RLOO (Ahmadian et al., 2024) 75.58 67.86 51.73 98.39 90.68 77.57 76.86 62.58 29.54 16.28 2.50 RE++ (Hu, 2025) 75.92 60.26 5.01 98.39 93.11 73.87 56.52 50.21 12.64 4.07 3.90 GPG (Chu et al., 2025) 77.70 69.28 54.21 98.39 90.40 78.40 75.77 45.96 27.93 12.79 2.50 GRPO (Shao et al., 2024) 76.45 27.56 49.90 98.39 90.40 77.64 77.51 53.58 23.30 11.00 3.30
+> HARPO (ours) 76.55 69.85 50.52 98.39 91.98 78.87 77.61 70.64 25.40 14.54 1.70
+
+4. Experiments 
+
+4.1. Setup 
+
+We use the Human Behavior Atlas benchmark (Ong et al., 2026) for training and evaluation, which covers diverse hu-man behavior tasks with over 100k samples. The tasks include sentiment polarity (SEN), emotion recognition (EMO), social reasoning (SOC), intent recognition (INT), non-verbal communication (NVC), as well as detecting hu-mor (HUM), sarcasm (SAR), anxiety (ANX), depression (DEP), and PTSD (PTSD). Given the multimodal nature of the data (text, vision, and audio), we adopt Qwen 2.5 Omni-7B (Xu et al., 2025a) as our base architecture for OMNI SAPIENS -7B 2.0. All training follows a multitask setup, where a single model is jointly trained across all tasks. 
+
+4.2. Multitask Performance 
+
+RQ1: We compare HARPO with recent critic-free reasoning RL methods by training all methods on the same benchmark with an identical reward design and base model (Qwen 2.5 Omni-7B). We also evaluate our HARPO-trained model, OMNI SAPIENS -7B 2.0, against state-of-the-art models. 
+
+Comparing Model Performance . Relative to existing mod-els, O MNI SAPIENS -7B 2.0 achieves the strongest over-all performance across behavioral tasks. From Tab. 1, OMNI SAPIENS -7B 2.0 outperforms general-purpose LLMs (Gemma-3, Qwen-2.5-Omni, Qwen-2.5-VL, Qwen-3-VL). It also outperforms prior behavioral models trained jointly on multiple diverse social-behavioral tasks, for which only a small number of public models exist (HumanOmniV2-7B, OmniSapiens-7B RL). In particular, O MNI SAPIENS -7B 2.0 achieves the best results on 9 of 10 tasks and attains the strongest average task performance rank (1.20). 
+
+RL Algorithm Performance Comparison . HARPO ex-hibits the most consistent performance across behavioral tasks among recent reasoning RL algorithms. From Tab. 1, HARPO outperforms widely adopted reasoning-based RL methods that follow critic-free training paradigms (e.g., GRPO, RLOO) and their subsequent variants (GPG, RE++), achieving the best average performance rank (1.70) across tasks. Notably, while GRPO, GPG, RE++ exhibit perfor-mance collapse on certain tasks (i.e., SAR) the weaker-performing tasks under HARPO do not experience such collapse, suggesting relatively balanced multitask learning. 
+
+4.3. Generalization Performance 
+
+Table 2. Zero-shot generalization weighted F1 performance (%) on AUT and SER, compared to existing models. 
+
+Model AUT SER 
+
+Qwen 2.5-Omni-7B 25.68 53.53 OmniSapiens-7B RL 30.46 55.77 HumanOmniV2-7B 38.05 62.74 
+
+OmniSapiens-7B 2.0 (ours) 39.91 72.11 
+
+RQ2: We analyze zero-shot transfer performance on held-out datasets (i.e., without further fine-tuning) to evaluate the generalization capabilities of O MNI SAPIENS -7B 2.0 rela-tive to existing behavioral models. Specifically, we evaluate on AV-ASD (Deng et al., 2024) for the task of Autism Be-havior Recognition (AUT) and on IEMOCAP (Busso et al., 2008) for Speech Emotion Recognition (SER). 
+
+Transfer Performance on AUT. AUT focuses on recogniz-ing autism-related behavioral cues, a data-scarce domain where high annotation costs and privacy constraints limit 5OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+data availability for supervised training (Li et al., 2023a). OMNI SAPIENS -7B 2.0 attains the highest performance of 39.91%, outperforming HumanOmniV2-7B (38.05%) and OmniSapiens-7B RL (30.46%) by approximately +2% and +9%, respectively. This suggests how O MNI SAPIENS -7B 2.0 can be more effective in data-scarce behavioral settings such as autism without explicit supervision, by enabling stronger transfer from general behavioral training. 
+
+Transfer Performance on SER. OMNI SAPIENS -7B 2.0 achieves the highest zero-shot performance on SER, which suggests greater generalization performance for emotion recognition. Although SER is related to emotion recogni-tion (EMO), it is evaluated on a held-out dataset (IEMO-CAP) that differs substantially from the benchmark’s EMO training datasets in annotation protocols and conversa-tional context. These annotation and contextual differ-ences often poses challenges for model generalization in emotion recognition settings (Montag et al., 2025). Yet, O MNI SAPIENS -7B 2.0 reaches 72.11%, exceeding HumanOmniV2-7B (62.74%) and OmniSapiens-7B RL (55.77%) by roughly +9% and +16%, respectively. This sug-gests that O MNI SAPIENS -7B 2.0 can support more robust transfer to new emotion recognition settings. 
+
+Comparison with OmniSapiens-7B RL . Despite being trained on the same Human Behavioral Atlas benchmark, OMNI SAPIENS -7B 2.0, trained with HARPO, exhibits stronger generalization performance than OmniSapiens-7B RL on SER and AUT. This coincides with the more balanced multitask performance achieved by O MNI SAPIENS -7B 2.0 from Tab. 1, with an average task rank of 1.20 compared to 3.00 for OmniSapiens-7B RL. This suggests that the HARPO-trained O MNI SAPIENS -7B 2.0, by learning more uniformly across behavioral tasks, can support the acquisi-tion of general behavioral features that are more transferable, contributing to improved generalization performance. 
+
+4.4. Reasoning Comparison 
+
+RQ3: Beyond task performance, we compare reasoning traces 3 for an interpretable view of the decision-making pro-cess of different methods and models. This provides insight into the robustness of the underlying inference behavior. 
+
+Reasoning on Complex Pragmatic Tasks . For complex tasks such as sarcasm (SAR) and humour (HUM) detec-tion, which rely on pragmatic cues (i.e., contextual signals beyond literal lexical content), we observe that HARPO induces richer reasoning behavior as compared to GRPO. From Fig.1, compared to GRPO, HARPO achieves a larger proportion of correct predictions on SAR and HUM, ac-companied by longer and more varied reasoning-length dis-
+
+> 3
+
+To support reproducibility and further study, we make publicly available all the reasoning traces after the review process. 5 10 15 20 25 30                                
+
+> 0
+> 50
+> 100
+> 150
+> 200
+> 510 15 20 25 30
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50 Incorrect
+> Correct
+> GRPO (F1: 27.60%) HARPO (F1: 69.85%) HUM
+> 510 15 20 25 30
+> 0
+> 50
+> 100
+> 150
+> 200
+> 510 15 20 25 30
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50 Incorrect
+> Correct
+> GRPO (F1: 27.60%) HARPO (F1: 69.85%)
+> 510 15 20 25 30
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> 510 15 20 25 30
+> 0
+> 5
+> 10
+> 15
+> 20 Incorrect
+> Correct
+> GRPO (F1: 53.60%) HARPO (F1: 70.64%) SAR
+> Sample Count
+> Reasoning Length
+> GRPO (F1: 27.56%)
+> GRPO (F1: 53.58%)
+> HARPO (F1: 69.85%)
+> HARPO (F1: 70.64%)
+
+Figure 1. Sample count versus token reasoning length. Green indicates correct predictions, red indicates incorrect. HARPO induces more varied reasoning lengths for the respective tasks of (Top: HUM, Bottom: SAR), compared to GRPO. Transcript: “I can't believe          
+
+> we wasted all that time on
+> our Hulk costumes.”
+> HARPO:
+> Q: Is the speaker being
+> sarcastic in this
+> utterance?
+> GRPO:
+> Reasoning: The speaker is expressing disappointment
+> and frustration about wasting time on Hulk costumes,
+> which is not a sarcastic comment.
+> Classi fi cation: Not Sarcasm
+> Reasoning: Sarcasm
+> Classi fi cation: Sarcasm
+> Transcript: “That’s why i
+> began investigating the most
+> secretive and experimental
+> prison units in the united
+> states for so called second
+> tier terrorists”
+> HARPO:
+> Q: Does this video contain
+> a humorous punchline?
+> GRPO:
+> Reasoning: The speaker is talking about a serious topic,
+> investigating prison units, which is not a humorous
+> punchline.
+> Classi fi cation: Not Humour
+> Reasoning: Humour
+> Classi fi cation: Humour
+
+Figure 2. Example of reasoning traces on pragmatic tasks hu-mour detection (HUM) (left) and sarcasm detection (SAR) (right). HARPO is observed to reflect more explicit and varied reasoning compared to GRPO, which defaults to minimal/ no reasoning. 
+
+tributions. Qualitative analysis, Fig. 2, further illustrates that GRPO often produces shortcut responses with mini-mal or no explicit reasoning, while HARPO’s reasoning traces remain more contextually grounded, reflecting delib-eration over pragmatic and inferential cues present in the input. These findings suggest that HARPO’s emphasis on balanced optimization reduces the suppression of useful reasoning trajectories for these weaker tasks, resulting in richer reasoning behavior that coincides with improved task performance. 
+
+Reasoning in Zero-Shot Settings. On the held-out AUT task, qualitative analysis of reasoning traces, Fig. 3, reveals that HumanOmniV2 often generates expansive reasoning chains that can introduce additional behaviors without clear evidential support. This tendency is reflected by a higher av-erage number of predicted behaviors per sample (2.38) than are present (1.72). Conversely, OmniSapiens-7B RL often reasons that autism behaviors are absent even when salient 6OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization HumanOmniv2:          
+
+> Q: Based on the audio and video, which of
+> the autism-related behaviors are present?
+> {De fi nitions of behaviors are provided, i.e:
+> Aggressive Behavior: …
+> Non-Responsiveness: …
+> … }
+> You may respond with one or more behavior.
+> Reasoning: He’s standing and just swung
+> his arms really fast and hard. That could
+> de fi nitely be seen as aggressive behavior…
+> He's moving so fast too, looking quite
+> agitated. This could be linked to
+> hyperactivity, which might be part of sensory
+> overresponsive behavior… He's sitting at the
+> table, hands covering his face, looking
+> distressed… maybe non-responsive to
+> what's happening around him…
+> OmniSapiens RL: OmniSapiens 2.0:
+> Classi fi cation: Aggressive Behavior, Hyper-
+> or Hyporeactivity to Sensory Input, Non-
+> Responsiveness to Verbal Interaction
+> Reasoning: The children are
+> hitting each other, which is
+> aggressive behavior
+> Classi fi cation: Aggressive
+> Behavior
+> Reasoning: The audio and video
+> do not provide enough information
+> to determine the presence of the
+> autism-related behaviors listed.
+> The background (label) is
+> indicated as “no signi fi cant target
+> behavior present”
+> Classi fi cation: Background
+
+Figure 3. Reasoning traces on zero-shot generalization for autism behavioral detection (AUT) on the AVASD dataset; HumanOm-niv2 tends to produce verbose reasoning, OmniSapiens RL tends to abstain from making predictions, O MNI SAPIENS -7B 2.0 gener-ates concise reasoning traces identifying the most salient behavior. 
+
+cues are visible; it predicts “background (no behavior)” in 44.76% of samples, although such cases only account for 4.20%. In contrast, the HARPO-trained O MNI SAPIENS -7B 2.0 typically produces concise reasoning traces that focus on identifying salient behaviors directly supported by the clip’s evidence, without overpredicting (1.07 predictions per sample) or defaulting to “background (no behavior)” pre-dictions (only 18.31% of such predictions across samples). While this stricter, evidence-based reasoning style yields lower recall than HumanOmniV2 (32.38% versus 46.75%), it substantially improves precision (51.97% versus 33.72%), and avoids the conservative abstention behavior observed in OmniSapiens-7B RL, leading to the strongest overall perfor-mance (F1 of 39.91 in Tab. 2) among the compared models. These observations on AUT indicate that relative to existing models, O MNI SAPIENS -7B 2.0’s evidence-aligned reason-ing behavior yields a more effective precision–recall trade-off by mitigating over-prediction and abstention, suggesting its potential utility for zero-shot behavioral detection. 
+
+4.5. Empirical Analysis & Ablations 
+
+RQ4: To further evaluate the mechanisms of HARPO, we conduct empirical analyses and ablation studies to examine the behavior of its underlying mechanisms. 
+
+Effect of HARPO’s Advantage Modulation on Weak Per-forming Tasks. A central design principle of HARPO is to promote balanced optimization by modulating advantages prior to the policy update step. To investigate this effect, we compute the relative task advantage, defined as the ra-tio between a task’s average advantage magnitude and the mean of the average advantage magnitudes across all tasks, to observe how a change in this statistic affects learning. We focus on the SAR task as a representative weak-performing 0 100 200 300 400 500 600        
+
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> GRPO
+> HARPO
+> 0100 200 300 400 500 600
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1
+> 1.2
+> 1.4 GRPO
+> HARPO
+
+Training Steps 
+
+> Relative Task Adv. Rewards
+> GRPO
+> HARPO
+
+Figure 4. Comparison of relative task advantage and rewards for SAR under HARPO and GRPO. After step 355 (dotted line), HARPO exhibits increasing relative task advantage alongside in-creasing rewards, while GRPO maintains lower relative task ad-vantage with decreasing rewards. 
+
+task (performance of 53.58% under GRPO; 70.64% under HARPO), which allows us to more clearly study advantage modulation in this regime. We track how its relative task advantage evolves over 600 training steps, alongside task rewards. From Fig. 4, in the later parts of training (i.e., after the dotted line depicting step 355), HARPO’s amplification of SAR’s relative task advantage coincides with a contin-ued increase in average rewards. At the same late-stage of of training, GRPO’s unmodulated relative task advan-tage remains lower, corresponding with a steady decline in rewards. This suggests that HARPO’s advantage modula-tion can help sustain longer learning for weak-performing tasks with otherwise diminished advantages, contributing to improved task performance. 
+
+Table 3. Average task performance rank for HARPO ablations (lower is better), computed by ranking methods per task based on performance, then averaging ranks across tasks. We provide the per-task and per-dataset performance breakdown in App. E.1. 
+
+Variant Avg. Rank ↓
+
+HARPO 1.90 
+
+w/o structured modulation 2.00 w/o sample-level modulation 2.60 w/o inertial control 2.70 
+
+Effect of Structured Modulation. We consider an ablation in which structured modulation via the geometric reference is removed, and advantage modulation factors are instead the inverse of the contribution signals (i.e., s(t) = 1 /p (t)). From Tab. 3, this variant (w/o structured modulation) ex-7OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+hibits weaker multitask performance (avg. rank 2.00) com-pared to HARPO (1.90). A possible explanation is that the ablation produces a net amplification of advantages during training. The per-task modulation factors s(t) 
+
+> m
+
+have a geo-metric mean that remains above atleast 2.5 (App. Fig. 6), in-dicating a sustained tendency for advantages to be upscaled during training. In contrast, due to geometric centering, HARPO maintains a modulation factors that have a geomet-ric mean of 1, mitigating uniform amplification of advan-tages across tasks. Since the magnitude of policy-gradient updates is directly scaled by advantage values, increasing advantage magnitudes can alter the effective update size, which is known to influence optimization behavior and per-formance (Schulman et al., 2015; 2017). As a result, directly using s(t) = 1 /p (t) instead of a structured, geometrically centered modulation may inadvertently impact optimization dynamics and downstream performance. 
+
+Effect of Inertial Control. From Tab. 3, the average rank degrades from 1.90 with the HARPO method to 2.70 for the ablation without inertial control (i.e. without smooth-ing in Eq. 11). To study this further, we examine the task modulation factors s(t) 
+
+> m
+
+over training for multiple tasks (SAR, SEN, ANX). From Fig. 5, we observe that tasks with greater performance improvements with inertial con-trol, SAR (+7.96%) and SEN (+5.69%) from App. E Tab. 5, also exhibit clearer differences in s(t) 
+
+> m
+
+over training. In par-ticular, inertial control yields more gradual changes in s(t) 
+
+> m
+
+,in contrast to the sharper fluctuations observed without it. In contrast, ANX, which exhibits comparatively smaller perfor-mance differences (+1.30%), shows similar s(t) 
+
+> m
+
+trends with and without inertial control. This suggest that while inertial control does not uniformly affect all tasks, it can improve performance for tasks with excessive fluctuations in s(t) 
+
+> m
+
+,by stabilizing the scaling of advantage signals, which can support more consistent policy updates (Ilyas et al., 2018). 
+
+Effect of Modulation at the Sample-Level. To study the ef-fect of modulating advantages at the sample-level in addition to the task-level, we run an ablation without sample-level modulation (i.e. leveraging only the task-level modulation factors, s(t) 
+
+> m
+
+). From Tab. 3, this results in weaker overall performance, with the ablation attaining a 2.60 average task performance rank compared to HARPO at 1.90. To understand the impact of sample-level modulation, we ana-lyze with Fig. 5, a task (ANX) that performs stronger with modulation at the sample-level. Accordingly, we observe that modulation at the sample-level produces a noticeably narrower advantage distribution compared to without, high-lighting that relatively extreme advantage values are sup-pressed (we observe the same trend for other tasks as well, with more plots provided for NVC, SOC, HUM in App. E.3 Fig. 7). This narrower spread does not necessarily indicate a reduction in the aggregate advantages, since the geometric 100 200 300 400 500         
+
+> 1
+> 1.5
+> 2
+> 2.5
+> SAR
+> SEN
+> ANX
+> 100 200 300 400 500
+> 0.5
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+> 3.5
+> 4
+> Modulation Factor
+> −2 −1 012
+> 0
+> 1
+> 2
+> 3
+> w/o hierarchical (task only)
+> HARPO
+> Density
+> HARPO
+> w/o sample
+> Training Steps
+> SAR
+> SEN
+> ANX
+> Advantage Values
+
+Figure 5. Top: Comparison of distribution of advantages between HARPO and the ablation without sample-level modulation, for the ANX task. Sample-level modulation leads to a narrowing of the advantage distribution which can result in better performance for specific tasks (additional task distributions are in App. E). Middle & Bottom: Comparison of modulation factors between HARPO (middle) and without inertial control (bottom). Inertial control enables a more gradual change in modulation factor values. 
+
+mean enforced by Eqs. (8) - (9) helps preserve the overall multiplicative scale of scaled advantages. Instead, it mit-igates extreme advantage values; potentially preventing a small subset of samples with extreme values from dispro-portionately influencing the policy update. However, while beneficial for most tasks, the effects of sample-level modu-lation varies across tasks, as EMO, INT, and SOC show no explicit improvements (App. E.1 Fig. 5). 
+
+5. Conclusion 
+
+In this work, we introduced HARPO, a RL method that ac-counts for heterogeneous learning signals across multiple be-havioral tasks. Using HARPO, we developed OmniSapiens 2.0, a unified behavioral model trained on diverse datasets. Multitask and generalization evaluations showed consistent 8OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+performance across behavioral domains, underscoring the value of modeling heterogeneous learning signals. More broadly, these findings suggest a different perspective in how unified social behavioral AI may be trained. Rather than assuming that the strongest signals are inherently the most informative, unified models may benefit from explic-itly protecting weaker, but structurally meaningful signals that encode latent social and behavioral structure. 
+
+Impact Statement 
+
+This paper presents work whose goal is to advance the field of Machine Learning. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 
+
+References 
+
+Ahmadian, A., Cremer, C., Gall ´e, M., Fadaee, M., Kreutzer, J., Pietquin, O., ¨Ust ¨un, A., and Hooker, S. Back to basics: Revisiting reinforce style optimization for learning from human feedback in llms. arXiv preprint arXiv:2402.14740 , 2024. Ak c¸ ay, M. B. and O ˘guz, K. Speech emotion recognition: Emotional models, databases, features, preprocessing methods, supporting modalities, and classifiers. Speech Communication , 116:56–76, 2020. Arora, S., Hazan, E., and Kale, S. The multiplicative weights update method: a meta-algorithm and applica-tions. Theory of computing , 8(1):121–164, 2012. Bachmann, R., Kar, O. F., Mizrahi, D., Garjani, A., Gao, M., Griffiths, D., Hu, J., Dehghan, A., and Zamir, A. 4m-21: An any-to-any vision model for tens of tasks and modalities. Advances in Neural Information Processing Systems , 37:61872–61911, 2024. Bai, S., Chen, K., Liu, X., Wang, J., Ge, W., Song, S., Dang, K., Wang, P., Wang, S., Tang, J., et al. Qwen2. 5-vl technical report. arXiv preprint arXiv:2502.13923 , 2025. Breazeal, C. L. Sociable machines: Expressive social ex-change between humans and robots . PhD thesis, Mas-sachusetts Institute of Technology, 2000. Bubeck, S. et al. Convex optimization: Algorithms and com-plexity. Foundations and Trends® in Machine Learning ,8(3-4):231–357, 2015. Busso, C., Bulut, M., Lee, C.-C., Kazemzadeh, A., Mower, E., Kim, S., Chang, J., Lee, S., and Narayanan, S. S. Iemocap: Interactive emotional dyadic motion cap-ture database. Journal of Language Resources and Evaluation , 42(4):335–359, dec 2008. doi: 10.1007/ s10579-008-9076-6. Cambria, E. Affective computing and sentiment analysis. 
+
+IEEE Intelligent Systems , 31(2):102–107, 2016. Cao, H., Cooper, D. G., Keutmann, M. K., Gur, R. C., Nenkova, A., and Verma, R. Crema-d: Crowd-sourced emotional multimodal actors dataset. IEEE transactions on affective computing , 5(4):377–390, 2014. Castro, S., Hazarika, D., P ´erez-Rosas, V., Zimmermann, R., Mihalcea, R., and Poria, S. Towards multimodal sarcasm detection (an obviously perfect paper). In ACL , 2019. Chen, J., Yang, J., Wu, H., Li, D., Gao, J., Zhou, T., and Xiao, B. Florence-vl: Enhancing vision-language models with generative vision encoder and depth-breadth fusion. In Proceedings of the Computer Vision and Pattern Recog-nition Conference , pp. 24928–24938, 2025. Chu, X., Huang, H., Zhang, X., Wei, F., and Wang, Y. Gpg: A simple and strong reinforcement learning baseline for model reasoning. arXiv preprint arXiv:2504.02546 , 2025. Dang, T., Dimitriadis, A., Wu, J., Sethu, V., and Ambikaira-jah, E. Constrained dynamical neural ode for time se-ries modelling: A case study on continuous emotion prediction. In ICASSP 2023-2023 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , pp. 1–5. IEEE, 2023. Deng, S., Kosloski, E. E., Patel, S., Barnett, Z. A., Nan, Y., Kaplan, A., Aarukapalli, S., Doan, W. T., Wang, M., Singh, H., et al. Hear me, see me, understand me: Audio-visual autism behavior recognition. IEEE Transactions on Multimedia , 2024. Gao, S., Koker, T., Queen, O., Hartvigsen, T., Tsiligkaridis, T., and Zitnik, M. Units: A unified multi-task time se-ries model. Advances in Neural Information Processing Systems , 37:140589–140631, 2024. Giannakakis, G., Grigoriadis, D., Giannakaki, K., Simanti-raki, O., Roniotis, A., and Tsiknakis, M. Review on psy-chological stress detection using biosignals. IEEE trans-actions on affective computing , 13(1):440–460, 2019. Haarnoja, T., Pong, V., Zhou, A., Dalal, M., Abbeel, P., and Levine, S. Composable deep reinforcement learning for robotic manipulation. In 2018 IEEE international conference on robotics and automation (ICRA) , pp. 6244– 6251. IEEE, 2018. Hasan, M. K., Rahman, W., Zadeh, A. B., and Zhong, J. Ur-funny: A multimodal language dataset for understanding humor. In EMNLP-IJCNLP , pp. 2046–2056, 2019. Henderson, P., Islam, R., Bachman, P., Pineau, J., Precup, D., and Meger, D. Deep reinforcement learning that mat-ters. In Proceedings of the AAAI conference on artificial intelligence , volume 32, 2018. 9OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+Hessel, J., Marasovi ´c, A., Hwang, J. D., Lee, L., Da, J., Zellers, R., Mankoff, R., and Choi, Y. Do androids laugh at electric sheep? humor “understanding” benchmarks from the new yorker caption contest. In Proceedings of the 61st Annual Meeting of the Association for Computa-tional Linguistics (Volume 1: Long Papers) , pp. 688–714, 2023. Hu, J. Reinforce++: A simple and efficient approach for aligning large language models. arXiv preprint arXiv:2501.03262 , 2025. Ilyas, A., Engstrom, L., Santurkar, S., Tsipras, D., Janoos, F., Rudolph, L., and Madry, A. A closer look at deep policy gradients. arXiv preprint arXiv:1811.02553 , 2018. Joshi, M. L. and Kanoongo, N. Depression detection using emotional artificial intelligence and machine learning: A closer review. Materials Today: Proceedings , 58:217– 226, 2022. Kendall, A., Gal, Y., and Cipolla, R. Multi-task learning using uncertainty to weigh losses for scene geometry and semantics. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , pp. 7482– 7491, 2018. Kingma, D. and Ba, J. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 , 2014. Li, H., Tjandrasuwita, M., Fung, Y. R., Solar-Lezama, A., and Liang, P. P. Mimeqa: Towards socially-intelligent nonverbal foundation models. arXiv preprint arXiv:2502.16671 , 2025. Li, J., Li, D., Xiong, C., and Hoi, S. Blip: Bootstrapping language-image pre-training for unified vision-language understanding and generation. In International Confer-ence on Machine Learning , pp. 12888–12900. PMLR, 2022. Li, J., Chheang, V., Kullu, P., Brignac, E., Guo, Z., Bhat, A., Barner, K. E., and Barmaki, R. L. Mmasd: A multimodal dataset for autism intervention analysis. In Proceedings of the 25th International Conference on Multimodal In-teraction , pp. 397–405, 2023a. Li, J., Wei, P., Han, W., and Fan, L. Intentqa: Context-aware video intent reasoning. In Proceedings of the IEEE/CVF international conference on computer vision , pp. 11963– 11974, 2023b. Liang, P. P., Salakhutdinov, R., and Morency, L.-P. Compu-tational modeling of human multimodal language: The mosei dataset and interpretable dynamic fusion. In ACL ,2018. Miloyan, B., Pachana, N. A., and Suddendorf, T. The future is here: A review of foresight systems in anxiety and depression. Cognition & emotion , 28(5):795–810, 2014. Monkaresi, H., Bosch, N., Calvo, R. A., and D’Mello, S. K. Automated detection of engagement using video-based estimation of facial expressions and heart rate. IEEE Transactions on Affective Computing , 8(1):15–28, 2016. Montag, C., Xu, C., Spap ´e, M., and Cambria, E. The emotion labeling problem in affective computing research. 2025. Ong, K., Dai, W., Li, C., Feng, D., Li, H., Wu, J., Cheong, J., Mao, R., Mengaldo, G., Cambria, E., et al. Human behavior atlas: Benchmarking unified psychological and social behavior understanding. In Proceedings of ICLR ,2026. OpenAI. Gpt-5. https://openai.com/gpt-5/ , Au-gust 2025. Pan, R., Luo, H., Yuan, Q., Luo, G., Li, J., Shen, T., Mao, R., and Cambria, E. Multitask reinforcement learning with metadata-guided adaptive routing. Information Fusion ,129:104068, 2026. Pessoa, L. On the relationship between emotion and cogni-tion. Nature reviews neuroscience , 9(2):148–158, 2008. Picard, R. W. Affective computing . MIT press, 2000. Pichora-Fuller, M. K. and Dupuis, K. Toronto emotional speech set (TESS). Borealis , 2020. doi: 10.5683/ SP2/E8H2MF. URL https://doi.org/10.5683/ SP2/E8H2MF .Poria, S., Hazarika, D., Majumder, N., Naik, G., Cambria, E., and Mihalcea, R. MELD: A multimodal multi-party dataset for emotion recognition in conversations. In ACL ,pp. 527–536, 2019. Sawadogo, M. A. L., Pala, F., Singh, G., Selmi, I., Puteaux, P., and Othmani, A. Ptsd in the wild: a video database for studying post-traumatic stress disorder recognition in unconstrained environments. Multimedia Tools and Applications , 83(14):42861–42883, 2024. Scherer, K. R. The dynamic architecture of emotion: Evi-dence for the component process model. Cognition and emotion , 23(7):1307–1351, 2009. Schulman, J., Levine, S., Abbeel, P., Jordan, M., and Moritz, P. Trust region policy optimization. In International conference on machine learning , pp. 1889–1897. PMLR, 2015. 10 OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+Schulman, J., Wolski, F., Dhariwal, P., Radford, A., and Klimov, O. Proximal policy optimization algorithms. 
+
+arXiv preprint arXiv:1707.06347 , 2017. Shao, Z., Wang, P., Zhu, Q., Xu, R., Song, J., Bi, X., Zhang, H., Zhang, M., Li, Y., Wu, Y., et al. Deepseekmath: Push-ing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 , 2024. Sutton, R. S., McAllester, D., Singh, S., and Mansour, Y. Policy gradient methods for reinforcement learning with function approximation. Advances in neural information processing systems , 12, 1999. Team, G., Kamath, A., Ferret, J., Pathak, S., Vieillard, N., Merhej, R., Perrin, S., Matejovicova, T., Ram ´e, A., Rivi `ere, M., et al. Gemma 3 technical report. arXiv preprint arXiv:2503.19786 , 2025. Teh, Y., Bapst, V., Czarnecki, W. M., Quan, J., Kirkpatrick, J., Hadsell, R., Heess, N., and Pascanu, R. Distral: Robust multitask reinforcement learning. Advances in neural information processing systems , 30, 2017. Valstar, M., Gratch, J., Schuller, B., Ringeval, F., Lalanne, D., Torres Torres, M., Scherer, S., Stratou, G., Cowie, R., and Pantic, M. Avec 2016: Depression, mood, and emotion recognition workshop and challenge. In Proceed-ings of the 6th International Workshop on Audio/Visual Emotion Challenge , pp. 3–10. ACM, 2016. Wilf, A., Mathur, L., Mathew, S., Ko, C., Kebe, Y., Liang, P. P., and Morency, L.-P. Social-iq 2.0 challenge: Benchmarking multimodal social understanding. https://github.com/abwilf/ Social-IQ-2.0-Challenge , 2023. Wu, J., Dang, T., Sethu, V., and Ambikairajah, E. A novel markovian framework for integrating absolute and rela-tive ordinal emotion information. IEEE Transactions on Affective Computing , 14(3):2089–2101, 2022. Xu, J., Guo, Z., He, J., Hu, H., He, T., Bai, S., Chen, K., Wang, J., Fan, Y., Dang, K., et al. Qwen2. 5-omni techni-cal report. arXiv preprint arXiv:2503.20215 , 2025a. Xu, J., Guo, Z., Hu, H., Chu, Y., Wang, X., He, J., Wang, Y., Shi, X., He, T., Zhu, X., et al. Qwen3-omni technical report. arXiv preprint arXiv:2509.17765 , 2025b. Yang, Q., Yao, S., Chen, W., Fu, S., Bai, D., Zhao, J., Sun, B., Yin, B., Wei, X., and Zhou, J. Humanomniv2: From understanding to omni-modal reasoning with con-text. arXiv preprint arXiv:2506.21277 , 2025. Yannakakis, G. N., Cowie, R., and Busso, C. The ordi-nal nature of emotions: An emerging approach. IEEE Transactions on Affective Computing , 12(1):16–35, 2018. Yu, J. et al. Ch-sims v2: A chinese multimodal sentiment analysis dataset. In Proceedings of the 30th ACM In-ternational Conference on Multimedia , pp. 1234–1243, 2022. Yu, Q., Zhang, Z., Zhu, R., Yuan, Y., Zuo, X., Yue, Y., Dai, W., Fan, T., Liu, G., Liu, L., et al. Dapo: An open-source llm reinforcement learning system at scale. arXiv preprint arXiv:2503.14476 , 2025. Yu, T., Kumar, S., Gupta, A., Levine, S., Hausman, K., and Finn, C. Gradient surgery for multi-task learning. In Advances in Neural Information Processing Systems ,volume 33, pp. 5824–5836, 2020. Zadeh, A., Zellers, R., Pincus, E., and Morency, L.-P. MOSI: Multimodal corpus of sentiment intensity and subjectiv-ity analysis in online opinion videos. arXiv preprint arXiv:1606.06259 , 2016. Zadeh, A., Liang, P. P., Poria, S., Cambria, E., and Morency, L.-P. Multimodal language analysis in the wild: CMU-MOSEI dataset and interpretable dynamic fusion graph. In ACL , pp. 2236–2246, 2018. Zhang, J. and Zuo, C. Grpo-lead: A difficulty-aware re-inforcement learning approach for concise mathemat-ical reasoning in language models. arXiv preprint arXiv:2504.09696 , 2025. Zhang, X. et al. Mental-perceiver: Multimodal mental health dataset and model. In Proceedings of the AAAI Conference on Artificial Intelligence , 2025. 11 OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+A. HARPO Algorithm Block 
+
+We describe the HARPO procedure in Algorithm 1. 
+
+Algorithm 1 HARPO Heterogeneity Aware Relative Policy Optimization 
+
+Input: task set M; batch {(m, q )} ∼ D , where m ∈ M indexes tasks and q denotes a sample from task m; rollout groups {G(m,q )}
+
+with rewards {r(m,q,i )}; ε > 0; βρ, β s ∈ [0 , 1) ; previous inertial states ¯p(t−1) and s(t−1) 
+
+Output: updated policy parameters θ
+
+Construct group-normalized advantages: for all (m, q ) in batch do 
+
+ˆμ(m,q ) ← 1
+
+> |G(m,q )|
+
+P 
+
+> i∈G(m,q )
+
+r(m,q,i )
+
+ˆσ(m,q ) ← q 1
+
+> |G(m,q )|
+
+P 
+
+> i∈G(m,q )
+
+(r(m,q,i ) − ˆμ(m,q ))2
+
+for all i ∈ G(m,q ) do 
+
+ˆA(t)(m,q,i ) ← r(m,q,i ) − ˆμ(m,q )
+
+ˆσ(m,q ) + ε
+
+end for end for Construct contribution signals: for all (m, q ) in batch do 
+
+p(t)(m,q ) ← 1
+
+> |G(m,q )|
+
+P
+
+> i∈G(m,q )
+
+ˆA(t)(m,q,i )
+
+¯p(t)(m,q ) ← βρ ¯p(t−1) (m,q ) + (1 − βρ) p(t)(m,q )
+
+end for for all m with samples in batch do 
+
+p(t) 
+
+> m
+
+←
+
+P
+
+> q∈Q (t)
+> m
+
+P
+
+> i∈G(m,q )
+
+ˆA(t)(m,q,i )
+
+P
+
+> q∈Q (t)
+> m
+
+|G(m,q )|
+
+¯p(t) 
+
+> m
+
+← βρ ¯p(t−1)  
+
+> m
+
++ (1 − βρ) p(t)
+
+> m
+
+end for Construct geometric references: for all m with samples in batch do 
+
+¯p(t)ref ,m ←
+
+ Q
+
+> q∈Q (t)
+> m
+
+¯p(t)(m,q )
+
+1/|Q (t) 
+
+> m|
+
+end for 
+
+¯p(t)ref ,M ←
+
+ Q 
+
+> m∈M
+
+¯p(t)
+
+> m
+
+1/|M| 
+
+Construct modulation factors: for all (m, q ) in batch do 
+
+s(m,q ) ← ¯p(t)ref ,m /¯p(t)(m,q )
+
+s(t)(m,q ) ←
+
+
+
+s(t−1) (m,q )
+
+βs  s(m,q )
+
+1−βs
+
+end for for all m with samples in batch do 
+
+sm ← ¯p(t)ref ,M/¯p(t)
+
+> m
+
+s(t) 
+
+> m
+
+←
+
+
+
+s(t−1) 
+
+> m
+
+βs
+
+(sm)1−βs
+
+end for Obtain HARPO-modulated advantages: for all (m, q ) in batch do for all i ∈ G(m,q ) do 
+
+AH( t)(m,q,i ) ← s(t)(m,q ) s(t) 
+
+> m
+
+ˆA(t)(m,q,i )
+
+end for end for Optimize policy with HARPO objective: 
+
+Construct PPO-clipped surrogate ˜AH(m,q,i ): k (θ) from AH( t)(m,q,i ), in the same fashion as Eq. (14) Update θ by maximizing JHARPO (θ) using ˜AH(m,q,i ): k (θ) (Eq. (12)) 
+
+12 OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+B. Additional Details on the Human Behavioral Atlas Benchmark 
+
+B.1. Tasks and Datasets 
+
+Human Behavioral Atlas (Ong et al., 2026) comprises approximately 100k samples, with 10 tasks and 13 datasets; we summarize the benchmark below for completeness, with details following the original benchmark description: The tasks for the benchmark include Sentiment polarity (SEN): classifying attitudes as positive, negative, or neutral; emotion recognition (EMO): identifying emotions (anger, joy, sadness); social reasoning (SOC): understanding socially grounded judgments like empathy or appropriateness; intent recognition (INT): identifying the underlying purpose behind a behavior; and non-verbal communication (NVC): interpreting gestures and facial expressions. They also cover humor detection (HUM), sarcasm detection (SAR), anxiety detection (ANX), depression detection (DEP), and PTSD detection (PTSD). Each task may be associated with one or more datasets. We summarize the benchmark datasets as follows. CMU-MOSEI (Zadeh et al., 2018) is a large-scale multimodal dataset annotated for sentiment and emotion in real-world opinionated videos. MELD (Poria et al., 2019) provides utterance-level emotion and sentiment annotations from multi-party dialogues in the TV series Friends . UR-FUNNYv2 (Hasan et al., 2019) contains multimodal TED talk clips annotated for humor. MUStARD (Castro et al., 2019) is a multimodal sarcasm detection dataset constructed from television show dialogues. DAIC-WOZ (Valstar et al., 2016) consists of multimodal clinical interviews for depression assessment. CREMA-D (Cao et al., 2014) is an acted emotional speech dataset with categorical emotion labels. CH-SIMSv2 (Yu et al., 2022) comprises multimodal sentiment annotations from simulated human–computer interactions. MMPsy (Zhang et al., 2025) is a multimodal mental health dataset annotated for anxiety and depression. PTSD in the Wild (Sawadogo et al., 2024) contains real-world videos annotated for post-traumatic stress disorder. TESS (Pichora-Fuller & Dupuis, 2020) is an emotional speech dataset with acted portrayals of discrete emotions. Social-IQ 2 (Wilf et al., 2023) evaluates social intelligence via reasoning over human interactions in video. IntentQA (Li et al., 2023b) is a video question-answering dataset focused on intent inference in everyday scenarios. MimeQA (Li et al., 2025) evaluates nonverbal social reasoning using gesture-based video question answering. We report from the original paper, a Tab. 4 which summarizes the datasets associated task, modalities, sample count and evaluation metric. For completeness, the paper also includes the different dimensions of human behavior that each dataset belongs to. These include, affective states (Aff), which capture feelings, emotions and sentiments; cognitive states (Cog), which reflect internal mental processes such as reasoning or attention inferred from observable behavior; pathological states (Path), which correspond to psychological or psychiatric conditions assessed through verbal or nonverbal indicators; and social processes (Soc), which characterize social interaction and communicative behaviors such as humor, intent, and cooperation.                                                                                      
+
+> Table 4. Datasets and their associated tasks and human behavior dimensions in Human Behavior Atlas. The modalities T, A, V stand for text, audio and vision respectively. The tasks can fall into two categories, CLS = classification (evaluated by direct label matching). TXTR = text-response (evaluated by an LLM judge).
+> Dataset Dimension Task(s) Task Type Modalities Samples Eval. Metric
+> CMU-MOSEI Aff; Cog EMO, SEN CLS T / A / V 31,454 Binary weighted F1 (SEN), Mean weighted acc. (EMO) MELD Aff; Soc; Cog EMO, SEN CLS T / A / V 27,412 Binary weighted F1 (SEN), Mean weighted acc. (EMO) TESS Aff; Cog EMO CLS T / A / – 2,800 Mean weighted accuracy CREMA–D Aff EMO CLS T / A / – 7,442 Mean weighted accuracy CH–SIMSv2 Aff SEN CLS T / A / V 4,403 Binary weighted F1 Social-IQ 2.0 Soc; Cog SOC TXTR T / A / V 6,437 Accuracy (LLM–Judge) IntentQA Soc; Cog INT TXTR T / A / V 16,297 Accuracy (LLM–Judge) MimeQA Soc NVC TXTR T / A / V 806 Accuracy (LLM–Judge) UR–FUNNYv2 Soc HUM CLS T / A / V 2,125 Weighted F1 MUStARD Soc SAR CLS T / A / V 690 Weighted F1 DAIC–WOZ Path DEP CLS T / A / – 189 Weighted F1 MMPsy Path DEP, ANX CLS T / – / – 1,275 Weighted F1 PTSD–in–the–Wild Path PTSD CLS T / A / V 634 Weighted F1
+
+13 OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+B.2. Evaluation Metrics 
+
+We follow the same evaluation metrics utilized in Human Behavior Atlas, which specifically account for the task-specific nuances. The summary of the metrics utilized for each task is found in Tab. 4. For HUM (Humour Detection), SAR (Sarcasm Detection), DEP (Depression Detection), ANX (Anxiety Detection), and PTSD (PTSD Detection), the weighted F1 score is computed: 
+
+F 1 = 2 · Precision · Recall Precision + Recall ,
+
+where, Precision = T P T P + F P , Recall = T P T P + F N .
+
+The weighted F1 is then computed as: Weighted-F1 = X
+
+> c∈C
+
+nc
+
+N · F 1c,
+
+where nc is the number of true instances in class c, N is the total number of instances, and C is the set of classes. SEN (Sentiment Detection) utilizes binary weighted F1, which applies the same formula but only over the positive and negative sentiment classes, where fine-grained sentiment scales (i.e., weakly positive or weakly negative) are mapped into positive or negative classes respectively. This accounts for the differences in sentiment-scale labelling across the SEN datasets. For EMO (Emotion Recognition), the mean/ average weighted accuracy across all emotion classes (e.g., fear, surprise, joy) is calculated, using the weighted accuracy formula, following Liang et al. (2018): Weighted-Accuracy = 0 .5 · T P P + 0 .5 · T N N ,
+
+where T P and T N are the number of true positives and true negatives for the target class, and P and N denote the total number of positive and negative samples, respectively. For free-text response QA tasks such as NVC (Non-Verbal Communication), INT (Intent Recognition), and SOC (Social Reasoning), an LLM judge (GPT-5 nano (OpenAI, 2025)) is used to grade the generated responses. Specifically, task-specific prompts are provided to the LLM judge and the proportion of responses marked as TRUE is recorded as an estimate of accuracy: Accuracy = number of TRUE responses number of total responses The full grading prompts can be found in the original Human Behavior Atlas paper (Ong et al., 2026). 
+
+C. Experimental Settings. 
+
+C.1. Hyperparameter Settings 
+
+We train all methods for up to 5 epochs with early stopping based on validation performance. Validation is performed every 50 training steps. Early stopping is triggered if the validation metric does not improve for 5 consecutive validation runs (i.e., over 250 training steps). This stopping criterion helps reduce the impact of short-horizon fluctuations in validation metrics that arise from the high variance and non-stationarity of on-policy sampling (Henderson et al., 2018). We select the checkpoint achieving the highest average validation weighted F1 score. From Tab. 1, model results (i.e., Gemma-3-4B (Team et al., 2025), Qwen 2.5-Omni-7B (Xu et al., 2025a), Qwen 2.5-VL-7B (Bai et al., 2025), OmniSapiens-7B RL (Ong et al., 2026), HumanOmniV2-7B (Yang et al., 2025) are taken from the Human Behavior Atlas benchmark paper (Ong et al., 2026)), while we run the evaluation of Qwen 3-VL-8B Instruct (Xu et al., 2025b) using its implementation on Huggingface 4.On the other hand, we implement the reinforcement learning training algorithms in Tab. 1 (i.e., RLOO (Ahmadian et al., 2024), RE++ (Hu, 2025), GPG (Chu et al., 2025), GRPO (Shao et al., 2024)) using the VERL package 5. To enable fair 
+
+> 4https://huggingface.co
+> 5https://github.com/volcengine/verl
+
+14 OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+comparison with HARPO, all reinforcement learning methods are run on the same Human Behavior Atlas benchmark, with the same base model, Qwen 2.5-Omni-7B (Xu et al., 2025a), and exactly the same reward design in Sec. 3.3. For the RL baselines, we follow standard practice by reusing the hyperparameter configurations reported in the original papers, thereby preserving the authors’ intended optimization settings. For HARPO, we retain the learning rate used by GRPO ( 1 × 10 −6), since HARPO retains the update structure as GRPO, and we set βρ, βs in the inertial control Eq. (11) as 0.95. We also utilize the AdamW optimizer and omit explicit KL regularization. This is motivated by HARPO’s advantage modulation, which already acts to regularize policy updates, and is aligned with prior literature that strict KL constraints are not always necessary in on-policy training (Yu et al., 2025). For all reinforcement learning methods, we fix the number of rollouts to 5, utilize the same effective batch size of 256 with PPO-mini-batch size of 128, and set the prompt and response lengths to 4096 and 2048 respectively. All methods are run on 4 Nvidia H200s as well as 4 Nvidia RTX PRO 6000 Blackwell GPUs. 
+
+C.2. Full Details on Reward Design 
+
+From Sec. 3.3, we utilize a final reward per sample that combines task accuracy rtask , format correcteness rf mt , length penalty rlen . We summarize this below, with format weight wfmt = 0 .2 and length scale λlen = 0 .75 , where rtask can be 
+
+rcls or rqa , depending on if the sample belongs to a classification or QA task respectively: 
+
+r = (1 − wfmt ) rtask + wfmt rfmt + λlen rlen ,
+
+We provide additional details on rtask , rf mt , rlen . For rtask , it can either be classification reward rcls , or question-answering reward rqa , depending on whether the sample involves a classification response or a free-text answer respectively. rcls 
+
+is computed using a binary score for whether the predicted label exactly matches the ground truth label. rqa leverages a cosine similarity reward that compares the embedding of the predicted free text sequence and the ground truth, leveraging MiniLM-L6-v2 6 as the embedding model. Because cosine similarity typically falls between [−1, 1] , we ensure that the values are transformed into the range of [0 , 1] , such that it is compatible with reward assignment. We sumamarise this below, where ˆy is the predicted response (which contains just the answer without reasoning trace) and y is the ground truth: 
+
+rtask (ˆ y, y ) = 
+
+(rcls (ˆ y, y ), if classification ,rqa (ˆ y, y ), if free-text QA .rcls (ˆ y, y ) = 
+
+(
+
+1, ˆy = y, 
+
+0, otherwise .rqa (ˆ y, y ) = cos( e(ˆ y), e (y)) + 1 2 , cos( u, v ) = u⊤v
+
+∥u∥2 ∥v∥2
+
+, u = e(ˆ y), v = e(y).
+
+For the formatting reward rf mt , we assign a binary reward based on whether the generated response strictly follows the output format specified in the prompt. In particular, we provide the model the following system prompt: 
+
+{ c o n t e n t }
+
+You FIRST t h i n k a b o u t t h e r e a s o n i n g p r o c e s s a s an i n t e r n a l monologue and t h e n p r o v i d e t h e f i n a l a n s w e r . The r e a s o n i n g p r o c e s s MUST BE e n c l o s e d w i t h i n <
+
+t h i n k > < / t h i n k > t a g s . The f i n a l a n s w e r MUST BE p u t i n \ boxed { } .A response receives rf mt = 1 if and only if it contains <think> and </think> tags, followed by a final prediction enclosed in \boxed , in this order; otherwise, rfmt = 0. This check is applied to the full response and enforces adherence to the prescribed output schema. Finally, we provide a overlong length penalty, rlen which follows Zhang & Zuo (2025) to prevent excessive length and verbosity of responses. Accordingly, let ℓ be response length, we use a max Lmax of 812 tokens and buffer length B of 128 
+
+> 6https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
+
+15 OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+tokens. The penalty is: 
+
+rlen (ℓ) = 
+
+
+
+0, ℓ ≤ Lmax − B,  
+
+> (Lmax −B)−ℓB
+
+, Lmax − B < ℓ ≤ Lmax ,
+
+−1, ℓ > L max .
+
+D. Additional Formulas 
+
+D.1. Full GRPO Formulation 
+
+For completeness, we provide the full formulation of GRPO in Sec. 3.1, including the surrogate objective and importance-sampling formulation. Accordingly, for task m and sample q, GRPO samples a rollout group G(m,q ) of responses {o(m,q,i )}, where i ∈ G(m,q )
+
+indexes individual rollouts (i.e., a sampled response) with rewards r(m,q,i ), computing the group-normalized advantage: 
+
+ˆA(m,q,i ) = r(m,q,i ) − ˆμG(m,q )
+
+ˆσG(m,q ) + ε , (13) where ˆμG(m,q ) and ˆσG(m,q ) are the empirical mean and standard deviation of {r(m,q,i )}|G(m,q )| 
+
+> i=1
+
+. GRPO then optimizes 
+
+πθ (a | s) by performing a PPO-style trust-region update. At token position k of response o(m,q,i ), φ(m,q,i ): k(θ) denotes the importance sampling ratio between πθ and the old policy πθold , ˜A(m,q,i ): k(θ) denotes the PPO-clipped surrogate using 
+
+ˆA(m,q,i ), and JGRPO (θ) averages this surrogate over tokens and rollout samples with an optional KL penalty to a reference policy πref (with weight β). We summarize these with a compact objective: 
+
+φ(m,q,i ): k(θ) = πθ
+
+ o(m,q,i ): k | q, o (m,q,i ): <k 
+
+
+
+πθold 
+
+ o(m,q,i ): k | q, o (m,q,i ): <k 
+
+
+
+˜A(m,q,i ): k(θ) = min 
+
+
+
+φ(m,q,i ): k(θ) ˆA(m,q,i ),
+
+clip  φ(m,q,i ): k(θ), 1 − ϵ, 1 + ϵ ˆA(m,q,i )
+
+
+
+JGRPO (θ) = Eq∼D m E{o(m,q,i )}∼ πθold 
+
+"
+
+1
+
+|G(m,q )|
+
+> |G(m,q )|
+
+X
+
+> i=1
+
+1
+
+no(m,q,i )
+
+> no(m,q,i )
+
+X
+
+> k=1
+
+˜A(m,q,i ): k(θ)
+
+#
+
+− β E[DKL (πθ ∥ πref )] .
+
+(14) 
+
+D.2. Additional HARPO Details 
+
+In Sec. 3.2, we explained the structured modulation utilized by HARPO, which constructs modulation factors by comparing contribution signals to a geometric mean reference. We provide further details on why this construction yields modulation factors whose geometric mean equals 1, ensuring that multiplicative upscaling from certain modulation factors is exactly compensated by downscaling from others. Fix an iteration t and a task m, and let Q(t) 
+
+> m
+
+denote the set of samples associated with task m. The sample-level geometric reference is defined as: 
+
+¯p(t)ref ,m = Y
+
+> q∈Q (t)
+> m
+
+p(t)(m,q )
+
+! 1 
+
+> |Q (t)
+> m|
+
+.
+
+Using this reference, the sample-level modulation factor for each sample q is constructed as: 
+
+s(t)(m,q ) = ¯p(t)ref ,m 
+
+p(t)(m,q )
+
+.
+
+16 OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+Taking the product over all samples in Q(t) 
+
+> m
+
+yields: 
+
+Y
+
+> q∈Q (t)
+> m
+
+s(t)(m,q ) = Y
+
+> q∈Q (t)
+> m
+
+¯p(t)ref ,m 
+
+p(t)(m,q )
+
+= (¯ p(t)ref ,m )|Q (t) 
+
+> m|
+
+Q
+
+> q∈Q (t)
+> m
+
+p(t)(m,q )
+
+.
+
+By definition of the geometric mean: 
+
+(¯ p(t)ref ,m )|Q (t)  
+
+> m|
+
+= Y
+
+> q∈Q (t)
+> m
+
+p(t)(m,q ),
+
+and therefore: Y
+
+> q∈Q (t)
+> m
+
+s(t)(m,q ) = 1 .
+
+This shows that the sample-level modulation factors possess a geometric mean of 1. An identical argument applies at the task-level. Let M denote the set of tasks and define the task-level geometric reference as 
+
+¯p(t)ref ,M = Y
+
+> m∈M
+
+p(t)
+
+> m
+
+! 1
+
+> |M|
+
+.
+
+The task-level modulation factors are given by 
+
+s(t) 
+
+> m
+
+= ¯p(t)ref ,M
+
+p(t)
+
+> m
+
+.
+
+Taking the product over all tasks yields Y
+
+> m∈M
+
+s(t) 
+
+> m
+
+= 1 .
+
+Therefore, the modulation factors are possess a geometric mean of 1 at both the sample and task-levels, ensuring that multiplicative upscaling from some modulation factors is exactly compensated by downscaling from others. Hence, the factors cannot simulateneously enlarge or shrink all advantages at the sample or task-level, mitigating unintended influence on the effective global step size. 17 OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+E. Additional Results 
+
+E.1. Full Ablation Results 
+
+We provide the per task and per dataset breakdown of the results from the ablation in the following. Tab. 5 represents the task-level performance of the ablations, whereas Tab. 6 represents the per-dataset performance breakdown of all ablations. 
+
+Table 5. Per-task performance (%) for HARPO ablations across behavioral tasks. Each value is the arithmetic mean over datasets associated with the task. Avg. Rank is computed across tasks using per-task ranks (higher is better; ties use average rank), and then averaged over tasks (lower is better). Rows with missing task values are omitted from ranking.                                                         
+
+> Variant EMO HUM INT PTSD ANX DEP SEN SAR SOC NVC Avg. Rank ↓
+> HARPO 76.55 69.85 50.52 98.39 91.98 78.87 77.61 70.64 25.40 14.54 1.90
+> w/o structured modulation 78.44 66.61 50.38 98.39 90.68 77.01 77.48 72.68 29.08 15.12 2.00 w/o inertial control 76.42 63.05 53.28 98.39 90.68 76.48 71.92 62.68 30.12 13.95 2.70 w/o sample-level modulation 77.27 67.82 50.94 98.39 90.68 71.04 76.37 68.19 29.43 12.21 2.60
+
+Table 6. Ablation results for HARPO components, grouped by behavioral tasks and datasets. Following the unified metrics proposed in the Human Behavior Atlas Benchmark (Ong et al., 2026), we use binary weighted F1 for SEN; mean per-class weighted accuracy for EMO; weighted F1 for HUM, SAR, ANX, DEP, PTSD; and LLM-Judge accuracy for SOC, INT, NVC.             
+
+> Model / Ablations EMO HUM INT PTSD ANX DEP SEN SAR SOC NVC
+> CREMA-D
+> MELD (E)
+> MOSEI (E)
+> TESS
+> UR-FUNNY
+> IntentQA
+> PTSD WILD
+> MMPSY (A)
+> MMPSY (D)
+> DAIC–WOZ
+> MELD (S)
+> CH-SIMSv2
+> MOSEI (S)
+> MUStARD
+> Social-IQ 2.0
+> MimeQA
+> HARPO 85.80 69.14 55.45 95.83 69.85 50.52 98.39 91.98 84.53 73.20 75.49 88.71 68.64 70.64 25.40 14.54 w/o structured modulation 84.48 71.70 60.36 97.22 66.61 50.38 98.39 90.68 83.20 70.82 70.43 88.37 73.65 72.68 29.08 15.12 w/o inertial control 86.49 67.86 56.61 94.72 63.05 53.28 98.39 90.68 82.04 70.92 73.80 84.65 57.32 62.68 30.12 13.95 w/o sample-level modulation 84.71 68.92 57.38 98.06 67.82 50.94 98.39 90.68 73.44 68.64 71.61 87.76 69.74 68.19 29.43 12.21
+
+E.2. Full Dataset Results 
+
+For brevity, Tab. 1 shows the performance at the task-level. We additionally provide the dataset-level breakdown of these results in the following Tab. 7. We also provided the full dataset breakdown for HARPO and its ablations in Tab. 6. 
+
+E.3. Additional Training Plots 
+
+We provide additional training plots to empirically illustrate the training dynamics in our experiments. We include a Fig. 7 that depicts the advantage distributions of the different behavioral tasks in the Human Behavior Atlas benchmark (Ong et al., 2026). In particular, the right column of Fig. 7 depicts the group-normalized advantages of the tasks SEN, NVC, INT under a GRPO run. The different advantage distributions observed highlights how the behavioral tasks can systematically induce different advantages, as mentioned in Sec. 3.1. In the left column of this Fig. 7, we compare the advantage distributions with and without sample-level modulation for other tasks (SOC, HUM, NVC). Accordingly, we observe that with sample-level modulation in the HARPO method, the advantage distributions tend to become narrower than without. This coincides with more consistent performance across tasks in Tab. 3 with HARPO achieving an average task rank of 1.90 compared to without sample-level modulation at 2.60. We include a Fig. 6 to illustrate the task-level modulation factors over time between the ablation that utilizes s(t) = 1 /p (t)
+
+and HARPO. To this end, we observe that in the left column of this figure, the geometric mean of the modulation factors are consistently above 2.5. This further illustrates how the modulation factors can induce unintended scaling of the global step size, without geometric centering. In the same Fig. 6, in the right column, we also observe how the contribution signals p(t) varies with training for different tasks, SAR, INT, EMO, SOC. Accordingly, we observe that for certain tasks, the task-level contribution signals p(t) 
+
+> m
+
+can differ by orders of magnitude. For example, the p(t) 
+
+> m
+
+for INT may exceed EMO by a factor of up to 7. Since these signals are used to construct the modulation factors, the empirical illustrations provide additional context for the considerable variation in modulation factors. This motivates the use of a geometric reference as a practical tool to temper excessively large differences in modulation factors. 18 OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization 
+
+Table 7. Full results grouped by behavioral tasks (headers) and their relevant datasets (sub-headers). Following the unified metrics proposed in the Human Behavior Atlas Benchmark (Ong et al., 2026), we use binary weighted F1 for SEN; mean per-class weighted accuracy for EMO; weighted F1 for HUM, SAR, ANX, DEP, PTSD; and LLM-Judge accuracy for SOC, INT, NVC. 
+
+Model / Algorithm EMO HUM INT PTSD ANX DEP SEN SAR SOC NVC 
+
+> CREMA-D
+> MELD (E)
+> MOSEI (E)
+> TESS
+> UR-FUNNY
+> IntentQA
+> PTSD WILD
+> MMPSY (A)
+> MMPSY (D)
+> DAIC–WOZ
+> MELD (S)
+> CH-SIMSv2
+> MOSEI (S)
+> MUStARD
+> Social-IQ 2.0
+> MimeQA
+
+Models 
+
+Gemma-3-4B 49.50 64.20 56.50 49.90 59.70 22.70 49.90 60.10 78.80 13.70 78.50 81.30 61.70 52.90 19.10 2.30 Qwen 2.5-Omni-7B 52.10 66.10 58.00 56.80 54.30 25.40 76.00 79.30 79.10 63.60 70.00 71.40 60.20 65.60 25.40 6.90 Qwen-2.5-VL-7B 50.10 57.10 59.20 49.90 58.30 24.90 75.50 63.10 65.30 62.30 67.40 52.40 31.70 51.10 23.10 9.80 Qwen 3-VL-8B-Instruct 50.20 70.87 59.44 50.14 66.76 38.00 92.70 42.29 36.38 66.86 68.97 77.19 62.93 63.67 24.94 13.95 OMNI SAPIENS -7B RL 50.10 69.90 58.10 51.00 63.90 48.60 96.80 91.90 81.40 72.90 57.10 39.30 22.40 64.70 30.40 13.30 HumanOmniV2-7B 56.00 63.30 55.80 63.70 63.80 26.30 82.40 52.70 67.20 63.60 76.80 82.50 63.30 39.50 28.20 9.30 
+
+OMNI SAPIENS -7B 2.0 (ours) 85.80 69.14 55.45 95.83 69.85 50.52 98.39 91.98 84.53 73.20 75.49 88.71 68.64 70.64 25.40 14.54 
+
+Training Algorithms 
+
+RLOO 85.77 67.74 50.05 98.75 67.86 51.73 98.39 90.68 84.26 70.88 67.72 89.64 73.21 62.58 29.54 16.28 RE++ 82.56 66.52 59.05 95.56 60.26 5.01 98.39 93.11 79.09 68.64 66.67 87.86 15.03 50.21 12.64 4.07 GPG 82.62 69.36 60.00 98.75 69.28 54.21 98.39 90.36 85.88 70.92 75.10 87.77 64.43 45.96 27.93 12.79 GRPO 82.88 69.85 57.22 95.83 27.56 49.90 98.39 90.42 84.35 70.92 76.28 84.57 71.68 53.58 23.30 11.00 
+
+HARPO (ours) 85.80 69.14 55.45 95.83 69.85 50.52 98.39 91.98 84.53 73.20 75.49 88.71 68.64 70.64 25.40 14.54 100 200 300 400 500       
+
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8 SAR
+> INT
+> EMO
+> SOC
+> 100 200 300 400 500
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+> 3.5
+> 4HARPO
+> w/o structured modulation (scaling by 1/p (t) )
+> Modulation Factor
+> Training Steps
+> pt values
+> SAR
+> INT
+> EMO
+> SOC
+> HARPO
+> W/o structured modulation
+> (scaling by 1/p t
+
+)
+
+Figure 6. Left: Comparison of geometric mean of the task-level modulation factors s(t) 
+
+> m
+
+between HARPO and the w/o structured modulation ablation that utilizes s(t) = 1 /p (t). We observe that the modulation geometric mean of the modulation factors are above 2.5 throughtout training. Right: Values of p(t) over training for different tasks SAR, INT, EMO, SOC. We observe that between specific tasks (i.e., INT vs EMO), the task-level contribution signals p(t) 
+
+> m
+
+can vary by considerable orders of magnitude throughout training. 
+
+19 OmniSapiens: A Foundation Model for Social Behavior Processing via Heterogeneity-Aware Relative Policy Optimization −2 −1.5 −1 −0.5 0 0.5 1 1.5 2
+
+> 0
+> 0.1
+> 0.2
+> 0.3
+> GRPO
+
+NVC                                       
+
+> −2 −1.5 −1 −0.5 00.5 11.5 2
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> GRPO
+> −2 −1.5 −1 −0.5 00.5 11.5 2
+> 0
+> 1
+> 2
+> 3
+> 4
+> GRPO
+> −8 −6 −4 −2 02468
+> 0
+> 1
+> 2
+> 3
+> 4
+> w/o hierarchical (task only)
+> HARPO
+> −2.5 −2 −1.5 −1 −0.5 00.5 11.5 2
+> 0
+> 0.2
+> 0.4
+> 0.6
+> 0.8 w/o hierarchical (task only)
+> HARPO
+> −2 −1 012
+> 0
+> 0.5
+> 1
+> w/o hierarchical (task only)
+> HARPO
+
+NVC 
+
+HUM 
+
+SOC  HARPO 
+
+> Density
+
+Advantage Values 
+
+INT 
+
+SEN  GRPO 
+
+w/o sample level mod. 
+
+Figure 7. Left: Advantage distributions for HARPO (red) and the ablation (blue) which does not involve sample-level modulation, across the different tasks SOC, HUM, NVC. We observe that HARPO, with sample-level modulation induces a narrower advantage distribution. Right: More plots to depict the group-normalized advantage distributions of different tasks, SEN, NVC, INT. We observe that the different behavioral tasks provide different advantage distributions. 
+
+20

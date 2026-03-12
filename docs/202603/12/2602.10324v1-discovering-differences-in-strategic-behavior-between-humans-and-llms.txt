@@ -1,0 +1,3417 @@
+Title: Discovering Differences in Strategic Behavior Between Humans and LLMs
+
+URL Source: https://arxiv.org/pdf/2602.10324v1
+
+Published Time: Thu, 12 Feb 2026 01:17:44 GMT
+
+Number of Pages: 38
+
+Markdown Content:
+> 2026-02-04
+
+# Discovering Differences in Strategic Behavior between Humans and LLMs 
+
+Caroline Wang 1,* , Daniel Kasenberg 2, Kim Stachenfeld 2 and Pablo Samuel Castro 2  
+
+> *Work performed as a student researcher., 1The University of Texas at Austin, 2Google DeepMind
+
+As Large Language Models (LLMs) are increasingly deployed in social and strategic scenarios, it becomes critical to understand where and why their behavior diverges from that of humans. While behavioral game theory (BGT) provides a framework for analyzing behavior, existing models do not fully capture the idiosyncratic behavior of humans or black-box, non-human agents like LLMs. We employ AlphaEvolve, a cutting-edge program discovery tool, to directly discover interpretable models of human and LLM behavior from data, thereby enabling open-ended discovery of structural factors driving human and LLM behavior. Our analysis on iterated rock-paper-scissors reveals that frontier LLMs can be capable of deeper strategic behavior than humans. These results provide a foundation for understanding structural differences driving differences in human and LLM behavior in strategic interactions. 
+
+Keywords: large language models,behavioral game theory, strategic behavior, cognitive sci-ence,computational social science 
+
+1. Introduction 
+
+Artificial intelligence (AI) is becoming ubiqui-tous in human activities, fundamentally altering how we work, communicate, and interact. In particular, the rapid advancement of Large Lan-guage Models (LLMs) has catalyzed a shift toward agents capable of generating human-passing text in interactive social settings. These agents are frequently anthropomorphized by users and re-searchers alike, although they are intrinsically non-human. We identify two predominant scenarios: first, where LLM agents interact directly with humans and other artificial agents, and second, where LLM agents are used as proxies to study human behavior. Examples of ‘direct interaction’ scenar-ios are numerous, as they often pose direct eco-nomic value, and include general-purpose conver-sational assistants Ouyang et al. (2022), coding assistants (Srinivasan et al., 2025), customer ser-vice agents (Buhler, 2025), virtual relationship agents (Siemon et al., 2022), and negotiation agents (Van Hoek and Lacity, 2023). Simultane-ously, driven by the discovery that groups of LLMs can display interesting and human-like emergent social behavior Park et al. (2022), researchers in the social sciences and social computing, as well as market research firms (Amble, 2025; Ko-rst et al., 2025), have begun to use LLM agents as a convenient and cheap method to simulate human behavior in both individual and social sce-narios (Ziems et al., 2024). As users continue to interact with LLMs in their everyday lives, and researchers publish findings using LLM proxies for human behavior, the fol-lowing question becomes critical for both safety and scientific progress: What are the similarities and differences between LLM and human behavior in repeated social interactions? Understanding dif-ferences is crucial for understanding limitations of LLMs as digital twins, improving behavioral alignment to human expectations, and monitor-ing LLM capabilities. While answering this ques-tion represents a broad and ambitious research endeavor, this paper studies the question through the lens of iterated matrix games. Games have long been used to measure cognitive abilities for both humans (Allen et al., 2024) and AI (Mnih et al., 2015; Silver et al., 2016). Matrix games, in particular, exemplify real-world social and strate-gic scenarios, thereby allowing us to study strate-gic interactions in a controlled sandbox. Our approach draws from established methods in behavioral game theory (BGT; Camerer, 2003).  
+
+> Corresponding author(s): caroline.l.wang@utexas.edu
+> ©2026 Google. All rights reserved
+> arXiv:2602.10324v1 [cs.AI] 10 Feb 2026
+
+Discovering Differences in Strategic Behavior between Humans and LLMs choice                          
+
+> prev opp. choice
+> opponent choice
+> opponent transition matrix
+> opponent beater bias
+> Predict opp actions
+> counterfactual
+> rewards
+> 1. UPDATE
+> apply
+> Q-decay
+> compute expected rewards
+> Q-value
+> array
+> select
+> active
+> Q-values
+> apply
+> Q-decay
+> choice
+> opponent choice reward
+> subjective reward
+> prediction error
+> historical opp. choice frequency
+> old
+> next choice Q-values
+> prev
+> choice
+> choice
+> logits
+> stickiness
+> bias
+> Input Output Agent
+> State
+> new
+> learning
+> rate
+> based on
+> sign( )
+> updated
+> active
+> Q-values
+> OPPONENT MODELING
+> VALUE LEARNING
+> OPPONENT MODELING
+> prev
+> choice
+> 3. UPDATE
+> unchosen
+> Q-values
+> Q-value
+> array VALUE LEARNING
+> counter factual
+> prediction
+> error
+> prediction error
+> select
+> chosen
+> Q-value
+> reward
+> 2. UPDATE
+> chosen Q-value
+> asymm.
+> learning rate based on
+> sign
+> choice
+> logits
+> UPDATE
+> active Q-values choice bias
+> prediction error based dynamic temperature
+
+Figure 1 | Diagrams of AlphaEvolve-discovered programs. The simplest-but-best programs for humans ( left )and Gemini 2.5 Pro ( right ), discovered by AlphaEvolve on iterated rock-paper-scissors, are displayed. For simplicity, the learnable parameters 𝜃 of each program are omitted. Both programs use value-based learning and opponent modeling. The Gemini 2.5 Pro program displays more sophisticated opponent modeling than humans and considers counterfactual outcomes during value updates. 
+
+BGT seeks to understand human social behavior through empirically studying behavior in simple games. There are two dominant methods of in-quiry: (1) studying simple behavioral statistics (e.g., the win rate in rock-paper-scissors), and (2) constructing parameterized mathematical models to fit behavioral data, and studying those mod-els (Wright and Leyton-Brown, 2019; Zhu et al., 2025). While behavioral statistics are essential for identifying trends in data, they do not explain them. On the other hand, traditional BGT models rely on manually designed mathematical formu-las as hypotheses to explain and predict deviations in human behavior from game theoretically ra-tional behavior. 1 However, as LLMs introduce non-human behavioral priors, relying solely on human-centric hypotheses may fail to capture facets of LLM strategic behavior that differ from humans. In this work, we aim to structurally character-ize the differences between human and LLM be-havior in strategic scenarios without limiting our framework to models designed for human behav-ior. We automate the model generation process by using LLMs to generate interpretable models of behavior that fit the data well (Aygün et al., 2025; Castro et al., 2025; Novikov et al., 2025; Rmus 
+
+> 1
+
+Behavioral game theorists have also considered neural network models, which may fit the data arbitrarily well, but this shifts the onus from model design to model interpreta-tion (Hartford et al., 2016). 
+
+et al., 2025). This allows us to explore the space of candidate models supported by behavioral data from humans and various LLMs, to understand behavioral differences on a structural level. We compare the behavior of humans and LLMs in the matrix game Iterated Rock-Paper-Scissors (IRPS), a simple but foundational testbed that is actively used to study human strategic behavior (Batzilis et al., 2019), cognitive biases (Dyson et al., 2016), neural processes (Moerel et al., 2025), opponent modeling (Brockbank and Vul, 2024), and evolu-tionary dynamics (Wang et al., 2014). Our work differs from existing analyses of LLM strategic behavior because existing analyses focus on LLM strategic capabilities in isolation (Akata et al., 2025; Cipolina-Kun et al., 2025; Payne and Alloui-Cros, 2025), or analyze game-specific statistics (Fan et al., 2024; Roberts et al., 2025). In contrast, we analyze a data-driven space of models generated by LLMs, which allows for open-ended discovery of factors driving both human and LLM behavior. Our contributions are as follows: 
+
+• We introduce the first application of automated symbolic model discovery to characterize hu-man and LLM behavior through interpretable behavioral models. 
+
+• We demonstrate that frontier LLMs win with higher rates and against more complex oppo-
+
+2Discovering Differences in Strategic Behavior between Humans and LLMs 
+
+nents than humans in IRPS, even without agen-tic scaffolds. 
+
+• Using AlphaEvolve-discovered behavioral mod-els, we provide a structural explanation for this performance gap, revealing that frontier LLMs maintain more sophisticated opponent models than humans. 
+
+2. IRPS Datasets 
+
+Rock-paper-scissors (RPS) is a two-player zero-sum game with well-understood theoretical prop-erties. The Nash equilibrium, which specifies game-theoretically optimal behavior, prescribes that a rational agent should act randomly to pre-vent exploitable patterns in behavior from de-veloping (von Neumann et al., 1944). However, humans do not behave randomly in RPS (Batzilis et al., 2019; Wang et al., 2014; Xu et al., 2013), motivating a large body of work across BGT, neu-roscience, and cognitive psychology, despite the game’s simplicity. Studies have demonstrated that humans exhibit “primary salience bias”, favoring Rock on the first move (Brockbank and Vul, 2024; Xu et al., 2013), and employ conditional response strategies (e.g., win-stay-lose-shift; Dyson et al., 2016). Of particular interest is that iterated rock-paper-scissors (IRPS) creates the ideal conditions to investigate the human ability to perform oppo-nent modeling —a form of theory-of-mind (ToM; Premack and Woodruff, 1978). Due to the game’s simplicity, the only way to consistently win is to rapidly detect strategic regularities in the op-ponent’s behavior and adapt accordingly, which humans do to a limited extent (Batzilis et al., 2019; Brockbank and Vul, 2024). Consequently, IRPS has been used as a benchmark for both AI game-playing (Lanctot et al., 2023) and ToM in LLMs (Cross et al., 2025). ToM, or the cognitive ability for an agent to un-derstand the beliefs, desires and intentions of oth-ers, is a crucial aspect of human social interaction. Thus, we identify IRPS as a particularly interest-ing domain in which to compare human and LLM strategic capabilities. We leverage an existing dataset of human gameplay on IRPS (Brockbank and Vul, 2024), and construct a matched dataset for each LLM to enable a rigorous comparison. The IRPS setting and each dataset is described below. Further details about each dataset are provided in App. D. 
+
+IRPS Game and Bots The IRPS game setting is inherited from Brockbank and Vul (2024). Each game lasts for 300 rounds. In each round, players receive 3, 0, or -1 for a win, tie, or loss respec-tively. 2 Opponents consist of 15 bots of varying complexity; see App. C for details). For each game, the opponent is one of 15 bots of varying complexity. The bots can be divided into nonadaptive and adaptive bots. Nonadaptive bots employ transition-based strategies that map a small amount of historical context to fixed next moves (e.g., playing the move that beats the opponent’s prior move) with 90% probability. Adaptive bots track historical sequential dependencies in their opponent’s moves, and play to counter the pre-dicted next move with 100% probability. Impor-tantly, all bots are fully exploitable by an oppo-nent that tracks the bot’s patterns in behavior. 
+
+Human Dataset Brockbank and Vul (2024) in-troduced a large-scale dataset where 411 human participants play IRPS against bots for a total of 129,087 choices. Participants were informed that the bots’ strategies were fixed, but not what each bot strategy was. After each round, partici-pants were shown both moves and the round out-come. Throughout the game, participants were also shown the game instructions, and a tally in-dicating progress through the game. 
+
+Matched LLM Datasets To enable a fair com-parison to behavior in the existing human dataset, data is collected under conditions that match those of the Brockbank and Vul (2024) dataset as closely as possible. In particular, the LLMs play IRPS using the same game payoffs described pre-viously, where gameplay prompts are based on the instructions given to the humans. For each LLM, 
+
+> 2Values were chosen by Brockbank and Vul (2024) to maintain engagement by increasing opportunity to gain points. Values do not change the Nash equilibrium.
+> 3Discovering Differences in Strategic Behavior between Humans and LLMs
+
+rock paper scissors rock (0, 0) (-1, 3) (3, -1) paper (3, -1) (0, 0) (-1, 3) scissors (-1, 3) (3, -1) (0, 0)   
+
+> Table 1 |Rewards for one round of the IRPS game. Each tuple contains the rewards of the (row, column) players.
+
+20 games of 300 rounds were collected against all 15 bots, for a total of 90,000 choices. We consider reasoning-capable, closed and open-source LLMs from Google and OpenAI, that were the most advanced at the time of this study: Gemini 2.5 Pro and 2.5 Flash (Comanici et al., 2025), GPT 5.1 (OpenAI, 2025b), and the open-source GPT OSS 120B (OpenAI, 2025a). Data collection details are provided in App. D.2. 
+
+3. Methods 
+
+We distill the underlying behavior in each dataset via AlphaEvolve (Novikov et al., 2025), a recently introduced framework for generating programs that maximize a mathematical objective. By us-ing LLMs to evolve Python programs that describe behavioral data, AlphaEvolve bridges the gap be-tween high-performance but black-box models, and interpretable, theory-driven equations. While discovered programs are optimized for a predic-tive loss and may not correspond to actual causal mechanisms of behavior, nevertheless, they pro-vide human-readable, mechanistic descriptions that can be analyzed and verified like traditional scientific hypotheses. Consequently, they offer both competitive predictive accuracy and mech-anistic interpretability. Below, we provide the problem formulation for behavioral modeling in IRPS, followed by an example of a programmatic behavioral model. We then describe the baseline models as well as how AlphaEvolve is used to dis-cover programmatic behavioral models directly from data. 
+
+3.1. Problem Formulation: Behavior Modeling in IRPS 
+
+We consider the problem of predicting an agent’s choices at each round of a two-player game, given its prior actions, the opponent’s prior actions, and prior game outcomes. The IRPS game can be rep-resented using the formalism of the two-player, symmetric, iterated game, Γ = ⟨𝐴, 𝑟, 𝑇 ⟩. In the game Γ, 𝐴 = 𝐴 1 = 𝐴 2 represents the finite set of actions available to each player, 𝑟 : 𝐴 1 × 𝐴 2 ↦ → ℝ2
+
+specifies the outcome of each round by associat-ing numeric rewards to each pair of actions, and  
+
+> 𝑇
+
+represents the number of rounds. For IRPS, 𝐴 
+
+is the set {rock, paper, scissors }, 𝑟 is specified in Table 1, and 𝑇 = 300 . The subscript 𝑡 will denote the game round, and 𝑎, 𝑎 𝑜 will respectively refer to the actions of the ego agent , whose perspective we take, and its opponent. A behavioral model is a function 
+
+> 𝜙
+
+(𝑎 𝑡 , 𝑎 𝑜 𝑡 , 𝑟 𝑡 , ℎ 𝑡 , 𝜃 ) → ( ˆ𝑝 𝑡 +1, ℎ 𝑡 +1) that processes the current ego agent action, 𝑎 𝑡 , the current opponent action, 𝑎 𝑜 𝑡 ∈ 𝐴 , and the received reward  
+
+> 𝑟 𝑡
+
+, to update an internal state ℎ𝑡 and output a probability distribution over the ego agent’s possible next moves ˆ𝑝 𝑡 +1 ∈ Δ( 𝐴 ). A behavioral model is parameterized by a vector 𝜃 , which may be fit to a dataset D = {𝜏 𝑖 }𝑁 𝑖 =1, using the standard maximum likelihood estimation and stochastic gradient descent (SGD). In the definition of D, 
+
+> 𝑁
+
+denotes the number of games, and 𝜏 , the sequence of choices and rewards within each game, 𝜏 = {𝑎 𝑡 , 𝑎 𝑜 𝑡 , 𝑟 𝑡 }𝑇 𝑡 =1. See App. E.1 for further details. In the following, we will use 𝜙 (𝜃 D ) to indicate what dataset 𝜙 is fit to. A programmatic behavioral model is a model that is represented as a program (App. Fig. 3). In the literature, behavioral models have con-sisted of human-specified mathematical update rules based on behavioral mechanisms, or ma-chine learning models, such as neural net-works (Camerer and Hua Ho, 1999; Camerer et al., 2004; Hartford et al., 2016; Zhu et al., 2025). Both types are expressible as programs, underscoring that programs provide highly flex-ible representation for behavioral models. Our baselines include both types, while AlphaEvolve programs fall into the latter category. Within the context of this study, we outline two criteria for ideal behavioral models. First, models should predict behavior well, even on unseen data (generalization ), to ensure that our conclusions are not simply due to overfitting Hartford et al. 
+
+> 4Discovering Differences in Strategic Behavior between Humans and LLMs
+
+(2016). Second, they should be interpretable , to allow us to gain insight on differences between be-havioral models of humans and LLMs. To evaluate predictive fit and generalization, model perfor-mance is reported as the two-fold cross-validated normalized likelihood (see App. E). To evalu-ate the interpretability of the programmatic be-havioral models examined in this paper, we em-ploy the Halstead effort, a software engineering heuristic designed to measure the time required to comprehend and implement a program, based on the number of total and unique operators and operands in code (detailed in App. E.5). 
+
+3.2. Evolving Behavioral Models using AlphaE-volve 
+
+We adopt the training procedure of Castro et al. (2025), who employed a predecessor to AlphaE-volve to generate programmatic cognitive models. The general framework is briefly summarized be-low, focusing on distinctions of our framework from Castro et al. (2025). We refer the inter-ested reader to App. E.4 for further details. In brief, AlphaEvolve is an evolutionary opti-mization procedure that uses LLMs to generate programs that maximize a fitness function , which maps candidate programs to a scalar score. To generate a program, an LLM is provided with contextual information, a small sample of previ-ously generated programs, a parent program, and corresponding scores of provided programs. The LLM is instructed to propose modifications to the parent program in order to increase its score. As LLMs have been trained on large amounts of data, they are capable of leveraging diverse, existing theories on human strategic behavior to propose candidate models. We use AlphaEvolve to discover programmatic behavioral models that fit a dataset D. There are two key distinctions between our approach and Castro et al. (2025). First, we use AlphaE-volve (Novikov et al., 2025), rather than its prede-cessor, FunSearch (Romera-Paredes et al., 2024). Second, to avoid overfitting and maximize pro-gram interpretability, we use a multi-objective fitness function that considers both the cross-validated likelihood of the training dataset, and the Halstead effort. This resembles the approach of Rmus et al. (2025), who used the Bayesian information criterion (BIC; Watanabe, 2013) to evaluate a programmatic model’s predictive per-formance and simplicity. 3 The multi-objective op-timization results in a Pareto frontier that trades off between predictive performance and inter-pretability (e.g., Figure 4). In our AlphaEvolve configuration, Gemini 2.5 Flash is used to generate programs. AlphaEvolve is initialized with a template program that pro-vides the desired program specifications, such as the input and output variables (App. Fig. 3). Note that the template program represents the param-eters 𝜃 as the variable, params . Let Φ denote the space of programs, and F ( 𝜙 ) : Φ ↦ → ℝ denote the fitness function over programs. In further de-tail, the first component of the fitness function is the twofold cross-validated maximum likelihood achieved by a program 𝜙 , after its parameters 𝜃 
+
+are fit to dataset D via SGD (App. Eq. 2), i.e. 
+
+F ( 𝜙 (𝜃 D )) . The overall AlphaEvolve procedure amounts to a bilevel optimization process, where the outer loop searches over the program space 
+
+Φ, while the inner loop searches over parameter space 𝜃 . Thus, in contrast to standard machine learning methods that require the user to pre-specify the model structure (e.g., the architecture of a neural network), AlphaEvolve automatically searches over possible model structures .
+
+3.3. Baseline Behavioral Models 
+
+To assess the accuracy of models discovered by AlphaEvolve, we compare them against three rep-resentative baselines. The first is the usual Nash equilibrium baseline, the second is founded on classic baselines in BGT, while the third uses highly flexible neural networks. 
+
+Nash Equilibrium The classic game-theoretic baseline assumes all players act rationally. In 
+
+> 3While the BIC is a widely adopted approach for model selection in statistics, it is less suited for measuring the in-terpretability of a program. The BIC formula relies on the number of data points used to train a model and the num-ber of parameters estimated by the model. In our setting, all programs generated by AlphaEvolve are trained on the same number of data points and have the same number of estimated parameters.
+> 5Discovering Differences in Strategic Behavior between Humans and LLMs
+
+IRPS, this corresponds to playing each move with probability 1/3 (von Neumann et al., 1944). 
+
+Contextual Sophisticated Experi-ence-Weighted Attraction (CS-EWA) The majority of BGT models focus on non-repeated games, failing to capture within-game adap-tation. While Experience-Weighted Attraction (EWA) (Camerer and Hua Ho, 1999) hybridizes reinforcement and belief-based learning for repeated play, and Sophisticated EWA (Camerer et al., 2002) incorporates recursive reasoning about opponents, both assume random rematch-ing between rounds. This prevents modeling strategies that adapt to a specific opponent’s history. To address this, we extend Sophisticated EWA to CS-EWA, which accounts for temporal dependencies by maintaining independent attraction vectors for every joint history of length 𝐿 = 2. This allows the model to learn context-specific strategies (e.g., “if I played Rock and lost, switch to Paper”). See App. E.3 for details. 
+
+Recurrent Neural Network (RNN) As a refer-ence point for performance of a highly flexible but black-box statistical learner, we use an RNN based on the Gated Recurrent Unit (GRU; Cho et al., 2014). While highly flexible and capable of capturing complex sequential patterns in be-havioral data, RNNs are challenging to interpret, and do not directly provide insight on behavior. 
+
+4. Comparing Human and LLM Strate-gic Behavior Using AlphaEvolve 
+
+We perform a structural comparison of human and LLM behavior by comparing the respective best behavioral models generated by AlphaEvolve. This section presents the experimental results, which are organized along three axes. First, to ground the comparison, we directly compare the win rate statistics of human and all LLMs, bro-ken down by each bot type (Section 4.1), find-ing that frontier LLMs outperform humans but follow similar aggregate trends. Second, to val-idate the quality-of-fit for programs generated by AlphaEvolve, AlphaEvolve is compared to base-line behavioral modeling methods (Section 4.2), 0.0      
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Aggregate Win Rate  Human Gemini 2.5 Pro Gemini 2.5 Flash GPT 5.1 GPT OSS 120B
+> 30
+> 90
+> 150
+> 210
+> 270 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Win Rate Over Time
+> bot 1 (easy)
+> bot 2 (easy)
+> bot 3 (easy)
+> bot 4 (easy)
+> bot 5 (medium)
+> bot 6 (medium)
+> bot 7 (hard)
+> nash/random
+> oracle
+> 30
+> 90
+> 150
+> 210
+> 270
+> 30
+> 90
+> 150
+> 210
+> 270
+> 30
+> 90
+> 150
+> 210
+> 270
+> 30
+> 90
+> 150
+> 210
+> 270
+> Bots (least most complex)
+> Game Round
+
+Figure 2 | Win rates against nonadaptive bots. Bots are colored from least to most complex. The top row displays the aggregate win rate over all bots while the 
+
+bottom row displays the win rate over time. Mean and 95% CIs are displayed, with some CIs not visible due to marker size. 
+
+demonstrating better behavior modeling per-formance than baselines. Finally, we investi-gate structural differences between human and LLM behavior discovered by AlphaEvolve, by com-paring the simplest-but-best generated programs (Section 4.3). We find that the superior perfor-mance of strong LLMs stems from their ca-pacity to maintain more complex opponent models. Supplemental results and experimental details are presented in App. B. 
+
+4.1. Win Rates of Humans and LLMs 
+
+The average win rates of each agent against each nonadaptive bot is reported in Fig. 2, compared to the win rates of a randomly acting player and a player with oracle knowledge of the bot policy. The analysis below focuses on the nonadaptive bots; see App. B for the adaptive bots. We first consider the aggregate win rates (top row). Both humans and LLMs win at rates well above random chance against the simpler non-adaptive bots, with Gemini 2.5 Flash/Pro and GPT 5.1 winning at higher rates than humans, yet still beneath the optimal oracle win rate. Win rates tend to decrease as the nonadaptive bots become more complex, with all agents failing to exploit the most complex bot. In a similar spirit, the win rates against nonadaptive bots are largely higher than for the more complex adaptive bots. Thus, frontier LLMs outperform humans, but overall aggregate win rate trends are similar .
+
+> 6Discovering Differences in Strategic Behavior between Humans and LLMs
+
+Differences between humans and LLMs occur in which bots they perform especially poorly or well against. While all achieve near-random win rates against the most complex bot, strikingly, humans and GPT OSS 120B also perform at near-random levels for the two next most complex bots. On the other hand, Gemini 2.5 Flash/Pro and GPT 5.1 have overall higher win rates than humans, improving in particular against the two aforementioned bots. Next, we consider the win rates over time (bot-tom row), which provide two interesting insights. First, Gemini 2.5 Flash/Pro and GPT 5.1 converge to a near-optimal win rate sooner than humans do, demonstrating that advanced frontier models identify strategic patterns in the bot behavior much more rapidly than humans do , and likely explaining why they have higher aggregate win rates. Yet, the win rate at convergence is simi-lar for humans and the stronger LLMs, suggest-ing that humans also eventually learn to exploit strategic regularities. Second, GPT OSS 120B’s win rates actually decrease over time, demonstrat-ing a substantial difference from other agents. We hypothesize that GPT OSS 120B is unable to effectively synthesize the information in longer-context scenarios. Our findings align with prior work, which has also found that weaker LLMs fail to behave in strategically sensible ways (Fan et al., 2024; Qian et al., 2025b). 
+
+4.2. AlphaEvolve Models Improve Over Base-lines 
+
+To validate our use of AlphaEvolve as a behavioral modeling method, we compare it to the baselines described in Sec 3.3. All methods were fit to the data three independent times and evaluated on a heldout test set. For the RNN, an extensive hy-perparameter search was performed using a split of the training set. Since we are interested in dis-cussing the best discovered behavioral program in Section 4.3, the results reported in this sec-tion correspond to the best of three trials for all methods. Details on the training and evaluation procedure are provided in App. E.4. Fig. 3 displays quality-of-fit for all behavioral modeling methods, in terms of the relative im-provement in twofold cross-validated normalized likelihood over the Nash equilibrium baseline. Each individual point represents a single game in the test set. For all datasets, all behavioral models predict behavior substantially better than the fully rational Nash baseline, and AlphaEvolve significantly outperforms the CS-EWA baseline (all 𝑝 < 0.001 , Wilcoxon signed rank with Bon-ferroni correction; 𝑍 ≤ − 7.148 ). AlphaEvolve fits the data similarly well to the RNN for the hu-man and GPT OSS 120B datasets, and improves over the RNN for Gemini 2.5 Flash/Pro and GPT 5.1. We attribute this to the fact that RNNs are more prone to overfitting, whereas AlphaEvolve’s cross-validated scoring mechanism and the use of LLMs for code generation implicitly regular-ize the discovered models toward solutions that generalize. Regardless, this demonstrates that 
+
+AlphaEvolve has captured the structure in the dataset at least as well as a highly flexible neu-ral network-based method, and much better than the BGT model designed for human data .
+
+4.3. Analyzing AlphaEvolve Programs to Gain Novel Insights on Human versus LLM Be-havior 
+
+Unlike RNNs, AlphaEvolve’s programmatic mod-els are interpretable. Each program is a human-readable Python function, grounded in scientific concepts drawn from BGT, multi-agent learning, and cognitive psychology. Thus, structural differ-ences between human and LLM behavior may be reflected in the mechanisms embedded within programs that fit the data well. Importantly, we do not claim that the programs are ground-truth mechanistic models of how agents make strategic decisions in IRPS. Rather, we view the programs as mechanistic hypotheses validated by predictive fit to data. Applying Occam’s Razor, we study not the best-fit programs discussed in Section 4.2, but the simplest programs that fit the data well. 
+
+4.3.1. Simplest-But-Best Discovered Programs 
+
+Fig. 4 displays the evaluation score of all programs located on the Pareto frontier of training likeli-hood and negative Halstead effort. Informally, 
+
+> 7Discovering Differences in Strategic Behavior between Humans and LLMs -0.1
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Improvement over
+> Nash Baseline
+> (Normalized Likelihood)
+> Human
+> -0.1
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Gemini 2.5 Pro
+> -0.1
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> Gemini 2.5 Flash
+> -0.1
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> GPT 5.1
+> -0.1
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> GPT OSS 120B
+> CS-EWA
+> AlphaEvolve
+> GRU
+
+Figure 3 | AlphaEvolve improves over baseline behavioral models. The improvement in per-game normalized likelihood over the Nash baseline (which achieves a likelihood of 1/3 on all datasets) is shown for each dataset and method. The mean and 95% confidence interval are displayed in the error bars. 
+
+the Pareto frontier consists of the programs that are not dominated by any other programs; that is, no other program achieves a higher training likelihood while remaining equally or more sim-ple. For each dataset, there are a large number of programs that have similarly high evaluation likelihoods, but vary in complexity. Driven by this observation, we define a straightforward de-cision rule to identify the simplest-but-best (SBB) program from the Pareto frontier. Let ℓ(𝜙 ) denote the evaluation score of pro-gram 𝜙 , 𝑠 (𝜙 ) denote its simplicity, ˆΦ denote the set of all programs produced by AlphaEvolve, and PF ( ˆΦ) denote the Pareto frontier of simplicity and evaluation likelihood. Then, 𝜖 > 0, the SBB (𝜖 )
+
+program is defined as: SBB (𝜖 ) ∈ arg max  
+
+> 𝜙 ∈PF (ˆΦ)
+
+{𝑠 (𝜙 ) | ℓ(𝜙 ) > max   
+
+> 𝜙 ′∈ˆΦ
+
+ℓ(𝜙 ′) − 𝜖 }.
+
+(1) Eq. 1 filters programs on the Pareto frontier for those with evaluation likelihood within 𝜖 of the maximum evaluation likelihood, and selects the simplest such program. Our analysis sets 𝜖 to 
+
+0.005 . SBB (0.005 ) programs are displayed as the yellow stars in Fig. 4, while the best-fit programs discussed in Section 4.2 are displayed as blue stars. 
+
+4.3.2. Ability of SBB Programs to Predict Be-havior of Other Agents 
+
+We evaluate each SBB program’s ability to pre-dict behavior across agents using the cross-generalization matrix in Fig. 5. Columns rep-resent each SBB program, and rows represent evaluation datasets; note that values are compa-rable only within rows. Each program’s parame-ters are fit to the evaluation dataset using SGD, and cross-validated likelihoods are reported. The dominance of diagonal elements confirms that Al-phaEvolve identifies programs with high quality-of-fit for each respective agent. High off-diagonal scores, where programs generalize to agents they were not optimized for, reveal behavioral simi-larities. Symmetric high scores provide stronger evidence of similar strategic behavior between agent pairs. We find high symmetric predictabil-ity between Gemini 2.5 Flash, Pro, and GPT 5.1. Across these models, cross-generalization scores remained consistently high (difference from best-fit model is 0 for 2.5 Pro dataset, 0.005 for 2.5 Flash dataset, and 0.017 for GPT 5.1 dataset), suggesting they behave similarly despite marginal variations in fit. In contrast, GPT OSS 120B’s failure to model other agents suggests strategic differences from other agents, and aligns with its declining win rates observed in Section 4.1. Further, a significant performance gap exists be-tween humans and all LLMs: the human program is a poorer predictor of LLM behavior than models optimized for those agents, and vice versa for the human dataset (all 𝑝 < 0.001 , Wilcoxon signed-rank with Bonferroni corrections; 𝑍 ≤ − 5.73 ). These results support a core premise of the study: that LLMs exhibit strategic behaviors that are not fully captured by behavioral models de-signed for humans .
+
+4.3.3. Semantic Content of SBB Programs 
+
+We now analyze the semantic content of SBB pro-grams to identify potential mechanistic drivers of the observed behavioral differences between hu-man and LLMs. For brevity, this section focuses on high-level similarities and differences. The prop-erties of each program are summarized in App. 
+
+> 8
+
+Discovering Differences in Strategic Behavior between Humans and LLMs 0.34 0.36 0.38 0.40 0.42 0.44                  
+
+> Evaluation Likelihood ( )
+> -140K
+> -120K
+> -100K
+> -80K
+> -60K
+> -40K
+> -20K
+> 0
+> Negative Halstead Effort (  )
+> Human
+> 0.35 0.40 0.45 0.50
+> Evaluation Likelihood ( )
+> -160K
+> -140K
+> -120K
+> -100K
+> -80K
+> -60K
+> -40K
+> -20K
+> 0
+> Gemini 2.5 Pro
+> 0.35 0.40 0.45
+> Evaluation Likelihood ( )
+> -100K
+> -80K
+> -60K
+> -40K
+> -20K
+> 0
+> Gemini 2.5 Flash
+> 0.35 0.40 0.45 0.50
+> Evaluation Likelihood ( )
+> -250K
+> -200K
+> -150K
+> -100K
+> -50K
+> 0
+> GPT 5.1
+> 0.34 0.35 0.36 0.37 0.38
+> Evaluation Likelihood ( )
+> -175K
+> -150K
+> -125K
+> -100K
+> -75K
+> -50K
+> -25K
+> 0
+> GPT OSS 120B
+> AlphaEvolve
+> Nash Eq.
+> CS-EWA
+
+Figure 4 | Pareto Frontier of AlphaEvolve Programs. The AlphaEvolve program evaluated in Fig. 3 is denoted by the blue star, while the simplest-but-best program is indicated by the yellow star. Program simplicity is measured by the negative Halstead effort. 
+
+’Table B.4. Fig. 1 visualizes the human and Gem-ini 2.5 Pro SBB programs as a diagram, while the remainder are provided in the supplemental mate-rial. Across all agents, SBB programs consistently exhibit two components, value-based learning and 
+
+opponent modeling . Each is described below. Us-ing an LLM judge, we also verify that over the Pareto frontiers of AlphaEvolve programs for hu-mans and Gemini 2.5 Pro, opponent modeling is a concept included in the majority of pro-grams that fit the data well, while Q-learning is present in nearly all programs. (App. B.2). 
+
+Value-Based Learning. All programs but GPT OSS 120B use a 3x3x3 Q-table representing the value of the current action given the prior joint ac-tion, 𝑄 (𝑎 𝑡 , 𝑎 𝑜 𝑡 −1, 𝑎 𝑡 −1), while GPT OSS 120B main-tains only a single-dimensional Q-vector, repre-senting 𝑄 (𝑎 𝑡 ). These programs update Q-values toward the running average of rewards 𝑟 𝑡 , while Human 0.450      
+
+> ±0.018
+> 0.415
+> ±0.016
+> 0.427
+> ±0.017
+> 0.435
+> ±0.018
+> 0.389
+> ±0.012
+> Gemini
+> 2.5 Pro
+> 0.476
+> ±0.014
+> 0.507
+> ±0.012
+> 0.507
+> ±0.012
+> 0.506
+> ±0.012
+> 0.403
+> ±0.011
+> Gemini
+> 2.5 Flash
+> 0.461
+> ±0.012
+> 0.486
+> ±0.011
+> 0.491
+> ±0.011
+> 0.482
+> ±0.012
+> 0.391
+> ±0.007
+> GPT 5.1 0.467
+> ±0.013
+> 0.492
+> ±0.013
+> 0.490
+> ±0.014
+> 0.509
+> ±0.013
+> 0.425
+> ±0.009
+> human g2.5-pro g2.5-flash gpt5.1 gpt-oss
+> Discovered Program
+> GPT OSS
+> 120B
+> 0.369
+> ±0.004
+> 0.383
+> ±0.005
+> 0.376
+> ±0.005
+> 0.383
+> ±0.006
+> 0.383
+> ±0.004
+> 0.41
+> 0.44
+> 0.44
+> 0.50
+> 0.43
+> 0.48
+> 0.46
+> 0.50
+> 0.37
+> 0.38
+> Evaluated Dataset
+
+Figure 5 | Cross-generalization of SBB Programs to each dataset. Cross-generalization matrix displaying evaluation likelihoods of each simplest-but-best dis-covered program on all datasets and 95% CI’s. 
+
+applying a decay factor to older rewards. 
+
+Opponent Modeling. All programs feature an opponent model that tracks dependencies in op-ponent historical action patterns. Opponent mod-els are used to forecast the opponent’s next move, which is used for Q-table based next action selec-tion. Since these models directly model opponent choice frequencies and do not recursively con-sider the agent itself, all agents are characterized by their respective SBB programs as level-1 play-ers in cognitive hierarchy theory (Camerer et al., 2004). 4 Since the exploitative adaptive bots are level-1 players, this reflects the limited ability of all agents to counter-exploit adaptive bots. Be-yond these core components, choice stickiness (previously observed in human IRPS behavior by Eyler et al. (2009)) emerged as the most frequent cognitive bias, appearing in the human, Gemini 2.5, and GPT OSS 120B programs. The primary difference between agents lies in the dimensionality of the opponent modeling ma-trix. The human and GPT OSS 120B programs exhibit single-dimensional opponent models that directly track opponent historical move frequency. In contrast, Gemini 2.5 Flash/Pro maintain 3x3 models that track the opponent’s move frequen-cies conditioned on the previous move, and GPT 5.1 maintains a 3x3x3 model. This suggests that 
+
+the superior win rates of Gemini 2.5 Flash/Pro and GPT 5.1 stems from maintaining more complex models of opponent behavior than humans .
+
+4A level-1 player plays assuming that the opponent does not model them in return (that is, the opponent is a level-0 
+
+player). 
+
+9Discovering Differences in Strategic Behavior between Humans and LLMs 
+
+5. Discussion 
+
+As LLM agents are increasingly integrated into society (Tomasev et al., 2025), detecting and un-derstanding strategic divergences from human behavior is critical. This paper explores structural differences between human and LLM behavior in Iterated Rock-Paper-Scissors (IRPS) by compar-ing interpretable behavioral models discovered directly from data using AlphaEvolve, a state-of-the-art method for program synthesis. Our work exists in the context of a large body of prior work evaluating LLMs as human proxies and strategic players, and developing models to characterize human behavior, which we explore in App. A (Re-lated Work). Nevertheless, to the best of our knowledge, this represents the first application of automated model discovery tools for behavioral game theory, and for characterizing differences between LLM and human strategic behavior. Our experiments reveal that in IRPS, frontier LLMs exhibit more sophisticated strategic think-ing than humans. In particular, frontier mod-els (Gemini 2.5 Pro, Gemini 2.5 Flash, and GPT 5.1) exhibit significantly higher aggregate win rates than humans by identifying and exploiting opponent strategic patterns much earlier in the interaction. The programmatic behavioral mod-els discovered by AlphaEvolve suggest that while humans and frontier LLMs utilize value-based learning and opponent modeling, frontier models employ substantially larger opponent models. In contrast, smaller, open-source models like GPT OSS 120B perform worse than humans, declin-ing in performance as game history grow. This highlights a limitation in long-context reasoning for smaller architectures. Remarkably, our findings differ substantially from those of Fan et al. (2024), who studied a similar, 10-round IRPS setting where LLMs were pitted against bots. They found that GPT 3 and GPT 3.5 could perform no better than random play because they could not synthesize any in-sights about opponents from IRPS action history, while GPT 4 was capable of basic opponent mod-eling, but remained worse than humans. This re-flects the significant advance in LLM capabilities between the previous and current generations. Our findings also have implications for advances in the ToM capabilities of LLMs. Strachan et al. (2024) found that the same GPT-4 model studied by Fan et al. (2024) exhibited ToM abilities on par with those of humans in classic test scenar-ios, in contrast to earlier LLMs who failed such tests (Sap et al., 2022). Although the scope of this study was limited to ToM in IRPS (opponent modeling), the clear advance in opponent model-ing capabilities leads us to hypothesize a similar advance in general ToM abilities. Our findings echo the growing body of evidence that, while aggregate measurements of LLM be-havior can display similar trends to those of hu-man behavior (Horton, 2023; Xie et al., 2024), frontier LLMs are not perfect proxies for human behavior, especially in scenarios requiring strate-gic reasoning (Fan et al., 2024; Gao et al., 2024; Jia and Yuan, 2024; Qian et al., 2025b). As a whole, this study has demonstrated that AlphaEvolve can provide insights on the structural differences between LLMs and humans from be-havior alone. Unlike existing Chain-of-Thought monitoring techniques (Korbak et al., 2025), our modeling method does not require relying on a model’s reasoning traces, which do not always accurately reflect behavior (Chen et al., 2025; Kovarik et al., 2025). Thus, the automated behav-ioral modeling studied here could be a valuable addition to the existing toolbox of monitoring methods. 
+
+Limitations and Future Work This study fo-cuses on intrinsic strategic behavior of LLMs in IRPS, finding several differences from humans. It does not explore techniques to align LLM be-havior more closely with that of humans, which represents an interesting line of future work. This study also models average human behavior on IRPS, which does not account for individual dif-ferences in IRPS ability. It is likely that expert humans would display more sophisticated oppo-nent modeling abilities as well, although it may still differ from the particular type of opponent modeling displayed by LLMs. Future work might also evaluate the generalization of these discov-ered programmatic models across a broader set of games or scenarios. 
+
+> 10 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+Acknowledgements 
+
+We thank Marc Lanctot, Zun Li, Wil Cunningham, Kevin Miller, the Algorithms of the Mind team, and Doina Precup for their valuable discussions and insights. We are also grateful to Logan Cross and Eric Brockbank for their assistance with the data. 
+
+References 
+
+G. Aher, R. I. Arriaga, and A. T. Kalai. Using Large Language Models to Simulate Multiple Humans and Replicate Human Subject Studies, July 2023. E. Akata, L. Schulz, J. Coda-Forno, S. J. Oh, M. Bethge, and E. Schulz. Playing repeated games with large language models. Na-ture Human Behaviour , pages 1–11, May 2025. ISSN 2397-3374. doi: 10.1038/ s41562-025-02172-y. K. Allen, F. Brändle, M. Botvinick, J. E. Fan, S. J. Gershman, A. Gopnik, T. L. Griffiths, J. K. Hartshorne, T. U. Hauser, M. K. Ho, J. R. De Leeuw, W. J. Ma, K. Murayama, J. D. Nelson, B. Van Opheusden, T. Pouncy, J. Rafner, I. Rahwan, R. B. Rutledge, J. Sherson, Ö. Şimşek, H. Spiers, C. Summerfield, M. Thal-mann, N. Vélez, A. J. Watrous, J. B. Tenen-baum, and E. Schulz. Using games to under-stand the mind. Nature Human Behaviour , 8 (6):1035–1043, June 2024. ISSN 2397-3374. doi: 10.1038/s41562-024-01878-9. Z. C. Amble, Seema. Faster, Smarter, Cheaper: AI Is Reinventing Market Research, June 2025. E. Aygün, A. Belyaeva, G. Comanici, M. Coram, H. Cui, J. Garrison, R. J. A. Kast, C. Y. McLean, P. Norgaard, Z. Shamsi, D. Smalling, J. Thomp-son, S. Venugopalan, B. P. Williams, C. He, S. Martinson, M. Plomecka, L. Wei, Y. Zhou, Q.-Z. Zhu, M. Abraham, E. Brand, A. Bulanova, J. A. Cardille, C. Co, S. Ellsworth, G. Joseph, M. Kane, R. Krueger, J. Kartiwa, D. Liebling, J.-M. Lueckmann, P. Raccuglia, Xuefei, Wang, K. Chou, J. Manyika, Y. Matias, J. C. Platt, L. Dorfman, S. Mourad, and M. P. Brenner. An AI system to help scientists write expert-level empirical software, Sept. 2025. D. Batzilis, S. Jaffe, S. Levitt, J. A. List, and J. Picel. Behavior in Strategic Settings: Evidence from a Million Rock-Paper-Scissors Games. Games ,10(2):18, June 2019. ISSN 2073-4336. doi: 10.3390/g10020018. A. T. Beck. Depression: Clinical, Experimental, and Theoretical Aspects . Hoeber Medical Division, Harper & Row, 1967. ISBN 978-0-286-61849-6. F. Bianchi, P. J. Chia, M. Yuksekgonul, J. Tagli-abue, D. Jurafsky, and J. Zou. How well can LLMs negotiate? NEGOTIATIONARENA plat-form and analysis. In Proceedings of the 41st International Conference on Machine Learning ,volume 235 of ICML’24 , pages 3935–3951, Vi-enna, Austria, July 2024. JMLR.org. M. Binz, E. Akata, M. Bethge, F. Brändle, F. Call-away, J. Coda-Forno, P. Dayan, C. Demir-can, M. K. Eckstein, N. Éltető, T. L. Griffiths, S. Haridi, A. K. Jagadish, L. Ji-An, A. Kipnis, S. Kumar, T. Ludwig, M. Mathony, M. Mat-tar, A. Modirshanechi, S. S. Nath, J. C. Peter-son, M. Rmus, E. M. Russek, T. Saanum, J. A. Schubert, L. M. S. Buschoff, N. Singhi, X. Sui, M. Thalmann, F. Theis, V. Truong, V. Udan-darao, K. Voudouris, R. Wilson, K. Witte, S. Wu, D. Wulff, H. Xiong, and E. Schulz. Centaur: A foundation model of human cognition, Apr. 2025. J. Bradbury, R. Frostig, P. Hawkins, M. J. Johnson, C. Leary, D. Maclaurin, G. Necula, A. Paszke, J. VanderPlas, S. Wanderman-Milne, and Q. Zhang. JAX: composable transforma-tions of Python+NumPy programs, 2018. URL 
+
+http://github.com/jax-ml/jax .E. Brockbank and E. Vul. Repeated rock, pa-per, scissors play reveals limits in adaptive se-quential behavior. Cognitive Psychology , 151: 101654, 2024. ISSN 0010-0285. doi: 10.1016/ j.cogpsych.2024.101654. K. Buhler. Ai 50 2025: Ai agents move beyond chat. Forbes , April 2025. URL 
+
+https://www.forbes.com/sites/ 
+
+> 11 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+konstantinebuhler/2025/04/10/ ai-50-2025-ai-agents-move-beyond-chat/ .C. Camerer. Behavioral Game Theory: Experiments in Strategic Interaction . Princeton University Press, Mar. 2003. ISBN 978-0-691-09039-9. C. Camerer and T. Hua Ho. Experience-weighted Attraction Learning in Normal Form Games. 
+
+Econometrica , 67(4):827–874, 1999. ISSN 1468-0262. doi: 10.1111/1468-0262.00054. C. F. Camerer. Behavioral economics. Current Biology , 24(18):R867–R871, Sept. 2014. ISSN 0960-9822. doi: 10.1016/j.cub.2014.07.040. C. F. Camerer, T.-H. Ho, and J.-K. Chong. Sophis-ticated Experience-Weighted Attraction Learn-ing and Strategic Teaching in Repeated Games. 
+
+Journal of Economic Theory , 104(1):137–188, May 2002. ISSN 0022-0531. doi: 10.1006/ jeth.2002.2927. C. F. Camerer, T.-H. Ho, and J.-K. Chong. A Cog-nitive Hierarchy Model of Games. The Quar-terly Journal of Economics , 119(3):861–898, Aug. 2004. ISSN 0033-5533. doi: 10.1162/ 0033553041502225. V. Capraro, R. D. Paolo, and V. Pizziol. Assessing Large Language Models’ ability to predict how humans balance self-interest and the interest of others. Papers , Feb. 2024. P. S. Castro, N. Tomasev, A. Anand, N. Sharma, R. Mohanta, A. Dev, K. Perlin, S. Jain, K. Levin, N. Elteto, W. Dabney, A. Novikov, G. C. Turner, M. K. Eckstein, N. D. Daw, K. J. Miller, and K. Stachenfeld. Discov-ering Symbolic Cognitive Models from Hu-man and Animal Behavior. In Forty-Second International Conference on Machine Learn-ing , 2025. URL https://openreview.net/ forum?id=dhRXGWJ027 .A. Chan, C. Di, J. Rupertus, G. Smith, V. N. Rao, M. H. Ribeiro, and A. Monroy-Hernández. Re-defining Research Crowdsourcing: Incorporat-ing Human Feedback with LLM-Powered Dig-ital Twins. In Proceedings of the Extended Ab-stracts of the CHI Conference on Human Factors in Computing Systems , pages 1–10, Apr. 2025. doi: 10.1145/3706599.3720269. Y. Chen, J. Benton, A. Radhakrishnan, J. Uesato, C. Denison, J. Schulman, A. Somani, P. Hase, M. Wagner, F. Roger, V. Mikulik, S. R. Bowman, J. Leike, J. Kaplan, and E. Perez. Reasoning Models Don’t Always Say What They Think, May 2025. K. Cho, B. van Merriënboer, D. Bahdanau, and Y. Bengio. On the Properties of Neural Machine Translation: Encoder–Decoder Approaches. In D. Wu, M. Carpuat, X. Carreras, and E. M. Vecchi, editors, Proceedings of SSST-8, Eighth Workshop on Syntax, Semantics and Structure in Statistical Translation , pages 103–111, Doha, Qatar, Oct. 2014. Association for Computa-tional Linguistics. doi: 10.3115/v1/W14-4012. L. Cipolina-Kun, M. Nezhurina, and J. Jitsev. Game Reasoning Arena: A Framework and Benchmark for Assessing Reasoning Capabil-ities of Large Language Models via Game Play, Aug. 2025. J. Coda-Forno, M. Binz, J. X. Wang, and E. Schulz. CogBench: A large language model walks into a psychology lab, Feb. 2024. G. Comanici et al. Gemini 2.5: Pushing the Fron-tier with Advanced Reasoning, Multimodality, Long Context, and Next Generation Agentic Capabilities, 2025. G. Corrado and K. Doya. Understanding Neu-ral Coding through the Model-Based Analysis of Decision Making. Journal of Neuroscience ,27(31):8178–8180, Aug. 2007. ISSN 0270-6474, 1529-2401. doi: 10.1523/JNEUROSCI. 1590-07.2007. L. Cross, V. Xiang, A. Bhatia, D. L. Yamins, and N. Haber. Hypothetical Minds: Scaffolding Theory of Mind for Multi-Agent Tasks with Large Language Models. In The Thirteenth International Conference on Learning Represen-tations , 2025. URL https://openreview. net/forum?id=otW0TJOUYF .N. D. Daw. Trial-by-trial data analysis using computational models: (Tutorial Review). In M. R. Delgado, E. A. Phelps, and T. W. Rob-bins, editors, Decision Making, Affect, and Learn-ing: Attention and Performance XXIII , page 0. 
+
+> 12 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+Oxford University Press, Mar. 2011. ISBN 978-0-19-960043-4. doi: 10.1093/acprof:oso/ 9780199600434.003.0001. S. G. Disner, C. G. Beevers, E. A. P. Haigh, and A. T. Beck. Neural mechanisms of the cogni-tive model of depression. Nature Reviews Neu-roscience , 12(8):467–477, Aug. 2011. ISSN 1471-0048. doi: 10.1038/nrn3027. B. J. Dyson, J. M. P. Wilbiks, R. Sandhu, G. Papani-colaou, and J. Lintag. Negative outcomes evoke cyclic irrational decisions in Rock, Paper, Scis-sors. Scientific Reports , 6(1):20479, Feb. 2016. ISSN 2045-2322. doi: 10.1038/srep20479. J. M. Epstein. Inverse Generative Social Science: Backward to the Future. Journal of Artificial Societies and Social Simulation , 26(2):9, 2023. ISSN 1460-7425. D. Eyler, Z. Shalla, A. Doumaux, and T. McDevitt. Winning at Rock-Paper-Scissors. The College Mathematics Journal , 40(2):125–128, 2009. ISSN 0746-8342. C. Fan, J. Chen, Y. Jin, and H. He. Can Large Language Models Serve as Rational Players in Game Theory? A Systematic Analysis. Proceed-ings of the AAAI Conference on Artificial Intelli-gence , 38(16):17960–17967, Mar. 2024. ISSN 2374-3468. doi: 10.1609/aaai.v38i16.29751. A. Filippas, J. J. Horton, and B. S. Manning. Large Language Models as Simulated Economic Agents: What Can We Learn from Homo Sili-cus? In Proceedings of the 25th ACM Confer-ence on Economics and Computation , EC ’24, pages 614–615, New York, NY, USA, Dec. 2024. Association for Computing Machinery. ISBN 979-8-4007-0704-9. doi: 10.1145/3670865. 3673513. N. Fontana, F. Pierri, and L. M. Aiello. Nicer than Humans: How Do Large Language Models Behave in the Prisoner’s Dilemma? Proceedings of the International AAAI Conference on Web and Social Media , 19:522–535, June 2025. ISSN 2334-0770. doi: 10.1609/icwsm.v19i1.35829. C. Gao, X. Lan, N. Li, Y. Yuan, J. Ding, Z. Zhou, F. Xu, and Y. Li. Large language models em-powered agent-based modeling and simula-tion: A survey and perspectives. Humani-ties and Social Sciences Communications , 11 (1):1259, Sept. 2024. ISSN 2662-9992. doi: 10.1057/s41599-024-03611-3. Y. Gao, D. Lee, G. Burtch, and S. Fazelpour. Take caution in using LLMs as human surrogates. 
+
+Proceedings of the National Academy of Sciences ,122(24):e2501660122, June 2025. doi: 10. 1073/pnas.2501660122. J. S. Hartford, J. R. Wright, and K. Leyton-Brown. Deep Learning for Predicting Human Strategic Behavior. In Advances in Neural Information Pro-cessing Systems , volume 29. Curran Associates, Inc., 2016. J. J. Horton. Large Language Models as Simulated Economic Agents: What Can We Learn from Homo Silicus?, Jan. 2023. D. Jarrett, M. Pîslar, M. A. Bakker, M. H. Tessler, R. Köster, J. Balaguer, R. Elie, C. Summerfield, and A. Tacchetti. Language Agents as Digital Representatives in Collective Decision-Making, Feb. 2025. J. Jia and Z. Yuan. An Experimental Study of Competitive Market Behavior Through LLMs, Nov. 2024. J. Jia, Z. Yuan, J. Pan, P. E. McNamara, and D. Chen. Decision-Making Behavior Evaluation Framework for LLMs under Uncertain Context. In The Thirty-eighth Annual Conference on Neu-ral Information Processing Systems , Nov. 2024. J. Kim, M. Kovach, K.-M. Lee, E. Shin, and H. Tza-vellas. Learning to be Homo Economicus: Can an LLM Learn Preferences from Choice, Jan. 2024. T. Korbak, M. Balesni, E. Barnes, Y. Bengio, J. Ben-ton, J. Bloom, M. Chen, A. Cooney, A. Dafoe, A. Dragan, S. Emmons, O. Evans, D. Farhi, R. Greenblatt, D. Hendrycks, M. Hobbhahn, E. Hubinger, G. Irving, E. Jenner, D. Kokota-jlo, V. Krakovna, S. Legg, D. Lindner, D. Luan, A. Madry, J. Michael, N. Nanda, D. Orr, J. Pa-chocki, E. Perez, M. Phuong, F. Roger, J. Saxe, B. Shlegeris, M. Soto, E. Steinberger, J. Wang, 
+
+> 13 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+W. Zaremba, B. Baker, R. Shah, and V. Mikulik. Chain of Thought Monitorability: A New and Fragile Opportunity for AI Safety, July 2025. J. Korst, S. Puntoni, and O. Toubia. How Gen AI Is Transforming Market Research. Harvard Busi-ness Review , 103(3):90–99, May 2025. ISSN 0017-8012. V. Kovarik, E. O. Chen, S. Petersen, A. Ghersen-gorin, and V. Conitzer. AI Testing Should Ac-count for Sophisticated Strategic Behaviour, Aug. 2025. M. Lanctot, J. Schultz, N. Burch, M. O. Smith, D. Hennes, T. Anthony, and J. Perolat. Population-based Evaluation in Repeated Rock-Paper-Scissors as a Benchmark for Multiagent Reinforcement Learning. Transactions on Ma-chine Learning Research , June 2023. ISSN 2835-8856. N. Li, C. Gao, M. Li, Y. Li, and Q. Liao. EconAgent: Large Language Model-Empowered Agents for Simulating Macroeconomic Activities. In L.-W. Ku, A. Martins, and V. Srikumar, editors, Pro-ceedings of the 62nd Annual Meeting of the As-sociation for Computational Linguistics (Volume 1: Long Papers) , pages 15523–15536, Bangkok, Thailand, Aug. 2024. Association for Compu-tational Linguistics. doi: 10.18653/v1/2024. acl-long.829. J. Liu, M. Guo, and V. Conitzer. An Inter-pretable Automated Mechanism Design Frame-work with Large Language Models, Feb. 2025. S. Mao, Y. Cai, Y. Xia, W. Wu, X. Wang, F. Wang, Q. Guan, T. Ge, and F. Wei. ALYMPICS: LLM Agents Meet Game Theory. In O. Rambow, L. Wanner, M. Apidianaki, H. Al-Khalifa, B. D. Eugenio, and S. Schockaert, editors, Proceed-ings of the 31st International Conference on Com-putational Linguistics , pages 2845–2866, Abu Dhabi, UAE, Jan. 2025. Association for Compu-tational Linguistics. R. D. McKelvey and T. R. Palfrey. Quantal Re-sponse Equilibria for Normal Form Games. 
+
+Games and Economic Behavior , 10(1):6–38, July 1995. ISSN 0899-8256. doi: 10.1006/ game.1995.1023. K. Miller, M. Eckstein, M. Botvinick, and Z. Kurth-Nelson. Cognitive Model Discovery via Disen-tangled RNNs. Advances in Neural Informa-tion Processing Systems , 36:61377–61394, Dec. 2023. V. Mnih, K. Kavukcuoglu, D. Silver, A. A. Rusu, J. Veness, M. G. Bellemare, A. Graves, M. Ried-miller, A. K. Fidjeland, G. Ostrovski, S. Pe-tersen, C. Beattie, A. Sadik, I. Antonoglou, H. King, D. Kumaran, D. Wierstra, S. Legg, and D. Hassabis. Human-level control through deep reinforcement learning. Nature , 518(7540): 529–533, Feb. 2015. ISSN 1476-4687. doi: 10.1038/nature14236. D. Moerel, T. Grootswagers, J. L. L. Chin, F. Cia-rdo, P. Nijhuis, G. L. Quek, S. Smit, and M. Var-let. Neural decoding of competitive decision-making in Rock–Paper–Scissors. Social Cogni-tive and Affective Neuroscience , 20(1):nsaf101, Jan. 2025. ISSN 1749-5016. doi: 10.1093/ scan/nsaf101. Q. Niu, J. Liu, Z. Bi, P. Feng, B. Peng, K. Chen, M. Li, L. K. Yan, Y. Zhang, C. H. Yin, C. Fei, T. Wang, Y. Wang, S. Chen, and M. Liu. Large Language Models and Cognitive Science: A Comprehensive Review of Similarities, Differ-ences, and Challenges, Dec. 2024. A. Novikov, N. V ˜u, M. Eisenberger, E. Dupont, P.-S. Huang, A. Z. Wagner, S. Shirobokov, B. Ko-zlovskii, F. J. R. Ruiz, A. Mehrabian, M. P. Kumar, A. See, S. Chaudhuri, G. Holland, A. Davies, S. Nowozin, P. Kohli, and M. Balog. AlphaEvolve: A coding agent for scientific and algorithmic discovery, 2025. OpenAI. Introducing ChatGPT, 2022. URL 
+
+https://openai.com/index/chatgpt/ .OpenAI. Introducing gpt-oss, 2025a. URL https://openai.com/index/ introducing-gpt-oss/ .OpenAI. GPT-5.1: A smarter, more conver-sational ChatGPT, 2025b. URL https:// openai.com/index/gpt-5-1/ .L. Ouyang, J. Wu, X. Jiang, D. Almeida, C. L. Wainwright, P. Mishkin, C. Zhang, S. Agarwal, 
+
+> 14 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+K. Slama, A. Ray, J. Schulman, J. Hilton, F. Kel-ton, L. Miller, M. Simens, A. Askell, P. Welinder, P. Christiano, J. Leike, and R. Lowe. Training language models to follow instructions with human feedback, 2022. J. S. Park, L. Popowski, C. Cai, M. R. Morris, P. Liang, and M. S. Bernstein. Social Simu-lacra: Creating Populated Prototypes for So-cial Computing Systems. In Proceedings of the 35th Annual ACM Symposium on User Interface Software and Technology , UIST ’22, pages 1–18, New York, NY, USA, Oct. 2022. Association for Computing Machinery. ISBN 978-1-4503-9320-1. doi: 10.1145/3526113.3545616. J. S. Park, C. Q. Zou, A. Shaw, B. M. Hill, C. Cai, M. R. Morris, R. Willer, P. Liang, and M. S. Bernstein. Generative Agent Simulations of 1,000 People, Nov. 2024. K. Payne and B. Alloui-Cros. Strategic Intelligence in Large Language Models: Evidence from evo-lutionary Game Theory, July 2025. D. Premack and G. Woodruff. Does the chim-panzee have a theory of mind? Behavioral and Brain Sciences , 1(4):515–526, Dec. 1978. ISSN 1469-1825, 0140-525X. doi: 10.1017/ S0140525X00076512. C. Qian, A. Parisi, C. Bouleau, V. Tsai, M. Le-breton, and L. Dixon. To Mask or to Mirror: Human-AI Alignment in Collective Reasoning, Oct. 2025a. C. Qian, K. Zhu, J. Horton, B. S. Manning, V. Tsai, J. Wexler, and N. Thain. Strategic Tradeoffs Between Humans and AI in Multi-Agent Bar-gaining, Oct. 2025b. M. Rmus, A. K. Jagadish, M. Mathony, T. Lud-wig, and E. Schulz. Generating Computa-tional Cognitive models using Large Language Models. In The Thirty-ninth Annual Con-ference on Neural Information Processing Sys-tems , 2025. URL https://openreview. net/forum?id=QKICx7eSMJ .J. Roberts, K. Moore, and D. Fisher. Do Large Language Models Learn Human-Like Strate-gic Preferences? In E. Kamalloo, N. Gon-tier, X. H. Lu, N. Dziri, S. Murty, and A. La-coste, editors, Proceedings of the 1st Work-shop for Research on Agent Language Models (REALM 2025) , pages 97–108, Vienna, Aus-tria, July 2025. Association for Computational Linguistics. ISBN 979-8-89176-264-0. doi: 10.18653/v1/2025.realm-1.8. B. Romera-Paredes, M. Barekatain, A. Novikov, M. Balog, M. P. Kumar, E. Dupont, F. J. R. Ruiz, J. S. Ellenberg, P. Wang, O. Fawzi, P. Kohli, and A. Fawzi. Mathematical dis-coveries from program search with large lan-guage models. Nature , 625(7995):468–475, Jan. 2024. ISSN 1476-4687. doi: 10.1038/ s41586-023-06924-6. M. Sap, R. Le Bras, D. Fried, and Y. Choi. Neu-ral theory-of-mind? on the limits of social intelligence in large LMs. In Y. Goldberg, Z. Kozareva, and Y. Zhang, editors, Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing , pages 3762– 3780, Abu Dhabi, United Arab Emirates, Dec. 2022. Association for Computational Linguis-tics. doi: 10.18653/v1/2022.emnlp-main. 248. URL https://aclanthology.org/ 2022.emnlp-main.248/ .D. Siemon, T. Strohmann, B. Khosrawi-Rad, T. de Vreede, E. Elshan, and M. Meyer. Why Do We Turn to Virtual Compan-ions? A Text Mining Analysis of Replika Reviews. In AMCIS 2022 Proceedings ,2022. URL https://aisel.aisnet.org/ amcis2022/sig_hci/sig_hci/10 .D. Silver, A. Huang, C. J. Maddison, A. Guez, L. Sifre, G. van den Driessche, J. Schrittwieser, I. Antonoglou, V. Panneershelvam, M. Lanc-tot, S. Dieleman, D. Grewe, J. Nham, N. Kalch-brenner, I. Sutskever, T. Lillicrap, M. Leach, K. Kavukcuoglu, T. Graepel, and D. Hassabis. Mastering the game of Go with deep neural networks and tree search. Nature , 529(7587): 484–489, Jan. 2016. ISSN 1476-4687. doi: 10.1038/nature16961. S. Srinivasan, S. N. Mishra, and R. Kak. Windsurf and the ai code assistant mar-ket. Harvard Business School Case 125-
+
+> 15 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+111, 2025. URL https://www.hbs.edu/ faculty/Pages/item.aspx?num=67313 .D. O. Stahl and P. W. Wilson. On Players ′ Mod-els of Other Players: Theory and Experimental Evidence. Games and Economic Behavior , 10 (1):218–254, July 1995. ISSN 0899-8256. doi: 10.1006/game.1995.1031. J. W. A. Strachan, D. Albergo, G. Borghini, O. Pansardi, E. Scaliti, S. Gupta, K. Saxena, A. Rufo, S. Panzeri, G. Manzi, M. S. A. Graziano, and C. Becchio. Testing theory of mind in large language models and humans. Na-ture Human Behaviour , 8(7):1285–1295, July 2024. ISSN 2397-3374. doi: 10.1038/ s41562-024-01882-z. H. Sun, Y. Wu, P. Wang, W. Chen, Y. Cheng, X. Deng, and X. Chu. Game Theory Meets Large Language Models: A Systematic Survey with Taxonomy and New Frontiers, Aug. 2025. N. Tomasev, M. Franklin, J. Z. Leibo, J. Jacobs, W. A. Cunningham, I. Gabriel, and S. Osindero. Virtual Agent Economies, Sept. 2025. R. Van Hoek and M. Lacity. Procurement in the Age of Automation. MIT Sloan Management Review , 65(1):46–53, 2023. ISSN 15329194. J. von Neumann, O. Morgenstern, and A. Rubin-stein. Theory of Games and Economic Behav-ior (60th Anniversary Commemorative Edition) .Princeton University Press, 1944. ISBN 978-0-691-13061-3. Z. Wang, B. Xu, and H.-J. Zhou. Social cycling and conditional responses in the Rock-Paper-Scissors game. Scientific Reports , 4(1):5830, July 2014. ISSN 2045-2322. doi: 10.1038/ srep05830. S. Watanabe. A Widely Applicable Bayesian Infor-mation Criterion. Journal of Machine Learning Research , 14:867–897, 2013. J. R. Wright and K. Leyton-Brown. Level-0 Mod-els for Predicting Human Behavior in Games. 
+
+Journal of Artificial Intelligence Research , 64: 357–383, Feb. 2019. ISSN 1076-9757. doi: 10.1613/jair.1.11361. F. Xiao and X. X. Wang. Evaluating the abil-ity of large Language models to predict hu-man social decisions. Scientific Reports , 15(1): 32290, Sept. 2025. ISSN 2045-2322. doi: 10.1038/s41598-025-17188-7. C. Xie, C. Chen, F. Jia, Z. Ye, S. Lai, K. Shu, J. Gu, A. Bibi, Z. Hu, D. Jurgens, J. Evans, P. Torr, B. Ghanem, and G. Li. Can Large Language Model Agents Simulate Human Trust Behav-ior? In The Thirty-eighth Annual Conference on Neural Information Processing Systems , Nov. 2024. B. Xu, H.-J. Zhou, and Z. Wang. Cycle frequency in standard Rock–Paper–Scissors games: Evi-dence from experimental economics. Physica A: Statistical Mechanics and its Applications , 392 (20):4997–5005, Oct. 2013. ISSN 0378-4371. doi: 10.1016/j.physa.2013.06.039. J.-Q. Zhu, J. C. Peterson, B. Enke, and T. L. Grif-fiths. Capturing the complexity of human strategic decision-making with machine learn-ing. Nature Human Behaviour , pages 1–7, June 2025. ISSN 2397-3374. doi: 10.1038/ s41562-025-02230-5. C. Ziems, W. Held, O. Shaikh, J. Chen, Z. Zhang, and D. Yang. Can Large Language Models Transform Computational Social Science? Com-putational Linguistics , 50(1):237–291, Mar. 2024. ISSN 0891-2017. doi: 10.1162/coli_ a_00502. 
+
+> 16 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+A. Related Work 
+
+This section contextualizes our work with respect to existing literature on LLMs as human proxies, LLMs as strategic players, and symbolic models for describing human decision-making. For a discussion of the literature on human behavior in RPS, see Section 2. 
+
+LLMs As Human Proxies The social sciences center around understanding human behavior at the individual, group, and societal levels. A core challenge is gathering high-quality human data for the study at hand, which is both time-consuming and expensive. The demonstration that LLMs can generate remarkably human-like text in chat interfaces (OpenAI, 2022), and that communities of such agents can generate realistic social behavior (Park et al., 2022, 2024), has driven an explosion of interest in deploying LLMs as social simulacra , or digital twins to study human behavior (Gao et al., 2024). Various methods have been proposed, from prompt engineering (Horton, 2023; Kim et al., 2024), to agent architectures (Cross et al., 2025; Li et al., 2024; Mao et al., 2025; Park et al., 2024), to fine-tuning (Binz et al., 2025; Jarrett et al., 2025). This application of LLMs has the potential to revolutionize research in both academia (Chan et al., 2025; Epstein, 2023; Filippas et al., 2024; Ziems et al., 2024) and industry (Amble, 2025; Korst et al., 2025). As recognition of this potential grows, so too has a body of research evaluating behavioral similarities and differences between LLMs and humans. A prominent evaluation strategy is the Turing experiment ,in which a classic experiment is replicated with LLMs, and the results compared to humans’ (Aher et al., 2023; Capraro et al., 2024; Jia and Yuan, 2024; Xiao and Wang, 2025). Other studies compare LLMs to humans along cognitive measures (Coda-Forno et al., 2024; Niu et al., 2024), strategic traits such as risk preference (Jia et al., 2024; Xiao and Wang, 2025), rationality (Fan et al., 2024), trust (Xie et al., 2024), bias (Qian et al., 2025a), or theory of mind (Strachan et al., 2024). The results from these studies are mixed, with the overall picture being that LLM behavior is often, but not always (e.g. Gao et al. (2025)) similar to humans, where the degree of similarity varies per-scenario and per-LLM. Unlike existing literature, this study leverages a model discovery tool to automatically explore structural differences between humans and LLMs, without relying on pre-existing models and measures of human behavior. 
+
+LLMs As Strategic Players There has also been interest in understanding intrinsic strategic capabil-ities of LLMs (Cipolina-Kun et al., 2025; Sun et al., 2025). Prior studies have examined RPS (Akata et al., 2025; Fan et al., 2024; Lanctot et al., 2023), negotiation games (Bianchi et al., 2024; Qian et al., 2025b), Prisoner’s Dilemma (Fontana et al., 2025; Roberts et al., 2025), and market games (Jia and Yuan, 2024). Studies have also examined how LLMs strategically interact with other LLMs in tournament-style evaluations (Akata et al., 2025; Payne and Alloui-Cros, 2025). Most of the aforementioned papers focus solely on the strategic behavior of LLMs, but Qian et al. (2025b) and Roberts et al. (2025) also compare human and LLM strategic behavior in negotiation games and prisoner’s dilemma, respectively. In contrast to these works, we compare human and LLM behavior in IRPS. Further, our model-based comparison allows us to compare behavior on a structural level. 
+
+Symbolic Models for Human Decision-Making Symbolic models have been used in neuroscience and cognitive science since the mid-1900s to predict how humans or animals make decisions, by describing underlying cognitive mechanisms (Beck, 1967; Corrado and Doya, 2007; Daw, 2011; Disner et al., 2011). Symbolic models have also played a foundational role in behavioral game theory and economics (Camerer, 2003, 2014) (although classically, the focus has been on describing behavior, rather than proposing cognitively plausible theories). For instance, cognitive hierarchies (Camerer 
+
+> 17 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+et al., 2004), level-𝑘 reasoning (Stahl and Wilson, 1995), and quantal response equilibria (McKelvey and Palfrey, 1995) are all prominent models of human strategic decision-making within normal form games. Classically, these models are developed by human researchers, who iteratively refine the models based on scientific theories, principles, and experiments, until they fit the data well. This process is both challenging and time consuming. Moreover, the resultant models often do not maximize predictive fit. As a result, researchers turned to machine learning methods, such as neural networks, to either (1) directly fit behavior (Hartford et al., 2016) or (2) augment existing symbolic models in a hybrid approach (Miller et al., 2023; Zhu et al., 2025). Yet the first approach leads to black-box models that do not offer behavioral insights, while the second remains fundamentally constrained in predictive fit by the structure of the base symbolic model. To address the above limitations, recent papers have used LLMs to directly discover symbolic models from data (Aygün et al., 2025; Castro et al., 2025; Rmus et al., 2025) by combining an LLM’s ability to write code and substantial, embedded domain knowledge with an iterative model-fitting framework. These papers have successfully created programs that fit the data as well as neural network baselines while remaining highly interpretable. Within game theory, a similar approach was used to automatically design interpretable mechanisms (Liu et al., 2025). This paper demonstrates that such an approach can also be used to discover symbolic behavioral models directly from data, and extracts insights about human and LLM behavior by comparing the models. 
+
+B. Supplemental Results 
+
+B.1. Win Rates of Adaptive Bots 0.0      
+
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Aggregate Win Rate  Human Gemini 2.5 Pro Gemini 2.5 Flash GPT 5.1 GPT OSS 120B
+> 30
+> 90
+> 150
+> 210
+> 270 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Win Rate Over Time
+> bot 8 (easy)
+> bot 9 (easy)
+> bot 10 (medium)
+> bot 11 (medium)
+> bot 12 (hard)
+> bot 13 (harder)
+> bot 14 (harder)
+> bot 15 (super
+> hard)
+> nash/random
+> oracle
+> 30
+> 90
+> 150
+> 210
+> 270
+> 30
+> 90
+> 150
+> 210
+> 270
+> 30
+> 90
+> 150
+> 210
+> 270
+> 30
+> 90
+> 150
+> 210
+> 270
+> Bots (least most complex)
+> Game Round
+
+Figure 6 | Win rates against adaptive bots. 
+
+Figure 6 presents the win rates of human and LLM agents against each adaptive bot. Mirroring the results re-ported in the main paper for nonadap-tive bots, the overall aggregate trends remain consistent between humans and models. Gemini 2.5 Flash/Pro and GPT 5.1 outperform humans against all adversaries, and demon-strate a more rapid learning trajec-tory. The main difference is that the overall win rates are lower than against nonadaptive bots, with the humans’ and GPT OSS 120B win rates even dropping below that of the Nash equilibria for the most challenging two bots, demonstrating that the bots are successfully exploiting the aforementioned agents. However, Gemini 2.5 Flash/Pro and GPT 5.1 are not exploited by the same bots (although they are performing only slightly better than the Nash equilibria). 
+
+B.2. Prevalence of Opponent Modeling and Q-Learning Across Pareto Frontier 
+
+Opponent modeling and Q-learning are two core components within all SBB programs. A natural question then, is whether these ideas are conceptual outliers, or from another perspective, whether AlphaEvolve might have generated other ideas that fit the data equally as well. We analyze the Pareto frontier of programs for humans and Gemini 2.5 Pro to determine the prevalence of these ideas. For each program, we asked Gemini 2.5 Flash to summarize the core and secondary ideas within each program, providing a short description and justification of each idea. The prompt is shown in Listing 1. 
+
+> 18
+
+Discovering Differences in Strategic Behavior between Humans and LLMs 0.350 0.375 0.400 0.425 
+
+> Eval Score
+> -125K
+> -100K
+> -75K
+> -50K
+> -25K
+> 0
+> Negative Halstead Effort
+
+Human    
+
+> Phrase Matched:
+> Opponent Modeling
+> False
+> True
+> SBB Program
+> 0.35 0.40 0.45 0.50
+> Eval Score
+> -150K
+> -125K
+> -100K
+> -75K
+> -50K
+> -25K
+> 0
+> Negative Halstead Effort
+
+Gemini 2.5 Pro 0.350 0.375 0.400 0.425 
+
+> Eval Score
+> -125K
+> -100K
+> -75K
+> -50K
+> -25K
+> 0
+> Negative Halstead Effort
+
+Human    
+
+> Phrase Matched:
+> Q-Learning
+> False
+> True
+> SBB Program
+> 0.35 0.40 0.45 0.50
+> Eval Score
+> -150K
+> -125K
+> -100K
+> -75K
+> -50K
+> -25K
+> 0
+> Negative Halstead Effort
+
+Gemini 2.5 Pro 
+
+Figure 7 | Conceptual classification of AlphaEvolve programs. Programs on the Pareto frontier containing opponent modeling ( top ) and Q-learning ( bottom ). 
+
+Key phrase matching was performed across summaries for opponent modeling and Q-learning. Fig. 7 shows that for the Pareto frontiers of both datasets, opponent modeling is a concept included in the majority of programs that fit the data well, while Q-learning is present in nearly all programs. This consistency suggests that AlphaEvolve commonly identifies these as important primitives for modeling human and LLM behavior, rather than idiosyncratic features of the selected SBB programs. 
+
+Listing 1 | Conceptual extraction prompt. The prompt used to summarize concepts contained in Pareto frontier programs. The full prompt begins with the background information displayed in Listing 4 to ground conceptual extraction. 
+
+... [ Background information , beginning " You are a renowned expert in behavioral game theory ..."] ... # Current program Here is a candidate program you have written . >> BEGIN CANDIDATE PROGRAM { code } >> END CANDIDATE PROGRAM # Task Given your expertise and familiarity with the literature , please list the distinct ideas present in the program , identifying core ideas and secondary ideas . For each idea , identify whether it may be ** ablated ** from the program in ascientific sense . This means that the idea may be removed from the program OR replaced by acomparable but SIMPLER idea . ## Constraints - Each idea must represent only a SINGLE concept . If there are two similar 
+
+19 Discovering Differences in Strategic Behavior between Humans and LLMs 
+
+ideas ( e . g . two types of learning rates ) , list them as separate ideas . ## Answer Format Explain your decisions but ultimately return your answer with the following format . You MUST INCLUDE the begin and end tags in your response . { begin_answer_tag } - Core Idea : < name >; - Justification : < justification > - Ablatable : < true / false > - Justification : < justification > - Secondary Idea : < name > - Justification : < justification > - Ablatable : < true / false > - Justification : < justification > { end_answer_tag } """ 
+
+B.3. Offline Evaluation of SBB Program Choice Distributions 
+
+We evaluated the extent to which SBB programs capture the statistical properties of the original datasets, specifically focusing on offline win rate replication when conditioned on identical game scenarios. In this evaluation, we replayed historical games one round at a time, feeding the game state into the SBB programs and sampling an action from the resulting choice logits. These synthetic decisions were then assessed against the ground-truth actions to derive performance metrics. Figure 8 displays the aggregate synthetic win rates generated by AlphaEvolve compared to the ground truth, while Figures 9 and 10 provide the breakdown by bot and over time. We observe that the synthetic win rates align closely with the ground truth, exhibiting particularly high fidelity for nonadaptive bots. While prediction variance naturally increases for adaptive bots and GPT OSS 120B—reflecting the higher entropy inherent in their win rates—the results collectively demonstrate that the choice distributions learned by the SBB programs yield performance profiles comparable to those of the original agents. 
+
+> 20
+
+Discovering Differences in Strategic Behavior between Humans and LLMs 0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Win Rate
+
+Human Gemini 2.5 Pro Gemini 2.5 Flash GPT 5.1 GPT OSS 120B 
+
+Non-Adaptive Bots 
+
+nash/random 
+
+oracle 
+
+bot 1 (easy) 
+
+bot 2 (easy) 
+
+bot 3 (easy) 
+
+bot 4 (easy) 
+
+bot 5 (medium) 
+
+bot 6 (medium) 
+
+bot 7 (hard) 
+
+Bots (least most complex) 0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Win Rate
+
+Human Gemini 2.5 Pro Gemini 2.5 Flash GPT 5.1 GPT OSS 120B 
+
+Adaptive Bots 
+
+nash/random 
+
+oracle 
+
+bot 8 (easy) 
+
+bot 9 (easy) 
+
+bot 10 (medium) 
+
+bot 11 (medium) 
+
+bot 12 (hard) 
+
+bot 13 (harder) 
+
+bot 14 (harder) 
+
+bot 15 (super 
+
+hard) 
+
+Bots (least most complex) 
+
+Figure 8 | Fidelity of synthetic win rate statistics. Comparison of ground-truth win rates versus synthetic win rates derived from offline SBB choice distributions. Results are shown for nonadaptive bots ( top ) and adaptive bots ( bottom ). 
+
+21 Discovering Differences in Strategic Behavior between Humans and LLMs 30 
+
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 1 (easy) 
+
+Human 
+
+Actual 
+
+AlphaEvolve 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+Gemini 2.5 Pro 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+Gemini 2.5 Flash 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+GPT 5.1 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+GPT OSS 120B 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 2 (easy) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 3 (easy) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 4 (easy) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 5 (medium) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 6 (medium) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 7 (hard) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+Round 
+
+Win Rate Over Time, Actual vs AlphaEvolve (Non-Adaptive Bots) 
+
+Figure 9 | Fidelity of synthetic win rate over time statistics–nonadaptive bots. Comparison of ground-truth win rates versus synthetic win rates derived from offline SBB choice distributions, broken down per bot. 
+
+22 Discovering Differences in Strategic Behavior between Humans and LLMs 30 
+
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 8 (easy) 
+
+Human 
+
+Actual 
+
+AlphaEvolve 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+Gemini 2.5 Pro 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+Gemini 2.5 Flash 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+GPT 5.1 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+GPT OSS 120B 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 9 (easy) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 10 (medium) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 11 (medium) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 12 (hard) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 13 (harder) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 14 (harder) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+bot 15 (super 
+
+hard) 
+
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+> 30
+> 60
+> 90
+> 120
+> 150
+> 180
+> 210
+> 240
+> 270
+> 300
+
+Round 
+
+Win Rate Over Time, Actual vs AlphaEvolve (Adaptive Bots) 
+
+Figure 10 | Fidelity of synthetic win rate over time statistics–adaptive bots. Comparison of ground-truth win rates versus synthetic win rates derived from offline SBB choice distributions, broken down per bot. 
+
+23 Discovering Differences in Strategic Behavior between Humans and LLMs 
+
+B.4. Simplest-But-Best Programs: Extended Discussion 
+
+The SBB programs are included in App. F. Comments were manually pruned to improve code readability. Table 2 summarizes the characteristics of the SBB programs. 
+
+C. IRPS Bots 
+
+We re-implement the bots originally described by Brockbank and Vul (2024). Bots are summarized in Tables 3 and 4. For clarity, we index these bots from 1 to 15, assigning indices 1–7 to nonadaptive agents and indices 8–15 to adaptive agents. The agents are ordered roughly by complexity, which we define based on the quantity of historical information required to update the agent’s internal state and compute a choice at timestep 𝑡 . It is important to note that the nonadaptive and adaptive classes differ fundamentally. Adaptive bots explicitly maintain an opponent model to exploit predictable patterns, whereas nonadaptive bots follow fixed rules mapping history to next action choices. Consequently, complexity rankings are only comparable within a specific class. One cannot infer that a low-complexity adaptive bot is strictly more capable than a high-complexity nonadaptive bot, nor that they present an equivalent challenge level, only that adaptive bots are in general more complex than nonadaptive bots. To formalize the bot policies, we employ the terminology of positive , negative , and nil transitions. We encode the actions Rock, Paper, and Scissors as integers 0, 1, and 2 respectively. A transition is defined as positive if the agent moves from action 𝑖 to (𝑖 + 1) ( mod 3), negative if it moves to (𝑖 − 1) ( mod 3),and nil if it repeats action 𝑖 . These transitions can be calculated relative to the bot’s own previous action (a self-transition) or relative to the opponent’s previous action (an opponent-transition). Regarding initialization and edge cases, bots act uniformly at random until sufficient history is available to satisfy their specific strategy requirements (e.g., a bot relying on actions from two timesteps ago will play randomly for the first two rounds). Furthermore, in scenarios where an adaptive bot’s internal model deems multiple opponent moves equally probable, the bot resolves the ambiguity by sampling one of the predicted moves at random and selecting the corresponding counter-strategy. 
+
+D. Dataset Details 
+
+D.1. Human Dataset                                   
+
+> Bot Strategy Games Percent
+> Non-adaptive Bots
+> Bot 1 (easy) 45 16.7% Bot 2 (easy) 40 14.9% Bot 3 (easy) 35 13.0% Bot 4 (easy) 39 14.5% Bot 5 (medium) 37 13.8% Bot 6 (medium) 36 13.4% Bot 7 (hard) 37 13.8%
+> Adaptive Bots
+> Bot 8 (easy) 25 11.0% Bot 9 (easy) 29 12.8% Bot 10 (medium) 30 13.2% Bot 11 (medium) 33 14.5% Bot 12 (harder) 23 10.1% Bot 13 (harder) 30 13.2% Bot 14 (harder) 27 11.9% Bot 15 (super hard) 30 13.2% Figure 11 |Human dataset composition.
+
+We utilize the human-bot interaction dataset collected by Brockbank and Vul (2024). The dataset consists of human participants playing against either nonadaptive or adap-tive bots. The distribution of games across different bot strategies is summarized in Table 11. For full details re-garding the data collection procedure, we refer the reader to the original manuscript. The complete instructions pro-vided to the human participants, dataset, and associated code are publicly available at https://github.com/ erik-brockbank/rps-bot-manuscript-public .To ensure reproducibility, we applied the follow-ing preprocessing and cleaning steps to the raw data files (rps_v2_data.csv for nonadaptive and 
+
+rps_v3_data.csv for adaptive bots): 
+
+> 24
+
+Discovering Differences in Strategic Behavior between Humans and LLMs 
+
+Table 2 | Simplest-but-best program comparison across datasets. 
+
+Category Name Description Human Gemini 2.5 Pro Gemini 2.5 Flash GPT 5.1 GPT OSS 120B 
+
+Value-based learning 
+
+Q-value matrix size 
+
+3 × 3 × 3 3 × 3 × 3 3 × 3 × 3 3 × 3 × 3 3Target: tempo-ral difference Target used in the predic-tion error is the temporal difference target, i.e. 𝑟 𝑡 + 
+
+> 𝛾
+
+arg max 𝑎 ′ 𝑄 (𝑠 𝑡 +1, 𝑎 ′). Com-pared to the next row, includes a max over actions. - - - - -Target: reward 
+
+> 𝑟 𝑡
+
+Target used in the prediction error is the reward 𝑟 𝑡 .
+
+✓ ✓ ✓ ✓ ✓
+
+Counterfactual update Updates are made on the un-chosen actions, based on the opponent’s actual action. - ✓ ✓ ✓ ✓
+
+Q-value decay Q-values are decayed with each timestep. 
+
+✓ ✓ ✓ ✓ ✓
+
+Asymmetric learning rate based on sign of pred. error The learning rate in the Q-value update depends on the sign of the prediction error. 
+
+✓ - ✓ - -Asymmetric learning rate based on sign (𝑟 𝑡 )
+
+The learning rate in the Q-value update depends on the sign of the reward. - ✓ - ✓*Learning rate based on |𝑟 𝑡 |.-
+
+Opponent Modeling (OM) 
+
+OM matrix size All OM’s track opponent ac-tion frequencies. The size 3 vector always tracks the opponent’s historical action frequency. The 3x3 matrix tracks the opponent transition,  
+
+> 𝑇
+
+(𝑎 𝑜 𝑡 |𝑎 𝑜 𝑡 −1), while the 3x3x3 matrix tracks 𝑇 (𝑎 𝑜 𝑡 |𝑎 𝑜 𝑡 −1, 𝑎 𝑜 𝑡 −2).3 3 × 3 3 × 3 3 × 3 × 3 3Opponent ac-tion frequency decay Opponent action frequen-cies are decayed with each timestep. - - ✓ ✓ -
+
+Opponent Models’ Influ-ence on Decision-Making 
+
+Forecast op-ponent next choice and play best response. OM is used to forecast the opponent’s next action dis-tribution. The best response is accordingly computed and added to the retuned choice_logits. 
+
+✓ ✓ ✓ ✓ ✓
+
+Cognitive Biases 
+
+Alternation bias Bias to switch to an action other than the current action. - - ✓ - ✓
+
+Stickiness (perseverance) bias Bias to play own last action. ✓ ✓ ✓ - ✓
+
+Switch-to-beat bias Bias to play the action that beats own last action. - ✓ - - -
+
+25 Discovering Differences in Strategic Behavior between Humans and LLMs 
+
+Table 3 | Non-adaptive bot strategies. Bot strategies are described from their perspective. The column ‘Dependencies’ summarizes the information needed for the bot to choose their action and update internal state variables at time 𝑡 .
+
+Bot ID Strategy Name Dependencies Description 
+
+Bot 1 (Easy) Self transition (+) 𝑎 𝑡 Plays a positive self-transition. Bot 2 (Easy) Self transition (-) 𝑎 𝑡 Plays a negative self-transition. Bot 3 (Easy) Opponent transition (+) 𝑎 𝑜 𝑡 Plays a positive opponent-transition. Bot 4 (Easy) Opponent transition (0) 𝑎 𝑜 𝑡 Plays a nil opponent-transition. Bot 5 (Medium) Prev. outcome (W0L+T-) 𝑎 𝑡 , 𝑟 𝑡 
+
+Plays a positive, negative, or nil self-transition following a win, loss, or tie, respectively. Bot 6 (Medium) Prev. outcome (W+L-T0) 𝑎 𝑡 , 𝑟 𝑡 
+
+Plays a nil, positive, or negative self-transition following a win, loss, or tie, respectively. Bot 7 (Hard) Prev. outcome, prev. transition 𝑎 𝑡 −1, 𝑎 𝑡 , 𝑟 𝑡 
+
+Plays a self-transition conditioned on the previous outcome and previous self-transition. 
+
+Table 4 | Adaptive bot strategies. Bots are described from their perspective. These bots maintain a count-based model of the opponent to predict future actions. Dependencies list the historical information used to update the bot’s internal opponent model at time 𝑡 .
+
+Bot ID Strategy Name Dependencies Description 
+
+Bot 8 (Easy) Self-transition 𝑎 𝑜 𝑡 −1, 𝑎 𝑜 𝑡 
+
+Tracks the history of counts of the opponent’s positive, negative, and nil self-transitions. Bot 9 (Easy) Opponent transition 𝑎 𝑡 −1, 𝑎 𝑜 𝑡 
+
+Tracks the history of counts for the opponent’s positive, negative, and nil opponent-transitions. Bot 10 (Medium) Previous move 𝑎 𝑜 𝑡 −1, 𝑎 𝑜 𝑡 
+
+Tracks the co-occurrence of every pair of opponent moves from one round to the next. Bot 11 (Medium) Opp. previous move 𝑎 𝑡 −1, 𝑎 𝑜 𝑡 
+
+Exploits patterns in opponent moves based on the bot’s own previous move rather than the opponent’s. Bot 12 (Harder) Previous outcome 𝑟 𝑡 −1, 𝑎 𝑜 𝑡 −1, 𝑎 𝑜 𝑡 
+
+Tracks the opponent’s most likely self-transition conditioned on the previous outcome. Bot 13 (Harder) Prev. move, Opp. prev. move 𝑎 𝑡 −1, 𝑎 𝑜 𝑡 −1, 𝑎 𝑜 𝑡 
+
+Tracks opponent moves conditioned on the joint history of the opponent’s and the bot’s previous moves. Bot 14 (Harder) Previous two moves 𝑎 𝑜 𝑡 −2, 𝑎 𝑜 𝑡 −1, 𝑎 𝑜 𝑡 
+
+Tracks the opponent’s move choices conditioned on the sequence of moves in the previous two rounds. Bot 15 (Super Hard) Prev. outcome, prev. transition 𝑎 𝑜 𝑡 −2, 𝑎 𝑜 𝑡 −1, 𝑎 𝑜 𝑡 , 𝑟 𝑡 −1
+
+Tracks opponent self-transitions conditioned on the previous outcome and the opponent’s previous self-transition. 
+
+Exclusion Criteria Following Brockbank and Vul (2024), we filtered the dataset based on the following quality controls. First, one specific game ID was removed, consistent with the original authors’ data processing, as the participant was identified as not trying. Next, games with fewer than 50 rounds were excluded. Finally, games containing more than 10 missing values in player moves were excluded. 
+
+Imputation Incomplete games were padded to a fixed length. Missing player moves ( NaN ) were handled in two steps. First (where possible), missing moves were deduced logically based on the opponent’s recorded move and the round’s payoff. Any remaining missing values were imputed as a “Rock vs. Rock” scenario (resulting in a tie/0 points). 
+
+D.2. LLM Dataset 
+
+As discussed in the main paper, our LLM data gathering procedure was designed to mirror the Brockbank human data collection as closely as possible. Each experimental session consisted of 300 
+
+26 Discovering Differences in Strategic Behavior between Humans and LLMs 
+
+rounds. We collected data for 20 independent sessions for each model against each opponent bot. Each game was implemented as a series of independent queries to the respective model APIs. For each round 𝑡 of the game, the agent is provided with a prompt containing the game rules and the complete history of the previous 𝑡 − 1 rounds. The agent is then asked to generate a move for the current round. The exact prompt template is provided in Fig. 2. All models were accessed using their respective APIs, with their default levels of thinking, from November 2025 through December 2025. For Gemini, this corresponds to the dynamic thinking mode; for GPT models, this corresponds to the medium level of effort. For all models, we used a temperature to 0.5. ’ 
+
+Listing 2 | Prompt used for the LLM Agent in IRPS data gathering.                                                                                                                                                                       
+
+> You are playing agame of Rock , Paper , Scissors against an opponent . In each round , you will select one of the rock , paper , or scissors cards to play against your opponent . Your opponent is going to choose acard to play as well , but neither of you can see what the other has selected until after you have both chosen . The rules for winning are : -Rock beats Scissors -Scissors beats Paper -Paper beats Rock If you and your opponent choose the same card , it ’ s atie . You and your opponent are going to play 300 rounds . Now , it ’ s your turn . The game history is displayed below . Round 1Your choice : rock Opponent choice : scissors Game outcome : win Round 2Your choice : paper Opponent choice : paper Game outcome : tie ... [ History continues for t -1 rounds ] ... Round tBased on the history , consider the opponent ’ s strategy and decide on the best move for the current round . When asked to select your choice for the current round , only output your choice as ’Your choice : rock ’ , ’ Your choice : paper ’ , or ’ Your choice : scissors ’. Do not output any other symbols , thoughts , or text .
+
+E. Behavioral Modeling Procedure 
+
+This section describes the details of our behavior modeling procedure. We first describe the general training and evaluation procedure, including the data partitioning procedure, training objective, and evaluation process. Next, we provide details on each baseline and AlphaEvolve. 
+
+E.1. Training and Evaluation Procedure 
+
+This section describes the general procedure for partitioning the data for training and evaluation, followed by the specific details of the training and evaluation procedure. 
+
+> 27 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+Data Partitioning To facilitate rigorous evaluation of model discovery, we partition each dataset into two disjoint sets: a training set Dtrain and an evaluation set Deval . These sets are formed by splitting the data by game index, assigning even-indexed games to the evaluation set and odd-indexed games to the training set. We perform the program search (AlphaEvolve) exclusively on Dtrain . The output of this training procedure is a set of discovered programs, ˆΦ, each endowed with fittable parameters 𝜃 . The held-out evaluation set Deval is reserved strictly for the final assessment of these discovered programs (which itself involves fitting the behavioral model to data, as described below). 
+
+Behavioral Model Training Procedure A behavioral model 𝜙 (𝜃 ) is fit to a dataset D by solving the following maximum likelihood estimation objective, where recall that 𝑁 is the total nubmer of games and 𝑇 is the number of rounds within each game:  
+
+> 𝜃 ∗
+
+= arg min  
+
+> 𝜃
+
+L( 𝜃, D; 𝜙 ) (2) s.t. L( 𝜃, D; 𝜙 ) :=
+
+> 𝑁
+
+∑︁  
+
+> 𝑖 =1
+> 𝑇 −1
+
+∑︁ 
+
+> 𝑡 =1
+
+− log Pr (𝑎 𝑖,𝑡 +1 |𝑎 𝑖,𝑡 , 𝑎 𝑜 𝑖,𝑡 , 𝑟 𝑖,𝑡 , ℎ 𝑖,𝑡 , 𝜃 ) (3) 
+
+L( 𝜃, D; 𝜙 ) represents the negative log likelihood of the program 𝜙 (𝜃 ) on D, so we minimize it over the dataset. Note that we fit parameters to the aggregate population of subjects rather than per-subject. This is due to the structure of the human dataset, where each subject typically completes only a single game. Fitting parameters per-subject would lead to overfitting. However, note that even if we had access to a human dataset where each subject completes multiple games, we should still fit only a single set of parameters for each LLM dataset, since each LLM dataset represents the behavior of a single LLM without persona-based scaffolding. To solve the objective in Eq. 2, we utilize stochastic gradient descent. Following Castro et al. (2025), we use the AdaBelief optimizer with a learning rate of 5 × 10 −2. Optimization proceeds until convergence, defined as a relative change in score of less than 10 −2 over a 100-step window, or until a maximum of 10,000 steps is reached. To mitigate sensitivity to initialization and avoid local minima, we repeat this parameter fitting process from distinct random initializations up to 10 times and select the parameters yielding the lowest negative log-likelihood. 
+
+E.2. Behavioral Modeling Evaluation Procedure 
+
+All results reported in the main paper are derived from the held-out evaluation set Deval . To evaluate a program 𝜙 , we perform two-fold cross-validation on Deval . The games in Deval are randomly partitioned into two folds, 𝐴 and 𝐵 . We fit a single set of aggregate parameters 𝜃 𝐴 to the games in fold 𝐴 and evaluate the negative log-likelihood on fold 𝐵 . Conversely, we fit 𝜃 𝐵 to fold 𝐵 and evaluate on fold 𝐴 . The final reported metric is the average normalized likelihood across these folds. 
+
+E.3. Baselines Contextual Sophisticated Experience Weighted Attraction (CS-EWA) We introduce Contextual Sophisticated Experience Weighted Attraction (CS-EWA), a baseline that extends the classic EWA model (Camerer and Hua Ho, 1999) to account for temporal dependencies and strategic sophistication in repeated interactions. While standard EWA and its sophisticated variant (Camerer et al., 2002) 
+
+> 28 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+assume random rematching (mean-field interaction), our CS-EWA agent explicitly models the history of the two-player interaction. The model conditions its learning on a joint history state 𝑆 𝑡 . Let 𝑎 𝑡 and 𝑎 𝑜 𝑡 denote the agent’s and opponent’s actions at time 𝑡 , respectively. For a history length 𝐿 , the state at time 𝑡 is defined as the sequence of the previous 𝐿 joint actions: 𝑆 𝑡 = (𝑎 𝑡 −𝐿 , 𝑎 𝑜 𝑡 −𝐿 , . . . , 𝑎 𝑡 −1, 𝑎 𝑜 𝑡 −1). The agent maintains two independent sets of EWA learning tables, Tself and Tshadow , each containing 𝐾 2𝐿 entries (where 𝐾 is the number of actions). Tself tracks the agent’s own history of payoffs to form an adaptive policy, while 
+
+Tshadow tracks the opponent’s history to form a predictive model of the opponent’s behavior. The decision process at step 𝑡 proceeds in three phases: 1. Retrospective Update: Given the most recent observation (𝑎 𝑡 −1, 𝑎 𝑜 𝑡 −1) and reward 𝑟 𝑡 −1, the agent retrieves the state index 𝑆 𝑡 −1 (the context used for the previous decision). It updates the experience weights 𝑁 and attractions 𝐴 in Tself using the standard EWA learning rules. Simultaneously, it updates Tshadow from the opponent’s perspective, treating 𝑎 𝑜 𝑡 −1 as the choice and 𝑎 𝑡 −1 as the environment. 2. Strategic Forecasting: The agent identifies the current state 𝑆 𝑡 . It computes a probabilistic forecast of the opponent’s move, 𝜋 opp , as a mixture of two hypothesized behaviors: an adaptive 
+
+opponent (derived from Tshadow ) and a sophisticated opponent (who best-responds to the agent’s own adaptive tendencies). This belief mixture is controlled by a parameter 𝛼 ′ ∈ [ 0, 1].3. Action Selection: The agent calculates a sophisticated strategy (best-responding to 𝜋 opp ) and mixes it with its own adaptive strategy (derived from Tself ), controlled by a population parameter 
+
+𝛼 ∈ [ 0, 1].Algorithm 1 details the complete procedure, while Algorithm 2 defines the standard EWA update algorithm. Following the original presentation of EWA (Camerer and Hua Ho, 1999), 𝑁 is overloaded to refer to the number of times the context has been seen, while 𝛼, 𝛼 ′, 𝜙, 𝛿, 𝜌, 𝛽 refer to EWA-specific parameters. 
+
+> 29 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+Algorithm 1 Contextual Sophisticated EWA (CS-EWA) 
+
+1: Hyperparameters: 𝜃 self , 𝜃 shadow (EWA params: 𝜙, 𝛿, 𝜌, 𝛽 ), 𝛼 (sophistication), 𝛼 ′ (belief). 
+
+2: Initialize: State tables Tself , Tshadow for all 𝐾 2𝐿 contexts; History buffer 𝐻 .
+
+3: while interaction continues do 
+
+4: // 1. Update Phase (Post-Trial 𝑡 − 1)
+
+5: Observe previous actions 𝑎 𝑡 −1, 𝑎 𝑜 𝑡 −1
+
+6: 𝑆 𝑝𝑟𝑒𝑣 ← Encode (𝐻 )
+
+7: // Update Self Table (Agent perspective) 
+
+8: Tself [𝑆 𝑝𝑟𝑒𝑣 ] ← EWA_Update (T self [𝑆 𝑝𝑟𝑒𝑣 ], 𝜃 self , 𝑎 𝑡 −1, 𝑎 𝑜 𝑡 −1, Payoff self )
+
+9: // Update Shadow Table (Opponent perspective) 
+
+10: Tshadow [𝑆 𝑝𝑟𝑒𝑣 ] ← EWA_Update (T shadow [𝑆 𝑝𝑟𝑒𝑣 ], 𝜃 shadow , 𝑎 𝑜 𝑡 −1, 𝑎 𝑡 −1, Payoff opp )
+
+11: Update 𝐻 ← Shift (𝐻, 𝑎 𝑡 −1, 𝑎 𝑜 𝑡 −1)
+
+12: // 2. Prediction Phase (Trial 𝑡 )
+
+13: 𝑆 𝑐𝑢𝑟𝑟 ← Encode (𝐻 )
+
+14: Retrieve attractions 𝐴 self from Tself [𝑆 𝑐𝑢𝑟𝑟 ] and 𝐴 shadow from Tshadow [𝑆 𝑐𝑢𝑟𝑟 ]
+
+15: // Component A: Agent’s Adaptive Strategy 
+
+16: 𝜋 adapt self ← Softmax (𝛽 self · 𝐴 self )
+
+17: // Component B: Forecast Opponent (Level-k Closure) 
+
+18: 𝜋 adapt opp ← Softmax (𝛽 shadow · 𝐴 shadow )
+
+19: 𝑉 soph opp ← 𝔼 𝑎 ∼𝜋 adapt self 
+
+[Payoff opp (· , 𝑎 )] 
+
+20: 𝜋 soph opp ← Softmax (𝛽 shadow · 𝑉 soph opp )
+
+21: 𝜋 forecast opp ← 𝛼 ′𝜋 soph opp + ( 1 − 𝛼 ′)𝜋 adapt opp 
+
+22: // Component C: Agent’s Sophisticated Strategy 
+
+23: 𝑉 soph self ← 𝔼 𝑎 𝑜 ∼𝜋 forecast opp [Payoff self (· , 𝑎 𝑜 )] 
+
+24: 𝜋 soph self ← Softmax (𝛽 self · 𝑉 soph self )
+
+25: // 3. Final Mixture 
+
+26: 𝜋 final ← 𝛼𝜋 soph self + ( 1 − 𝛼 )𝜋 adapt self 
+
+27: Sample action 𝑎 𝑡 ∼ 𝜋 final 
+
+28: end while Algorithm 2 Standard EWA Update 
+
+1: Input: Current State (𝑁, 𝐴 ), Params (𝜌, 𝜙, 𝛿 ), Choice 𝑎 chosen , Opponent Choice 𝑎 𝑜 
+
+> chosen
+
+, Payoff Function 𝑈 (· , ·) 
+
+2: Output: Updated State (𝑁 ′, 𝐴 ′)
+
+3: 𝑁 ′ ← 𝜌𝑁 + 1
+
+4: for each action 𝑎 ∈ { 1 . . . 𝐾 } do 
+
+5: // Calculate realized or counterfactual payoff from reward matrix 𝑈 
+
+6: 𝑟 𝑎 ← 𝑈 (𝑎, 𝑎 𝑜 
+
+> chosen
+
+)
+
+7: // Indicator for chosen action 
+
+8: 𝐼 𝑎 ← 𝕀 (𝑎 = 𝑎 chosen )
+
+9: // Update attractions. 
+
+10: 𝐴 ′ 
+
+> 𝑎
+
+← 𝜙𝑁 𝐴 𝑎 +[ 𝛿 +( 1−𝛿 ) 𝐼 𝑎 ]𝑟 𝑎 
+
+> 𝑁 ′
+
+11: end for Return (𝑁 ′, 𝐴 ′)
+
+> 30 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+RNN Implementation To establish a neural baseline, we trained a recurrent neural network that included several Gated Recurrent Unit (GRU) blocks followed by several fully connected layers, where the number of such blocks and layers were determined via sweeping hyperparameters. For the GRU blocks, we swept the values {1, 2}; for the fully connected layers, we swept {0, 1, 2, 4}. We also swept the number of hidden units, considering sizes of {8, 16 }. We additionally swept over learning rates of 
+
+{10 −3, 10 −4}, optimizing all model variants using the Adam optimizer. To ensure robustness, each hyperparameter configuration was trained using 3 distinct random seeds. We utilized early stopping to select the best parameters and terminate training. Consistent with our overall modeling approach, we fit a single across-game model. All training and hyperparameter selection was conducted using the training split. The best set of hyperparameters were evaluated with three distinct seeds, via two-fold cross-validation. Consistent with how we select the final AlphaEvolve seed, we select the best performing RNN seed on the heldout evaluation set. 
+
+E.4. AlphaEvolve Details Program Template All programs discovered by AlphaEvolve conform to the functional signature defined in Listing 3. The template is implemented in JAX (Bradbury et al., 2018), enabling efficient automatic differentiation. This allows for rapid parameter fitting via gradient descent for every candidate program generated during the evolutionary process. Following Castro et al. (2025), the 
+
+params variable is a vector that is limited to size 10.                                    
+
+> 1def agent (
+> 2params : jnp . array ,
+> 3choice : int ,
+> 4opponent_choice : int ,
+> 5reward : float ,
+> 6agent_state : Optional [ jnp . array ] ,
+> 7)-> tuple [ jnp . array , jnp . array ]:
+> 8" " " Behavioral model describing agent behavior on iterated rock - paper - scissors . " " "
+> 910 agent_state =None
+> 11 choice_logits =jnp . array ([1.0 , 1.0 , 1.0])
+> 12 13 return choice_logits , agent_state
+
+Listing 3 | Initial template program for AlphaEvolve. All discovered programs follow this functional signature. The initial program is equivalent to the Nash equilibrium model. 
+
+LLM Prompting AlphaEvolve uses a structured prompt to guide the LLM in generating valid program candidates. The full prompt utilized for the two-player scenarios is included below: 
+
+Listing 4 | The prompt provided to AlphaEvolve for discovering two-player game strategies 
+
+You are a renowned expert in behavioral game theory , with deep expertise in psychology , neuroscience , machine learning , multi - agent reinforcement learning , and many other related fields . You are also a highly skilled software engineer . Leveraging your deep knowledge of scientific literature and your innovative spirit , you excel at implementing new ideas for computational models of human behavior in Python and skillfully prototyping them . Your job is to develop candidate models of human behavior , implemented as Python programs , that will be evaluated on their ability to reproduce the behavior of humans playing two - player games where they iteratively perform actions and learn from the outcomes of their behavior . These programs have parameters that will be fit to the behavior of an individual subject , and will be scored based on how well the model reproduces the behavior of that same subject in a held - out dataset . They will also be scored based on how understandable they are to afellow scientist . # Context ## Program structure 
+
+> 31 Discovering Differences in Strategic Behavior between Humans and LLMs
+
+The program you are writing will have the name ‘ agent ‘ , and will implement an agent that learns and behaves like the subjects do . It will have fittable parameters which allow it to match the behavior of different subjects performing the same task . Programs will be implemented in jax , and must be fully differentiable , so that parameters can be efficiently optimized when computing the score . The program will describe the computations that happen within a single trial , and will have the following internal structure . First , parameters from the input ‘params ‘ jax array will be assigned names . These names should be descriptive of their role in the code . Next , the ‘ state ‘ array will be updated to reflect the subject ’ s experience . Finally , the probability of each possible choice will be computed , and expressed in the form of logits . The program will output both these logits and the updated state . Each computational step should be written on its own line so that the code is clear and easy to understand . Any complex or unusual computations should be accompanied by an explanatory comment . ## Prior programs Previously we found that the following programs performed well on the task at hand , though we believe that it is still possible to do better : { previous_programs } ## Current program Here is the current program you are trying to improve ( you will need to propose a modification to it below ) : { code } ## * SEARCH / REPLACE block * Rules : Every * SEARCH / REPLACE block * must use this format : 1. The opening fence : ‘‘‘ python 2. The start of search block : <<<<<<< SEARCH 3. A contiguous chunk of up to 4 lines to search for in the existing source code 4. The dividing line : ======= 5. The lines to replace into the source code 6. The end of the replace block : >>>>>>> REPLACE 7. The closing fence : ‘‘‘ Every * SEARCH * section must * EXACTLY MATCH * the existing file content , character for character , including all comments , docstrings , etc . * SEARCH / REPLACE * blocks will replace * all * matching occurrences . Include enough lines to make the SEARCH blocks uniquely match the lines to change . Keep * SEARCH / REPLACE * blocks concise . Break large * SEARCH / REPLACE * blocks into a series of smaller blocks that each change a small portion of the file . Include just the changing lines , and a few surrounding lines if needed for uniqueness . Do not include long runs of unchanging lines in * SEARCH / REPLACE * blocks . To move code within a file , use 2 * SEARCH / REPLACE * blocks : 1 to delete it from its current location , 1 to insert it in the new location . Example : ‘‘‘ python <<<<<<< SEARCH f = lambda w , z : ( w + z , w + z , w + z ) return f======= f = lambda w , z : ( jax . nn . sigmoid ( w + z ) , w + z , w + z ) return f{ replace } ‘‘‘ { lazy_prompt } ONLY EVER RETURN CODE IN A * SEARCH / REPLACE BLOCK *! 
+
+> 32
+
+Discovering Differences in Strategic Behavior between Humans and LLMs 
+
+## Task { task_instruction } { focus_sentence } { trigger _chain_of_thought } Describe each change with a * SEARCH / REPLACE block *. 
+
+Multi-Objective Optimization A key distinction of our implementation compared to Castro et al. (2025) is the optimization criteria. While Castro et al. (2025) optimized primarily for predictive accuracy (likelihood), we employ AlphaEvolve to perform multi-objective optimization . We simul-taneously optimize two objectives. The first is the maximum likelihood objective defined in Eq. 2, while the second is the Halstead effort, a measure of program complexity. We found that optimizing Halstead effort improved the program interpretability. AlphaEvolve natively supports multi-objective optimization, allowing us to explore the Pareto frontier between model fit and code complexity. 
+
+Selection and Evaluation Procedure Our evaluation strategy focuses on identifying the single best scientific hypothesis (program) discovered, rather than evaluating the variance of the search method itself. To do so, we performed three independent AlphaEvolve runs. From each run, we extracted the program with the highest training score on Dtrain . These top candidates were then evaluated on the held-out evaluation set Deval . As detailed in Appendix E.1, we applied two-fold cross-validation on the evaluation games to compute a robust likelihood score. The final reported model is the single program that achieved the highest cross-validated score on Deval across all three random seeds. 
+
+E.5. Halstead Complexity Metrics 
+
+To quantify program complexity, we utilize the Halstead effort measure. The Halstead effort is one of a family of Halstead code complexity measures, all of which measure code complexity based on the total and unique number of operators and operands in code Let 𝜂 1 be the number of distinct operators, 𝜂 2 be the number of distinct operands, 𝑁 1 be the total number of operators, and 𝑁 2 be the total number of operands. The Halstead metrics are defined as follows: 
+
+• Volume ( 𝑉 ): 𝑉 = (𝑁 1 + 𝑁 2) × log 2 (𝜂 1 + 𝜂 2), representing the size of the program. 
+
+• Difficulty ( 𝐷 ): 𝐷 = 𝜂 1
+
+2 × 𝑁 2 
+
+> 𝜂 2
+
+, which measures the difficulty of the program to write or understand. 
+
+• Effort ( 𝐸 ): 𝐸 = 𝐷 × 𝑉 . This metric represents the total amount of time required to understand and develop the program. 
+
+F. SBB Programs                                                   
+
+> 1def human_vs_bot_irps (
+> 2params : chex . Array ,
+> 3choice : int ,
+> 4opponent_choice : int ,
+> 5reward : float ,
+> 6agent_state : Optional [ chex . Array ] ,
+> 7)-> tuple [ chex . Array , chex . Array ]:
+> 89p o s i t i v e _ p e _ l earni ng_r ate =jax . nn . sigmoid ( params [0])
+> 10 n e g a t i v e _ p e _ l e arni ng_ra te =jax . nn . sigmoid ( params [1])
+> 11 i n v e r s e _ t e m p e rature _base =jnp . exp ( params [2])
+> 12 q_decay_rate =jax . nn . sigmoid ( params [3])
+> 13 stickiness_bias =params [4]
+> 14 o p p o n e n t _ h i s t o ry _ l e a r n in g _ r a t e =jax . nn . sigmoid ( params [5])
+> 15 win_value =params [6]
+> 16 loss_value =params [7]
+> 17 tie_value =params [8]
+> 18 u n c e r t ai n t y _ s ensitivity =jax . nn . sigmoid ( params [9])
+> 19 20 if agent_state is None :
+
+33 Discovering Differences in Strategic Behavior between Humans and LLMs  
+
+> 21
+
+agent_state = jnp . zeros (33) # Total size : 27 ( Q ) + 3 ( last choice ) + 3 ( opponent history )  
+
+> 22 23
+
+q_tensor = agent_state [:27]. reshape ((3 , 3 , 3) )  
+
+> 24
+
+l a s t _ a g e n t _ c h o ice_ one_h ot = agent_state [27:30]  
+
+> 25
+
+o p p o n e nt _ c h o i ce_history = agent_state [30:33]  
+
+> 26 27
+
+c u r r e n t _ a g e n t _ c ho i ce _ on e_ h ot = jax . nn . one_hot ( choice , num_classes =3)  
+
+> 28
+
+c u r r e n t _ o p p o n e n t _ c h o i c e _ o n e _ h o t = jax . nn . one_hot ( opponent_choice , num_classes =3)  
+
+> 29 30
+
+chosen_q_value = jnp . einsum ( ’i ,j ,k , ijk - > ’ , last_agent_choice_one_hot , opponent_choice_history , current_agent_choice_one_hot , q_tensor )  
+
+> 31 32
+
+subjective_reward = jnp . where ( reward == 0.3 , win_value , jnp . where ( reward == -0.1 , loss_value , tie_value ) )  
+
+> 33
+
+prediction_error = subjective_reward - chosen_q_value  
+
+> 34
+
+learning_rate = jnp . where ( prediction_error >= 0 , positive_pe_learning_rate , nega tive _pe_l earni ng_r ate )  
+
+> 35 36
+
+u p da t ed _ ch o se n_q_value = chosen_q_value + learning_rate * prediction_error  
+
+> 37 38
+
+update_mask = jnp . einsum ( ’i ,j ,k - > ijk ’ , last_agent_choice_one_hot , opponent_choice_history , c u r r e n t _ a g e n t_ c ho ic e _o n e_ h ot )  
+
+> 39
+
+q_tensor = q_tensor * q_decay_rate + update_mask * ( updated_chosen_q_value - q_decay_rate * chosen_q_value )  
+
+> 40 41
+
+o p p o n e n t _ h i s t o r y _ m o d u l a t e d _ l e a r n i n g _ r a t e = jnp . clip ( o p p o n e n t_ h i s t o r y_ l e a r n i ng _ r a t e * (1 + jnp . abs ( subjective_reward ) ) , 0.0 , 1.0)  
+
+> 42
+
+o p p o n e nt _ c h o i ce_history = (1 - o p p o n e n t _ h i s t o r y _ m o d u l a t e d _ l e a r n i n g _ r a t e ) * opponent_choice_history +o p p o n e n t _ h i s t o r y _ m o d u l a t e d _ l e a r n i n g _ r a t e * c u r r e n t _ o pp o n e n t _ c h o i c e _ o n e _ h o t  
+
+> 43 44
+
+q _ v a l u e s _ f o r _ next_c hoice = jnp . einsum ( ’i ,j , ijk - > k ’ , current_agent_choice_one_hot , opponent_choice_history , q_tensor )  
+
+> 45
+
+q _ v a l u e s _ f o r _ next_c hoice = q_values_ for_next_choice + last _agen t_ch oice_ one_ hot * stickiness_bias  
+
+> 46 47
+
+d y n a m i c _ i n v e r se _t em pe ra tu re = inverse_tem perature_base * jnp . exp ( - uncertainty_sensitivity * jnp . abs ( prediction_error ) )  
+
+> 48
+
+choice_logits = d yn am ic _i nv er se _t em pe ra tu re * q_valu es_for_next_choice  
+
+> 49 50
+
+agent_state = jnp . concatenate ([  
+
+> 51
+
+q_tensor . flatten () ,  
+
+> 52
+
+current_agent_choice_one_hot ,  
+
+> 53
+
+opponent_choice_history ,  
+
+> 54
+
+])  
+
+> 55 56
+
+return choice_logits , agent_state 
+
+Listing 5 | Human SBB Program.  
+
+> 1
+
+def gemini_25_pro_irps (  
+
+> 2
+
+params : chex . Array ,  
+
+> 3
+
+choice : int ,  
+
+> 4
+
+opponent_choice : int ,  
+
+> 5
+
+reward : float ,  
+
+> 6
+
+agent_state : Optional [ chex . Array ] ,  
+
+> 7
+
+) -> tuple [ chex . Array , chex . Array ]:  
+
+> 89
+
+learning_rate_win = jax . nn . sigmoid ( params [0])  
+
+> 10
+
+learning_rate_loss = jax . nn . sigmoid ( params [1])  
+
+> 11
+
+inverse_temperature = jax . nn . softplus ( params [2])  
+
+> 12
+
+decay_rate = jax . nn . sigmoid ( params [3])  
+
+> 13
+
+c o u n t e r f a c t u a l _ le a rn i ng _r a te = jax . nn . sigmoid ( params [4])  
+
+> 14
+
+perseverance_bias = params [5]  
+
+> 15
+
+switch_to_beat_bias = params [6]  
+
+> 16
+
+oppo nent _bea ter_bias = params [7]  
+
+> 17
+
+o p po n en t _l e ar ning_rate = jax . nn . sigmoid ( params [8])  
+
+> 18
+
+o p p o n e n t _ i n v e r s e_ t em p er at u re = jax . nn . softplus ( params [9])  
+
+> 19 20
+
+if agent_state is None :  
+
+> 21
+
+q_values = jnp . zeros ((3 , 3 , 3) )  
+
+> 22
+
+opponent_model = jnp . full ((3 , 3) , 1/3.0)  
+
+> 23
+
+prev_choices = jnp . array ([ -1 , -1])  
+
+> 24
+
+agent_state = jnp . concatenate (( q_values . flatten () , opponent_model . flatten () , prev_choices ) )  
+
+> 25 26
+
+q_values = agent_state [:27]. reshape ((3 , 3 , 3) )  
+
+> 27
+
+opponent_model = agent_state [27:36]. reshape ((3 , 3) )  
+
+> 28
+
+my_prev_choice = jnp . array ( agent_state [36] , dtype = jnp . int32 )  
+
+> 29
+
+oppo nent _pre v_choice = jnp . array ( agent_state [37] , dtype = jnp . int32 )  
+
+> 30 31
+
+q_values_decayed = decay_rate * q_values  
+
+> 32 33
+
+is_first_trial = ( opponent_prev_choice == -1)  
+
+> 34 35
+
+c u r r e n t _ l e a r n i n g_ r at e _a ct u al = jnp . where ( reward > 0 , learning_rate_win , learning_rate_loss )  
+
+> 36
+
+p r e d i c ti o n _ e r ror_actual = reward - q_values_decayed [ choice , my_prev_choice , opponent_prev_choice ]  
+
+> 37 38
+
+q _ up d at e _a c tu al_choice = c ur r en t _l ea r ni n g_ r at e_ a ct u al * prediction_error_actual  
+
+> 39
+
+u p d a t e d _ q _ v a l u es _ a c t u a l_ c h o i c e = q_values_decayed . at [ choice , my_prev_choice , opponent_prev_choice ]. add (  
+
+> 40
+
+q _ up d at e _actual_choice * (~ is_first_trial )  
+
+> 41
+
+) 
+
+> 42 43
+
+reward_matrix = jnp . array ([  
+
+> 44
+
+[0.0 , -0.1 , 0.3] ,  
+
+> 45
+
+[0.3 , 0.0 , -0.1] , 
+
+34 Discovering Differences in Strategic Behavior between Humans and LLMs  
+
+> 46
+
+[ -0.1 , 0.3 , 0.0] ,  
+
+> 47
+
+])  
+
+> 48 49
+
+c o un t er f ac t ua l_rewards = reward_matrix [: , opponent_choice ]  
+
+> 50
+
+c o u n t e r f a c t u a l_ ch oi ce s_ ma sk = jnp . arange (3) != choice  
+
+> 51
+
+a l l _ c h o i c e s _ c u r re n t_ q _v al u es = u p d a t ed _ q _ v a l ue s _ a c t u al _ c h o i c e [: , my_prev_choice , opponent_prev_choice ]  
+
+> 52
+
+c o u n t e r f a c t u a l _ p r e d i c t i o n _ e r r o r s = counterfactual_rewards - a ll _ ch o ic es _ cu r re n t_ q_ v al u es  
+
+> 53 54
+
+c o un t er f ac t ua l_updates = c ou n te r fa ct u al _ le a rn in g _r a te * c o u n t e r f a c t u a l _ p r e d i c t i o n _ e r r o r s *c o u n t e r f a c t ua l_ ch oi ce s_ ma sk  
+
+> 55
+
+updated_q_values = u p d a t e d _q _ v a l u e s_ a c t u a l _c h o i c e . at [: , my_prev_choice , opponent_prev_choice ]. add (  
+
+> 56
+
+c o un t er f actual_updates * (~ is_first_trial )  
+
+> 57
+
+) 
+
+> 58 59
+
+c h oi c e_ l og i ts _q_values = inverse_temperature * updated_q_values [: , choice , opponent_choice ]  
+
+> 60
+
+c h oi c e_ l og i ts _q_values = choice_logits_q_values . at [ choice ]. add ( perseverance_bias )  
+
+> 61
+
+c h oi c e_ l og i ts _q_values = choice_logits_q_values . at [( choice + 1) % 3]. add ( switch_to_beat_bias )  
+
+> 62
+
+c h oi c e_ l og i ts _q_values = choice_logits_q_values . at [( opponent_choice + 1) % 3]. add ( opponent_beater_bias )  
+
+> 63 64
+
+o p p o n e n t _ p r e d i ctio n_err or = jnp . eye (3) [ opponent_choice ] - opponent_model [ opponent_prev_choice , :]  
+
+> 65
+
+op po ne nt _m od el_update = opponent_learning_rate * o ppone nt_pr edic tion_ error * (~ is_first_trial )  
+
+> 66
+
+u p da t ed _ op p on ent_model = opponent_model . at [ opponent_prev_choice , :]. add ( opponent_model_update )  
+
+> 67
+
+p r e d i c t e d _ o p p o n e n t _ n e x t _ c h o i c e s = updated_opponent_model [ opponent_choice , :]  
+
+> 68
+
+e x p e c t e d _ r e w a r d s _ o p p o n e n t _ m o d e l = jnp . dot ( reward_matrix , p r e d i c t e d _ o p p o n e n t _ n e x t _ c h o i c e s )  
+
+> 69
+
+c h o i c e _ l o g i t s _ o pp o ne n t_ mo d el = o pp on e nt _ in v er se _ te m pe r at ur e * e x p e c t e d _ r e w a r d s _ o p p o n e n t _ m o d el  
+
+> 70 71
+
+choice_logits = choice_logits_q_values + c h oi ce _ lo g it s _o p po ne n t_ m od e l  
+
+> 72 73
+
+next_agent_state = jnp . concatenate (( updated_q_values . flatten () , updated_opponent_model . flatten () , jnp . array ([ choice , opponent_choice ]) ) )  
+
+> 74 75
+
+return choice_logits , next_agent_state 
+
+Listing 6 | Gemini 2.5 Pro SBB Program.  
+
+> 1
+
+def ge mini _25_ flash_irps (  
+
+> 2
+
+params : chex . Array ,  
+
+> 3
+
+choice : int ,  
+
+> 4
+
+opponent_choice : int ,  
+
+> 5
+
+reward : float ,  
+
+> 6
+
+agent_state : Optional [ chex . Array ] ,  
+
+> 7
+
+) -> tuple [ chex . Array , chex . Array ]:  
+
+> 89
+
+if agent_state is None :  
+
+> 10
+
+q_values_init = jnp . zeros ((3 , 3 , 3) )  
+
+> 11
+
+i n i t i a l _ p r e vious_ch oices = jnp . array ([0 , 0]) # [ prev_opponent_choice , prev_agent_choice ]  
+
+> 12
+
+o p p o n e n t _ p r ediction _init = jnp . zeros ((3 , 3) )  
+
+> 13
+
+agent_state = jnp . concatenate (( q_values_init . flatten () , initial_previous_choices , opponent_ prediction_init . flatten () ) )  
+
+> 14 15
+
+q_values = agent_state [:27]. reshape ((3 , 3 , 3) )  
+
+> 16
+
+prev _opp onen t_choice = agent_state [27]. astype ( int )  
+
+> 17
+
+prev_agent_choice = agent_state [28]. astype ( int )  
+
+> 18
+
+o p p o n e n t _ p r e d i ctio n_sta te = agent_state [29:]. reshape ((3 , 3) )  
+
+> 19 20
+
+l e ar n in g _r a te _positive = jax . nn . sigmoid ( params [0])  
+
+> 21
+
+l e ar n in g _r a te _negative = jax . nn . sigmoid ( params [1])  
+
+> 22
+
+inverse_temperature = jnp . exp ( params [2])  
+
+> 23
+
+decay_rate = jax . nn . sigmoid ( params [3])  
+
+> 24
+
+a l t e r n a t i o n _ b i as_s treng th = jax . nn . sigmoid ( params [4])  
+
+> 25
+
+c o u n t e r f a c t u a l _ le a rn i ng _r a te = jax . nn . sigmoid ( params [5])  
+
+> 26
+
+regr et_l earn ing_rate = jax . nn . sigmoid ( params [6])  
+
+> 27
+
+o p po n en t _l e ar ning_rate = jax . nn . sigmoid ( params [7])  
+
+> 28
+
+o p p o n e n t _ i n v e r s e_ t em p er at u re = jnp . exp ( params [8])  
+
+> 29
+
+o p p o n e n t _ p r e d i ctio n_dec ay = jax . nn . sigmoid ( params [9])  
+
+> 30 31
+
+normalized_reward = ( reward + 0.1) / 0.4  
+
+> 32 33
+
+q_values = q_values * decay_rate  
+
+> 34
+
+o p p o n e n t _ p r e d i ctio n_sta te = oppon ent_p redi ction _stat e * o ppone nt_p redic tion_ deca y  
+
+> 35 36
+
+prediction_error = normalized_reward - q_values [ choice , prev_opponent_choice , prev_agent_choice ]  
+
+> 37
+
+e f f e c t iv e _ l e a rning_rate = jnp . where (  
+
+> 38
+
+prediction_error >= 0 , learning_rate_positive , learning_rate_negative  
+
+> 39
+
+) 
+
+> 40
+
+q_values = q_values . at [ choice , prev_opponent_choice , prev_agent_choice ]. add ( effective_learning_rate *prediction_error )  
+
+> 41 42
+
+co un te rf ac tu al_reward = 1.0  
+
+> 43
+
+c o u n t e r f a c t u a l _ p r e d i c t i o n _ e r r o r = counterfactual_reward - q_values [ winning_choice_against_opponent , prev_opponent_choice , prev_agent_choice ]  
+
+> 44
+
+q_values = q_values . at [ winning_choice_against_opponent , prev_opponent_choice , prev_agent_choice ]. add (  
+
+> 45
+
+c o u n t e r f a c tu al _ le a rn i ng _r a te * c o u n t e r f a c t u a l _ p r e d i c t i o n _ e r r o r  
+
+> 46
+
+) 
+
+> 47 48
+
+un ch os en _a ct ions_mask = 1.0 - jax . nn . one_hot ( choice , num_classes =3)  
+
+> 49
+
+neutral_reward = 0.5  
+
+> 50
+
+r e g r e t _p r e d i c tion_error = neutral_reward - q_values [: , prev_opponent_choice , prev_agent_choice ]  
+
+> 51
+
+q_values = q_values . at [: , prev_opponent_choice , prev_agent_choice ]. add (  
+
+> 52
+
+regr et_l earning_rate * regret_prediction_error * unchosen_actions_mask 
+
+35 Discovering Differences in Strategic Behavior between Humans and LLMs  
+
+> 53
+
+) 
+
+> 54 55
+
+alternation_bias = (1.0 - jax . nn . one_hot ( choice , num_classes =3) ) * a ltern ation _bia s_str ength - \ 
+
+> 56
+
+jax . nn . one_hot ( choice , num_classes =3) * alt ernat ion_b ias_ stren gth  
+
+> 57 58
+
+p r e d i c t e d _ o p p o n e n t _ n e x t _ c h o i c e _ p r o b s = jax . nn . softmax ( o ppon ent_p redic tion _stat e [ prev_opponent_choice ])  
+
+> 59
+
+a c t u a l _ o p p o n e n t _ n e x t _ c h o i c e _ o n e _ h o t = jax . nn . one_hot ( opponent_choice , num_classes =3)  
+
+> 60 61
+
+o p p o n e n t _ p r e d i ctio n_err or = a c t u a l _ o p p o n e n t _ n e x t _ c h o i c e _ o n e _ h o t - p r e d i c t e d _ o p p o n e n t _ n e x t _ c h o i c e _ p r o b s  
+
+> 62 63
+
+o p p o n e n t _ p r e d i ctio n_sta te = oppon ent_p redi ction _stat e . at [ prev_opponent_choice ]. add (  
+
+> 64
+
+o p po n en t _learning_rate * oppo nent_ predi ctio n_err or  
+
+> 65
+
+) 
+
+> 66 67
+
+o p p o n e n t _ p r e d i c t e d _ p r o b a b i l i t i e s _ f o r _ n e x t _ t r i a l = jax . nn . softmax ( oppo nent_ predi ctio n_sta te [ opponent_choice ])  
+
+> 68
+
+o p p o n e n t _ p r e d i c t i o n _ c o n t r i b u t i o n = jnp . roll ( opponent_predicted_probabilities_for_next_trial , shift =1) *o p p o n e n t _ i n v er s e_ te m pe r at u re  
+
+> 69 70
+
+choice_logits = ( q_values [: , opponent_choice , choice ] * inverse_temperature ) + alternation_bias +o p p o n e n t _ p r e d i c t i o n _ c o n t r i b u t i o n  
+
+> 71 72
+
+agent_state = jnp . concatenate (( q_values . flatten () , jnp . array ([ opponent_choice , choice ]) , o p p o n e n t _ p re dicti on_s tate . flatten () ) )  
+
+> 73 74
+
+return choice_logits , agent_state 
+
+Listing 7 | Gemini 2.5 Flash SBB Program.  
+
+> 1
+
+def gpt_51_agent (  
+
+> 2
+
+params : chex . Array ,  
+
+> 3
+
+choice : int ,  
+
+> 4
+
+opponent_choice : int ,  
+
+> 5
+
+reward : float ,  
+
+> 6
+
+agent_state : Optional [ chex . Array ] ,  
+
+> 7
+
+) -> tuple [ chex . Array , chex . Array ]:  
+
+> 89
+
+learning_rate = jax . nn . sigmoid ( params [0])  
+
+> 10
+
+reward_sensitivity = jax . nn . sigmoid ( params [1])  
+
+> 11
+
+beta = jnp . exp ( params [2])  
+
+> 12
+
+initial_q_value = params [3]  
+
+> 13
+
+decay_rate = jax . nn . sigmoid ( params [4])  
+
+> 14
+
+opponent_weight = jax . nn . sigmoid ( params [5]) choice .  
+
+> 15
+
+my_choice_weight = jax . nn . sigmoid ( params [6]) choice .  
+
+> 16
+
+o p p o n e n t _ p r e d i c ti o n _i n f lu e n c e = jax . nn . sigmoid ( params [7])  
+
+> 17
+
+regr et_l earn ing_rate = jax . nn . sigmoid ( params [8])  
+
+> 18 19
+
+if agent_state is None :  
+
+> 20
+
+q_table = jnp . full ((3 , 3 , 3) , initial_q_value )  
+
+> 21
+
+my_last_choice = -1  
+
+> 22
+
+oppo nent _last_choice = -1  
+
+> 23
+
+o p p o n e n t _ l a st _last _choi ce = -1  
+
+> 24
+
+o p p o n e nt _ p a ttern_counts = jnp . full ((3 , 3 , 3) , 1.0 / 3.0)  
+
+> 25
+
+agent_state = jnp . concatenate ([  
+
+> 26
+
+q_table . flatten () ,  
+
+> 27
+
+jnp . array ([ my_last_choice , opponent_last_choice , opp onent _last _las t_cho ice ]) ,  
+
+> 28
+
+o p p o n e nt_pattern_counts . flatten ()  
+
+> 29
+
+])  
+
+> 30 31
+
+q_table_flat_size = 3 * 3 * 3 
+
+> 32
+
+q_table = jnp . reshape ( agent_state [: q_table_flat_size ] , (3 , 3 , 3) )  
+
+> 33
+
+my_last_choice = jnp . int32 ( agent_state [ q_table_flat_size ])  
+
+> 34
+
+oppo nent _las t_choice = jnp . int32 ( agent_state [ q_table_flat_size + 1])  
+
+> 35
+
+o p p o n e n t _ l a s t _ last _choi ce = jnp . int32 ( agent_state [ q_table_flat_size + 2])  
+
+> 36
+
+o p p o n e nt _ p a t t ern_counts = jnp . reshape ( agent_state [ q_table_flat_size + 3:] , (3 , 3 , 3) )  
+
+> 37 38
+
+q_table = q_table * (1 - decay_rate )  
+
+> 39 40
+
+def update_q ( q_table_to_update , my_prev_choice , opp_prev_choice , r ) :  
+
+> 41
+
+current_q_value = q_table_to_update [ my_prev_choice , opp_prev_choice , choice ]  
+
+> 42
+
+effective_alpha = learning_rate * (1.0 + reward_sensitivity * jnp . abs ( r ) )  
+
+> 43
+
+updated_q_value = current_q_value + effective_alpha * ( r - current_q_value )  
+
+> 44
+
+return q_table_to_update . at [ my_prev_choice , opp_prev_choice , choice ]. set ( updated_q_value )  
+
+> 45 46
+
+q_table = jax . lax . cond (  
+
+> 47
+
+my_last_choice == -1 ,  
+
+> 48
+
+lambda qt , * _ : qt , # If first trial , don ’t update Q - table  
+
+> 49
+
+update_q ,  
+
+> 50
+
+q_table , my_last_choice , opponent_last_choice , reward  
+
+> 51
+
+) 
+
+> 52 53
+
+def update_regret ( q_table_to_update , my_prev_choice , opp_prev_choice , c u r r e n t _ o p p o n e n t _ c h o i c e _ f o r _ r e g r e t _ c a l c ) : 
+
+> 54
+
+rewards_if_chosen = jnp . array ([  
+
+> 55
+
+[0.0 , -0.1 , 0.3] ,  
+
+> 56
+
+[0.3 , 0.0 , -0.1] ,  
+
+> 57
+
+[ -0.1 , 0.3 , 0.0]  
+
+> 58
+
+])  
+
+> 59 60
+
+hypo thet ical_rewards = rewards_if_chosen [: , c u r r e n t _ o p p o n e n t _ c h o i c e _ f o r _ r e g r e t _ c a l c ]  
+
+> 61
+
+p r e v i o u s _ q _ va lu es _f or _s ta te = q_table_to_update [ my_prev_choice , opp_prev_choice , :] 
+
+36 Discovering Differences in Strategic Behavior between Humans and LLMs  
+
+> 62 63
+
+regret_updates = regret_learning_rate * ( hypothetical_rewards - pr ev io us _q _v al ue s_ fo r_ st at e )  
+
+> 64
+
+unchosen_mask = ( jnp . arange (3) != choice ) . astype ( float )  
+
+> 65
+
+u p d a t e d _ q _ v al ues _fo r_ sta te = p re vi ou s_ q_ va lu es _f or _s ta te + regret_updates * unchosen_mask  
+
+> 66 67
+
+return q_table_to_update . at [ my_prev_choice , opp_prev_choice , :]. set ( up dat ed _q_ val ues _f or_ sta te )  
+
+> 68 69
+
+# Apply regret update if a previous choice exists  
+
+> 70
+
+q_table = jax . lax . cond (  
+
+> 71
+
+my_last_choice == -1 ,  
+
+> 72
+
+lambda qt , * _ : qt , # If first trial , don ’t update regret  
+
+> 73
+
+update_regret ,  
+
+> 74
+
+q_table , my_last_choice , opponent_last_choice , opponent_choice  
+
+> 75
+
+) 
+
+> 76 77
+
+o p p o n e nt _ p a t t ern_counts = opponent_pattern_counts * (1 - decay_rate )  
+
+> 78 79
+
+# Only update if there was a sufficient history of opponent choices ( at least two previous choices available ) .  
+
+> 80
+
+def u p d a t e _ o p po nent_patterns ( counts , last_last_c , last_c , current_c ) :  
+
+> 81
+
+return counts . at [ last_last_c . astype ( int ) , last_c . astype ( int ) , current_c ]. add (1)  
+
+> 82 83
+
+o p p o n e nt _ p a t t ern_counts = jax . lax . cond (  
+
+> 84
+
+o p p o n e n t _ last _last _choi ce != -1 , # Check if there is a valid sequence ( prev_prev -> prev -> current ) .  
+
+> 85
+
+lambda opc , l_l_c , l_c , c_c : opc . at [ l_l_c . astype ( int ) , l_c . astype ( int ) , c_c ]. add (1) ,  
+
+> 86
+
+lambda opc , * _ : opc ,  
+
+> 87
+
+opponent_pattern_counts , opponent_last_last_choice , opponent_last_choice , opponent_choice  
+
+> 88
+
+) 
+
+> 89 90
+
+# --- Decision making for the next trial --- 
+
+> 91
+
+current_my_choice = choice  
+
+> 92
+
+c u r r e n t_ o p p o n ent_choice = opponent_choice  
+
+> 93 94
+
+q _ v a l u es _ s p e c ific_state = q_table [ current_my_choice , current_opponent_choice , :]  
+
+> 95
+
+q _ v a l u e s _ o p p o n ent_ focus ed = jnp . mean ( q_table [: , current_opponent_choice , :] , axis =0)  
+
+> 96
+
+q_values_my_focused = jnp . mean ( q_table [ current_my_choice , : , :] , axis =0)  
+
+> 97 98
+
+combined_q_values = (1.0 - opponent_weight - my_choice_weight ) * q_values_specific_state + \ 
+
+> 99
+
+opponent_weight * q_val ues_ oppon ent_f ocus ed + \ 
+
+> 100
+
+my_choice_weight * q_values_my_focused  
+
+> 101 102
+
+# --- Opponent prediction component --- 
+
+> 103
+
+cu rr en t_ pa tt ern_slice = opponent_pattern_counts [ opponent_last_choice , current_opponent_choice , :]  
+
+> 104
+
+o p p o n e n t _ p r e d ictio n_pro bs = current_pattern_slice / ( jnp . sum ( current_pattern_slice ) + 1e -6)  
+
+> 105 106
+
+reward_matrix = jnp . array ([  
+
+> 107
+
+[0.0 , -0.1 , 0.3] ,  
+
+> 108
+
+[0.3 , 0.0 , -0.1] ,  
+
+> 109
+
+[ -0.1 , 0.3 , 0.0]  
+
+> 110
+
+])  
+
+> 111 112
+
+# Calculate the expected value for each of the agent ’s actions (0 , 1 , 2)  
+
+> 113
+
+# with the opponent ’s predicted probabilities . This is the " fictitious play " component .  
+
+> 114
+
+f i c t i t i o u s _ p l a y _ e x p e c t e d _ v a l u e s = jnp . dot ( reward_matrix , oppon ent_ predi ction _pro bs )  
+
+> 115 116
+
+# Combine all influences  
+
+> 117
+
+f i n a l _ q _ v a l u e s_ fo r_ de ci si on = (1.0 - o p p on e n t_ p r ed i c ti o n _i n f l ue n c e ) * combined_q_values + \ 
+
+> 118
+
+o p p on e n t_ p r e di c t io n _ in f l ue n c e * f i c t i t i o u s _ pl a y _ e x p e c t e d _ v a l u e s  
+
+> 119 120
+
+choice_logits = f in al _q _v al ue s_ fo r_ de ci si on * beta  
+
+> 121 122
+
+# Update agent state for the next trial  
+
+> 123
+
+new_my_last_choice = choice  
+
+> 124
+
+n e w _ o p p o n e n t _ last_ choice = opponent_choice  
+
+> 125
+
+n e w _ o p p o n e n t _ l a st _ l a st _ c ho i c e = opponent_last_choice # Current opponent_last_choice becomes next o p p o n e n t _ l as t_las t_ch oice  
+
+> 126
+
+new_agent_state = jnp . concatenate ([  
+
+> 127
+
+q_table . flatten () ,  
+
+> 128
+
+jnp . array ([ new_my_last_choice , new_opponent_last_choice , n ew _ o pp o n e nt _ l as t _ la s t _c h o ic e ]) ,  
+
+> 129
+
+o p p o n e n t_ pattern_counts . flatten () # Use the updated opponent_pattern_counts  
+
+> 130
+
+])  
+
+> 131 132
+
+return choice_logits , new_agent_state 
+
+Listing 8 | GPT 5.1 SBB Program.  
+
+> 1
+
+def gpt_oss_120b_irps (  
+
+> 2
+
+params : chex . Array ,  
+
+> 3
+
+choice : int ,  
+
+> 4
+
+opponent_choice : int ,  
+
+> 5
+
+reward : float ,  
+
+> 6
+
+agent_state : Optional [ chex . Array ] ,  
+
+> 7
+
+) -> tuple [ chex . Array , chex . Array ]:  
+
+> 89
+
+learning_rate_q , learning_rate_opponent , inverse_temperature , decay_rate , gain_loss_asymmetry_reward , opponent_model_weight , persistence_weight , persistence_decay_rate , switch_bonus , r e w a r d _ s e n s i ti v it y_ t o_ s wi t ch = params  
+
+> 10 11
+
+if agent_state is None :  
+
+> 12
+
+i n i t i a l _ o p p on ent _fr eq uen cy = 1/3 
+
+37 Discovering Differences in Strategic Behavior between Humans and LLMs  
+
+> 13
+
+agent_state = jnp . array ([0.0 , 0.0 , 0.0 , initial_opponent_frequency , initial_opponent_frequency , initial_opponent_frequency , 0.0 , 0.0 , 0.0 , -1.0])  
+
+> 14 15
+
+q_values = agent_state [:3]  
+
+> 16
+
+o p p o n e n t _ c h o i ce _f re qu en ci es = agent_state [3:6]  
+
+> 17
+
+persistence_trace = agent_state [6:9]  
+
+> 18
+
+previous_choice = agent_state [9]  
+
+> 19 20
+
+# Apply gain - loss asymmetry from prospect theory to the reward itself .  
+
+> 21
+
+reward_transformed = jnp . where ( reward >= 0 , reward , gai n_ los s_a sy mme try _re wa rd * reward )  
+
+> 22 23
+
+q_values = q_values * (1 - decay_rate )  
+
+> 24
+
+prediction_error = reward_transformed - q_values [ choice ]  
+
+> 25
+
+q_values = q_values . at [ choice ]. set ( q_values [ choice ] + learning_rate_q * prediction_error )  
+
+> 26
+
+# Apply a " regret " update to unchosen actions . This models counterfactual learning .  
+
+> 27
+
+unchosen_mask = 1.0 - jax . nn . one_hot ( choice , num_classes =3)  
+
+> 28
+
+q_values = q_values - unchosen_mask * learning_rate_q * prediction_error  
+
+> 29 30
+
+# Update opponent ’s choice frequencies with a recency bias ( exponentially weighted moving average )  
+
+> 31
+
+o p p o n e nt _ c h o i ce_one_hot = jax . nn . one_hot ( opponent_choice , num_classes =3)  
+
+> 32
+
+o p p o n e n t _ c h o i ce _f re qu en ci es = (1 - learning_rate_opponent ) * op po ne nt _c ho ic e_ fr eq ue nc ie s +l ea r ni n g_ r ate_opponent * opponent_choice_one_hot  
+
+> 33
+
+# Normalize opponent choice frequencies to ensure they sum to 1 , representing a probability distribution .  
+
+> 34
+
+o p p o n e n t _ c h o i ce _f re qu en ci es /= jnp . sum ( o pp on en t_ ch oi ce _f re qu en ci es )  
+
+> 35 36
+
+# Calculate expected rewards for each of agent ’s possible choices based on opponent ’s predicted strategy  
+
+> 37
+
+reward_matrix = jnp . array ([  
+
+> 38
+
+[0.0 , -0.1 , 0.3] ,  
+
+> 39
+
+[0.3 , 0.0 , -0.1] ,  
+
+> 40
+
+[ -0.1 , 0.3 , 0.0] ,  
+
+> 41
+
+])  
+
+> 42
+
+e x p e c t e d _ r e w a r d s _ f r o m _ o p p o n e n t _ m o d e l = jnp . dot ( reward_matrix , o pp on en t_ ch oi ce _f re qu en c ie s )  
+
+> 43 44
+
+# Combine Q - values and expected rewards from opponent model , weighted by opponent_model_weight  
+
+> 45
+
+combined_values = q_values + opponent_model_weight * e x p e c t e d _ r e w a r d s _ f r o m _ o p p o n e n t _ m o d e l  
+
+> 46 47
+
+# Update the persistence trace . All traces decay , and the chosen action ’s trace is incremented .  
+
+> 48
+
+persistence_trace = persistence_trace * (1 - persistence_decay_rate )  
+
+> 49
+
+persistence_trace = persistence_trace . at [ choice ]. set ( persistence_trace [ choice ] + 1.0) # Increment trace for chosen action  
+
+> 50
+
+# Add the persistence trace to the combined values , acting as a direct action bias , scaled by the persistence_weight .  
+
+> 51
+
+combined_values += persistence_weight * persistence_trace  
+
+> 52 53
+
+# Add a switching bonus : if the current action is different from the previous one , add a bonus .  
+
+> 54
+
+is_switch = jax . nn . one_hot ( choice , num_classes =3) != jax . nn . one_hot ( jnp . array ( previous_choice , dtype = jnp . int32 ) , num_classes =3)  
+
+> 55
+
+m o du l at e d_ s wi tch_bonus = switch_bonus + r ew a rd _s e ns i ti v it y_ t o_ s wi t ch * jnp . abs ( prediction_error )  
+
+> 56
+
+switch_effect = jnp . where ( previous_choice == -1 , jnp . zeros (3) , is_switch * modulated_switch_bonus )  
+
+> 57
+
+combined_values += switch_effect  
+
+> 58 59
+
+choice_logits = inverse_temperature * combined_values  
+
+> 60 61
+
+# Update the full agent state  
+
+> 62
+
+agent_state = jnp . concatenate (( q_values , opponent_choice_frequencies , persistence_trace , jnp . array ([ choice ]) ) )  
+
+> 63 64
+
+return choice_logits , agent_state 
+
+Listing 9 | GPT OSS 120B SBB Program. 
+
+38

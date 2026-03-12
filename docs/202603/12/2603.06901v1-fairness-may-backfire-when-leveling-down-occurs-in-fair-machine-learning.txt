@@ -1,0 +1,468 @@
+Title: Fairness May Backfire: When Leveling-Down Occurs in Fair Machine Learning
+
+URL Source: https://arxiv.org/pdf/2603.06901v1
+
+Published Time: Tue, 10 Mar 2026 00:15:47 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Fairness May Backfire: When Leveling-Down Occurs in Fair Machine Learning 
+
+Yi Yang 
+
+Department of Information Systems, Arizona State University, yi.yang.10@asu.edu 
+
+Xiangyu Chang 
+
+Department of Information Systems and Intelligent Business, Xi’an Jiaotong University, xiangyuchang@xjtu.edu.cn 
+
+Pei-yu Chen* 
+
+Department of Information Systems, Arizona State University, peiyu.chen@asu.edu 
+
+Abstract. As machine learning (ML) systems increasingly shape access to credit, jobs, and other opportunities, the fairness of algorithmic decisions has become a central concern. Yet it remains unclear when enforcing fairness constraints in these systems genuinely improves outcomes for affected groups or instead leads to “leveling down,” making one or both groups worse off. We address this question in a unified, population-level (Bayes) framework for binary classification under prevalent group fairness notions. Our Bayes approach is distribution-free and algorithm-agnostic, isolating the intrinsic effect of fairness requirements from finite-sample noise and from training and intervention specifics. We analyze two deployment regimes for ML classifiers under common legal and governance constraints: attribute-aware decision-making (sensitive attributes available at decision time) and attribute-blind decision-making (sensitive attributes excluded from prediction). We show that, in the attribute-aware regime, fair ML necessarily (weakly) improves outcomes for the disadvantaged group and (weakly) worsens outcomes for the advantaged group. In contrast, in the attribute-blind regime, the impact of fairness is distribution-dependent: fairness can benefit or harm either group and may shift both groups’ outcomes in the same direction, leading to either leveling up or leveling down. We characterize the conditions under which these patterns arise and highlight the role of “masked” candidates in driving them. Overall, our results provide structural guidance on when pursuing algorithmic fairness is likely to improve group outcomes and when it risks systemic leveling down, informing fair ML design and deployment choices. 
+
+Key words: Fair machine learning, Algorithmic bias, Leveling down, Bayes-Optimal Classifier 
+
+## 1. Introduction 
+
+Machine learning (ML) algorithms are increasingly used to make decisions with far-reaching consequences in areas such as credit, healthcare, and criminal justice. Alongside their growing use, concerns about algorithmic fairness have intensified, particularly when algorithmic outcomes may disadvantage groups defined by sensitive attributes such as race or gender (Barocas et al. 2023). Addressing fairness in ML has therefore become an important focus of research over the past decade (Caton and Haas 2024), with presumptive aim to improve outcomes for disadvantaged or marginalized groups (Mittelstadt et al. 2023). In response, a large literature has focused on outcome fairness in ML models, especially in classification settings. The first line of work has led to several group fairness notions, such as Demographic Parity (Dwork et al. 2012), Equal Opportunity (Hardt et al. 2016), and Predictive Equality (Corbett-Davies et al. 2017). 
+
+* Corresponding author. 
+
+1
+
+> arXiv:2603.06901v1 [stat.ML] 6 Mar 2026
+
+2
+
+Building on these notions, the second line of work develops various algorithmic interventions, via pre-processing, in-processing, or post-processing approaches, to operationalize fairness (Barocas et al. 2023). Despite these advances in fair ML solutions, recent empirical evidence (Mittelstadt et al. 2023, Corbett-Davies et al. 2023, Jorgensen et al. 2023, Yang et al. 2024) shows that enforcing current fairness notions in practice frequently leads to a leveling down phenomenon, where fairness is achieved by making one or both groups worse off (e.g., Outcomes A or B in Figure 1). This raises fundamental questions that remain unresolved: when are observed fairness gains accompanied by drops in group-specific outcome? When do such decline constitute true cases of leveling down rather than incidental artifacts? Does leveling down arise systematically from fairness constraints, or only under particular conditions? (Mittelstadt et al. 2023).    
+
+> Note. Δdenotes the level of (un)fairness under a common fairness notion.
+> Figure 1 Outcomes under classical and fairness-aware ML.
+
+We study these questions in two deployment regimes for ML classifiers that reflect prevailing legal and governance constraints in real-life applications. In many domains such as credit and employment, laws and regulations against disparate treatment prohibit the explicit use of sensitive attributes (e.g., race and gender) in constructing algorithmic predictions (including threshold selection) (Kallus et al. 2022). In some jurisdictions, even collecting or processing such attributes is restricted or prohibited (GDPR 2016). 1 This setting is referred to as attribute-blind (Chen et al. 2024, Yang et al. 2025a), in which predictions must depend only on non-sensitive features. In some other domains (e.g., clinical decision making), it may be justifiable to incorporate sensitive attribute alongside non-sensitive features in predictions, thus can be permitted by laws (GDPR 2016). For example, population differences in genetic risk or disease pathogenesis may necessitate the inclusion of sensitive attributes (e.g., gender) for prediction (Tannenbaum et al. 2019). This is referred to as the attribute-aware setting (Chen et al. 2024), in which sensitive attributes can also be used for prediction. Note that both two regimes can pursue the same fairness notions and develop fair ML models accordingly. 2 However, they implement fairness through different mechanisms. As we show in this work, these mechanisms, together with problem context, govern when, how, and why leveling down occurs.   
+
+> 1Beyond legal restrictions, the sensitive attribute can be missing at decision time, either because organizations do not collect it or because applicants refuse to disclose it.
+> 2In the attribute-blind setting, sensitive attributes are excluded. However, this provides only procedural fairness and cannot guarantee outcomes fairness (Yang et al. 2025b). Model outcomes can still reflect discrimination along these sensitive attributes due to proxy variables (Barocas and Selbst 2016) or redundant encodings (Hardt et al. 2016). Thus, outcome fairness has also been studied in the attribute-blind regime (Zafar et al. 2017, Menon and Williamson 2018, Chen et al. 2024, Yang et al. 2025a). 3
+
+In this work, we adopt a unified theoretical population-level framework centered on Bayes-optimal classi-fiers. The Bayes-optimal classifier is the one that attains the lowest possible average risk (i.e., the theoretical best solution) for a given learning problem: thus, no algorithm, no matter how clever or sophisticated, can attain lower average risk than it. Bayes-optimal classifiers are foundational in the study of standard binary classification (Devroye et al. 2013) and serve as a “limit of what is achievable.” Since standard learning procedures aim to recover the Bayes-optimal classifier from finite samples, our Bayes lens isolates the intrin-sic effects of fairness constraints from finite-sample noise and algorithmic implementation choices (e.g., fairness intervention types or training procedure). Consequently, our results are structural , distribution-free ,and algorithm-agnostic –i.e., they hold for arbitrary data-generating processes 3 and do not hinge on any specific training or fairness intervention, thereby revealing the genuine cases of “leveling down” in fair ML. Throughout, we contrast attribute-aware and attribute-blind deployments. In each regime, we first char-acterize the Bayes-optimal (fair) classifier and then trace their effects for different groups. We then reveal the underlying mechanisms by which fairness is achieved and outcomes are altered via leveling down .
+
+Our study yields three main findings and makes several contributions. First , we provide a theoretical, distribution-free, and algorithm-agnostic framework for assessing the effect of fair ML under prevalent fairness notions on the groups affected by these decisions. Built on Bayes-optimal rules, our analysis avoids prior distributional assumptions that can shape observed impact patterns and noise from intervention meth-ods, thereby identifying the intrinsic effect of the fairness requirement. Second , we consider two broader deployment regimes in practice (attribute-aware and attribute-blind) and theoretically show that fair ML operates and affects groups differently across them. In the attribute-aware regime, fairness redistributes decisions in a way that never harms the disadvantaged group and never benefits the advantaged group. In the attribute-blind regime, impacts are distribution-dependent: fairness can help or harm either group and may move both groups in the same direction, leading to leveling up or leveling down. Third , within the attribute-blind regime, we further characterize the conditions that lead to these patterns and clarify the underlying mechanism, highlighting the role of masked candidates . These insights offer practical guidance for decision-makers on fair ML algorithm design and model alignment. The remainder of the paper is organized as follows. Section 2 reviews the related literature. Section 3 introduces the problem setup and preliminaries. In Section 4, we analyze the fair ML impacts in the attribute-aware regime, and Section 5 analyzes the attribute-blind regime. Proofs and simulations are provided in the full version. 
+
+## 2. Related Work 
+
+This paper builds on the literature on Bayes-optimal fair classification , which characterizes optimal decision rules under fairness constraints (Menon and Williamson 2018) in both attribute-aware (Corbett-Davies et al.  
+
+> 3Our results are distribution-free up to a standard regularity condition ensuring well-defined decision thresholds, as is common in statistical machine learning. In particular, we do not impose any parametric form on the data distribution. 4
+
+2017, Schreuder and Chzhen 2021, Chen et al. 2024) and attribute-blind settings (Agarwal et al. 2018, Chen et al. 2024, Zeng et al. 2024, Yang et al. 2025a). Our work adopts these Bayes-optimal characterizations but shift the focus from algorithmic feasibility to the economic consequences of enforcing fairness: how decisions are reallocated across groups, how welfare statistics change under fairness constraints, and when, how, and why leveling down can arise even under optimal implementation. On the economic-impact side, a growing literature studies the downstream consequences of fair ML. One line of work provides empirical evidence that enforcing standard fairness notions can yield uneven welfare effects across stakeholders and may even harm the disadvantaged group it aims to protect (Jorgensen et al. 2023, Mittelstadt et al. 2023). These findings suggest that fairness gains may come with leveling down. Motivated by this evidence, we develop a theoretical foundation for these patterns and clarify the underlying mechanisms. Another line of work analyzes the theoretical impact of fair ML on group outcomes. Closer to our setting, several works examine classical binary classification. For instance, Liang et al. (2021) and Zhao and Gordon (2022) primarily analyze fairness-accuracy frontiers under Accuracy Parity and Demographic Parity, respectively, and sidely observe that enforcing these two notions raises at least one group’s error rate. The most closely related works to ours are Liu et al. (2018) and Fu et al. (2022). Liu et al. (2018) investigate how enforcing strict DP and EO affects groups’ score compared to equal treatment (ET) via a single threshold, while Fu et al. (2022) use an analytical model to assess whether groups are better off when a profit-maximizing firm is required to implement strict EO rather than ET, explicitly accounting for the firm’s learning effort. They adopt a similar score-and-threshold pipeline: decision-makers use ML algorithms to assigns quality scores to candidates, assuming the scores are either uniformly distributed (Fu et al. 2022) or satisfy certain independence conditions (Liu et al. 2018). They then post-process the scores with a unified threshold (ET) or choosing group-wise thresholds (EO/DP) to make decisions and compare the resulting group-level impacts. However, these works adopt a structured, tractable model for the score distribution. We complement and extend this line of work by allowing more general data-generating environments and by explicitly considering settings in which sensitive attributes are unavailable at decision time (e.g., due to operational or legal constraints), thereby broadening the scope of feasible fairness interventions. Building on these insights, we provide a Bayes-optimal, population-level characterization of fair-ML impacts that is structural and algorithm-agnostic, and does not rely on a specific parametric model for the underlying data distribution. 
+
+## 3. Preliminaries 
+
+3.1. Classification 
+
+We consider a classification problem specified by a joint distribution D over (𝑋, 𝑆,𝑌 ), where 𝑋 ∈ X denotes the non-sensitive feature vector, 𝑆 ∈ S = {0, 1} a sensitive attribute, and 𝑌 ∈ { 0, 1} the ground-truth label. 4 A 
+
+> 4In other words, we focus on binary classification with a single sensitive attribute. 5
+
+classifier produces a prediction ˆ𝑌 ∈ { 0, 1} from the available inputs. Depending on the deployment regime, predictions may be based on both (𝑋, 𝑆 ) (attribute-aware) or on 𝑋 alone (attribute-blind). We analyze both regimes and investigates how fairness requirements operate differently in each. To unify notation, let the input space be V, with V = X × S in the attribute-aware regime and V = X in the attribute-blind regime. We consider a measurable randomized classifier 𝑓 : V → [ 0, 1] that, given 𝑉 ∈ V , outputs a probability of predicting ˆ𝑌 = 1 based on 𝑉 .5 Let F denote the class of such functions and let Bern ( 𝑝 ) denote the Bernoulli distribution with success probability 𝑝 ∈ [ 0, 1].
+
+DEFINITION 1 (R ANDOMIZED CLASSIFIER ). A randomized classifier 𝑓 ∈ F specifies, for any 𝑣 ∈ V ,the probability 𝑓 (𝑣 ) of predicting ˆ𝑌 = 1 given 𝑉 = 𝑣 , i.e., ˆ𝑌 | 𝑉 = 𝑣 ∼ Bern ( 𝑓 (𝑣 )) .Typically, the quality of a classifier is evaluated using a statistical risk function 𝑅 (· ; D) : F → R+. A canonical risk is the cost-sensitive risk (Menon and Williamson 2018), defined as follows: 
+
+DEFINITION 2. For a cost parameter 𝑐 ∈ [ 0, 1], the (expected) cost-sensitive risk is given by 𝑅 𝑐𝑠 ( 𝑓 ; 𝑐 ) =
+
+(1 − 𝑐 )𝑃 ( ˆ𝑌 = 0,𝑌 = 1) + 𝑐𝑃 ( ˆ𝑌 = 1,𝑌 = 0), where ˆ𝑌 is the prediction produced by 𝑓 , and 𝑌 is the true label. The cost-sensitive risk allows asymmetric penalization of false negatives and false positives via the cost parameter 𝑐 . When 𝑐 = 0.5, it reduces to the conventional error rate with equal penalties. For a given problem, the Bayes-optimal classifier is theoretically the best method, achieving the lowest possible average risk. It is defined as any minimizer 𝑓 ∗ ∈ arg min 𝑓 ∈ F 𝑅 𝑐𝑠 ( 𝑓 ; 𝑐 ). In practice, standard learning paradigms aim to recover 𝑓 ∗ from finite data (e.g., via empirical risk minimization with proper surrogate losses). Under mild regularity conditions, such learning algorithms are Bayes-consistent, meaning that the learned classifiers converge to 𝑓 ∗ as the sample size grows. Let 1[·] denote the indicator function. The following result by Menon and Williamson (2018), Zeng et al. (2024) and Yang et al. (2025a) characterizes the unconstrained Bayes-optimal classifiers that minimize 
+
+𝑅 𝑐𝑠 ( 𝑓 ; 𝑐 ). Its form is given in terms of the posterior class-probability 𝜂 (𝑣 ) := 𝑃 (𝑌 = 1 | 𝑉 = 𝑣 ) and 𝑐 .
+
+LEMMA 1 (Bayes-optimal Classifiers) . For a cost parameter 𝑐 ∈ [ 0, 1], all Bayes-optimal classifiers 
+
+𝑓 ∗ (𝑣 ) ∈ arg min 𝑓 ∈ F 𝑅 𝑐𝑠 ( 𝑓 ; 𝑐 ) have the form 𝑓 ∗ (𝑣 ) = 1 [ℎ(𝑣 ) > 0] + 𝛼 · 1 [ℎ(𝑣 ) = 0] , for all 𝑣 ∈ V , where 
+
+ℎ(𝑣 ) = 𝜂 (𝑣 ) − 𝑐 , and 𝛼 ∈ [ 0, 1] is an arbitrary parameter. 6
+
+3.2. Fairness-Aware Classification 3.2.1. Fairness Constraints Conventional learning objectives minimize expected risk (cost) with-out accounting for fairness. However, extensive empirical evidence documents systematic disparities in algorithmic outcomes across groups defined by sensitive attributes (Obermeyer et al. 2019). In response, a large literature has formalized algorithmic fairness notions to mitigate these disparities. For each group 
+
+𝑠 ∈ { 0, 1}, we define Group Selection Rate (GSR): GSR 𝑠 ( 𝑓 ) = 𝑃 ( ˆ𝑌 = 1 | 𝑆 = 𝑠 ), True Positive Rate (TPR):              
+
+> 5Equivalently, 𝑉 =(𝑋, 𝑆 )in the attribute-aware regime and 𝑉 =𝑋 in the attribute-blind regime.
+> 6In the following analysis, we set 𝛼 =0 arbitrarily (Elkan 2001, Devroye et al. 2013, Natarajan et al. 2018). Since for instances at the threshold boundary, the risk is a constant and thus any prediction is optimal.
+
+6
+
+TPR 𝑠 ( 𝑓 ) = 𝑃 ( ˆ𝑌 = 1 | 𝑌 = 1, 𝑆 = 𝑠 ), and False Positive Rate (FPR): FPR 𝑠 ( 𝑓 ) = 𝑃 ( ˆ𝑌 = 1 | 𝑌 = 0, 𝑆 = 𝑠 ).7 Then, we consider the following fairness notions widely used in ML. 
+
+DEFINITION 3 (D EMOGRAPHIC PARITY ). A classifier 𝑓 satisfies demographic parity (Dwork et al. 2012) if its prediction ˆ𝑌 is independent of the sensitive attribute 𝑆 , so that GSR 0 ( 𝑓 ) = GSR 1 ( 𝑓 ).
+
+DEFINITION 4 (E QUAL OPPORTUNITY ). A classifier 𝑓 satisfies equal opportunity (Hardt et al. 2016) if it achieves the same true positive rate between groups, i.e., TPR 0 ( 𝑓 ) = TPR 1 ( 𝑓 ).
+
+DEFINITION 5 (P REDICTIVE EQUALITY ). A classifier 𝑓 satisfies predictive equality (Corbett-Davies et al. 2017) if it achieves the same false positive rate between groups, i.e., FPR 0 ( 𝑓 ) = FPR 1 ( 𝑓 ).In practice, achieving the equalities above (i.e., perfect fairness) often requires a significant sacrifice in efficiency (higher expected risk) and is typically infeasible with finite data (Shen et al. 2023). Instead, a limited level of disparity may be preferred. Accordingly, previous research has typically measures fairness as differences in the quantities that would be equal under perfect fairness and focuses on minimizing risk subject to constraints on disparity levels (Zafar et al. 2019, Williamson and Menon 2019, Chen et al. 2024, Denis et al. 2024). Following this line of work, we define disparity measures as group differences in the quantities equalized by each fairness notion. 
+
+DEFINITION 6 (D ISPARITY MEASURES ). For a randomized classifier 𝑓 with prediction ˆ𝑌 , let 𝑦 ★ ⊆{0, 1}. For 𝑠 ∈ { 0, 1}, let Rate 𝑠 ( 𝑓 ) = 𝑃 ( ˆ𝑌 = 1 | 𝑆 = 𝑠,𝑌 ∈ 𝑦 ★) denote the notion-conditioned selection rate for group 𝑠 under 𝑓 . Then, the disparity measure for 𝑓 is defined as: DM ( 𝑓 ) = Rate 1 ( 𝑓 ) − Rate 0 ( 𝑓 ). The value of 𝑦 ★ depends on the chosen fairness notion: For DP, 𝑦 ★ = {0, 1}; for EO, 𝑦 ★ = {1}; and for PE, 𝑦 ★ = {0}.We refer to the notion-conditioned selection rate for group 𝑠 , Rate 𝑠 ( 𝑓 ), as the notion-target rate (NTR), since it is the statistic that the chosen fairness notion targets for equalization across groups. Intuitively, 
+
+DM ( 𝑓 ) measures the signed gap in NTRs between two groups; its sign indicates which group attains the higher NTR under the chosen notion (and thus, which group benefits more) when applying a classifier 𝑓 .
+
+REMARK 1. Usually, the event ˆ𝑌 = 1 is considered a favorable action, 8 since an individual is selected (e.g., granting a loan (Fu et al. 2020)). In this case, for a chosen notion, the advantaged group is the group with a higher NTR, since the model favors them relative to the other. We refer to the other group as the 
+
+disadvantaged group .
+
+3.2.2. Byes-Optimal Fair Classifier In fairness-aware classification, decision-makers typically per-mit a limited amount of disparity and pre-specify an unfairness tolerance level 𝛿 ∈ [ 0, 1].9 For a given 𝛿 ,they seek a Bayes-optimal fair classifier 𝑓 ∗ 
+
+> DM
+
+(𝑣 ) that minimizes the cost subject to its unfairness level not exceeding 𝛿 . Formally, this can be expressed as: 
+
+𝑓 ∗ 
+
+> DM
+
+∈ arg min  
+
+> 𝑓 ∈ F
+
+{𝑅 𝑐𝑠 ( 𝑓 ; 𝑐 ) : |DM ( 𝑓 )| ≤ 𝛿 } . (1)                         
+
+> 7We consider the non-degenerate case where each group contains individuals with both labels, that is, 𝑃 (𝑆 =𝑠,𝑌 =𝑦 )>0 for
+> ∀𝑠 ∈ { 0,1}and ∀𝑦 ∈ { 0,1}. Then the group-wise TPR and FPR are well-defined.
+> 8This can always be achieved by encoding the favorable outcome in the ground-truth label as 𝑌 =1.
+> 9Note that 𝛿 =0 corresponds to perfect fairness; larger 𝛿 relaxes the constraint and indicates less fairness.
+
+7
+
+Prior work (Menon and Williamson 2018, Zeng et al. 2024, Yang et al. 2025a) also characterizes the form of Bayes-optimal fair classifiers, as presented in Lemma 2. 
+
+LEMMA 2 (Bayes-optimal Fair Classifiers) . Let 𝑐 ∈ [ 0, 1], 𝛿 ∈ [ 0, 1], and a fairness notion DM ∈{DP , EO , PE }. Let V denote the input space. Then, there exists 𝜆 ∗ ∈ R10 such that all Bayes-optimal fair classifiers 𝑓 ∗ 
+
+> DM
+
+(𝑣 ) ∈ F that minimize {𝑅 𝑐𝑠 ( 𝑓 ; 𝑐 ) : |DM ( 𝑓 )| ≤ 𝛿 } have the form of 𝑓 ∗ 
+
+> DM
+
+(𝑣 ) = 1 [ℎDM (𝑣 ) > 0] + 
+
+𝛼 · 1 [ℎDM (𝑣 ) = 0] , for all 𝑣 ∈ V . Here, ℎDM (𝑣 ) = 𝜂 (𝑣 ) − 𝑐 − 𝜆 ∗ · 𝜈 DM (𝑣 ), 𝜂 (𝑣 ) = 𝑃 (𝑌 = 1 | 𝑉 = 𝑣 ), and 
+
+𝛼 ∈ [ 0, 1] is arbitrary. The term 𝜈 DM (𝑣 ) depends on the chosen fairness notion. In the attribute-aware regime, V = X × S , and in the attribute-blind regime, V = X.
+
+Lemmas 1 and 2 show that, in either regime, the Bayes-optimal fair rule compares the posterior 𝜂 to the unconstrained threshold 𝑐 adjusted by a fairness correction 𝜈 DM . Note that in this paper, we consider the setting where the random variables 𝜂 (𝑋 ), 𝜈 DM (𝑋 ), 𝜂 (𝑋, 𝑠 ) and 𝜈 DM (𝑋, 𝑠 ) for ∀𝑠 ∈ S , admit probability density functions (i.e., have continuous distributions) over X (Lei 2014, Chzhen et al. 2019, Zeng et al. 2024). This implies the boundary sets of randomized classifiers are of measure zero (Chzhen et al. 2019). 
+
+## 4. Fair ML Impacts in the Attribute-Aware Regime 
+
+In the attribute-aware regime, with V = X × S , Lemma 1 gives the unconstrained Bayes-optimal classifier: 
+
+𝑓 ∗ (𝑥, 𝑠 ) = 1 [𝜂 (𝑥, 𝑠 ) > 𝑐 ] . (2) By Menon and Williamson (2018), Zeng et al. (2024), Yang et al. (2025a) and Lemma 2, the Bayes-optimal fair classifier enforcing DM ∈ { DP , EO , PE } at tolerance 𝛿 ∈ [ 0, 1] is: 
+
+𝑓 𝜆 ∗ 
+
+> DM
+
+(𝑥, 𝑠 ) = 1 [𝜂 (𝑥, 𝑠 ) > 𝑐 + 𝜆 ∗ · 𝜈 DM (𝑥, 𝑠 )] , (3) where 𝜈 DP (𝑥, 𝑠 ) = (2𝑠 −1)  
+
+> 𝑃 (𝑆 =𝑠 )
+
+, 𝜈 EO (𝑥, 𝑠 ) = (2𝑠 −1) 𝜂 ( 𝑥,𝑠 )   
+
+> 𝑃 (𝑆 =𝑠,𝑌 =1)
+
+, and 𝜈 PE (𝑥, 𝑠 ) = (2𝑠 −1) ( 1− 𝜂 ( 𝑥,𝑠 ) )    
+
+> 𝑃 (𝑆 =𝑠,𝑌 =0)
+
+. Note that if 𝜆 ∗ = 0, then 
+
+𝑓 𝜆 ∗ 
+
+> DM
+
+(𝑥, 𝑠 ) = 𝑓 ∗ (𝑥, 𝑠 ); that is, the unconstrained classifier already satisfies the fairness constraint. Moreover, let 𝑠 ℎ := arg max 𝑠 ∈ S Rate 𝑠 ( 𝑓 ∗ (𝑥, 𝑠 )) denote the advantaged group and 𝑠 𝑙 := arg min 𝑠 ∈ S Rate 𝑠 ( 𝑓 ∗ (𝑥, 𝑠 )) the disadvantaged group (Remark 1). We now analyze how enforcing fairness affects these two groups. 
+
+4.1. Impact on Different Groups 
+
+Enforcing fairness in the aware regime introduces a correction term 𝜈 DM (𝑥, 𝑠 ) that yields group-specific thresholding: individuals with the same 𝑥 can be treated differently across groups. For all three notions, 
+
+𝜈 DM (𝑥, 1) ≥ 0 and 𝜈 DM (𝑥, 0) ≤ 0 for all 𝑥 , so the fair threshold 𝑐 + 𝜆 ∗𝜈 DM (𝑥, 𝑠 ) shifts in opposite directions across groups relative to the unconstrained threshold 𝑐 . This is formalized in Proposition 1.                            
+
+> 10 The value of 𝜆 ∗corresponds to the difference of Lagrange multipliers for the two bounds in |DM (𝑓 )| ≤ 𝛿 and may be negative (Menon and Williamson 2018). Its exact value depends on the data distribution D, the chosen fairness notion, and 𝛿 . In other words, for the constrained problem min {𝑅 𝑐𝑠 (𝑓 ;𝑐 ):|DM (𝑓 )| ≤ 𝛿 }, there always exists 𝜆 ∗∈Rsuch that 𝑓 ∗
+> DM (𝑣 )attains the minimum. 8
+
+PROPOSITION 1 (Opposite Threshold Shifts Across Groups) . For a notion DM ∈ { DP , EO , PE } and a tolerance level 𝛿 ∈ [ 0, 1], let 𝜆 ∗ be its corresponding optimal multiplier in (3) . Then, we have, for all 𝑥 ∈ X ,
+
+𝑐 + 𝜆 ∗𝜈 DM (𝑥, 𝑠 ℎ) ≥ 𝑐 and 𝑐 + 𝜆 ∗𝜈 DM (𝑥, 𝑠 𝑙 ) ≤ 𝑐, with equality for both groups iff 𝜆 ∗ = 0.
+
+Proposition 1 shows that, in the attribute-aware regime, fairness weakly increases the threshold for the advantaged group and weakly decreases it for the disadvantaged group relative to 𝑐 , with equality iff the unconstrained classifier already satisfies the fairness constraint. Thus, fair ML systematically shifts decisions toward the disadvantaged group: the selected region (weakly) contracts for 𝑠 ℎ and expands for 𝑠 𝑙 .We then examine how fairness requirements affect group-level outcomes by tracking each group’s NTR, 
+
+Rate 𝑠 ( 𝑓 ), as we move from 𝑓 ∗ (𝑥, 𝑠 ) to 𝑓 𝜆 ∗ 
+
+> DM
+
+(𝑥, 𝑠 ). Theorem 1 characterizes the resulting NTR shifts. 
+
+THEOREM 1 (NTR Redistribution with 𝑆 ). Fix a fairness notion DM ∈ { DP , EO , PE } and a tolerance level 𝛿 ∈ [ 0, 1]. Let Rate 𝑠 be the group-wise NTR under DM . With 𝑓 ∗ as in (2) and 𝑓 𝜆 ∗ 
+
+> DM
+
+as in (3) , we have 
+
+Rate 𝑠 ℎ ( 𝑓 𝜆 ∗
+
+> DM
+
+) ≤ Rate 𝑠 ℎ ( 𝑓 ∗) and Rate 𝑠 𝑙 ( 𝑓 𝜆 ∗
+
+> DM
+
+) ≥ Rate 𝑠 𝑙 ( 𝑓 ∗).
+
+Theorem 1 shows that, in the attribute-aware regime, fair classifiers shift group NTRs in opposite directions toward equalization: they weakly improve outcomes for the disadvantaged group while potentially weakly reducing outcomes for the advantaged group. This pattern always holds and aligns with the presumptive aim of the field: to improve outcomes for disadvantaged groups that unjustifiably receive worse treatment or outcomes than their peers (Mittelstadt et al. 2023). Having established how each group’s NTR responds at a fixed tolerance level 𝛿 , we next examine how the magnitude of this redistribution varies with 𝛿 . Knowing this effect helps calibrate 𝛿 and provides an overview of how it shapes group-level outcomes. Proposition 2 provides the comparative statics. 
+
+PROPOSITION 2 (Lower 𝛿 Always Amplifies Aware Fair ML’s Impact) . Under the same setup as in Theorem 1, as a function of 𝛿 (with 𝜆 ∗ = 𝜆 ∗ (𝛿 )), we have that Rate 𝑠 ℎ ( 𝑓 𝜆 ∗
+
+> DM
+
+) is monotone non-decreasing, and 
+
+Rate 𝑠 𝑙 ( 𝑓 𝜆 ∗
+
+> DM
+
+) is monotone non-increasing. 
+
+Proposition 2 shows that tighter fairness constraints (smaller 𝛿 ) intensifies the opposite-direction adjust-ments of NTRs across groups. Specifically, lowering 𝛿 weakly reduces the advantaged group’s NTR and weakly raises the disadvantaged group’s NTR. The effect is always order-preserving in 𝛿 .We next consider group precision, defined for group 𝑠 as 𝜋 𝑠 ( 𝑓 ) = 𝑃 (𝑌 = 1 | ˆ𝑌 = 1, 𝑆 = 𝑠 ), i.e., the fraction of accepted candidates in group 𝑠 who are truly qualified. It complements selection rates by capturing the quality (rather than the quantity) of acceptances. Theorem 2 shows the results. 
+
+THEOREM 2 (Group-wise Precision by Fair ML with 𝑆 ). For a classifier 𝑓 , let 𝜋 𝑠 ( 𝑓 ) denote the pre-cision of group 𝑠 ∈ S when 𝑃 ( ˆ𝑌 = 1 | 𝑆 = 𝑠 ) > 0. Then, for any group 𝑠 with both 𝜋 𝑠 ( 𝑓 ∗) and 𝜋 𝑠 ( 𝑓 𝜆 ∗
+
+> DM
+
+)
+
+well-defined, the following holds: 𝜋 𝑠 ( 𝑓 𝜆 ∗
+
+> DM
+
+) ≥ 𝜋 𝑠 ( 𝑓 ∗) if 𝑠 = 𝑠 ℎ, and 𝜋 𝑠 ( 𝑓 𝜆 ∗
+
+> DM
+
+) ≤ 𝜋 𝑠 ( 𝑓 ∗) if 𝑠 = 𝑠 𝑙 .9
+
+Theorem 2 implies that applying the fair classifier always weakly increases precision for the advantaged group and weakly decreases it for the disadvantaged group (when precision is well-defined under both rules). Thus, even though the disadvantaged group’s selection-based rates rise, the quality of its acceptances declines. This is concerning: approving unqualified individuals can harm them (e.g., default and credit-score damage in lending) and, at the group level, can increase observed adverse outcomes, making the disadvantaged group appear riskier (Fu et al. 2022). Conversely, for the advantaged group, selection-based rates weakly decrease while precision weakly increases, implying higher-quality acceptances and fewer observed bad outcomes. This improvement in apparent risk profile comes at the cost of reduced access: some qualified advantaged candidates may be screened out, raising concerns about “reverse discrimination” (Yang et al. 2025b). These directional effects are notion-agnostic in the aware regime and hold for all 𝛿 .
+
+4.2. Redistribution Mechanism: The Role of the Sensitive Attribute 
+
+We show that, in the attribute-aware regime, fair ML always has a deterministic direction of impact across the two groups. These effects are driven by a simple threshold-shift mechanism based on 𝑆 . By Proposition 1, using 𝑆 in prediction allows group-specific thresholds relative to the unified unconstrained threshold: the threshold weakly increases for the advantaged group and weakly decreases for the disadvantaged group. Figure 2 then illustrates this redistribution. 
+
+Advantaged group (deletion only). Raising the threshold for group 𝑠 ℎ from 𝑐 removes previously selected candidates in increasing order of 𝜂 (𝑥, 𝑠 ℎ). Hence, all selection rates (including NTR) weakly decrease, while precision weakly increases, since the removed candidates are those less likely to be qualified among the previously selected. 
+
+Disadvantaged group (inclusion only). Lowering the threshold for group 𝑠 𝑙 from 𝑐 adds previously unselected instances in decreasing order of 𝜂 (𝑥, 𝑠 𝑙 ). Hence, all selection rates (including NTR) weakly increase, while precision weakly decreases, as the added candidates are less likely to be qualified than those previously selected.  
+
+> Figure 2 Selection Regions Before and After Enforcing Fairness in the Attribute-Aware Regime.
+
+## 5. Fair ML Impacts in the Attribute-Blind Regime 
+
+In the previous section, we studied the attribute-aware setting, where the sensitive attribute is available and can be used in prediction. While permissible in some domains (e.g., medical diagnosis), it may be restricted or prohibited in others; for instance, the Equal Credit Opportunity Act bars lending decisions that explicitly depend on race or gender. In such settings, models must operate in an attribute-blind regime, predicting 10 
+
+using only non-sensitive features 𝑋 , so the input space is V = X. In this case, Lemma 1 characterizes the unconstrained Bayes-optimal classifier for all 𝑥 ∈ X :
+
+𝑓 ∗ (𝑥 ) = 1 [𝜂 (𝑥 ) > 𝑐 ] . (4) By Menon and Williamson (2018), Zeng et al. (2024), Yang et al. (2025a) and Lemma 2, the Bayes-optimal fair classifier enforcing DM ∈ { DP , EO , PE } at tolerance 𝛿 ∈ [ 0, 1] in the blind regime is: 
+
+𝑓 𝜆 ∗ 
+
+> DM
+
+(𝑥 ) = 1 [𝜂 (𝑥 ) > 𝑐 + 𝜆 ∗ · 𝜈 DM (𝑥 )] , (5) where 𝜈 DP (𝑥 ) = 𝑃 (𝑆 =1| 𝑋 =𝑥 )  
+
+> 𝑃 (𝑆 =1)
+
+− 𝑃 (𝑆 =0| 𝑋 =𝑥 )  
+
+> 𝑃 (𝑆 =0)
+
+, 𝜈 EO (𝑥 ) = 𝑃 (𝑆 =1,𝑌 =1| 𝑋 =𝑥 )   
+
+> 𝑃 (𝑆 =1,𝑌 =1)
+
+− 𝑃 (𝑆 =0,𝑌 =1| 𝑋 =𝑥 )   
+
+> 𝑃 (𝑆 =0,𝑌 =1)
+
+, and 𝜈 PE (𝑥 ) =      
+
+> 𝑃 (𝑆 =1,𝑌 =0|𝑋 =𝑥 )
+> 𝑃 (𝑆 =1,𝑌 =0)
+
+− 𝑃 (𝑆 =0,𝑌 =0| 𝑋 =𝑥 )   
+
+> 𝑃 (𝑆 =0,𝑌 =0)
+
+. Note that if 𝜆 ∗ = 0, then 𝑓 𝜆 ∗ 
+
+> DM
+
+(𝑥 ) = 𝑓 ∗ (𝑥 ); that is, the unconstrained clas-sifier already satisfies the fairness constraint. Furthermore, let 𝑠 ℎ := arg max 𝑠 ∈ S Rate 𝑠 ( 𝑓 ∗ (𝑥 )) denote the advantaged group and 𝑠 𝑙 := arg min 𝑠 ∈ S Rate 𝑠 ( 𝑓 ∗ (𝑥 )) the disadvantaged group (Remark 1) in the blind regime. 11 We now analyze how enforcing fairness affects these two groups in the blind regime. 
+
+5.1. Impact on Different Groups 
+
+In the attribute-blind regime, the correction term 𝜈 DM (𝑥 ) depends only on 𝑥 and is 𝑆 -invariant, as shown in (5). Thus, individuals with the same 𝑥 receive the same decision regardless of group membership. This contrasts with the attribute-aware regime, where the correction 𝜈 DM (𝑥, 𝑠 ) induces group-specific thresholds and hence group-dependent treatment for the same 𝑥 .Furthermore, unlike the aware regime in which the direction (sign) of the threshold shift is fixed only by 
+
+𝑠 and is distribution-agnostic, in the blind case the direction of the threshold adjustment at 𝑥 is governed by the group composition conditional on 𝑋 , as captured by 𝑃 (𝑆 | 𝑋 = 𝑥 ) or 𝑃 (𝑆,𝑌 | 𝑋 = 𝑥 ). Consequently, the fairness correction aggregates group information at the feature level rather than at the group label: its effect varies with 𝑥 , and group-level outcomes depend on how each group is distributed over 𝑋 . Hence, in the attribute-blind regime, group impacts are distribution-dependent rather than predetermined by group membership as in the aware regime. Below, we first partition candidates into three non-overlapping regions (Definition 7), and then formalize the resulting feature-level threshold shifts in Proposition 3. 
+
+DEFINITION 7 (A DVANTAGED -LIKE AND DISADVANTAGED -LIKE ). For a notion DM ∈ { DP , EO , PE }
+
+and a tolerance level 𝛿 ∈ [ 0, 1], let 𝜆 ∗ be the optimal multiplier in (5). Define Qℎ = {𝑥 ∈ X : 𝜆 ∗𝜈 DM (𝑥 ) >
+
+0}, Q𝑙 = {𝑥 ∈ X : 𝜆 ∗𝜈 DM (𝑥 ) < 0}, and Q◦ = {𝑥 ∈ X : 𝜆 ∗𝜈 DM (𝑥 ) = 0}. We call points in Qℎ advantaged-like ,those in Q𝑙 disadvantaged-like , and those in Q◦ neutral (in the sense of 𝜈 DM (𝑥 )). 
+
+PROPOSITION 3 (Feature-level Threshold Shift) . Fix a fairness notion DM ∈ { DP , EO , PE } and a tolerance 𝛿 ∈ [ 0, 1], and let 𝜆 ∗ be the optimal multiplier in (5) . With Qℎ, Q𝑙 , Q◦ as in Definition 7, for any 
+
+𝑥 ∈ X , we have: 𝑐 + 𝜆 ∗𝜈 DM (𝑥 ) > 𝑐 if 𝑥 ∈ Q ℎ; 𝑐 + 𝜆 ∗𝜈 DM (𝑥 ) < 𝑐 if 𝑥 ∈ Q 𝑙 ; and 𝑐 + 𝜆 ∗𝜈 DM (𝑥 ) = 𝑐 if 𝑥 ∈ Q ◦.                 
+
+> 11 Here, we abuse notation and reuse 𝑠 ℎand 𝑠 𝑙 for the advantaged and disadvantaged groups in the attribute-blind regime. This does not imply that the same group is advantaged/disadvantaged in both regimes; the identity of the advantaged and disadvantaged groups can differ between the attribute-aware and attribute-blind deployments (i.e., arg max 𝑠 ∈ S Rate 𝑠 (𝑓 ∗(𝑥 )) =arg min 𝑠 ∈ S Rate 𝑠 (𝑓 ∗(𝑥, 𝑠 )) ).
+
+11 
+
+Proposition 3 shows that fairness introduces a 𝑥 -dependent correction which increases the threshold (penal-izes) for candidates from advantaged-like side and decreases it (subsidizes) those from the disadvantaged-like side. For candidates whole looks neutral, the threshold is not adjusted. Hence, the selection set shrinks (relative to that of the unconstrained classifier) on Qℎ, expands on Q𝑙 , and unchanged on Q◦. Consequently, the net effect on each group depends on how 𝑃 (𝑆 | 𝑋 ) or 𝑃 (𝑆,𝑌 | 𝑋 ) distributes mass over these regions. Next, we investigate the NTRs associated with a chosen notion. As noted in Figure 1, they can vary via one of three patterns when reducing unfairness: (i) Both groups’ NTRs weakly decrease, with a larger drop for the advantaged group; (ii) Both groups’ NTRs weakly increase, with a larger gain for the disadvantaged group; or (iii) The advantaged group’s NTR weakly decreases, while the disadvantaged’s weakly increases. 12 We will show that all three patterns can arise in the attribute-blind regime and identify distributional conditions under which each occurs. We discuss the first two patterns here and leave the third one in the full version. 
+
+THEOREM 3 (NTR Redistribution Without 𝑆 ). Fix a notion DM ∈ { DP , EO , PE } and 𝛿 ∈ [ 0, 1].For 𝑥 ∈ X with 𝜈 DM (𝑥 ) ≠ 0, define 𝜁 (𝑥 ) = 𝜂 ( 𝑥 ) − 𝑐 𝜈 DM ( 𝑥 ) and the extrema 𝐴 max = sup 𝒙 :𝜈 DM ( 𝑥 )>0 𝜁 (𝑥 ), 𝐴 min =
+
+inf 𝒙 :𝜈 DM ( 𝑥 )>0 𝜁 (𝑥 ), 𝐵 max = sup 𝒙 :𝜈 DM ( 𝑥 )<0 𝜁 (𝑥 ), 𝐵 min = inf 𝒙 :𝜈 DM ( 𝑥 )<0 𝜁 (𝑥 ). For group 𝑠 ∈ S , let Rate 𝑠 denote its group-wise NTR under DM . With 𝑓 ∗ as in (4) and 𝑓 𝜆 ∗ 
+
+> DM
+
+as in (5) , the following hold for any group 𝑠 : If 
+
+𝐴 max ≤ 𝐵 min , then Rate 𝑠 ( 𝑓 𝜆 ∗
+
+> DM
+
+) ≤ Rate 𝑠 ( 𝑓 ∗); if 𝐵 max < 𝐴 min , then Rate 𝑠 ( 𝑓 𝜆 ∗
+
+> DM
+
+) ≥ Rate 𝑠 ( 𝑓 ∗).
+
+Theorem 3 shows that in the blind regime, fair ML can move both groups’ NTRs in the same direction. Because the blind rule is 𝑆 -invariant, the same set of 𝑥 flips together; how each group’s NTR changes depends on the mass each group places on that flipped set. If that set carries “similar” share in two groups, or if all flipped points are more characteristic of the same group, i.e., all lie in Qℎ (𝐴 max ≤ 𝐵 min ) or all lie in Q𝑙 (𝐵 max < 𝐴 min ), both groups’ NTRs move in the same direction. This contrasts with the aware regime (Theorem 1), where fairness always shifts the two groups in opposite directions toward the target (within tolerance 𝛿 ). In the attribute-blind regime, such opposite-direction equalization need not occur, and the group effects are distribution-dependent. Theorem 3 characterizes group NTRs at a fixed tolerance in the attribute-blind regime, we then study how they respond as the tolerance 𝛿 varies. 
+
+PROPOSITION 4 (When Lower 𝛿 Amplifies Blind Fair ML’s Impact) . Under the same setup as in Theorem 3, let 𝜆 ∗ = 𝜆 ∗ (𝛿 ). For any group 𝑠 ∈ S : If 𝐴 max ≤ 𝐵 min , then Rate 𝑠 ( 𝑓 𝜆 ∗
+
+> DM
+
+) is monotone non-decreasing in 𝛿 ; if 𝐵 max < 𝐴 min , then Rate 𝑠 ( 𝑓 𝜆 ∗
+
+> DM
+
+) is monotone non-increasing in 𝛿 .
+
+Relative to Proposition 2 (attribute-aware), where tightening 𝛿 produces opposite-direction, order-preserving shifts across groups for all distributions, Proposition 4 shows that in the attribute-blind regime the response is distribution-dependent. Under the separation 𝐴 max ≤ 𝐵 min (resp. 𝐵 max < 𝐴 min ), tightening 𝛿     
+
+> 12 These patterns may exhibit equalities (i.e., no change) on both groups only when the unconstrained classifier has already satisfied the fairness constraint (i.e., when 𝜆 ∗=0).
+
+12 
+
+weakly lowers (resp. raises) both groups’ NTRs, and the response is order-preserving in 𝛿 . When neither separation holds, a uniform direction is not guaranteed, and responses may switch direction as 𝛿 varies. For example, there may exist 0 ≤ 𝛿 1 < 𝛿 2 < |𝐷 DM (0)| and a group 𝑠 such that Rate 𝑠 ( 𝑓 𝜆 ∗ ( 𝛿 2 ) 
+
+> DM
+
+) < Rate 𝑠 ( 𝑓 ∗) <
+
+Rate 𝑠 ( 𝑓 𝜆 ∗ ( 𝛿 1 ) 
+
+> DM
+
+). Thus, unlike the attribute-aware case, tightening 𝛿 does not further raise the disadvantaged group’s NTR (nor lower the advantaged group’s NTR) for all distributions; rather, how the gap narrows under tighter fairness is distribution-dependent. We next analyze how blind fair ML affects group-wise precision, building on the order-alignment condi-tions in Definition 8. Theorem 4 then presents the result. 
+
+DEFINITION 8 (O RDER ALIGNMENT ). Let G ⊆ X and 𝑔, ℎ : X → R be real-valued functions. We say that 𝑔 is aligned with ℎ on G, written 𝑔 Aln 
+
+∼ ℎ on G, if ∀𝑥, 𝑥 ′ ∈ G , 𝑔 (𝑥 ) ≤ 𝑔 (𝑥 ′) ⇒ ℎ(𝑥 ) ≤ ℎ(𝑥 ′).
+
+THEOREM 4 (Group-wise Precision by Fair ML Without 𝑆 ). For a group 𝑠 ∈ S and a classifier 𝑓 ,define the group-wise precision achieved by 𝑓 as 𝜋 𝑠 ( 𝑓 ) = 𝑃 (𝑌 = 1| ˆ𝑌 = 1, 𝑆 = 𝑠 ) whenever 𝑃 ( ˆ𝑌 = 1 | 𝑆 = 𝑠 ) >
+
+0. Let 𝑓 ∗ (𝑥 ) as in (4) and 𝑓 𝜆 ∗ 
+
+> DM
+
+(𝑥 ) as in (5) , and let 𝜁 (𝑥 ), 𝐴 max , 𝐴 min , 𝐵 max and 𝐵 min be as in Theorem 3. Write 
+
+𝜂 𝑠 (𝑥 ) := 𝜂 (𝑥, 𝑠 ). Then, for any group 𝑠 with both 𝜋 𝑠 ( 𝑓 ∗) and 𝜋 𝑠 ( 𝑓 𝜆 ∗
+
+> DM
+
+) well-defined, the following holds: If 𝐴 max ≤ 𝐵 min , then 𝜋 𝑠 
+
+  𝑓 𝜆 ∗
+
+> DM
+
+ 
+
+≥ 𝜋 𝑠 ( 𝑓 ∗) if 𝜁 Aln 
+
+∼ ( 2𝑠 ℎ − 1) 𝜂 𝑠 on Qℎ, (6) 
+
+≤ 𝜋 𝑠 ( 𝑓 ∗) if 𝜁 Aln 
+
+∼ ( 1 − 2𝑠 ℎ) 𝜂 𝑠 on Qℎ . xxxxxxxxxxxxxxxxxxxxxxx (7) 
+
+If 𝐵 max < 𝐴 min , then 𝜋 𝑠 
+
+  𝑓 𝜆 ∗
+
+> DM
+
+ 
+
+≥ 𝜋 𝑠 ( 𝑓 ∗), if sup Qℎ 𝜂 𝑠 ≤ inf Q𝑙 𝜂 𝑠 and 𝜁 Aln 
+
+∼ ( 2𝑠 ℎ − 1) 𝜂 𝑠 on Q𝑙 , (8) 
+
+≤ 𝜋 𝑠 ( 𝑓 ∗), if sup Q𝑙 𝜂 𝑠 ≤ inf Qℎ 𝜂 𝑠 and 𝜁 Aln 
+
+∼ ( 1 − 2𝑠 ℎ) 𝜂 𝑠 on Q𝑙 . (9) When the separation conditions hold and precision is well-defined, Theorem 4 characterizes group-wise precision shifts under blind fair ML. If a distribution satisfies 𝐴 max ≤ 𝐵 min and the condition in (6) for a group 𝑠 , then the flipped-out points have lower 𝜂 than the remaining selected set, so 𝜋 𝑠 weakly increases; under (7) the flipped-out points have higher 𝜂 , so 𝜋 𝑠 weakly decreases. If a distribution satisfies 𝐵 max < 𝐴 min 
+
+and the condition in (8) for a group 𝑠 , then the flipped-in points have higher 𝜂 than the previously selected set, so 𝜋 𝑠 weakly increases; under (9) the flipped-in points have lower 𝜂 , so 𝜋 𝑠 weakly decreases. This contrasts with the attribute-aware regime (Theorem 2), where precision always moves in opposite directions across groups (advantaged weakly up, disadvantaged weakly down); In the blind regime, either direction can occur for each group, and both groups may move the same way (under separation). 
+
+5.1.1. Redistribution Mechanism: The Role of Masked Candidates Recall that in the attribute-blind regime, enforcing fairness introduces an 𝑥 -dependent correction which penalizes individu-als on the advantaged-like side Qℎ and subsidizes those on the disadvantaged-like side Q𝑙 , while leaving the neutral side Q◦ unchanged. Because 𝑆 is unobserved, each side contains a mixture of true-𝑆 = 1 and true-𝑆 = 0 individuals. In other words, on each side there are candidates who, look advantaged-like (resp. disadvantaged-like) but whose true group label is the opposite 13 –these are the masked candidates . Note that                   
+
+> 13 A candidate may look advantaged-like by 𝜈 DM (𝑥 )while actually belonging to the disadvantaged group, and vice versa. Take DP as an example, for a instance 𝑥 , even its 𝑃 (𝑆 =1|𝑋 =𝑥 )> 𝑃 (𝑆 =0|𝑋 =𝑥 )(i.e., are Group 1-like), 𝑥 can actually be long to Group 0. 13
+
+in the blind regime, when moving from unfair classifier to the fair one, deletions on the advantaged-like side and additions on the disadvantaged-like side can occur simultaneously on both groups, with net effects set by the data distribution. This contrasts with the aware case, where flips are only group-specific (deletion only on the advantaged and addition only on the disadvantaged). In the blind case, if the flipped set is concentrated in one side ( Qℎ or Q𝑙 ), deletion and addition phases separate and a single direction dominates. 
+
+(a) 𝐴 max ≤ 𝐵 min (b) 𝐵 max < 𝐴 min  
+
+> Figure 3 Selection Regions Before and After Enforcing Fairness in the Attribute-Blind Regime.
+
+Case 𝐴 max ≤ 𝐵 min (deletion-only on the advantaged-like side). Under 𝐴 max ≤ 𝐵 min , the fair ML 
+
+reduces the selected set exclusively within the Qℎ following the order of 𝜁 (𝑥 ), which aggregates information of to what extent an 𝑥 are advantaged-like and are marginal qualified under the unconstrained rule (how closed to the original boundary); see Figure 3a. It leaves other sides unaffected. Two consequences are immediate: (i) Both groups’ selection rates weakly decrease. The advantaged-like side contains members of both groups (true advantaged group members and masked candidates from the disadvantaged group). Thus, deleting from this side can reduce the selected mass of both groups (hence all group-wise selection rates, including NTR, weakly decrease). (ii) Precision depends on how removals rank in 𝜂 . Fair ML removes previously selected candidates following the order of 𝜁 (𝑥 ). Under order alignment conditions in Theorem 4, one can compare the 𝜂 profiles of the removed portion to what remains, thus know how precision changes. 
+
+Case 𝐵 max ≤ 𝐴 min (inclusion-only on the disadvantaged-like side). Under 𝐵 max ≤ 𝐴 min , the fair ML 
+
+expands the selected set exclusively within Q𝑙 by admitting previously unselected points following the order of 𝜁 (𝑥 ), see Figure 3b. Other sides remains unaffected. Two consequences are immediate: (i) Both groups’ selection rates weakly increase. The disadvantaged-like side contains members of both groups; adding from this side can therefore increase the selected mass of each group (hence all group-wise selection rates, including NTR, weakly increase). (ii) Precision depends on how entrants rank in 𝜂 . Fairness admits candidates following the order of 𝜁 (𝑥 ). Under conditions in Theorem 4, one can compare the 𝜂 profiles of the entrants to those of the incumbents; thus know how precision changes. 
+
+## 6. Conclusion 
+
+In this paper, we adapt a unified population-level (Bayes) framework to assess how fair ML affects group outcomes in binary classification, covering both attribute-aware and attribute-blind deployment. In the attribute-aware regime, we show that enforcing common fairness notions necessarily (weakly) improves 14 
+
+outcomes for the disadvantaged group while (weakly) reducing them for the advantaged group. In the attribute-blind regime, effects are distribution-dependent and may yield either leveling up or leveling down. We characterize when each pattern arises, highlight the role of “masked” candidates in driving them, and clarify the underlying mechanisms. 
+
+## References 
+
+Agarwal A, Beygelzimer A, Dudik M, Langford J, Wallach H (2018) A reductions approach to fair classification. 
+
+Proceedings of the 35th International Conference on Machine Learning , volume 80, 60–69 (PMLR). Barocas S, Hardt M, Narayanan A (2023) Fairness and machine learning: Limitations and opportunities (MIT press). Barocas S, Selbst AD (2016) Big data’s disparate impact. California Law Review 104:671. Caton S, Haas C (2024) Fairness in machine learning: A survey. ACM Computing Surveys 56(7). Chen W, Klochkov Y, Liu Y (2024) Post-hoc bias scoring is optimal for fair classification. The 12th International Conference on Learning Representations .Chzhen E, Denis C, Hebiri M, Oneto L, Pontil M (2019) Leveraging labeled and unlabeled data for consistent fair binary classification. Advances in Neural Information Processing Systems 32. Corbett-Davies S, Gaebler JD, Nilforoshan H, Shroff R, Goel S (2023) The measure and mismeasure of fairness. 
+
+Journal of Machine Learning Research 24(1):14730–14846. Corbett-Davies S, Pierson E, Feller A, Goel S, Huq A (2017) Algorithmic decision making and the cost of fairness. 
+
+Proceedings of the 23rd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining ,797–806. Denis C, Elie R, Hebiri M, Hu F (2024) Fairness guarantees in multi-class classification with demographic parity. 
+
+Journal of Machine Learning Research 25(130):1–46. Devroye L, Gy¨ orfi L, Lugosi G (2013) A probabilistic theory of pattern recognition , volume 31 (Springer Science & Business Media). Dwork C, Hardt M, Pitassi T, Reingold O, Zemel R (2012) Fairness through awareness. Proceedings of the 3rd Innovations in Theoretical Computer Science Conference , 214–226. Elkan C (2001) The foundations of cost-sensitive learning. Proceedings of the 17th International Joint Conference on Artificial Intelligence - Volume 2 , 973–978, IJCAI’01. Fu R, Aseri M, Singh PV, Srinivasan K (2022) “Un” fair machine learning algorithms. Management Science 68(6):4173– 4195. Fu R, Huang Y, Singh PV (2020) Artificial intelligence and algorithmic bias: Source, detection, mitigation, and implications. Pushing the Boundaries: Frontiers in Impactful OR/OM Research , chapter 2, 39–63 (INFORMS). GDPR (2016) Art. 9 GDPR–Processing of special categories of personal data. Hardt M, Price E, Srebro N (2016) Equality of opportunity in supervised learning. Proceedings of the 30th International Conference on Neural Information Processing Systems , 3323–3331. Jorgensen M, Richert H, Black E, Criado N, Such J (2023) Not so fair: The impact of presumably fair machine learning models. Proceedings of the 2023 AAAI/ACM Conference on AI, Ethics, and Society , 297–311. 15 Kallus N, Mao X, Zhou A (2022) Assessing algorithmic fairness with unobserved protected class using data combina-tion. Management Science 68(3):1959–1981. Lei J (2014) Classification with confidence. Biometrika 101(4):755–769. Liang A, Lu J, Mu X, Okumura K (2021) Algorithm design: A fairness-accuracy frontier. arXiv preprint arXiv:2112.09975 .Liu LT, Dean S, Rolf E, Simchowitz M, Hardt M (2018) Delayed impact of fair machine learning. Proceedings of the 35th International Conference on Machine Learning , 3150–3158 (PMLR). Menon AK, Williamson RC (2018) The cost of fairness in binary classification. Proceedings of the 1st Conference on Fairness, Accountability and Transparency , volume 81, 107–118. Mittelstadt B, Wachter S, Russell C (2023) The unfairness of fair machine learning: Leveling down and strict egalitar-ianism by default. Michigan Technology Law Review 30:1. Natarajan N, Dhillon IS, Ravikumar P, Tewari A (2018) Cost-sensitive learning with noisy labels. Journal of Machine Learning Research 18(155):1–33. Obermeyer Z, Powers B, Vogeli C, Mullainathan S (2019) Dissecting racial bias in an algorithm used to manage the health of populations. Science 366(6464):447–453. Schreuder N, Chzhen E (2021) Classification with abstention but without disparities. UAI 2021-37th Conference on Uncertainty in Artificial Intelligence .Shen X, Wong Y, Kankanhalli M (2023) Fair representation: Guaranteeing approximate multiple group fairness for unknown tasks. IEEE Transactions on Pattern Analysis and Machine Intelligence 45(1):525–538. Tannenbaum C, Norris CM, McMurtry MS (2019) Sex-specific considerations in guidelines generation and application. 
+
+Canadian Journal of Cardiology 35(5):598–605. Williamson R, Menon A (2019) Fairness risk measures. Proceedings of the 36th International Conference on Machine Learning , volume 97, 6786–6797. Yang Y, Huang Y, Chang X (2025a) Bayes-optimal fair classification with multiple sensitive features. Proceedings of the 40th Annual AAAI Conference on Artificial Intelligence .Yang Y, Wu Y, Chang X, Li M, Tan Y (2025b) Toward a fairness-aware scoring system for algorithmic decision-making. 
+
+Production and Operations Management 10591478251318918. Yang Y, Zhang H, Gichoya JW, Katabi D, Ghassemi M (2024) The limits of fair medical imaging AI in real-world generalization. Nature Medicine 30(10):2838–2848. Zafar MB, Valera I, Gomez-Rodriguez M, Gummadi KP (2019) Fairness constraints: A flexible approach for fair classification. Journal of Machine Learning Research 20(75):1–42. Zafar MB, Valera I, Rogriguez MG, Gummadi KP (2017) Fairness constraints: Mechanisms for fair classification. 
+
+Proceedings of the 20th International Conference on Artificial Intelligence and Statistics , volume 54, 962–970. Zeng X, Cheng G, Dobriban E (2024) Bayes-optimal fair classification with linear disparity constraints via pre-, in-, and post-processing. arXiv preprint arXiv:2402.02817 .Zhao H, Gordon GJ (2022) Inherent tradeoffs in learning fair representations. Journal of Machine Learning Research 
+
+23(57):1–26.
