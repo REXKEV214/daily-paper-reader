@@ -1,0 +1,1035 @@
+Title: SemaPop: Semantic-Persona Conditioned Population Synthesis
+
+URL Source: https://arxiv.org/pdf/2602.11569v1
+
+Published Time: Fri, 13 Feb 2026 01:38:50 GMT
+
+Number of Pages: 43
+
+Markdown Content:
+# SemaPop: Semantic-Persona Conditioned Population Synthesis 
+
+Zhenlin Qin a, Yancheng Ling a, Leizhen Wang c,a , Francisco Câmara Pereira d, Zhenliang Ma a,b, ∗
+
+> aDepartment of Civil and Architectural Engineering, KTH Royal Institute of Technology, Sweden
+> bDigital Futures, KTH Royal Institute of Technology, Sweden
+> cDepartment of Data Science and Artificial Intelligence, Monash University, Australia
+> dDepartment of Technology, Management and Economics Intelligent Transportation Systems, Technical University of Denmark, Denmark
+
+Abstract 
+
+Population synthesis is a critical component of individual-level socio-economic simulation, yet re-mains challenging due to the need to jointly represent statistical structure and latent behavioral semantics. Existing population synthesis approaches predominantly rely on structured attributes and statistical constraints, leaving a gap in semantic-conditioned population generation that can capture abstract behavioral patterns implicitly in survey data. This study proposes SemaPop, a semantic–statistical population synthesis model that integrates large language models (LLMs) with generative population modeling. SemaPop derives high-level persona representations from individual survey records and incorporates them as semantic conditioning signals for population generation, while marginal regularization is introduced to enforce alignment with target popu-lation marginals. In this study, the framework is instantiated using a Wasserstein GAN with gradient penalty (WGAN-GP) backbone, referred to as SemaPop-GAN. Extensive experiments demonstrate that SemaPop-GAN achieves improved generative performance, yielding closer align-ment with target marginal and joint distributions while maintaining sample-level feasibility and diversity under semantic conditioning. Ablation studies further confirm the contribution of se-mantic persona conditioning and architectural design choices to balancing marginal consistency and structural realism. In addition, counterfactual analyses show that semantic-level interven-tions enable controllable behavioral modulation with clear monotonic responses and limited side effects, underscoring the utility of SemaPop-GAN for behaviorally interpretable population anal-ysis. These results demonstrate that SemaPop-GAN enables controllable and interpretable pop-ulation synthesis through effective semantic–statistical information fusion. SemaPop-GAN also provides a promising modular foundation for developing generative population projection systems that integrate individual-level behavioral semantics with population-level statistical constraints. 
+
+Keywords: Population Synthesis, Persona Representation, Semantic-Conditioned Generative Modeling, Large Language Model 
+
+> ∗Corresponding author.
+> arXiv:2602.11569v1 [cs.AI] 12 Feb 2026
+
+1. Introduction 
+
+Modern socio-economic systems, such as transportation systems and urban systems, are in-creasingly governed by complex interactions between individual behaviors, demographic structures, and policy interventions [1, 2, 3]. Effective planning and policy evaluation in these systems require not only aggregate-level indicators, but also a fine-grained understanding of how heterogeneous individuals respond to changing socio-economic conditions. To capture such heterogeneity and interaction effects, many socio-economic modeling frameworks adopt individual-level simulation paradigms, such as agent-based modeling (ABM) and micro-simulation, which explicitly represent individuals and their behaviors [4, 5, 6, 7]. These approaches critically rely on the availability of synthetic populations, which serve as the foundational layer for initializing individual agents with realistic demographic and behavioral attributes. Consequently, the quality and expressiveness of population synthesis directly determine the credibility of downstream simulations and policy analysis. Despite their central role in individual-level simulation, population synthesis remains challeng-ing due to the need to integrate heterogeneous types of information. Beyond reproducing marginal distributions of structured variables, realistic synthetic populations must also capture latent be-havioral tendencies, preferences, and lifestyle characteristics that are often only implicitly encoded in survey data. These semantic aspects are difficult to represent within conventional population synthesis frameworks that primarily operate on structured attributes and statistical constraints, motivating a semantic–statistical information fusion perspective on population synthesis. In practice, addressing these challenges is fundamentally constrained by data availability. While some large-scale population surveys are publicly accessible, it remains difficult to obtain individual-level survey data at a sufficient scale for training modern generative models that simultaneously cover detailed demographic characteristics, household attributes, and rich behavioral information. Such datasets are rarely available in real-world settings due to privacy, respondent burden, and col-lection cost constraints. As a result, methodological advances in population synthesis are typically developed and tested using surrogate individual-level microdata, with synthetic populations eval-uated for consistency with real-world marginals [8, 9, 10, 11]. Such consistency-based evaluation is well established in the population synthesis literature and extends naturally to semantic–statistical fusion settings. Traditional population synthesis methods primarily adopt statistical constraint–driven paradigms. Marginal-based methods, including Iterative Proportional Fitting (IPF), Iterative Proportional Updating (IPU), and copula-based approaches, extrapolate population distributions through em-pirical marginals or dependency structures [8, 12, 13]. However, these methods remain tied to historical observations and are unable to represent scenario-driven behavioral or demographic shifts. Combinatorial optimization approaches generate synthetic populations by matching pre-defined constraints, yet do not learn underlying microdata distributions and thus exhibit limited generalization beyond observed conditions [14, 9, 11]. Recent deep generative models improve statistical realism by learning latent representations from survey and tabular microdata, but re-main confined to statistical pattern learning and lack mechanisms to encode semantic context or scenario-specific assumptions [15, 16, 17]. This limitation motivates the incorporation of external semantic knowledge, such as persona representations derived from natural language descriptions. 2Large Language Models (LLMs) offer a natural mechanism for incorporating external semantic knowledge into population synthesis due to their strong capacity for semantic abstraction [18, 19]. While survey microdata provide structured statistical attributes, such attributes alone are insuf-ficient to represent higher-level semantics related to lifestyles, preferences, and behavioral ten-dencies. By transforming such information into continuous persona embeddings, LLMs provide a compact semantic representation that complements structured tabular variables. Integrating persona embeddings with population synthesis models originally designed without semantic con-ditioning enables an information fusion framework in which statistical consistency is preserved while supporting scenario-driven semantic shifts. To realize a unified fusion of semantic persona knowledge and statistical population model-ing, we propose SemaPop , a persona-conditioned population synthesis framework that integrates LLM-derived persona embeddings with a statistical generative model under explicit distributional constraints. The framework is instantiated as SemaPop-GAN , using a Wasserstein GAN with gradient penalty (WGAN-GP) as the generative backbone for modeling realistic microdata distri-butions, while semantic persona embeddings are incorporated via feature-wise linear modulation (FiLM) to enable fine-grained semantic control. To ensure statistical consistency under both fac-tual and counterfactual conditions, we further introduce marginal regularization to guide generated populations toward target marginal structures. Note that this study focuses on the methodological problem of semantic–statistical informa-tion fusion in population synthesis, rather than on reproducing any specific real-world population. Synthetic population microdata are therefore employed as a controlled experimental substrate, en-abling systematic analysis of semantic conditioning and counterfactual interventions. Real-world-inspired marginal structures are treated exclusively as analytical references for probing model behavior and statistical consistency, rather than as ground-truth targets. The main contributions of this work are summarized as follows: 
+
+• We formulate population synthesis as a semantic–statistical information fusion problem and propose SemaPop , a unified framework for scenario-dependent population synthesis, which integrates LLM-derived persona representations as semantic conditioning signals and en-forces statistical alignment through marginal regularization. 
+
+• We introduce a counterfactual analysis framework operating at both the semantic embedding and text levels, enabling systematic evaluation of the propagation of semantic interventions to population-level demographic and behavioral outcomes. 
+
+• We conduct comprehensive empirical evaluations on synthetic population survey data to assess statistical realism, semantic controllability, and counterfactual consistency of the pro-posed framework, including post-hoc marginal calibration to examine the robustness of se-mantic conditioning under statistical alignment. The remainder of this paper is structured as follows: Section 2 reviews the studies related to population synthesis models, generative modeling with semantic information, and counterfactual analysis for information fusion. Sections 3 defines the studied problem and necessary notations. Section 4 proposes the SemaPop framework as well as its instantiation, and then introduce the 3counterfactual intervention framework. Section 5 conduct extensive experiments for validating model performance, robustness and effectiveness of persona conditions. The final section concludes the main findings and discusses future work. 
+
+2. Related Work 
+
+2.1. Population Synthesis with Structured Data 
+
+Traditional population synthesis methods primarily rely on constraint-driven or probabilistic formulations operating on structured survey data. Marginal-based approaches, such as IPF and its extensions such as IPU, generate synthetic populations by reweighting or scaling sample records to match externally provided demographic, household, or geographic marginals [20, 12, 8, 21]. Combinatorial optimization (CO) methods instead formulate synthesis as a discrete selection problem, searching for an optimal combination of individuals that minimizes discrepancies with target constraints through heuristic algorithms such as simulated annealing or genetic optimiza-tion [22, 10, 23, 11]. Probabilistic and graphical models including Bayesian, mixture-based, and copula-based formulations, explicitly estimate joint distributions by factorizing dependencies or separating marginal and dependence structures, enabling richer modeling of multi-attribute rela-tionships than purely marginal-fitting methods [24, 13, 25]. Despite differences in formulation, these traditional approaches remain fundamentally constrained by observed data and predefined constraints, limiting their ability to generalize beyond historical distributions or support scenario-driven future population projection. Data-driven population synthesis has emerged as an alternative paradigm that learns latent distributions and dependency structures directly from individual-level survey data. Early works include Bayesian networks that explicitly model joint demographic and household distributions [26]. More recently, deep generative models such as variational autoencoders (VAEs) and gen-erative adversarial networks (GANs), have been adapted from image generation to population and transportation applications, enabling flexible modeling of high-dimensional attribute spaces [27, 28, 29, 30]. Representative studies apply VAEs to capture latent preference mechanisms [31, 32] and Wasserstein GANs to address challenges such as sampling bias and structural zeros in large-scale population synthesis [17, 16]. Hybrid approaches further combine deep generative models with copula-based dependence structures to improve spatial transferability [33]. While these data-driven methods significantly enhance statistical realism and scalability, they primarily function as imputation-based frameworks that infer present population distributions from observed samples, and thus remain limited in representing semantic context or supporting scenario-driven future population projection. 
+
+2.2. Semantic Information in Generative Models 
+
+Recent advances in generative modeling have increasingly emphasized the role of semantic information as an explicit and controllable factor in the generation process. Across a range of architectures including VAEs, GANs, and diffusion-based models, semantic representations are commonly introduced as high-level conditioning signals that guide generation beyond low-level statistical pattern learning [34]. Rather than being treated as auxiliary metadata, semantic embed-dings are integrated into latent spaces or intermediate feature representations through mechanisms 4such as conditional decoding, latent alignment, or feature-wise modulation, enabling partial disen-tanglement between semantic intent and underlying statistical structure [35, 36, 37]. This stream of research highlights a shared insight: semantic information can function as an independent infor-mation source that systematically shapes generative distributions, improving controllability and expressiveness without requiring explicit modification of the data space [19, 38, 39]. Existing work on semantic conditioning in generative models has demonstrated its effective-ness across vision, language, and multimodal generation [36, 40, 41, 42, 43]. These results suggest a domain-independent principle for controlling generative distributions, which naturally extends to population synthesis. In population synthesis, behavioral tendencies, preferences, and lifestyle characteristics are inherently semantic, yet they are often only weakly expressed through struc-tured survey attributes, creating a representational gap where high-level semantic factors cannot be reliably inferred from statistical patterns alone [16]. This observation motivates the explicit incorporation of persona-level semantic representations into population synthesis. These repre-sentations serve as a complementary information channel to structured microdata, enabling the modeling of behavioral heterogeneity beyond what can be reliably inferred from survey attributes alone. 
+
+2.3. Information Fusion and Counterfactual Analysis 
+
+In information fusion systems, counterfactual analysis serves as a tool for probing how hetero-geneous information sources are integrated and how their semantic contributions influence model outputs. In the social sciences and causal inference literature, counterfactuals are formally defined within potential outcome frameworks or structural causal models and are used to reason about causal effects under hypothetical interventions, relying on explicit assumptions about causal struc-ture and identifiability [44, 45, 46]. By contrast, counterfactual analysis in contemporary AI and machine learning is typically op-erationalized as interventional or contrastive analysis on learned representations or inputs, aiming to analyze model behavior, interpretability, and sensitivity rather than to establish causal iden-tification [47, 48]. In this setting, counterfactuals are constructed via controlled modifications of inputs or internal representations and evaluated through resulting changes in model outputs or aggregate statistics [49, 50]. Such an operational notion of counterfactuals is well suited to information fusion problems, where semantic representations such as persona embeddings encode heterogeneous attributes from structured survey data. Accordingly, AI-based counterfactual anal-ysis methods can be broadly categorized into semantic-level interventions on representations and text-level interventions on inputs. At the semantic representation level, many counterfactual and interventional approaches op-erate by manipulating learned latent or embedding spaces. These studies show that high-level semantic attributes, such as demographic, behavioral, or contextual signals, can often be approx-imated as linear directions in shared embedding spaces, enabling controlled semantic intervention [49, 51, 52, 53]. Related works further formalize counterfactual explanations as latent-space inter-ventions, where modifying internal representations reveals how semantic factors influence model outputs [50, 54]. These studies establish semantic-level interventions as effective tools for analyzing and influencing generative model outputs in information fusion contexts. 5Complementary to semantic-level interventions, text-level counterfactual analysis constructs minimally modified natural language inputs to induce targeted changes in model behavior, and has been widely used to evaluate robustness, bias, and controllability in NLP systems [55, 56]. More recent work highlights the importance of guiding text-level counterfactual edits toward inter-pretable semantic factors, rather than relying on unconstrained textual perturbations, to reduce spurious effects [57]. From an information fusion perspective, text-level counterfactuals enable selective interventions on explicit information sources while holding others fixed, allowing fine-grained attribution of their influence within fused representations. 
+
+3. Preliminary 
+
+Population synthesis in this study is formulated on individual-level survey data in tabular form, where each row represents a population agent characterized by multi-dimensional attributes, in-cluding demographic, household, and behavioral information. Unlike general tabular data gener-ation, population synthesis does not aim to reproduce an identical replica of the observed sample. Instead, it seeks to synthesize a population that preserves realistic individual-level characteristics while remaining statistically consistent with population-level marginal distributions. 
+
+Population agent : A population agent xi is an element of a population set X, where i ∈{1, 2, . . . , N }. Each agent is represented by a vector of categorical and numerical attributes ex-tracted from individual-level surveys, covering demographic, household, and behavioral charac-teristics. Formally, each agent xi is composed of a set of attributes indexed by j ∈ J , where J
+
+denotes the collection of variables considered in the population representation. These variables can be partitioned into categorical attributes Jcat and numerical (continuous or quasi-continuous) attributes Jcont , according to their measurement scale. 
+
+Persona : Given a population agent xi, a persona πi is a piece of text that describes the characteristics of xi. In this study, personas are automatically generated using LLMs based on the information provided by xi.In our case, the population synthesis task is to learn a generator F (ϵ, π ) that models an implicit joint distribution ˆP (X), where ϵ denotes random noise typically sampled from a standard Gaussian distribution N (0, I). The objective of F (ϵ, π ) is to approximate the true population-level joint distribution P (X) by learning from a limited individual-level survey dataset of size n ≪ N .
+
+4. Methodology 
+
+4.1. Overview of SemaPop Framework 
+
+The framework shown in Figure 1 operates in two phases, namely a training phase and a generation phase, each composed of modular components with distinct roles. The LLM functions as a semantic abstraction layer that transforms the structured information of population agents x
+
+into high-level persona descriptions, while remaining frozen during training. The persona text is encoded by the same frozen LLM into a continuous semantic embedding, which serves as a compact representation of high-level persona information. The conditioning module injects this embedding into the generator, enabling persona-aware modulation of the generative process. During training, 6the generator learns to map persona-conditioned representations to realistic population agents under a prescribed training objective. During generation, the same modules are reused, with Gaussian noise replacing real data inputs, enabling the synthesis of new population agents guided solely by persona semantics. Individual Survey  
+
+> LLM
+> Persona Text Prompt
+> Encode
+> Persona
+> Embedding
+> Conditioning
+> Generator
+> Training Phase
+> 𝒙
+> ෝ𝒙
+> Training
+> Objective
+> Gauss ian Noise
+> LLM
+> Persona Text
+> Encode
+> Persona
+> Embedding
+> Conditioning
+> Generator
+> Generating Phase
+> ෝ𝒙
+
+Figure 1: Overview of the proposed SemaPop framework, divided into training and generating phases. In training, population agents x extracted from individual survey data are used to prompt a frozen LLM to generate persona text. The persona text is then encoded into a persona embedding and injected into the generator via a conditioning module. The generator produces ˆx conditioned on persona semantics and is optimized against real data x under a specified training objective. In generation, persona text is encoded in the same way and combined with Gaussian noise to synthesize new population agents ˆx.
+
+4.2. Persona Knowledge Representation and Semantic Conditioning 4.2.1. Persona Generation and Embedding 
+
+In population studies and survey-based research, individual agents are typically described by high-dimensional collections of demographic, household, and behavioral attributes. While such detailed representations are essential for statistical modeling, they can be difficult to interpret and reason about directly when analyzing heterogeneous populations. To address this, prior work in social science and transport research has adopted higher-level abstractions, such as behavioral segments or latent constructs, to summarize coherent patterns of individual characteristics and to bridge micro-level survey information with macro-level population understanding [58, 59, 60]. Building on this perspective, personas provide a complementary form of semantic abstraction that summarizes multiple population attributes into interpretable, high-level descriptions of representa-tive population profiles [61, 62]. Rather than replacing formal statistical representations, personas serve as an intermediate semantic layer that supports structured reasoning over heterogeneous population characteristics. In this study, we operationalize personas by leveraging a frozen LLM to automatically transform structured population survey attributes into persona text. Through this process, the LLM extracts concise and high-level semantic information from individual-level population agents, yielding an interpretable representation that captures essential characteristics while abstracting away low-level 7attribute detail. Specifically, we employ a prompt template, as shown in Figure 2, which instructs the LLM to summarize personal profiles and travel preferences using abstract and qualitative descriptions rather than exact numerical values. This design choice aligns with the role of personas as high-level semantic abstractions and avoids binding persona representations to specific numeric realizations of survey attributes. From a practical perspective, exact numerical characteristics of a target population are often unavailable unless additional surveys are conducted, making such abstract persona representations more appropriate for population synthesis applications. Information Inputs     
+
+> Thinking Guidance
+> Demographic Information :{demography }
+> (
+> Gender: Male
+> Age: 63
+> Marital_status :Single
+> …
+> )
+> Household Information : {household}
+> (
+> Number _of_cars_of_household : 1
+> Household _Type : Single
+> …
+> )
+> Behavioral Information: {behavior}
+> (
+> Trips _of_Car : 0
+> Trips _of_CarPassenger : 0
+> Trips _of_PublicTransport :0
+> …
+> )
+> According to the above demographic, household and behavioral
+> information of a person, summarize the characteristics of personal
+> profile and travel preferences in one paragraph.
+> Requirements:
+> 1. The generated content must not contain exact numbers, which
+> you should use abstract words to conclude the characteristics.
+> 2. The whole words should be around 100.
+
+Figure 2: Prompt template for persona generation. The template specifies structured demographic, household, and behavioral inputs, together with explicit guidance and constraints, for prompting an LLM to generate persona descriptions. Content shown in brackets corresponds to an example for a specific population agent. 
+
+To enable personas as conditioning signals in the generative modeling pipeline, we employ the same frozen LLM to encode persona text into continuous representations. Using a single frozen LLM for both persona construction and encoding ensures a stable and consistent semantic workflow from abstraction to representation. As illustrated in Figure 3, we extract high-level semantic information from the last L Transformer layers and aggregate them via a layer-wise mean operation. The resulting token-level representations are then combined using masked mean pooling, followed by LayerNorm, to obtain the final fixed-dimensional persona embedding. Formally, given a persona description πi, this encoding process defines a persona embedding function 
+
+ei = Eπ(πi), (1) where Eπ(·) denotes the fixed persona embedding module instantiated by the frozen LLM and the subsequent pooling and normalization operations. 8Embedding  
+
+> Layer
+> Persona
+> Tokens
+> Last  𝐿  Transformer Layers
+> …
+> …
+> LLM A rchitecture
+> Layer -wise
+> Mean
+> Masked Mean
+> Pooling
+> LayerNorm
+> …
+> Persona Embedding
+> Module
+> Person Embedding 𝒆
+> Attention Mask
+
+Figure 3: Persona Embedding Module. Persona text is first tokenized and processed by the LLM to obtain hidden states from the last L Transformer layers. These layer-wise representations are averaged, followed by masked mean pooling over tokens and LayerNorm, to produce a fixed-dimensional persona embedding. 
+
+4.2.2. Semantic Conditioning via FiLM Modulation 
+
+To incorporate high-level semantic information into the generative process while keeping the tabular data representation unchanged, we employ FiLM as the mechanism for semantic condi-tioning [37], as illustrated in Figure 4. Persona texts associated with individual agents are first encoded into continuous persona embeddings e, which are then transformed by a lightweight linear adapter network into a compact conditioning vector c,
+
+c = fadapt (e). (2) The conditioning vector is concatenated with the noise input z to form the initial hidden repre-sentation, 
+
+h0 = [ z; c], z ∼ N (0, I), (3) and is subsequently used to generate feature-wise modulation parameters that apply affine trans-formations to intermediate feature representations within the generator. Given an intermediate feature representation h, FiLM performs feature-wise scaling and shifting as 
+
+h′ =  1 + γ(c) ⊙ h + β(c) (4) where γ(·) and β(·) denote learnable functions mapping the conditioning vector to modulation parameters. This formulation enables semantic information to influence generation in a continuous and differentiable manner. The modulation layers are initialized as identity mappings, ensuring stable training dynamics and allowing semantic effects to emerge progressively during training. By injecting semantic signals through internal feature modulation rather than explicit augmentation of the underlying population feature space, this design enables controllable semantic influence while preserving the original feature space and statistical modeling assumptions of the population synthesis framework. 9Persona     
+
+> Adapter
+> Person Embedding 𝒆
+> Conditioning Vector 𝒄 Noise 𝒛
+> Concatenate
+> Linear
+> Linear
+> FiLM Block
+
+⨁ 
+
+> FiLM Block
+
+⨁
+
+> …
+> Output
+> Linear
+> Generator Backbone
+> ෝ𝒙
+
+Figure 4: Semantic conditioning via FiLM modulation. Persona embeddings are adapted into a conditioning vector and fused into the generator through feature-wise FiLM modulation at intermediate layers; the ⊕ symbol denotes conditional affine modulation rather than additive or residual operations. 
+
+4.3. Marginal Regularization for Statistical Consistency 
+
+While the generative objective encourages realism at the individual level, it is typically for-mulated as a sample-wise or instance-level objective and therefore does not by itself guarantee consistency with population-level statistics. This limitation becomes especially evident for low-dimensional marginal distributions, which constitute the primary statistics used for validation and scenario analysis in population synthesis. In practice, unconstrained generative models may pro-duce plausible individual profiles, yet still exhibit systematic deviations in category proportions or numerical distributions. To address this issue, we introduce marginal regularization as an explicit statistical constraint. Rather than enforcing sample-wise reconstruction, marginal regularization aligns generated populations with univariate marginal distributions computed from the training data. These reference marginals serve as internal statistical anchors for ensuring population-level consistency under controlled experimental settings, without implying direct calibration to real-world population statistics. Marginal regularization is formulated at the level of univariate distributions. For each variable 
+
+j ∈ J , we define a marginal estimation operator Φj (·) that maps a collection of samples to a normalized marginal probability vector. Given a batch of generated agents ˆX and the reference dataset Xref drawn from the training data, the corresponding marginals are defined as 
+
+ˆp(j) = Φ j ( ˆX), p(j) = Φ j (Xref ). (5) In practice, p(j) can be estimated from the full training set or approximated using mini-batches during training. 10 The marginal discrepancy for variable j is measured using the standardized root mean squared error (SRMSE), a commonly used metric in population synthesis evaluation [9, 24]. 
+
+L(j)marg = SRMSE  ˆp(j), p (j) =
+
+sX
+
+> k
+
+ ˆp(j) 
+
+> k
+
+− p(j)
+
+> k
+
+2 + ϵ, (6) where ϵ is a small constant for numerical stability, and k indexes the support of the marginal distribution (i.e., categories for categorical variables or bins for continuous variables). The overall marginal regularization term is obtained by aggregating discrepancies across vari-ables, 
+
+Lmarg = 1
+
+|J | 
+
+X
+
+> j∈J
+
+wj L(j)marg , (7) where wj optionally controls the relative importance of different attributes. In our implementation, uniform weights ( wj = 1 ) are used for all variables. 
+
+4.3.1. Marginal Regularization for Categorical Variables 
+
+For categorical variables, the marginal estimation operator Φj (·) computes category proportions by averaging the corresponding one-hot or relaxed soft blocks over samples: 
+
+ˆp(j) 
+
+> k
+
+= 1
+
+B
+
+> B
+
+X
+
+> b=1
+
+ˆx(j)
+
+> b,k
+
+, p(j) 
+
+> k
+
+= 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+x(j)
+
+> n,k
+
+, (8) where B denotes the number of generated samples in a batch and N denotes the number of reference samples used to estimate empirical marginals. This formulation naturally supports differentiable generators that output soft categorical assignments (e.g., via Gumbel–Softmax), while reducing to empirical frequencies in the discrete case. This estimator corresponds to the empirical expectation of categorical variables, yielding un-biased estimates of category-level marginal probabilities. It also aligns with standard population synthesis practice, where univariate marginals are expressed as category proportions. 
+
+4.3.2. Marginal Regularization for Continuous Variables 
+
+For continuous or quasi-continuous variables, marginals are represented using data-adaptive bins with centers {c(j) 
+
+> k
+
+}Kj
+
+> k=1
+
+, where Kj denotes the number of bins used for variable j. The marginal estimation operator Φj (·) is implemented as a differentiable soft histogram: 
+
+ˆp(j) 
+
+> k
+
+= 1
+
+B
+
+> B
+
+X
+
+> b=1
+
+exp 
+
+
+
+−(ˆ x(j)  
+
+> b−c(j)
+> k)2
+> 2σ2
+> j
+
+PKj 
+
+> k′=1
+
+exp 
+
+
+
+−(ˆ x(j)  
+
+> b−c(j)
+> k′)2
+> 2σ2
+> j
+
+, (9) where k indexes the bin centers for variable j, and k′ is a dummy index used to normalize the soft assignment across all bins. The reference marginal p(j) is constructed analogously from observed 11 data. The bin centers {c(j) 
+
+> k
+
+}Kj 
+
+> k=1
+
+and bandwidth σj are determined from the reference data prior to training and remain fixed during training. This soft formulation ensures differentiability and robustness to discretization choices. By representing marginals through a finite set of data-adaptive bin centers, we obtain a com-pact and differentiable approximation of univariate distributions that captures population-level structure. This formulation also aligns with how marginal statistics are typically observed and validated in population synthesis, where information is available in aggregated and discretized form rather than as continuous densities. 
+
+4.4. Framework Instantiation: SemaPop-GAN 
+
+To concretely instantiate the proposed SemaPop framework, we develop SemaPop-GAN , a persona-conditioned population synthesis model built upon a conditional Wasserstein generative adversarial network with gradient penalty (WGAN-GP) [63]. This instantiation provides a con-crete and reproducible implementation of semantic–statistical information fusion, rather than advocating a specific generative paradigm. The choice of a GAN-based backbone is motivated by its established effectiveness in model-ing high-dimensional tabular microdata and its flexibility in incorporating external conditioning signals. In particular, the Wasserstein objective offers a stable training signal and a principled measure of distributional discrepancy, which aligns well with the goal of reproducing population-level statistical properties under explicit marginal constraints. As illustrated in Figure 5, persona embeddings are first transformed by a lightweight persona adapter and then injected into both the generator and the critic through FiLM. This design enables fine-grained semantic conditioning while preserving the original structured representation of population microdata. For conditional discrimination, we adopt the projection discriminator paradigm [64], which introduces conditioning through an inner-product projection rather than naive concatenation. In the context of WGAN-GP, this projection mechanism is applied to the critic, yielding a condi-tioning scheme that is fully compatible with the Wasserstein critic objective. Formally, the critic is expressed as 
+
+D(x, e) = h(x) + ⟨ϕ(x), ψ (e)⟩, (10) where h(x) denotes an unconditional scoring function, ϕ(x) extracts feature representations of the input sample, and ψ(e) maps the persona embedding to the same latent space. This formulation allows the critic to assess sample quality while explicitly accounting for semantic consistency with the conditioning persona. Let z ∼ N (0, I) denote the latent noise vector and ˆx = G(z, e) the generated population agent. The critic is trained using a conditional Wasserstein objective with gradient penalty, 
+
+LD = Ez[D(ˆ x, e)] − Ex∼pdata [D(x, e)] + λgp E˜x (∥∇ ˜xD(˜ x, e)∥2 − 1) 2 , (11) where ˜x = αx+(1 −α)ˆ x denotes an interpolated sample used exclusively for gradient penalty com-putation, with α ∼ U (0 , 1) sampled following the standard WGAN-GP formulation. In practice, the critic is updated for ncritic steps per generator update to ensure stable Wasserstein distance estimation. 12 The generator is optimized to both fool the critic and satisfy explicit population-level statistical constraints. Its objective is defined as 
+
+LG = −Ez[D(G(z, e), e)] + λm (Lcont-marg + Lcat-marg ) , (12) where Lcont-marg and Lcat-marg denote marginal regularization terms for continuous and categorical variables, respectively, computed via soft histogram-based SRMSE. This composite objective en-sures that the generated population remains statistically grounded while allowing semantic persona information to induce controlled distributional shifts. We emphasize that the proposed SemaPop framework is model-agnostic with respect to the un-derlying generative architecture. Alternative paradigms, such as VAEs or diffusion-based models, may be adopted as backbone implementations, provided that they support conditional generation and distributional regularization. In this work, SemaPop-GAN serves as a concrete instantia-tion that facilitates systematic analysis of semantic–statistical information fusion in population synthesis. Projection    
+
+> Critic
+> (WGAN -GP)
+> FiLM
+> Generator
+> (WGAN -GP)
+> Persona
+> Adapter
+> WGAN -GP L oss +
+> Marginal Regularization
+> Conditioning
+> 𝒙 Person Embedding 𝒆
+> Figure 5: Overview of the SemaPop-GAN model. Persona embeddings condition a WGAN-GP based generator through FiLM, while marginal regularization enforces alignment with target population statistics under both factual and counterfactual scenarios.
+
+4.5. Counterfactual Interventions on Persona Condition 
+
+Persona information in the SemaPop framework is intended to function as an explicit and con-trollable conditioning signal that interacts with structured statistical constraints during population synthesis. However, outcome-based evaluations such as marginal fidelity or sample realism alone cannot determine whether semantic information actively influences the learned data-generating distribution or merely coexists with it. Without explicit intervention analysis, semantic–statistical information fusion may remain unverified, with generation potentially dominated by structured statistical regularities. To explicitly probe the role of persona conditioning, we adopt counterfactual interventions that manipulate persona-related semantic inputs while holding other factors fixed. By examining the resulting changes in generated populations, these interventions provide a direct means to 13 assess whether semantic information is operational within the generative process. Specifically, we consider semantic-level interventions in the embedding space and text-level interventions through natural language persona descriptions. Beyond methodological validation, such semantic responsiveness is also essential from an ap-plication perspective. In many population projection settings, future changes are specified con-ceptually rather than through explicit individual-level attributes. For example, scenarios may be formulated in terms of population aging, changing lifestyle preferences, or labor market transitions, as typically discussed in national population projection reports. In these contexts, persona-level semantics can serve as a primary representation of scenario assumptions. Accordingly, popula-tion synthesis frameworks intended to support forward-looking population projection must ex-hibit interpretable and systematic responses to semantic variations, rather than treating persona information as a passive or redundant input. This motivates the use of explicit counterfactual interventions to examine how semantic persona conditioning actively shapes generated population distributions. 
+
+4.5.1. Semantic-Level Intervention 
+
+At the semantic level, we perform counterfactual interventions directly in the persona em-bedding space, treating persona representations as actionable semantic control variables for the generator. Let ei ∈ RDp denote the persona embedding associated with individual i, and let Gθ(·)
+
+denote the trained conditional generator in SemaPop-GAN with parameters θ. Given a noise vector zi ∈ RDz , the synthesized population agent is generated as 
+
+ˆxi = Gθ(zi, ei). (13) To isolate the causal effect of semantic manipulation, we adopt a same-z protocol: for each base persona embedding e(0)  
+
+> i
+
+, the noise vector zi is held fixed across all intervention strengths α, so that any observed changes in ˆx(α) 
+
+> i
+
+can be attributed to the manipulated semantic input rather than stochastic variation. Here, an intervention with strength α corresponds to a controlled modification of the persona embedding along a semantic direction in the embedding space, while keeping zi
+
+fixed. 
+
+Fitting an intervention direction in persona space. We define a semantic intervention direction 
+
+d ∈ RDp by fitting a linear probe on persona embeddings from the training split only, thereby avoiding information leakage when interventions are evaluated on persona embeddings from a held-out test split. Let yi ∈ { 0, 1} denote a binary behavioral indicator derived from observed microdata, for example indicating whether an individual undertakes at least one public transport trip in daily activities. Persona embeddings are first standardized as 
+
+˜ei = ei − μσ , (14) where μ ∈ RDp and σ ∈ RDp are the empirical mean and standard deviation computed over training persona embeddings. A linear probe is then trained by minimizing 
+
+w⋆ = arg min 
+
+> w
+
+X
+
+> i
+
+L yi, f (˜ ei; w) + λ∥w∥22, (15) 14 where w ∈ RDp denotes the probe parameters, L(·) is a supervised loss function (e.g., logistic loss), and λ controls ℓ2 regularization. The resulting semantic intervention direction is defined as the normalized probe weight, 
+
+d = w⋆
+
+∥w⋆∥2
+
+. (16) Figure 6 provides a geometric illustration of this procedure, showing how persona embeddings labeled by a binary behavioral indicator are used to fit a linear probe and derive the semantic intervention direction d.Persona embedding ( 𝑦 𝑖 = 1)          
+
+> Persona embedding ( 𝑦 𝑖 =0)
+> Semantic direction 𝑑
+> Linear probe hyperplane
+> Figure 6: Illustration of semantic-level intervention in persona embedding space. Persona embeddings labeled by a binary behavioral indicator yi∈ { 0,1}are used to fit a linear probe, whose weight vector defines the semantic intervention direction dfor counterfactual editing.
+
+Counterfactual editing of persona embeddings. Given a set of base persona embeddings {e(0)  
+
+> i
+
+}ni=1 
+
+sampled from an evaluation split, counterfactual persona embeddings are constructed by trans-lating each base embedding along the semantic intervention direction d ∈ RDp with intervention strength α ∈ R,
+
+e(α) 
+
+> i
+
+= e(0)  
+
+> i
+
++ αd. (17) 
+
+Counterfactual population generation. For each intervention strength α, a counterfactual popula-tion is generated by feeding the edited persona embeddings e(α) 
+
+> i
+
+into the generator while reusing the same noise vectors {zi}ni=1 ,
+
+ˆx(α) 
+
+> i
+
+= Gθ(zi, e(α) 
+
+> i
+
+). (18) This procedure yields a family of counterfactual populations 
+
+ˆX(α) = {ˆx(α) 
+
+> i
+
+}ni=1 . (19) To prevent information leakage and ensure strict comparability, the semantic intervention direction d is always estimated from the training split, while base persona embeddings {e(0)  
+
+> i
+
+}
+
+may be sampled from either the training or test split, and noise vectors {zi} are held fixed across all intervention strengths α. In our experiments, semantic intervention is implemented as a linear translation in the embedding space without explicitly constraining the embedding norm, following common practice in semantic and latent space manipulation [65, 66, 67]. 15 4.5.2. Text-Level Intervention 
+
+At the text level, counterfactual interventions are performed directly on natural language per-sona descriptions, treating persona texts as a high-level semantic interface for controlling the generative process. Let πi denote the persona description associated with individual i, expressed in natural language. In contrast to semantic-level intervention, which operates directly in the continuous embedding space, text-level intervention modifies persona descriptions through con-strained textual edits, after which the edited texts are re-encoded into persona embeddings using the same frozen language model encoder as shown in Figure 3. Specifically, text-level intervention is formulated as constrained semantic cue editing, following recent work on controlled and minimally invasive text editing and counterfactual text generation [55, 56, 57]. Given an original persona description π(0)  
+
+> i
+
+, a prompt template instructs an LLM to minimally edit the text according to a specified intervention variant. Three editing operations are considered: semantic cue insertion for low-to-high intervention, and semantic cue removal and semantic cue suppression for high-to-low intervention. Here, low-to-high and high-to-low refer to the direction of intervention with respect to a target numerical attribute, indicating an increase or decrease in its value, respectively. These operations introduce, delete, or replace minimal textual elements that explicitly signal the presence or absence of a target semantic attribute, while preserving grammaticality and overall narrative coherence. Figure 7 illustrates this procedure and the corresponding editing constraints. The edited persona texts are denoted by π(β) 
+
+> i
+
+, where β indexes the discrete text-level interven-tion variants (e.g., insertion, removal, or suppression). Each edited persona description is then mapped to a continuous persona embedding via the same persona encoder defined in Eq. 1, 
+
+e(β) 
+
+> i
+
+= Eπ
+
+
+
+π(β)
+
+> i
+
+
+
+. (20) This design ensures that text-level intervention affects the generative process only through se-mantic changes reflected in the embedding space, without modifying the generator architecture or parameters. Given the re-encoded persona embeddings e(β) 
+
+> i
+
+, counterfactual population agents are generated using the same conditional generator as in semantic-level intervention. For a fixed noise vector zi,we obtain 
+
+ˆx(β) 
+
+> i
+
+= Gθ
+
+
+
+zi, e(β)
+
+> i
+
+
+
+. (21) As in semantic-level intervention, for each individual i, the noise vector zi is held fixed across all text-level intervention variants β to ensure comparability. This procedure yields a family of counterfactual populations 
+
+ˆX(β) = {ˆx(β) 
+
+> i
+
+}ni=1 . (22) Together with semantic-level intervention, text-level intervention provides a complementary, end-to-end perspective on whether semantic information is operational within the generative pro-cess, spanning from natural language persona manipulation to population synthesis. 16 Persona 
+
+> Semantic cue suppression
+> (high -to -low)
+> Semantic cue removal
+> (high -to -low)
+> Semantic cue insertion
+> (low -to -high)
+
+Prompt Templates 
+
+> LLM
+> Edited persona
+> (I nsertion )
+> Edited persona
+> (Removal)
+> Edited persona
+> (Suppression)
+> Only add one short sentence or
+> clause that explicitly indicates the
+> presence of the target behavior or
+> attribute.
+> Only remove sentences or clauses
+> that explicitly mention the target
+> behavior or attribute.
+> If deletion leads to ungrammatical or
+> incoherent text, replace the minimal
+> affected phrase with a semantically
+> neutral alternative.
+
+Figure 7: Illustration of text-level intervention via constrained semantic editing of persona descriptions. Three prompt templates guides an LLM to perform discrete text-level intervention variants indexed by β (e.g., semantic cue insertion, removal, or suppression), corresponding to low-to-high and high-to-low interventions, while enforc-ing minimal and localized edits. The resulting edited persona texts serve as counterfactual semantic inputs for downstream population generation. 
+
+5. Experiments 
+
+5.1. Data Description 
+
+The experiments in this study are conducted using a large-scale synthetic population dataset representing the Swedish population, publicly available via Mendeley Data. 1 The dataset provides a synthetic replica of over 10 million individuals (agents) in Sweden and is designed to support activity-based transport and population-level simulation studies. The synthetic population is generated on the basis of aggregated Swedish population and travel statistics for the year 2018, ensuring consistency with observed macro-level demographic and mobility patterns [68]. The data are organized in a relational format consisting of three linked tables: Person , House-hold , and Activity–travel , capturing individual attributes, household context, and daily activ-ity–travel patterns, respectively. The specific population attributes used as model inputs, to-gether with their semantic grouping, data types, and numbers of distinct values, are summarized in Table A.1. To construct the experimental population used in this study, we perform a stratified subsam-pling procedure at the municipality level. Sweden is divided into 290 municipalities, and from each municipality a fixed proportion of agents (e.g., 20%) is randomly sampled from the syn-thetic population. This proportional sampling strategy preserves relative population sizes and spatial heterogeneity across municipalities while substantially reducing the computational burden of model training and evaluation. The resulting subsampled population is further partitioned into training, validation, and test sets with sizes of 50,873, 20,262, and 2,040,650 agents, respectively. This highly imbalanced split reflects a realistic population synthesis setting, in which population 
+
+> 1
+
+https://data.mendeley.com/datasets/9n29p7rmn5/2 
+
+17 distributions must be inferred from a relatively small amount of available survey microdata and subsequently generalized to a much larger target population. All experiments are conducted on the resulting subsampled population. Since the data are fully synthetic, they do not contain personally identifiable information and are used solely as a surrogate individual-level microdata source for methodological evaluation. Consistency with real-world population statistics is assessed through aggregate-level comparisons rather than direct individual-level validation. 
+
+5.2. Evaluation Metrics 
+
+The evaluation metrics employed in this study serve two complementary purposes. First, they are used to assess the overall performance of the proposed generative model in reproducing statistically consistent synthetic populations. Second, they provide diagnostic measures for post-hoc marginal calibration, while counterfactual analyses rely on descriptive statistics of the relevant variables rather than additional formally defined evaluation metrics. 
+
+Standardized Root Mean Square Error (SRMSE). In addition to its role in marginal reg-ularization during model training, SRMSE is formally defined here as an evaluation metric to quantify the similarity between the generated and reference populations at the marginal and joint-marginal levels. Given the empirical distributions ˆp(j) = Φ j ( ˆX) and p(j) = Φ j (Xref ) over the 
+
+j-th variable or variable subset, constructed using the aggregation operator Φj (·) defined in Eq. 5, SRMSE is defined as 
+
+SRMSE  ˆp(j), p (j) =
+
+r
+
+> 1
+> Nj
+
+PNj
+
+> k=1
+
+
+
+ˆp(j) 
+
+> k
+
+− p(j)
+
+> k
+
+21
+
+> Nj
+
+PNj 
+
+> k=1
+
+p(j)
+
+> k
+
+, (23) where Nj denotes the number of discrete categories or bin combinations for the j-th marginal or joint-marginal distribution. In our experimental evaluation, we report SRMSE-M when j corresponds to a single variable, measuring consistency in univariate marginal distributions. We additionally report SRMSE-B 
+
+when j denotes a pair of variables, which quantifies consistency in the corresponding bivariate joint distributions. 
+
+Feasibility and Diversity via Precision and Recall. Beyond distributional similarity, we further evaluate the feasibility and diversity of the generated population using precision and recall [16]. These metrics assess the mutual support between the generated samples ˆX and the reference population Xref , which is used as the statistical anchor for evaluation. Specifically, precision measures the proportion of generated samples that correspond to at-tribute combinations observed in the reference population: 
+
+Precision = 1
+
+| ˆX| 
+
+> |ˆX|
+
+X
+
+> i=1
+
+I(ˆ xi ∈ Xref ) , (24) 18 while recall measures the extent to which the generated population covers the reference population: 
+
+Recall = 1
+
+|Xref | 
+
+> |Xref |
+
+X
+
+> j=1
+
+I
+
+
+
+xj ∈ ˆX
+
+
+
+, (25) where I(·) is an indicator function that equals 1 if the condition is satisfied and 0 otherwise. In this formulation, precision and recall provide indirect but informative measures of structural and sampling zeros. Low precision indicates the presence of infeasible or structurally implausible attribute combinations in the generated population (structural zeros), whereas low recall reflects insufficient coverage of valid but rare combinations observed in the reference data (sampling zeros). Since precision and recall exhibit an inherent trade-off, we additionally report the F1 score as a balanced summary measure: 
+
+F1 = 2 · Precision · Recall Precision + Recall . (26) 
+
+Effective Sample Size (ESS). In post-hoc marginal calibration, the generated population is ad-justed by assigning non-uniform weights to individual agents in order to satisfy external marginal constraints. While such reweighting improves distributional consistency, it may also reduce the ef-fective diversity of the population by concentrating mass on a small subset of agents. To quantify this effect, we report the effective sample size (ESS), a widely used diagnostic originally intro-duced in the context of importance sampling and sequential Monte Carlo methods [69, 70], and later adopted as a diagnostic of weight concentration and effective information loss in reweighted populations [71, 72]. Given a calibrated population of N agents with normalized weights {wi}Ni=1 satisfying PNi=1 wi =1, ESS is defined as 
+
+ESS = 1
+
+PNi=1 w2
+
+> i
+
+. (27) A higher ESS indicates that the calibrated population retains a larger proportion of effectively contributing agents, whereas a lower ESS reflects stronger weight concentration and reduced di-versity. In our experiments, ESS serves as a diagnostic measure to assess the trade-off between marginal accuracy and population diversity induced by post-hoc marginal calibration. 
+
+5.3. Generative Performance Comparison 
+
+To evaluate the generative fidelity and statistical realism of the proposed SemaPop framework, we conduct a comprehensive comparison against a diverse set of representative baseline models for tabular and population data generation. The selected baselines cover a broad spectrum of modeling paradigms, including classical probabilistic graphical models, VAE-based approaches, a diffusion-based model, and GAN-based generators. These baselines encompass both population synthesis methods and general-purpose tabular data generation models. All models are trained and evaluated under an identical experimental protocol and assessed using the same evaluation metrics, ensuring a fair and controlled comparison of their ability to reproduce individual-level joint distributions and population-level marginal statistics. Specifically, we compare SemaPop-GAN with the following baseline methods: 19 • CTGAN [73]. A conditional GAN designed for tabular data generation, employing mode-specific normalization and conditional sampling to handle mixed discrete–continuous vari-ables and imbalanced categorical distributions. 
+
+• TabDDPM [74]. A diffusion-based generative model that adapts denoising diffusion prob-abilistic models to tabular data, providing a likelihood-based baseline for modeling complex joint distributions. 
+
+• TVAE [73]. A variational autoencoder tailored for tabular data generation, modeling the data distribution via a latent-variable formulation with reconstruction and KL-divergence objectives. 
+
+• BN [26]. A Bayesian network–based population synthesis model that represents the joint distribution of individual and household attributes through a directed acyclic graph of con-ditional dependencies, offering a transparent and interpretable probabilistic baseline. 
+
+• BN-Copula [33]. A copula-based population synthesis BN model that decouples marginal distributions from dependency structures, enabling flexible modeling of continuous-variable dependencies and transferable synthetic population generation under varying marginal con-ditions. 
+
+• WGAN-GP [63]. A Wasserstein GAN baseline with gradient penalty regularization, which improves training stability and enforces the Lipschitz constraint more effectively than weight clipping in vanilla WGAN formulations. 
+
+• WGAN-GP-ZCR [16]. A WGAN-GP-based population synthesis model that introduces novel generator-side regularization terms to explicitly account for structural zeros and sam-pling zeros, thereby improving the feasibility and convergence of synthetic populations in high-dimensional microdata. 
+
+• SemaPop-VAE . Another instantiation of the SemaPop framework adopts a prior-conditioned variational autoencoder as the generative backbone, drawing on prior work on semantic-conditioned and learned-prior VAEs [75, 76]. Implementation details are provided in Ap-pendix C. Table 1 summarizes the generative performance of all models in terms of marginal error, bivari-ate consistency, and feasibility–diversity metrics. Across baselines, marginal and bivariate errors remain tightly clustered, with SRMSE-M ranging from 0.0104 to 0.0119 and SRMSE-B from 
+
+0.0554 to 0.0679 . This limited variation indicates that marginal-level agreement alone provides insufficient discrimination of generative quality at the joint-distribution level. In contrast, precision and recall reveal pronounced differences in feasibility and coverage. Clas-sical probabilistic models (BN and BN-Copula) and non-adversarial neural baselines (TVAE and TabDDPM) exhibit very low precision, all below 19% (e.g., 3.83% for CTGAN and 4.57% for BN), despite achieving recall values in the range of 70 –92% . This pattern suggests that these models cover a substantial portion of observed attribute combinations but generate a large number of infeasible or structurally implausible samples, resulting in consistently low F1 scores below 32% .GAN-based baselines substantially improve this trade-off: both WGAN-GP and WGAN-GP-ZCR 20 Table 1: Generative performance comparison between the SemaPop and baseline models. 
+
+Model SRMSE-M SRMASE-B Precision Recall F1 CTGAN 0.0119 0.0678 3.83 70.56 7.26 TabDDPM 0.0118 0.0679 18.71 91.54 31.07 TVAE 0.0119 0.0672 6.74 79.32 12.43 BN 0.0119 0.0679 4.57 79.60 8.64 BN-Copula 0.0119 0.0679 4.66 79.26 8.81 WGAN-GP 0.0111 0.0607 52.01 93.08 66.74 WGAN-GP-ZCR 0.0109 0.0593 51.88 93.33 66.69 SemaPop-VAE 0.0114 0.0628 15.20 86.10 25.84 SemaPop-GAN 0.0104 0.0554 73.95 93.39 82.54 
+
+raise precision to above 50% while maintaining high recall around 93% , yielding F1 scores of approximately 66% . The close performance between WGAN-GP and WGAN-GP-ZCR further in-dicates that stability-oriented regularization alone offers limited additional benefit once adversarial learning is in place. A direct comparison between SemaPop-VAE and SemaPop-GAN highlights the importance of the generative backbone in translating semantic conditioning into feasible and diverse sam-ples. Although both models incorporate persona-aware conditioning and marginal regularization, SemaPop-GAN achieves substantially better feasibility and diversity, indicating a more faithful approximation of the joint population distribution at the sample level. This gap can be attributed to fundamental differences in training objectives. VAE-based models explicitly regularize the la-tent space toward a single Gaussian prior with a fixed parametric form, which often leads to over-smoothing of multi-modal dependencies in high-dimensional discrete attribute spaces. In contrast, WGAN-based models optimize a data-space distributional divergence without imposing a parametric latent prior. As a result, the WGAN-GP backbone provides a more expressive foun-dation for enforcing complex multivariate dependencies and suppressing structural zeros. This empirical contrast underscores the practical importance of backbone selection in population syn-thesis, rather than suggesting a universal superiority of adversarial models. Overall, SemaPop-GAN achieves the best performance across all metrics, attaining the lowest SRMSE-M ( 0.0104 ) and SRMSE-B ( 0.0554 ) while simultaneously achieving the highest precision (73 .95% ), recall ( 93 .39% ), and F1 score ( 82 .54% ). Compared to the strongest GAN-based baselines (WGAN-GP and WGAN-GP-ZCR), SemaPop-GAN improves precision by over 22 percentage points and F1 by more than 16 points, while maintaining a comparable level of recall. This improvement indicates a substantial reduction in structurally implausible attribute combinations without compromising coverage of rare but valid configurations in the reference population. 
+
+5.4. Ablation Studies on Semantic Inputs and Architectural Mechanisms 
+
+To assess whether the performance gains of SemaPop genuinely stem from semantic persona conditioning rather than increased model capacity or architectural side effects, we conduct ablation studies along two complementary dimensions. The first ablation focuses on the semantic inputs, examining whether persona embeddings provide informative and controllable signals beyond noise 21 or implicit latent proxies. The second ablation targets key architectural mechanisms, evaluating how specific design choices mediate, amplify, or constrain the influence of semantic information on population generation. Together, these ablations aim to disentangle the contribution of seman-tic knowledge from that of model architecture, ensuring that semantic–statistical integration in SemaPop is both functional and interpretable. To isolate the effect of semantic persona inputs, we ablate the form and semantic grounding of the persona provided to the generator by considering four persona settings, as summarized in Table 2. The results show clear and consistent differences across configurations. Removing se-mantic inputs (No Persona) leads to reduced structural validity, reflected by lower precision and F1, even though recall remains high, indicating that coverage alone does not prevent structurally implausible combinations. Using Randomized Persona texts further degrades precision and F1, suggesting that semantically fluent but individual-agnostic personas can increase structural in-consistencies when semantic alignment is absent. In contrast, both Attribute-Grounded Persona and Implicit Semantic Persona substantially improve structural consistency and coverage. While explicit personas achieve the highest precision and F1 at the cost of larger marginal errors, implicit semantic personas provide a more balanced trade-off between marginal accuracy and structural realism, as adopted in SemaPop.         
+
+> Table 2: Ablation results under four persona settings. The four settings are: No Persona (zero persona embed-ding), Randomized Persona (LLM-generated personas without individual conditioning), Attribute-Grounded Persona (LLM-generated personas explicitly conditioned on precise individual-level attributes), Implicit Seman-tic Persona (free-form LLM-generated personas that intentionally abstract away precise attribute values, used in SemaPop).
+
+Persona Type SRMSE-M SRMSE-B Precision Recall F1 No Persona 0.0106 0.0572 60.53 92.87 73.29 Randomized Persona 0.0112 0.0613 45.92 92.33 61.33 Attribute-Grounded Persona 0.0137 0.0704 78.18 93.03 84.96 
+
+Implicit Semantic Persona 0.0104 0.0554 73.95 93.39 82.54           
+
+> Table 3: Architectural configurations of ablation models. Concat denotes concatenation-based conditioning at the generator input, FiLM denotes modulation-based conditioning as illustrated in Section 4.2.2, and Proj denotes projection-based conditioning in the discriminator input; G-Cond and D-Cond indicate whether the conditioning mechanism is applied to the generator or the discriminator, respectively.
+
+Ablation Model G-Cond D-Cond G-Concat / D-Proj Concat Proj G-Concat / D-FiLM Concat FiLM G-FiLM / D-FiLM FiLM FiLM G-FiLM / D-Proj FiLM Proj Table 4 reports the results of architectural ablation experiments that vary the conditioning mechanisms applied to the generator and discriminator, as well as the use of marginal regulariza-tion. Several consistent patterns emerge. First, models relying on simple concatenation-based con-ditioning in the generator (G-Concat) exhibit relatively weaker structural consistency, as reflected by lower precision and F1 scores, regardless of whether the discriminator employs projection-based 22 or FiLM-based conditioning. Replacing concatenation with FiLM modulation at the generator (G-FiLM) improves the effective utilization of semantic conditioning, particularly when combined with a projection-based discriminator. Second, projection-based conditioning in the discriminator (D-Proj) consistently outperforms FiLM-based conditioning (D-FiLM) in terms of structural va-lidity, highlighting the advantage of projection critics in enforcing condition-dependent structural consistency in the generated population. Third, comparing G-FiLM / D-Proj with and without marginal regularization shows that marginal regularization further improves both marginal and structural consistencies, yielding the best overall trade-off in the full SemaPop-GAN model. These results indicate that effective semantic conditioning in population synthesis requires a coordinated architectural design. In particular, generator-side modulation, discriminator-side projection, and marginal regularization jointly contribute to stable and structurally coherent population genera-tion. 
+
+> Table 4: Performance of architectural ablation models. Results are reported for different generator–discriminator conditioning combinations; the MargReg column indicates whether marginal regularization is applied during train-ing.
+
+Ablation Model MargReg SRMSE-M SRMSE-B Precision Recall F1 G-Concat / D-Proj ✓ 0.0103 0.0550 63.38 93.38 75.51 G-Concat / D-FiLM ✓ 0.0111 0.0595 62.58 92.98 74.81 G-FiLM / D-FiLM ✓ 0.0110 0.0595 61.98 93.82 74.65 G-FiLM / D-Proj ✗ 0.0108 0.0576 71.72 93.90 81.32 G-FiLM / D-Proj (SemaPop-GAN) ✓ 0.0104 0.0554 73.95 93.39 82.54 
+
+5.5. Post-hoc Marginal Calibration 
+
+To assess the robustness of persona-conditioned generation under explicit distributional con-straints, we conduct a post-hoc marginal calibration experiment. The objective is to isolate whether population-level deviations induced by semantic conditioning can be attributed to marginal mismatch, and to characterize the trade-off between marginal fidelity, joint realism, and population diversity under increasing constraint strength. In this experiment, given a fully specified set of target marginal distributions, generated sam-ples are kept fixed and reweighted at analysis time using a raking-based calibration procedure. Calibration strength is varied across five levels (L0–L4), corresponding to 0, 5, 10, 20, and 40 raking iterations, respectively. We evaluate two model variants—SemaPop trained with marginal regularization and an otherwise identical model trained without marginal regularization—under identical calibration levels. Full algorithmic and experimental details of the post-hoc calibration procedure are provided in Appendix B. All calibration experiments are conducted on synthetic population microdata. Target marginals are derived from the same synthetic reference population or constructed as hypothetical constraints for controlled analysis, rather than taken from external real-world statistics. Accordingly, post-hoc calibration is used strictly as an analytical tool, not as a mechanism for fitting the model to ground-truth population marginals. 23 Figure 8 reports marginal consistency (SRMSE-M), bivariate joint consistency (SRMSE-B), and effective sample size (ESS) across calibration levels. Both models benefit from mild calibra-tion (L1), but their behavior diverges as the calibration constraints strengthen. SemaPop-GAN with marginal regularization maintains stable marginal consistency and bivariate joint consistency from L1 to L4, indicating robust preservation of local joint-distribution structure under increasing constraints. In contrast, the unregularized model exhibits progressively degraded marginal con-sistency and bivariate joint consistency as calibration strength increases. Moreover, although ESS decreases for both models as expected, the regularized model consistently retains a higher effective sample size, indicating less severe weight concentration and improved robustness of the calibrated population. These results suggest that marginal regularization during training not only improves baseline marginal alignment, but also produces synthetic populations that better accommodate subsequent distributional constraints, preserving both higher-order structure and population diversity under semantic conditioning. L0 L1 L2 L3 L4          
+
+> 0.024
+> 0.026
+> 0.028
+> 0.030
+> SRMSE-M
+> (a) SRMSE-M
+> L0 L1 L2 L3 L4
+> 0.029
+> 0.030
+> 0.031
+> 0.032
+> 0.033
+> 0.034
+> SRMSE-B
+> (b) SRMSE-B
+> L0 L1 L2 L3 L4
+> 42000
+> 44000
+> 46000
+> 48000
+> 50000
+> ESS
+> (c) ESS
+> SemaPop-GAN (w/ MargReg) SemaPop-GAN (no MargReg)
+
+Figure 8: Trade-offs induced by post-hoc marginal calibration under increasing calibration strength (L0–L4). Panels report (a) marginal consistency (SRMSE-M), (b) joint realism (SRMSE-B), and (c) effective sample size (ESS). Results are shown for SemaPop-GAN trained with marginal regularization ( w/ MargReg ) and an otherwise identical model trained without marginal regularization ( no MargReg ). 
+
+5.6. Counterfactual Analysis on Semantic-Level Intervention 
+
+To systematically evaluate the behavioral implications of semantic-level interventions, we con-duct a series of counterfactual experiments using public transport (PT) usage as an illustrative intervened object. The choice of PT usage is not specific to the introduced counterfactual in-tervention framework, but serves as a representative behavioral attribute for examining how se-mantic manipulation propagates to observable outcomes. Specifically, this section investigates (i) population-level behavioral responses under continuous semantic perturbations, together with an analysis of potential side effects on non-target attributes, and (ii) heterogeneous intervention effects across distinct behavioral subgroups. 
+
+Evaluation set construction. All counterfactual analyses in this study are conducted on a municipality-stratified evaluation set, referred to as the Municipality-Stratified Evaluation Set (MSES) . The MSES is constructed by proportionally sampling individuals from the test set according to the population size of each municipality, resulting in a total of 10,054 agents. This construction 24 follows the same municipality-level stratified sampling protocol adopted for the test set in the previous experiments, ensuring consistency in geographic composition and avoiding distributional discrepancies across evaluation settings. 
+
+5.6.1. Continuous Semantic Intervention and Global Behavioral Response 
+
+Semantic interventions are implemented by shifting persona embeddings along the learned intervention direction using a continuous scaling factor α ∈ {− 1.5, −1.0, −0.5, 0, 0.5, 1.0, 1.5}, as formalized in Eq. 17. For each α, public transport behavior is evaluated using two complementary metrics: the mean number of public transport trips, E[Trips_of_PublicTransport ], capturing usage intensity, and the activation probability P (Trips_of_PublicTransport > 0) , capturing activation responses at the extensive margin. Side effects are further assessed by tracking variations in non-target attributes, enabling an evaluation of the selectivity and locality of the semantic intervention as the perturbation strength increases. The results in Figures 9 and 10 reveal a coherent and monotonic behavioral response to semantic-level intervention. As the intervention strength α increases, both the activation proba-bility of public transport usage and the expected number of public transport trips rise consistently, indicating that the semantic manipulation shifts agents toward higher public transport engage-ment. Figure 9 highlights a strong extensive-margin effect: the probability of observing at least one public transport trip remains near zero for negative α values, but increases sharply beyond a positive threshold and quickly saturates. This pattern suggests that the intervention primar-ily activates latent public transport usage among previously inactive individuals. Conditional on activation, Figure 10 shows a smooth increase in usage intensity with α, indicating a clear intensive-margin response among active users. Throughout the intervention, the latent noise is held fixed, ensuring that the observed changes are driven by semantic manipulation rather than stochastic variation. Together, these results demonstrate that the learned semantic direction induces structured, interpretable, and population-level behavioral shifts, supporting its use for controlled counterfactual analysis. 1.5 1.0 0.5 0.0 0.5 1.0 1.5      
+
+> Intervention strength
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> P(Trips_of_PublicTransport > 0)
+> Figure 9: Counterfactual response of public transport activation under semantic-level intervention. The curve reports the probability of observing at least one public transport trip as a function of the intervention strength α,with the latent noise held fixed to isolate the effect of semantic manipulation.
+
+25 1.5 1.0 0.5 0.0 0.5 1.0 1.5 
+
+> Intervention strength
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> (Trips_of_PublicTransport)
+
+Figure 10: Counterfactual response of public transport intensity under semantic-level intervention. The curve shows the expected number of public transport trips as a function of the intervention strength α, reflecting how usage intensity changes conditional on semantic manipulation, with the latent noise held fixed. 
+
+Figure 11 summarizes the side effects induced by semantic-level intervention by reporting the mean absolute changes of non-target numerical attributes. Overall, the magnitude of unintended perturbations remains limited and exhibits a clear locality pattern: attributes more semantically related to daily activity participation and mobility intensity (e.g., activity counts and car-related trips) show relatively larger responses, while core demographic and household attributes such as age and household size remain largely stable. This behavior indicates that the intervention primar-ily propagates within a semantically coherent subspace rather than inducing global, unstructured shifts across unrelated dimensions. Together with the monotonic target responses observed in Fig-ures 9 and 10, these results suggest that the semantic intervention achieves a favorable trade-off between behavioral effectiveness and side-effect control. 0.0 0.2 0.4 0.6 0.8    
+
+> mean | |(=1.5 vs. 0)
+> Activities_of_Work
+> Household_Size
+> Trips_of_Bike
+> Number_of_cars_of_household
+> Age
+> Trips_of_Walking
+> Trips_of_CarPassenger
+> First_Activity_Start_Time
+> Last_Activity_End_Time
+> Trips_of_Car
+> Activities_of_Home
+> Activities_of_Other
+
+Figure 11: Locality and side-effect magnitude of semantic-level intervention. The figure reports the mean absolute change of non-target numerical attributes between α = 0 and αmax = 1 .5, highlighting unintended perturbations induced by semantic manipulation while holding the latent noise fixed. 
+
+26 5.6.2. Subgroup-Based Counterfactual Analysis 
+
+While population-level analysis captures the average behavioral response to semantic interven-tion, it may obscure heterogeneous effects across individuals with different baseline behaviors. To examine whether semantic manipulation affects frequent and infrequent PT users differently, we further conduct a subgroup-based counterfactual analysis. Subgroups are constructed from the MSES dataset based on observed PT usage. Specifically, the high-PT subgroup is defined as the top 10% of individuals ranked by the number of public transport trips among those with strictly positive PT usage, which avoids instability caused by ties at zero. To form a contrasting low-PT subgroup of equal size, we adopt a mixed sampling strategy that combines individuals with low but positive PT usage and those with zero PT trips. Concretely, the low-PT subgroup consists of 5% randomly sampled individuals from the PT-positive population and 5% randomly sampled individuals with zero PT usage. The resulting high and low subgroups are non-overlapping and differ in size due to the underlying distribution of public transport usage, while remaining well separated in baseline behavior for comparative analysis. This procedure yields 1,005 high-PT and 770 low-PT individuals, which are used consistently across all subsequent counterfactual analyses, including the text-level interventions reported in the next subsection. Table 5 illustrates heterogeneous counterfactual responses of PT usage across behavioral strata under semantic intervention. At the baseline ( α = 0 ), the low-PT and high-PT subgroups are well separated in both activation and usage intensity, validating the subgroup construction. As the intervention strength increases, the two subgroups respond in opposite directions by design: positive semantic shifts activate and amplify PT usage among low-PT individuals, whereas re-versed semantic shifts suppress and ultimately deactivate PT usage in the high-PT subgroup. The interplay between activation and intensity highlights the mechanism of intervention. For low-PT individuals, increased participation accompanies rising trip intensity, suggesting that semantic manipulation first activates latent PT usage and then reinforces usage levels. In contrast, the high-PT subgroup exhibits a strong extensive-margin contraction, indicating that the intervention effectively reduces PT participation among initially frequent users. Note that the activation is evaluated on the generated outcomes and therefore need not equal one even for the high-PT subgroup defined on the observed baseline data. This reflects the stochas-tic decoding process rather than a failure of subgroup definition. Overall, these results demon-strate that semantic interventions operate in a subgroup-dependent manner, inducing asymmetric responses across behavioral strata rather than uniform shifts at the population average.       
+
+> Table 5: Subgroup-specific counterfactual PT usage responses under semantic intervention. The row α= 0 denotes the unperturbed baseline. Positive αincreases PT propensity for the low-PT subgroup, whereas the effective intervention direction is reversed for the high-PT subgroup, reflecting opposite semantic shifts across behavioral strata.
+
+α Low-PT ( +α) High-PT ( −α)mean activation mean activation 0 0.36 0.32 1.86 0.98 0.5 1.26 0.81 0.14 0.13 1 2.23 1 0 027 5.7. Counterfactual Analysis on Text-Level Intervention 
+
+To complement the semantic-level analysis, we examine text-level interventions that directly modify persona descriptions to assess whether explicit textual edits induce systematic behavioral changes across subgroups. The evaluation follows the same subgroup construction and sampling protocol as in Section 5.6.2, with text-level interventions applied to the identical high-PT and low-PT subgroups defined based on observed PT usage in the original data (i.e., the pre-intervention baseline). Table 6 reveals a clear asymmetry in the effectiveness of text-level interventions across behav-ioral strata. For the high-PT subgroup, both Removal and Suppression edits lead to substantial reductions in public transport usage, as evidenced by large negative shifts in mean trip counts and activation probabilities. The median individual-level change of −2 trips, together with con-sistently negative 25th percentile, indicates that these effects reflect systematic downward shifts across individuals rather than being driven by isolated outliers. Importantly, Suppression induces consistently stronger reductions than Removal across both aggregate and distributional metrics. Beyond the lower tail, this difference is also evident at the upper tail of the distribution. While Removal leaves the 75th percentile unchanged, Suppression produces a negative shift at the 75th percentile. This indicates a more uniform suppressive effect that extends to the highest-frequency PT users within the high-PT subgroup. One possible ex-planation is that simple removal of PT-related phrases may leave contextual cues in the persona text. These remaining cues can still encode frequent PT use, allowing high-frequency behavior to be partially preserved through the surrounding semantic context. In contrast, Suppression modifies the broader contextual framing of the persona description, enabling intervention effects to propagate more effectively to individuals whose travel patterns are strongly embedded in the original narrative. By comparison, the Insertion intervention applied to the low-PT subgroup yields negligible changes across all metrics. Both the mean and activation probability remain essentially unchanged, and the distribution of individual-level trip differences is tightly concentrated around zero. This stark contrast suggests that text-level insertion primarily adjusts the magnitude of existing behav-ioral tendencies rather than creating new ones from scratch. These findings jointly suggest that text-level interventions are highly effective at suppressing entrenched behaviors among frequent users. However, they have limited capacity to activate PT usage among individuals with weak baseline travel behavior.                            
+
+> Table 6: Counterfactual effects of text-level interventions on PT usage across behavioral subgroups. All ∆values are computed relative to the original personas, with P25/P75 denoting the 25th and 75th percentiles of individual-level trip differences.
+> Intervention ∆Mean ∆Activation ∆Trips (Median) ∆Trips (P25) ∆Trips (P75) High-PT (Removal) -1.5443 -0.4318 -2 -2 0High-PT (Suppression) -1.7473 -0.4308 -2 -3 -1 Low-PT (Insertion) -0.0234 -0.0039 000
+
+28 6. Conclusions 
+
+This study proposes SemaPop, a population synthesis framework that generates individual-level agents through semantic–statistical information fusion. SemaPop leverages large language mod-els (LLMs) to derive high-level persona representations from individual survey records, capturing abstract semantic patterns that are difficult to encode using purely structured attributes. These persona representations are embedded and used as semantic conditioning signals for downstream generative models. We instantiate the framework with a WGAN-GP backbone, referred to as SemaPop-GAN, which serves as the primary implementation of the proposed semantic–statistical population synthesis paradigm. To ensure statistical fidelity, we further introduce marginal reg-ularization during training to guide generated populations toward target marginal structures. In particular, for SemaPop-GAN, which serves as the primary population generator in counterfactual analysis, marginal regularization consistently improves statistical consistency under both factual and counterfactual settings. To address the practical constraints of large-scale real-world population surveys, all exper-iments are conducted using a synthetic Swedish population dataset. A diverse set of baseline models spanning multiple generative paradigms for population synthesis and tabular data gen-eration is evaluated. The results consistently indicate that WGAN-GP–based models are better suited for population synthesis, offering stronger capacity to capture complex multivariate de-pendencies and suppress structural zeros. Building on this foundation, SemaPop-GAN further reduces marginal and joint distribution errors while improving sample-level feasibility and diver-sity. Ablation studies confirm that the integration of semantic persona embeddings, together with a FiLM-conditioned generator and a projection-based critic, yields a more balanced trade-off between marginal consistency and structural realism. In post-hoc marginal calibration, marginal regularization improves baseline marginal align-ment while preserving higher-order structure and population diversity under semantic condition-ing. Counterfactual analyses further demonstrate that semantic-level interventions induce clear monotonic target responses, achieving a favorable balance between behavioral effectiveness and side effects. Subgroup analyses reveal asymmetric responses across behavioral groups. Under comparable intervention strength, high-PT users respond more strongly to suppression, whereas low-PT users exhibit weaker responses to incentive-based interventions. Moreover, text-level inser-tion interventions leave persona representations largely unchanged, with near-zero shifts in mean activation and response metrics. By contrast, removal and suppression interventions both disrupt persona semantics, with suppression exhibiting systematically stronger effects than removal. This study establishes a semantic-conditioned generative framework for population synthe-sis, enabling individual-level population agents to be generated with enhanced controllability and interpretability. Beyond population synthesis, our results motivate a shift toward generative mod-eling–based population projection, complementing conventional model-driven or assumption-based approaches. The proposed SemaPop framework provides a unified mechanism to align micro-level behavioral distributions with macro-level population statistics by combining semantic-conditioned generation with marginal calibration. Future work will focus on extending SemaPop to real-world population data for large-scale validation and calibration, as well as on developing an integrated population projection system grounded in the proposed framework. Such extensions will support 29 scenario-driven population analysis and enable behaviorally grounded population projections for long-term transport planning and policy makings. 
+
+CRediT authorship contribution statement Zhenlin Qin : Conceptualization, Data curation, Methodology, Visualization, Investigation, Formal analysis, Validation, Writing – original draft. Yangcheng Ling : Methodology, Validation, Writing – review and editing. Leizhen Wang : Data curation, Validation, Writing – review and editing. Francisco Câmara Pereira : Conceptualization, Formal analysis, Writing – review and editing, Supervision. Zhenliang Ma : Conceptualization, Data curation, Methodology, Formal analysis, Writing – review and editing, Supervision. 
+
+Data availability 
+
+We share the data via the link in the paper. The code will be made available upon reasonable request and is planned to be released publicly in a later stage of this research. 
+
+Declaration of competing interest 
+
+The authors declare that they have no known competing financial interests or personal rela-tionships that could have appeared to influence the work reported in this paper. 
+
+Acknowledgements 
+
+The work was supported by the China Scholarship Council, China under Grant 202408320061 and the TRENoP and Digital Futures research centers at KTH Royal Institute of Technology, Sweden. 
+
+Declaration of generative AI and AI-assisted technologies in the manuscript prepara-tion process 
+
+During the preparation of this work the author(s) used ChatGPT-5.2 in order to improve academic writing. After using this tool/service, the author(s) reviewed and edited the content as needed and take(s) full responsibility for the content of the published article. 
+
+Appendix A. Individual-Level Population Attributes 
+
+This appendix documents the individual-level population attributes used as inputs to the gen-erative modeling pipeline. Table A.1 provides a comprehensive overview of all input attributes, including their population-semantic grouping, data type, and number of distinct values. All at-tributes are represented at the level of individual agents, while household-related characteristics 30 Table A.1: Individual-level population attributes used as inputs to the generative model. Attributes are grouped by population semantics (demographic, household, and behavioral) and annotated with data type and number of distinct values. 
+
+> No.  Name  Attribute group  Data type  Number of values  Notes
+> 1 Municipality_Categories  Demographic  Categorical  10  Residential municipality category, used as a spatial demographic context 2 Age  Demographic  Numerical  106  Individual age in years 3 Gender  Demographic  Categorical  2 Binary gender indicator 4 Marital_status  Demographic  Categorical  3 Marital status of the individual 5 Employment_status  Demographic  Categorical  2 Employment participation status 6 Studenthood_status  Demographic  Categorical  2 Indicates whether the individual is a student 7 Income_class  Demographic  Categorical  5 Discretized personal income category 8 Household_Type  Household  Categorical  3 Household composition category 9 Household_Size  Household  Numerical  61  Number of individuals in the household (discrete count) 10  Number_of_cars_of_person  Household  Numerical  4 Household vehicle ownership attributed to individuals for modeling convenience 11  Number_of_children  Household  Numerical  39  Number of children in the household (discrete count) 12  Number_of_cars_of_household  Household  Numerical  26  Total number of vehicles owned by the household 13  Trips_of_Car  Behavioral  Numerical  18  Daily number of trips conducted as car driver 14  Trips_of_CarPassenger  Behavioral  Numerical  17  Daily number of trips conducted as car passenger 15  Trips_of_PublicTransport  Behavioral  Numerical  17  Daily number of public transport trips 16  Trips_of_Walking  Behavioral  Numerical  18  Daily number of walking trips 17  Trips_of_Bike  Behavioral  Numerical  17  Daily number of bicycle trips 18  Activities_of_Home  Behavioral  Numerical  7 Number of home activities in the daily schedule 19  Activities_of_Work  Behavioral  Numerical  7 Number of work-related activities 20  Activities_of_Other  Behavioral  Numerical  12  Number of non-work, non-home activities 21  Activities_of_School  Behavioral  Numerical  4 Number of school-related activities 22  First_Activity_Start_Time  Behavioral  Numerical  1438  Start time of the first daily activity (minute resolution) 23  Last_Activity_End_Time  Behavioral  Numerical  1408  End time of the last daily activity (minute resolution)
+
+31 are associated with individuals through their household membership and treated as shared contex-tual attributes. This classification is introduced for documentation and analytical transparency only and does not impose structural assumptions on the generative model. For spatial context, the original 290 Swedish municipalities are grouped into 10 municipality categories, preserving essential spatial and urban–rural distinctions while reducing dimensionality. This grouping follows the official municipality classification scheme published by the Swedish As-sociation of Local Authorities and Regions (SALAR), as documented in its municipality grouping report. 2
+
+Appendix B. Post-hoc Marginal Calibration 
+
+Appendix B.1. Scope and Role in the Analysis 
+
+Post-hoc marginal calibration is employed as an analysis-time procedure to disentangle population-level effects arising from persona-conditioned generation from distributional shifts that may be attributed solely to marginal mismatch. The calibration procedure itself does not involve any per-sona intervention, but operates on fixed synthetic samples generated by the persona-conditioned model. Specifically, post-hoc calibration adjusts the weights of generated samples to match a se-lected set of target marginal distributions, without modifying the underlying generative mech-anism or semantic conditions. In the post-hoc marginal calibration experiment (Section 5.5), the target marginal constraints are imposed on a selected set of key attributes capturing demo-graphic structure ( Age ), socioeconomic status ( Income_class ), household composition ( House-hold_Type ), motorization level ( Number_of_cars_of_household ), and public transport usage in-tensity ( Trips_of_PublicTransport ). These attributes are chosen to reflect dimensions that are commonly used in scenario-driven population analysis and policy-oriented studies. For example, public transport usage intensity may be indirectly influenced by household-level motorization, highlighting the importance of jointly considering demographic, household, and behavioral dimen-sions when assessing population-level responses under marginal constraints. By isolating the influence of marginal constraints through reweighting, post-hoc calibration enables a controlled analysis of the trade-off between marginal fidelity (SRMSE-M), joint realism (SRMSE-B), and population diversity, as quantified by effective sample size (ESS). In this exper-iment, calibration strength is varied across five levels (L0–L4), corresponding to 0, 5, 10, 20, and 40 raking iterations, respectively. 
+
+Appendix B.2. Calibration Problem Formulation 
+
+Let {ˆxi}Ni=1 denote a set of population agents generated by the SemaPop model, where each agent 
+
+ˆxi =
+
+
+
+ˆx(j)
+
+> i
+
+
+
+> j∈J cat ∪J cont
+> 2https://skr.se/kommunerochregioner/kommungruppsindelning.8281.html
+
+32 is represented by a vector of attributes consisting of categorical attributes j ∈ J cat and numerical (continuous or quasi-continuous) attributes j ∈ J cont , as defined in the main problem formulation. For the purpose of post-hoc marginal calibration and evaluation, attributes in Jcont are dis-cretized into a finite set of bins, such that both categorical and discretized numerical attributes are treated uniformly as categorical variables during calibration. The calibrated population distribution is represented by the weighted empirical measure 
+
+ˆpw(x) = 
+
+> N
+
+X
+
+> i=1
+
+wi δ(x = ˆ xi), (B.1) where δ(·) denotes the Dirac delta function. Here, w = ( w1, . . . , w N ) denotes the vector of non-negative sample weights learned through post-hoc marginal calibration, representing the relative population mass assigned to each generated agent. Calibration is performed with respect to a selected set of marginal constraints. For a cate-gorical attribute indexed by j ∈ J cat taking values k ∈ K j , let p∗ 
+
+> j
+
+(k) denote the target marginal distribution estimated from reference data. Given weights w, the corresponding weighted marginal induced by the synthetic population is 
+
+ˆpw,j (k) = 
+
+> N
+
+X
+
+> i=1
+
+wi I
+
+
+
+ˆx(j) 
+
+> i
+
+= k
+
+
+
+, (B.2) where I(·) denotes the indicator function, taking value 1 if the condition holds and 0 otherwise, and ˆx(j) 
+
+> i
+
+denotes the value of attribute j for agent i.The objective of calibration is to adjust w such that ˆpw(k) ≈ p∗(k) for all constrained attributes and categories, while keeping the generated samples {ˆxi} fixed. 
+
+Appendix B.3. Raking-Based Calibration Procedure 
+
+Marginal calibration is implemented via an iterative proportional fitting (IPF), or raking, procedure based on multiplicative weight updates. Starting from uniform weights 
+
+w(0)  
+
+> i
+
+= 1
+
+N , i = 1 , . . . , N, (B.3) the algorithm sequentially enforces each marginal constraint through iterative updates. For a categorical attribute indexed by j ∈ J cat with target marginal distribution p∗ 
+
+> j
+
+(k) over categories k ∈ K j , let ˆp(t) 
+
+> w,j
+
+(k) denote the weighted marginal induced by the synthetic population at iteration t. A multiplicative adjustment ratio is defined as 
+
+r(t) 
+
+> j
+
+(k) = p∗ 
+
+> j
+
+(k) + ε
+
+ˆp(t) 
+
+> w,j
+
+(k) + ε, (B.4) where ε > 0 is a small constant for numerical stability. 33 The weights are then updated according to 
+
+w(t+1)  
+
+> i
+
+= w(t) 
+
+> i
+
+·
+
+h
+
+r(t)
+
+> j
+
+
+
+ˆx(j)
+
+> i
+
+i α
+
+, (B.5) where α ∈ (0 , 1] is a damping factor controlling the strength of the update. After each update, the weights are renormalized to satisfy PNi=1 w(t+1)  
+
+> i
+
+= 1 .When multiple marginal constraints are specified, the above update is applied sequentially for each constrained attribute j within a single iteration. This process is repeated for a fixed number of iterations or until convergence. 
+
+Appendix C. Framework Instantiation: SemaPop-VAE FiLM                 
+
+> Persona
+> Adapter
+> Conditioning
+> 𝒙 Person Embedding 𝒆
+> Encoder
+> (VAE) 𝒛 =𝝁 +𝝈 ⊙𝝐 Decoder
+> (VAE)
+> VAE L oss +
+> Marginal Regularization
+> Prior Net
+> Conditional Prior
+> Figure C1: Overview of the SemaPop-VAE model. The encoder maps individual-level attributes xto a latent rep-resentation via reparameterization, while persona embeddings eare transformed by a persona adapter to condition the decoder through FiLM modulation. Persona information additionally parameterizes a conditional latent prior, resulting in a conditioned-prior KL regularization. The model is trained using a VAE reconstruction objective together with marginal regularization to enforce population-level statistical consistency.
+
+Appendix C.1. Prior-Conditioned VAE as a Reconstruction-Based Backbone 
+
+As a reconstruction-based counterpart to the adversarial instantiation of SemaPop, we employ a prior-conditioned variational autoencoder backbone [76], as illustrated in Figure C1. Persona embeddings are treated as external semantic signals and are used to parameterize a conditional latent prior and modulate the decoder via FiLM, while the encoder remains conditioned solely on observed individual attributes. This design avoids shortcut inference in the encoder and yields a clean baseline for contrasting reconstruction-based and adversarial training under the same semantic conditioning and marginal regularization framework. 34 Appendix C.2. Training Objective for SemaPop-VAE Training objective (SemaPop-VAE). We train SemaPop-VAE with a reconstruction–regularization objective that combines (i) attribute-wise reconstruction for mixed-type variables, (ii) KL regu-larization against a learned Gaussian prior, and (iii) marginal regularization defined in the main text. The overall objective is 
+
+Ltrain = Lcont-rec + Lcat-rec + β LKL + λm
+
+
+
+Lcont-marg + Lcat-marg 
+
+
+
+, (C.1) where β is the KL weight and λmarg controls the strength of marginal regularization. 
+
+Continuous reconstruction. Following TVAE [73], continuous attributes are reconstructed using a Gaussian negative log-likelihood (NLL) in the standardized space. The decoder predicts a mean 
+
+μcont and a log-variance log σcont , and the reconstruction loss is computed accordingly. Differ-ent from the original TVAE formulation, we apply the NLL directly to standardized continuous attributes and average the loss over feature dimensions. 
+
+Lcont-rec = E− log N  xcont | μcont , σcont  . (C.2) 
+
+Categorical reconstruction. For each categorical attribute, the decoder outputs logits ℓ(j) over its categories, and we apply the categorical cross-entropy loss: 
+
+Lcat-rec = 1
+
+J
+
+> J
+
+X
+
+> j=1
+
+E
+
+h
+
+CE 
+
+
+
+ℓ(j), x (j)
+
+i 
+
+, (C.3) where x(j) denotes the ground-truth categorical value of the j-th attribute. The averaging by J matches our implementation, ensuring comparable scale across datasets with different numbers of categorical variables. 
+
+KL regularization with learned prior. We regularize the approximate posterior qϕ(z | x) = N (μ, diag( σ2)) 
+
+against a learned Gaussian prior pψ(z) = N (μprior , diag( σ2
+
+> prior
+
+)) :
+
+LKL = KL  N (μ, σ2) ∥ N (μprior , σ2
+
+> prior
+
+) . (C.4) 
+
+Marginal regularization. Lcont-marg and Lcat-marg are the continuous and categorical marginal reg-ularization terms defined in the main text, and are applied to decoded samples to encourage consistency with reference marginal statistics. 
+
+Appendix C.3. Discussion: On the Limitations of VAE Backbones for Population Synthesis 
+
+The weaker performance of the VAE-based instantiation probably stems from a mismatch between the reconstruction-driven objective of standard TVAE formulations and the population-level requirements of the synthesis task. While standard VAEs optimize per-sample likelihood under latent regularization, population synthesis places greater emphasis on reproducing high-order joint distributions, structural constraints, and long-tailed subpopulations at the aggregate 35 level. As shown in Table 1, KL regularization in the current VAE encourages mean-seeking be-havior, suppressing rare but semantically valid attribute combinations and reducing statistical fidelity. This issue could arise from the inherited training objective rather than from variational inference. In contrast, WGAN-based models optimize population-level distributional discrepan-cies, aligning more naturally with the goal of reproducing complex multivariate dependencies of population structures. 
+
+Appendix D. Implementation Details of SemaPop 
+
+To implement SemaPop, we employ a lightweight state-of-the-art large language model (LLM), Qwen3-8B, to generate persona descriptions from synthetic individual-level survey data. Persona generation is performed with a temperature of 0.9 and a top-p value of 0.9, using a maximum of 512 newly generated tokens and with the thinking mode disabled. To ensure semantic consistency between persona generation and downstream conditioning, the same LLM is also used to obtain persona embeddings. Persona generation constitutes the most time-consuming component of the pipeline, requiring approximately 4 seconds per persona. The persona embedding procedure is performed with a batch size of 4, resulting in a total processing time of approximately 3 hours to obtain embeddings for both the training and validation sets, comprising 71,135 samples in total. To improve overall pipeline efficiency, both persona generation and the persona embedding procedure are conducted as offline preprocessing steps, decoupled from the subsequent training of the SemaPop models. The main hyperparameters of the two SemaPop instantiations are reported in Tables D.1 and D.2. The backbone networks include the generator and critic in the WGAN-based model, as well as the encoder and decoder in the VAE-based model. All backbone components are implemented using multilayer feed-forward networks with linear transformations. All experiments are conducted on a workstation equipped with four NVIDIA RTX 6000 Ada GPUs, providing a total of 192 GB of GPU memory. 
+
+References 
+
+[1] OECD. Publishing. Systems Approaches to Public Sector Challenges-Working with Change .OECD Publishing, 2017. [2] Dirk Helbing. Managing complexity in socio-economic systems. European Review , 17(2):423– 438, 2009. [3] Michael Batty. The new science of cities . MIT press, 2013. [4] Eric Bonabeau. Agent-based modeling: Methods and techniques for simulating human sys-tems. Proceedings of the national academy of sciences , 99(suppl_3):7280–7287, 2002. [5] Nigel Gilbert and Klaus Troitzsch. Simulation for the social scientist . McGraw-Hill Education (UK), 2005. 36 Table D.1: Hyperparameters of SemaPop-GAN. 
+
+Parameter Value Adapter hidden dim 1024 Adapter condition dim 128 Adapter dropout 0.1 FiLM feature dim (256, 512, 256) Generator hidden dim (256, 512, 256) Critic hidden dim (256, 512, 256) Gradient penalty weight 10.0 
+
+λm 0.4 Generator learning rate 2.0E-05 Critic learning rate 2.0E-05 Critic update frequency 5Noise dim 128 Optimizer Adam 
+
+> Table D.2: Hyperparameters of SemaPop-VAE.
+
+Parameter Value Adapter hidden dim 1024 Adapter condition dim 128 Adapter dropout 0.1 FiLM feature dim (512, 512, 512) PriorNet hidden dim 512 Encoder hidden dim (512, 512, 512) Decoder hidden dim (512, 512, 512) Encoder dropout 0.1 Decoder dropout 0.1 
+
+β 1.0 
+
+λm 2.0 Latent dim 128 Learning rate 2.0E-04 Batch size 512 Epochs 300 Optimizer Adam 37 [6] Eric J Miller. Agent-based activity/travel microsimulation: what’s next? In The Practice of Spatial Analysis: Essays in memory of Professor Pavlos Kanaroglou , pages 119–150. Springer, 2018. [7] Leizhen Wang, Peibo Duan, Zhengbing He, Cheng Lyu, Xin Chen, Nan Zheng, Li Yao, and Zhenliang Ma. Agentic large language models for day-to-day route choices. Transportation Research Part C: Emerging Technologies , 180:105307, 2025. [8] Richard J Beckman, Keith A Baggerly, and Michael D McKay. Creating synthetic baseline populations. Transportation Research Part A: Policy and Practice , 30(6):415–429, 1996. [9] Kirill Müller and Kay W Axhausen. Population synthesis for microsimulation: State of the art. Arbeitsberichte Verkehrs-und Raumplanung , 638, 2010. [10] David Voas and Paul Williamson. An evaluation of the combinatorial optimisation ap-proach to the creation of synthetic microdata. International Journal of Population Geography ,6(5):349–366, 2000. [11] Johan Barthelemy and Philippe L Toint. Synthetic population generation without a sample. 
+
+Transportation Science , 47(2):266–279, 2013. [12] Paul Norman. Putting iterative proportional fitting on the researcher’s desk; 1999. School of Geography, University of Leeds , 1999. [13] Byungduk Jeong, Wonjoon Lee, Deok-Soo Kim, and Hayong Shin. Copula-based approach to synthetic population generation. PloS one , 11(8):e0159496, 2016. [14] Kerstin Hermes and Michael Poulsen. A review of current methods to generate synthetic spatial microdata using reweighting and future directions. Computers, Environment and Urban Systems , 36(4):281–290, 2012. [15] Zack Aemmer and Don MacKenzie. Generative population synthesis for joint household and individual characteristics. Computers, Environment and Urban Systems , 96:101852, 2022. [16] Eui-Jin Kim and Prateek Bansal. A deep generative model for feasible and diverse population synthesis. Transportation Research Part C: Emerging Technologies , 148:104053, 2023. [17] Sergio Garrido, Stanislav S Borysov, Francisco C Pereira, and Jeppe Rich. Prediction of rare feature combinations in population synthesis: Application of deep generative modelling. 
+
+Transportation Research Part C: Emerging Technologies , 120:102787, 2020. [18] Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhari-wal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language mod-els are few-shot learners. Advances in neural information processing systems , 33:1877–1901, 2020. [19] Rishi Bommasani. On the opportunities and risks of foundation models. arXiv preprint arXiv:2108.07258 , 2021. 38 [20] Mark Birkin and M Clarke. Synthesis—a synthetic spatial information system for urban and regional analysis: methods and examples. Environment and planning A , 20(12):1645–1671, 1988. [21] Xin Ye, Karthik Konduri, Ram M Pendyala, Bhargava Sana, and Paul Waddell. A method-ology to match distributions of both household and person attributes in the generation of synthetic populations. In 88th Annual Meeting of the transportation research Board, Wash-ington, DC , volume 36, 2009. [22] Paul Williamson, Mark Birkin, and Phil H Rees. The estimation of population microdata by using data from small area statistics and samples of anonymised records. Environment and Planning A , 30(5):785–816, 1998. [23] Kirk Harland, Alison Heppenstall, Dianna Smith, and Mark H Birkin. Creating realistic synthetic populations at varying spatial scales: A comparative critique of population synthesis techniques. Journal of Artificial Societies and Social Simulation , 15(1), 2012. [24] David R Pritchard and Eric J Miller. Advances in population synthesis: fitting many at-tributes per agent and fitting to household and person margins simultaneously. Transporta-tion , 39(3):685–704, 2012. [25] Lijun Sun, Alexander Erath, and Ming Cai. A hierarchical mixture modeling framework for population synthesis. Transportation Research Part B: Methodological , 114:199–212, 2018. [26] Lijun Sun and Alexander Erath. A bayesian network approach for population synthesis. 
+
+Transportation Research Part C: Emerging Technologies , 61:49–62, 2015. [27] Diederik P Kingma and Max Welling. Auto-encoding variational bayes. arXiv preprint arXiv:1312.6114 , 2013. [28] Ian J Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial nets. Advances in neural information processing systems , 27, 2014. [29] Stanislav S Borysov, Jeppe Rich, and Francisco C Pereira. How to generate micro-agents? a deep generative modeling approach to population synthesis. Transportation Research Part C: Emerging Technologies , 106:73–97, 2019. [30] Martin Johnsen, Oliver Brandt, Sergio Garrido, and Francisco Pereira. Population synthesis for urban resident modeling using deep generative models. Neural Computing and Applica-tions , 34(6):4677–4692, 2022. [31] Guillem Boquet, Antoni Morell, Javier Serrano, and Jose Lopez Vicario. A variational au-toencoder solution for road traffic forecasting systems: Missing data imputation, dimension reduction, model selection and anomaly detection. Transportation Research Part C: Emerging Technologies , 115:102622, 2020. [32] Stanislav S Borysov and Jeppe Rich. Introducing synthetic pseudo panels: application to transport behaviour dynamics. Transportation , 48(5):2493–2520, 2021. 39 [33] Pascal Jutras-Dubé, Mohammad B Al-Khasawneh, Zhichao Yang, Javier Bas, Fabian Bastin, and Cinzia Cirillo. Copula-based transferable models for synthetic population generation. 
+
+Transportation Research Part C: Emerging Technologies , 169:104830, 2024. [34] Wenhao Yu, Chenguang Zhu, Zaitang Li, Zhiting Hu, Qingyun Wang, Heng Ji, and Meng Jiang. A survey of knowledge-enhanced text generation. ACM Computing Surveys , 54(11s):1– 38, 2022. [35] William Harvey, Saeid Naderiparizi, and Frank Wood. Conditional image generation by conditioning variational auto-encoders. arXiv preprint arXiv:2102.12037 , 2021. [36] Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. High-resolution image synthesis with latent diffusion models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10684–10695, 2022. [37] Ethan Perez, Florian Strub, Harm De Vries, Vincent Dumoulin, and Aaron Courville. Film: Visual reasoning with a general conditioning layer. In Proceedings of the AAAI conference on artificial intelligence , volume 32, 2018. [38] Ian Goodfellow, Yoshua Bengio, Aaron Courville, and Yoshua Bengio. Deep learning , vol-ume 1. MIT press Cambridge, 2016. [39] Xin Wang, Hong Chen, Si’ao Tang, Zihao Wu, and Wenwu Zhu. Disentangled representation learning. IEEE Transactions on Pattern Analysis and Machine Intelligence , 46(12):9677– 9696, 2024. [40] Nitish Shirish Keskar, Bryan McCann, Lav R Varshney, Caiming Xiong, and Richard Socher. Ctrl: A conditional transformer language model for controllable generation. arXiv preprint arXiv:1909.05858 , 2019. [41] Guodong Fan, Shengning Zhou, Zhen Hua, Jinjiang Li, and Jingchun Zhou. Llava-based semantic feature modulation diffusion model for underwater image enhancement. Information Fusion , 126:103566, 2026. [42] Jibing Gong, Jiquan Peng, Wei Wang, Wei Zhou, Chaozhuo Li, and Philip S. Yu. Beyond embedding-mapping: Social network alignment via generative information fusion and llm-guided iterative mechanism. Information Fusion , 127:103733, 2026. [43] Zhenpeng Wu, Siyang Xiao, and Jianliang Gao. Deep-shallow semantic fusion inference based on graph neural network. Information Fusion , 127:103849, 2026. [44] Donald B Rubin. Estimating causal effects of treatments in randomized and nonrandomized studies. Journal of educational Psychology , 66(5):688, 1974. [45] Judea Pearl. Causality: Models, Reasoning and Inference . Cambridge University Press, USA, 2nd edition, 2009. [46] Stephen L Morgan and Christopher Winship. Counterfactuals and causal inference: Methods and principles for social research . Cambridge University Press, 2014. 40 [47] Amir-Hossein Karimi, Bernhard Schölkopf, and Isabel Valera. Algorithmic recourse: from counterfactual explanations to interventions. In Proceedings of the 2021 ACM conference on fairness, accountability, and transparency , pages 353–362, 2021. [48] Sahil Verma, Varich Boonsanong, Minh Hoang, Keegan Hines, John Dickerson, and Chirag Shah. Counterfactual explanations and algorithmic recourses for machine learning: A review. 
+
+ACM Computing Surveys , 56(12):1–42, 2024. [49] Been Kim, Martin Wattenberg, Justin Gilmer, Carrie Cai, James Wexler, Fernanda Viegas, et al. Interpretability beyond feature attribution: Quantitative testing with concept activation vectors (tcav). In International conference on machine learning , pages 2668–2677. PMLR, 2018. [50] Riccardo Crupi, Alessandro Castelnovo, Daniele Regoli, and Beatriz San Miguel Gonzalez. Counterfactual explanations as interventions in latent space. Data Mining and Knowledge Discovery , 38(5):2733–2769, 2024. [51] Yujun Shen, Jinjin Gu, Xiaoou Tang, and Bolei Zhou. Interpreting the latent space of gans for semantic face editing. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9243–9252, 2020. [52] Erik Härkönen, Aaron Hertzmann, Jaakko Lehtinen, and Sylvain Paris. Ganspace: Discover-ing interpretable gan controls. Advances in neural information processing systems , 33:9841– 9850, 2020. [53] Andrey Voynov and Artem Babenko. Unsupervised discovery of interpretable directions in the gan latent space. In International conference on machine learning , pages 9786–9796. PMLR, 2020. [54] Shauli Ravfogel, Grusha Prasad, Tal Linzen, and Yoav Goldberg. Counterfactual interventions reveal the causal effect of relative clause representations on agreement prediction. arXiv preprint arXiv:2105.06965 , 2021. [55] Nishtha Madaan, Inkit Padhi, Naveen Panwar, and Diptikalyan Saha. Generate your counter-factuals: Towards controlled counterfactual generation for text. In Proceedings of the AAAI conference on artificial intelligence , volume 35, pages 13516–13524, 2021. [56] Christin Seifert, Jörg Schlötterer, et al. Ceval: A benchmark for evaluating counterfactual text generation. In Proceedings of the 17th International Natural Language Generation Conference ,pages 55–69, 2024. [57] Ziao Wang, Xiaofeng Zhang, and Hongwei Du. Beyond what if: Advancing counterfactual text generation with structural causal modeling. In Proceedings of the Thirty-Third International Joint Conference on Artificial Intelligence, IJCAI , pages 3–9, 2024. [58] Jillian Anable. ‘complacent car addicts’ or ‘aspiring environmentalists’ ? identifying travel behaviour segments using attitude theory. Transport policy , 12(1):65–78, 2005. 41 [59] Joan Walker and Moshe Ben-Akiva. Generalized random utility model. Mathematical social sciences , 43(3):303–343, 2002. [60] Moshe Ben-Akiva, Joan Walker, Adriana T Bernardino, Dinesh A Gopinath, Taka Morikawa, and Amalia Polydoropoulou. Integration of choice and latent variable models. Perpetual motion: Travel behaviour research opportunities and application challenges , 2002:431–470, 2002. [61] Alan Cooper. The inmates are running the asylum. In Software-ergonomie’99: design von informationswelten , pages 17–17. Springer, 1999. [62] John Pruitt and Jonathan Grudin. Personas: practice and theory. In Proceedings of the 2003 conference on Designing for user experiences , pages 1–15, 2003. [63] Ishaan Gulrajani, Faruk Ahmed, Martin Arjovsky, Vincent Dumoulin, and Aaron C Courville. Improved training of wasserstein gans. Advances in neural information processing systems ,30, 2017. [64] Takeru Miyato and Masanori Koyama. cgans with projection discriminator. In International Conference on Learning Representations (ICLR) , 2018. [65] Yujun Shen, Ceyuan Yang, Xiaoou Tang, and Bolei Zhou. Interfacegan: Interpreting the disentangled face representation learned by gans. IEEE transactions on pattern analysis and machine intelligence , 44(4):2004–2018, 2020. [66] Anthony Bau, Yonatan Belinkov, Hassan Sajjad, Nadir Durrani, Fahim Dalvi, and James Glass. Identifying and controlling important neurons in neural machine translation. In In-ternational Conference on Learning Representations , 2019. [67] Sumanth Dathathri, Andrea Madotto, Janice Lan, Jane Hung, Eric Frank, Piero Molino, Jason Yosinski, and Rosanne Liu. Plug and play language models: A simple approach to controlled text generation. In International Conference on Learning Representations , 2020. [68] Çağlar Tozluoğlu, Swapnil Dhamal, Sonia Yeh, Frances Sprei, Yuan Liao, Madhav Marathe, Christopher L Barrett, and Devdatt Dubhashi. A synthetic population of sweden: datasets of agents, households, and activity-travel patterns. Data in Brief , 48:109209, 2023. [69] Augustine Kong. A note on importance sampling using standardized weights. University of Chicago, Dept. of Statistics, Tech. Rep , 348:14, 1992. [70] Jun S Liu and Rong Chen. Sequential monte carlo methods for dynamic systems. Journal of the American statistical association , 93(443):1032–1044, 1998. [71] Jean-Claude Deville and Carl-Erik Särndal. Calibration estimators in survey sampling. Jour-nal of the American statistical Association , 87(418):376–382, 1992. [72] Paul P. Biemer and Sharon L. Christ. Weighting survey data. In International Handbook of Survey Methodology , pages 317–341. Routledge, 2012. 42 [73] Lei Xu, Maria Skoularidou, Alfredo Cuesta-Infante, and Kalyan Veeramachaneni. Modeling tabular data using conditional gan. Advances in neural information processing systems , 32, 2019. [74] Akim Kotelnikov, Dmitry Baranchuk, Ivan Rubachev, and Artem Babenko. Tabddpm: Mod-elling tabular data with diffusion models. In International conference on machine learning ,pages 17564–17579. PMLR, 2023. [75] Samuel Bowman, Luke Vilnis, Oriol Vinyals, Andrew Dai, Rafal Jozefowicz, and Samy Bengio. Generating sentences from a continuous space. In Proceedings of the 20th SIGNLL conference on computational natural language learning , pages 10–21, 2016. [76] Marissa Connor, Gregory Canal, and Christopher Rozell. Variational autoencoder with learned latent structure. In International conference on artificial intelligence and statistics ,pages 2359–2367. PMLR, 2021. 43

@@ -6,208 +6,115 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-13
-- 运行时间：2026-03-13 20:15:19 UTC
+- 最新运行日期：2026-03-15
+- 运行时间：2026-03-15 19:39:12 UTC
 - 运行状态：成功
-- 本次总论文数：62
-- 精读区：46
+- 本次总论文数：31
+- 精读区：15
 - 速读区：16
 
 ### 今日简报（AI）
-聚焦 AI 人文关怀，今日深度解析 62 篇论文，重点探讨医疗社区组建与老年人语音交互的创新设计。
-满分研究揭示了以人为本的 AI 在优化医疗互助社区及弥合老年人认知鸿沟方面的显著潜力。
-建议关注智能体推理风险与社交 AI 说服模型，探索技术如何更安全、有温度地服务于社会交互。
-- 详情：[/202603/13/README](/202603/13/README)
+今日精选 31 篇前沿论文，深度剖析 AI 在自由职业伦理、社会无障碍及全球语言层级中的核心变革。
+重点关注自由职业者对 AI 披露“先斩后奏”的实操现状，以及 AI 代理在多方谈判中作为顾问或代表的权衡策略。
+建议普通读者警惕 AI 正在构建的新型全球语言等级，并思考如何在自动化协作中平衡透明度与效率
+- 详情：[/202603/15/README](/202603/15/README)
 
 ### 精读区论文标签
-1. [Understanding User Perceptions of Human-centered AI-Enhanced Support Group Formation in Online Healthcare Communities](/202603/13/2603.11237v1-understanding-user-perceptions-of-human-centered-ai-enhanced-support-group-formation-in-online-healthcare-communities)  
-   标签：评分：10.0/10、query:hci-ai
-   evidence：以人为中心的AI增强个性化支持小组形成
-2. [Bridging the Cognitive Gap: Co-Designing and Evaluating a Voice-Enabled Community Chatbot for Older Adults](/202603/13/2603.11303v1-bridging-the-cognitive-gap-co-designing-and-evaluating-a-voice-enabled-community-chatbot-for-older-adults)  
-   标签：评分：10.0/10、query:ai-population
-   evidence：针对老年人的语音社区聊天机器人共同设计
-3. [Gender Bias in Generative AI-assisted Recruitment Processes](/202603/13/2603.11736v1-gender-bias-in-generative-ai-assisted-recruitment-processes)  
-   标签：评分：10.0/10、query:llm-bias
-   evidence：大模型招聘建议中的性别刻板印象与偏见
-4. [Governing Evolving Memory in LLM Agents: Risks, Mechanisms, and the Stability and Safety Governed Memory (SSGM) Framework](/202603/13/2603.11768v1-governing-evolving-memory-in-llm-agents-risks-mechanisms-and-the-stability-and-safety-governed-memory-ssgm-framework)  
-   标签：评分：10.0/10、query:llm-memory
-   evidence：管理大语言模型智能体中演化的长期记忆
-5. [PersonaTrace: Synthesizing Realistic Digital Footprints with LLM Agents](/202603/13/2603.11955v1-personatrace-synthesizing-realistic-digital-footprints-with-llm-agents)  
-   标签：评分：10.0/10、query:llm-personalization
-   evidence：利用大模型智能体从结构化用户画像中合成真实的数字足迹
-6. [LifeSim: Long-Horizon User Life Simulator for Personalized Assistant Evaluation](/202603/13/2603.12152v1-lifesim-long-horizon-user-life-simulator-for-personalized-assistant-evaluation)  
-   标签：评分：10.0/10、query:llm-personalization
-   evidence：用于个性化助手评估的用户生活模拟器
-7. [A Case Study in Responsible AI-Assisted Video Solutions: Multi-Metric Behavioral Insights in a Public Market Setting](/202603/13/2603.04607v1-a-case-study-in-responsible-ai-assisted-video-solutions-multi-metric-behavioral-insights-in-a-public-market-setting)  
+1. ["Better Ask for Forgiveness than Permission": Practices and Policies of AI Disclosure in Freelance Work](/202603/15/2603.07459v1-better-ask-for-forgiveness-than-permission-practices-and-policies-of-ai-disclosure-in-freelance-work)  
    标签：评分：9.0/10、query:hci-ai
-   evidence：公共空间负责任AI的以用户为中心的方法论
-8. [Generalizing Fair Top-$k$ Selection: An Integrative Approach](/202603/13/2603.04689v1-generalizing-fair-top-k-selection-an-integrative-approach)  
-   标签：评分：9.0/10、query:llm-bias
-   evidence：公平Top-k选择与算法公平性
-9. [Hit-RAG: Learning to Reason with Long Contexts via Preference Alignment](/202603/13/2603.07023v1-hit-rag-learning-to-reason-with-long-contexts-via-preference-alignment)  
-   标签：评分：9.0/10、query:llm-memory
-   evidence：长上下文RAG推理的偏好对齐
-10. [Multi-TAP: Multi-criteria Target Adaptive Persona Modeling for Cross-Domain Recommendation](/202603/13/2603.07086v1-multi-tap-multi-criteria-target-adaptive-persona-modeling-for-cross-domain-recommendation)  
-   标签：评分：9.0/10、query:llm-personalization
-   evidence：针对用户偏好异质性的语义画像建模
-11. [POIROT: Investigating Direct Tangible vs. Digitally Mediated Interaction and Attitude Moderation in Multi-party Murder Mystery Games](/202603/13/2603.08136v1-poirot-investigating-direct-tangible-vs-digitally-mediated-interaction-and-attitude-moderation-in-multi-party-murder-mystery-games)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：游戏中的人机交互与用户体验
-12. [CRED: Counterfactual Reasoning and Environment Design for Active Preference Learning](/202603/13/2603.08531v1-cred-counterfactual-reasoning-and-environment-design-for-active-preference-learning)  
-   标签：评分：9.0/10、query:llm-personalization
-   evidence：用于人类对齐的主动偏好学习
-13. [Influence of Interactivity in Shaping User Experience and Social Acceptance of Mobile XR](/202603/13/2603.08973v1-influence-of-interactivity-in-shaping-user-experience-and-social-acceptance-of-mobile-xr)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：移动增强现实中的用户体验与社会接受度
-14. [Tracing Everyday AI Literacy Discussions at Scale: How Online Creative Communities Make Sense of Generative AI](/202603/13/2603.09055v1-tracing-everyday-ai-literacy-discussions-at-scale-how-online-creative-communities-make-sense-of-generative-ai)  
-   标签：评分：9.0/10、query:social-computing
-   evidence：在线创意社区中的用户行为分析
-15. [Pooling Engram Conditional Memory in Large Language Models using CXL](/202603/13/2603.10087v1-pooling-engram-conditional-memory-in-large-language-models-using-cxl)  
-   标签：评分：9.0/10、query:llm-memory
-   evidence：长期记忆机制与Engram存储
-16. [The Prediction-Measurement Gap: Toward Meaning Representations as Scientific Instruments](/202603/13/2603.10130v1-the-prediction-measurement-gap-toward-meaning-representations-as-scientific-instruments)  
-   标签：评分：9.0/10、query:social-computing
-   evidence：计算社会科学的嵌入表示
-17. [Beyond Interleaving: Causal Attention Reformulations for Generative Recommender Systems](/202603/13/2603.10369v1-beyond-interleaving-causal-attention-reformulations-for-generative-recommender-systems)  
-   标签：评分：9.0/10、query:llm-personalization
-   evidence：将用户行为建模为推荐的序列生成任务
-18. [Modeling Stage-wise Evolution of User Interests for News Recommendation](/202603/13/2603.10471v1-modeling-stage-wise-evolution-of-user-interests-for-news-recommendation)  
-   标签：评分：9.0/10、query:llm-personalization
-   evidence：建模用户兴趣的分阶段演变
-19. [CUAAudit: Meta-Evaluation of Vision-Language Models as Auditors of Autonomous Computer-Use Agents](/202603/13/2603.10577v1-cuaaudit-meta-evaluation-of-vision-language-models-as-auditors-of-autonomous-computer-use-agents)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：评估桌面环境中的交互式AI智能体
-20. [Trajectory-Informed Memory Generation for Self-Improving Agent Systems](/202603/13/2603.10600v1-trajectory-informed-memory-generation-for-self-improving-agent-systems)  
-   标签：评分：9.0/10、query:llm-memory
-   evidence：自我进化智能体的记忆生成与检索
-21. [Pneuma-Seeker: A Relational Reification Mechanism to Align AI Agents with Human Work over Relational Data](/202603/13/2603.10747v1-pneuma-seeker-a-relational-reification-mechanism-to-align-ai-agents-with-human-work-over-relational-data)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：通过共享关系模式使AI代理与人类工作对齐
-22. [AI-Generated Rubric Interfaces: K-12 Teachers' Perceptions and Practices](/202603/13/2603.10773v1-ai-generated-rubric-interfaces-k-12-teachers-perceptions-and-practices)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：教师对AI辅助评分量规生成和反馈界面的看法与实践。
-23. [The Attack and Defense Landscape of Agentic AI: A Comprehensive Survey](/202603/13/2603.11088v1-the-attack-and-defense-landscape-of-agentic-ai-a-comprehensive-survey)  
-   标签：评分：9.0/10、query:llm-bias
-   evidence：智能体AI的安全风险与挑战
-24. [Enhancing Value Alignment of LLMs with Multi-agent system and Combinatorial Fusion](/202603/13/2603.11126v1-enhancing-value-alignment-of-llms-with-multi-agent-system-and-combinatorial-fusion)  
-   标签：评分：9.0/10、query:llm-bias
-   evidence：利用多智能体融合和道德视角使大模型与人类价值观对齐
-25. [LLMs in social services: How does chatbot accuracy affect human accuracy?](/202603/13/2603.11213v1-llms-in-social-services-how-does-chatbot-accuracy-affect-human-accuracy)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：大模型聊天机器人建议对办事员能力的影响
-26. [Monitoring and Prediction of Mood in Elderly People during Daily Life Activities](/202603/13/2603.11230v1-monitoring-and-prediction-of-mood-in-elderly-people-during-daily-life-activities)  
+   evidence：AI披露对信任和关系的影响
+2. [The Three Praxes Framework - A Thematic Review and Map of Social Accessibility Research](/202603/15/2603.07727v1-the-three-praxes-framework---a-thematic-review-and-map-of-social-accessibility-research)  
    标签：评分：9.0/10、query:ai-population
-   evidence：老年人情绪状态的监测与预测
-27. [Mind the Sim2Real Gap in User Simulation for Agentic Tasks](/202603/13/2603.11245v1-mind-the-sim2real-gap-in-user-simulation-for-agentic-tasks)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：针对真实人类交互行为对大模型模拟器进行基准测试
-28. [The Unlearning Mirage: A Dynamic Framework for Evaluating LLM Unlearning](/202603/13/2603.11266v1-the-unlearning-mirage-a-dynamic-framework-for-evaluating-llm-unlearning)  
-   标签：评分：9.0/10、query:llm-bias
-   evidence：大语言模型遗忘学习以增强安全性并缓解偏见
-29. [Jailbreak Scaling Laws for Large Language Models: Polynomial-Exponential Crossover](/202603/13/2603.11331v1-jailbreak-scaling-laws-for-large-language-models-polynomial-exponential-crossover)  
-   标签：评分：9.0/10、query:llm-bias
-   evidence：大语言模型的安全对齐与越狱缩放法则
-30. [To Believe or Not To Believe: Comparing Supporting Information Tools to Aid Human Judgments of AI Veracity](/202603/13/2603.11393v1-to-believe-or-not-to-believe-comparing-supporting-information-tools-to-aid-human-judgments-of-ai-veracity)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：人机交互中的用户信任与真实性判断
-31. [Entropy Guided Diversification and Preference Elicitation in Agentic Recommendation Systems](/202603/13/2603.11399v1-entropy-guided-diversification-and-preference-elicitation-in-agentic-recommendation-systems)  
-   标签：评分：9.0/10、query:llm-personalization
-   evidence：偏好引导与智能体推荐
-32. [Federated Learning and Unlearning for Recommendation with Personalized Data Sharing](/202603/13/2603.11610v1-federated-learning-and-unlearning-for-recommendation-with-personalized-data-sharing)  
-   标签：评分：9.0/10、query:llm-personalization
-   evidence：个性化用户偏好学习与数据共享
-33. [From Control to Foresight: Simulation as a New Paradigm for Human-Agent Collaboration](/202603/13/2603.11677v1-from-control-to-foresight-simulation-as-a-new-paradigm-for-human-agent-collaboration)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：人机协作与前瞻性交互范式
-34. [Stuck on Suggestions: Automation Bias, the Anchoring Effect, and the Factors That Shape Them in Computational Pathology](/202603/13/2603.11821v1-stuck-on-suggestions-automation-bias-the-anchoring-effect-and-the-factors-that-shape-them-in-computational-pathology)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：决策支持中的自动化偏见与人机协作
-35. [The Landscape of Generative AI in Information Systems: A Synthesis of Secondary Reviews and Research Agendas](/202603/13/2603.11842v1-the-landscape-of-generative-ai-in-information-systems-a-synthesis-of-secondary-reviews-and-research-agendas)  
-   标签：评分：9.0/10、query:llm-bias
-   evidence：社会伦理风险综述，包括偏见和隐私
-36. [Social, Legal, Ethical, Empathetic and Cultural Norm Operationalisation for AI Agents](/202603/13/2603.11864v1-social-legal-ethical-empathetic-and-cultural-norm-operationalisation-for-ai-agents)  
-   标签：评分：9.0/10、query:llm-bias
-   evidence：使AI智能体的行为符合社会、伦理和文化规范
-37. [FlexRec: Adapting LLM-based Recommenders for Flexible Needs via Reinforcement Learning](/202603/13/2603.11901v1-flexrec-adapting-llm-based-recommenders-for-flexible-needs-via-reinforcement-learning)  
-   标签：评分：9.0/10、query:llm-personalization
-   evidence：通过强化学习使LLM推荐系统适应用户上下文和明确的需求指令
-38. [Understanding LLM Behavior When Encountering User-Supplied Harmful Content in Harmless Tasks](/202603/13/2603.11914v1-understanding-llm-behavior-when-encountering-user-supplied-harmful-content-in-harmless-tasks)  
-   标签：评分：9.0/10、query:llm-bias
-   evidence：LLM处理用户提供的有害内容时的行为
-39. [Fair Learning for Bias Mitigation and Quality Optimization in Paper Recommendation](/202603/13/2603.11936v1-fair-learning-for-bias-mitigation-and-quality-optimization-in-paper-recommendation)  
-   标签：评分：9.0/10、query:llm-bias
-   evidence：SIGCHI论文推荐中的偏见缓解
-40. [CHiL(L)Grader: Calibrated Human-in-the-Loop Short-Answer Grading](/202603/13/2603.11957v1-chillgrader-calibrated-human-in-the-loop-short-answer-grading)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：自动评分中的人机协同工作流
-41. [Design Exploration of Lightweight Interactions for Awareness-Supporting Technologies in Hybrid Work](/202603/13/2603.11977v1-design-exploration-of-lightweight-interactions-for-awareness-supporting-technologies-in-hybrid-work)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：混合办公协作与感知技术
-42. [An Intent of Collaboration: On Agencies between Designers and Emerging (Intelligent) Technologies](/202603/13/2603.12018v1-an-intent-of-collaboration-on-agencies-between-designers-and-emerging-intelligent-technologies)  
-   标签：评分：9.0/10、query:hci-ai
-   evidence：设计师与LLM之间的共同创作与协作
-43. [Human-Centred LLM Privacy Audits: Findings and Frictions](/202603/13/2603.12094v1-human-centred-llm-privacy-audits-findings-and-frictions)  
+   evidence：包容性设计与社会无障碍研究
+3. [SplitAgent: A Privacy-Preserving Distributed Architecture for Enterprise-Cloud Agent Collaboration](/202603/15/2603.08221v1-splitagent-a-privacy-preserving-distributed-architecture-for-enterprise-cloud-agent-collaboration)  
    标签：评分：9.0/10、query:llm-memory
-   evidence：以人为中心的LLM隐私审计与用户控制
-44. [Structure Selection for Fairness-Constrained Differentially Private Data Synthesis](/202603/13/2603.12112v1-structure-selection-for-fairness-constrained-differentially-private-data-synthesis)  
-   标签：评分：9.0/10、query:llm-bias
-   evidence：数据合成中的算法公平性与偏见缓解
-45. [Opinion Dynamics in Learning Systems](/202603/13/2603.12137v1-opinion-dynamics-in-learning-systems)  
+   evidence：AI智能体的隐私保护上下文感知脱敏
+4. [Sandpiper: Orchestrated AI-Annotation for Educational Discourse at Scale](/202603/15/2603.08406v1-sandpiper-orchestrated-ai-annotation-for-educational-discourse-at-scale)  
+   标签：评分：9.0/10、query:hci-ai
+   evidence：用于人机协作分析的双向主动系统
+5. [DexHiL: A Human-in-the-Loop Framework for Vision-Language-Action Model Post-Training in Dexterous Manipulation](/202603/15/2603.09121v1-dexhil-a-human-in-the-loop-framework-for-vision-language-action-model-post-training-in-dexterous-manipulation)  
+   标签：评分：9.0/10、query:hci-ai
+   evidence：用于通过VLA模型优化机器人策略的人机回环框架
+6. [Vibe-Creation: The Epistemology of Human-AI Emergent Cognition](/202603/15/2603.09486v1-vibe-creation-the-epistemology-of-human-ai-emergent-cognition)  
+   标签：评分：9.0/10、query:hci-ai
+   evidence：人机涌现认知与交互的认识论
+7. [Nurture-First Agent Development: Building Domain-Expert AI Agents Through Conversational Knowledge Crystallization](/202603/15/2603.10808v1-nurture-first-agent-development-building-domain-expert-ai-agents-through-conversational-knowledge-crystallization)  
+   标签：评分：9.0/10、query:llm-personalization
+   evidence：LLM代理中深度个性化且不断演进的领域专业知识
+8. [The Laziness of the Crowd: Effort Aversion Among Raters Risks Undermining the Efficacy of X's Community Notes Program](/202603/15/2603.11120v1-the-laziness-of-the-crowd-effort-aversion-among-raters-risks-undermining-the-efficacy-of-xs-community-notes-program)  
    标签：评分：9.0/10、query:social-computing
-   evidence：学习系统与社会舆论动力学的相互作用
-46. [Security Considerations for Artificial Intelligence Agents](/202603/13/2603.12230v1-security-considerations-for-artificial-intelligence-agents)  
+   evidence：数字平台上的社会计算与众包审核
+9. [LLMs Can Infer Political Alignment from Online Conversations](/202603/15/2603.11253v1-llms-can-infer-political-alignment-from-online-conversations)  
+   标签：评分：9.0/10、query:llm-personalization
+   evidence：从在线对话中推断隐藏的政治立场
+10. ["I followed what felt right, not what I was told": Autonomy, Coaching, and Recognizing Bias Through AI-Mediated Dialogue](/202603/15/2603.11274v1-i-followed-what-felt-right-not-what-i-was-told-autonomy-coaching-and-recognizing-bias-through-ai-mediated-dialogue)  
+   标签：评分：9.0/10、query:hci-ai
+   evidence：用于识别偏见的AI介导对话与人机交互体验
+11. [COMPASS: The explainable agentic framework for Sovereignty, Sustainability, Compliance, and Ethics](/202603/15/2603.11277v1-compass-the-explainable-agentic-framework-for-sovereignty-sustainability-compliance-and-ethics)  
    标签：评分：9.0/10、query:llm-bias
-   evidence：前沿AI智能体的安全与安全性
+   evidence：智能体系统中的伦理对齐与合规
+12. [LLM-Augmented Digital Twin for Policy Evaluation in Short-Video Platforms](/202603/15/2603.11333v1-llm-augmented-digital-twin-for-policy-evaluation-in-short-video-platforms)  
+   标签：评分：9.0/10、query:social-computing
+   evidence：短视频生态系统中的用户行为与平台政策
+13. [Modeling Sequential Design Actions as Designer Externalization on an Infinite Canvas](/202603/15/2603.11569v1-modeling-sequential-design-actions-as-designer-externalization-on-an-infinite-canvas)  
+   标签：评分：9.0/10、query:hci-ai
+   evidence：AI智能体对设计师外化过程和工作流的影响
+14. [When OpenClaw Meets Hospital: Toward an Agentic Operating System for Dynamic Clinical Workflows](/202603/15/2603.11721v1-when-openclaw-meets-hospital-toward-an-agentic-operating-system-for-dynamic-clinical-workflows)  
+   标签：评分：9.0/10、query:llm-memory
+   evidence：临床工作流中 LLM 智能体长期记忆机制不足
+15. [Few-for-Many Personalized Federated Learning](/202603/15/2603.11992v1-few-for-many-personalized-federated-learning)  
+   标签：评分：9.0/10、query:llm-personalization
+   evidence：针对异构客户端的个性化联邦学习
 
 ### 速读区论文标签
-1. [TRACER: Trajectory Risk Aggregation for Critical Episodes in Agentic Reasoning](/202603/13/2602.11409v1-tracer-trajectory-risk-aggregation-for-critical-episodes-in-agentic-reasoning)  
+1. [SemaPop: Semantic-Persona Conditioned Population Synthesis](/202603/15/2602.11569v1-semapop-semantic-persona-conditioned-population-synthesis)  
+   标签：评分：8.0/10、query:llm-personalization
+   evidence：从调查记录中提取高层画像表示用于人口合成
+2. [Artificial intelligence is creating a new global linguistic hierarchy](/202603/15/2602.12018v1-artificial-intelligence-is-creating-a-new-global-linguistic-hierarchy)  
+   标签：评分：8.0/10、query:ai-population
+   evidence：分析语言人工智能中的系统性不平等和数字边缘化
+3. [Choose Your Agent: Tradeoffs in Adopting AI Advisors, Coaches, and Delegates in Multi-Party Negotiation](/202603/15/2602.12089v2-choose-your-agent-tradeoffs-in-adopting-ai-advisors-coaches-and-delegates-in-multi-party-negotiation)  
    标签：评分：8.0/10、query:hci-ai
-   evidence：工具-智能体-用户交互的不确定性指标
-2. [Towards Reliable Machine Translation: Scaling LLMs for Critical Error Detection and Safety](/202603/13/2602.11444v1-towards-reliable-machine-translation-scaling-llms-for-critical-error-detection-and-safety)  
+   evidence：理解社交语境下的人机交互
+4. [Capability-Oriented Training Induced Alignment Risk](/202603/15/2602.12124v1-capability-oriented-training-induced-alignment-risk)  
    标签：评分：8.0/10、query:llm-bias
-   evidence：利用大模型检测机器翻译中的偏见和关键错误
-3. [Understanding Persuasive Interactions between Generative Social Agents and Humans: The Knowledge-based Persuasion Model (KPM)](/202603/13/2602.11483v1-understanding-persuasive-interactions-between-generative-social-agents-and-humans-the-knowledge-based-persuasion-model-kpm)  
-   标签：评分：8.0/10、query:hci-ai
-   evidence：生成式社交代理与人类之间的说服性交互
-4. [AgentLeak: A Full-Stack Benchmark for Privacy Leakage in Multi-Agent LLM Systems](/202603/13/2602.11510v1-agentleak-a-full-stack-benchmark-for-privacy-leakage-in-multi-agent-llm-systems)  
+   evidence：强化学习环境中的对齐风险与奖励利用
+5. [How Sampling Shapes LLM Alignment: From One-Shot Optima to Iterative Dynamics](/202603/15/2602.12180v1-how-sampling-shapes-llm-alignment-from-one-shot-optima-to-iterative-dynamics)  
+   标签：评分：8.0/10、query:llm-bias
+   evidence：提高AI安全性与偏好匹配的对齐技术
+6. [Query-focused and Memory-aware Reranker for Long Context Processing](/202603/15/2602.12192v1-query-focused-and-memory-aware-reranker-for-long-context-processing)  
    标签：评分：8.0/10、query:llm-memory
-   evidence：多智能体大模型系统中的隐私泄露与共享内存
-5. [Unifying Stable Optimization and Reference Regularization in RLHF](/202603/13/2602.11523v1-unifying-stable-optimization-and-reference-regularization-in-rlhf)  
-   标签：评分：8.0/10、query:llm-bias
-   evidence：RLHF 中的对齐技术，旨在减轻奖励黑客行为并确保稳定优化
-6. [Behavioral Indicators of Overreliance During Interaction with Conversational Language Models](/202603/13/2602.11567v1-behavioral-indicators-of-overreliance-during-interaction-with-conversational-language-models)  
-   标签：评分：8.0/10、query:hci-ai
-   evidence：LLM交互中过度依赖和用户信任的行为指标
-7. [Why Do Neural Networks Forget: A Study of Collapse in Continual Learning](/202603/13/2603.04580v1-why-do-neural-networks-forget-a-study-of-collapse-in-continual-learning)  
-   标签：评分：7.0/10、query:llm-memory
-   evidence：研究持续学习架构中的灾难性遗忘与结构崩溃。
-8. [A Late-Fusion Multimodal AI Framework for Privacy-Preserving Deduplication in National Healthcare Data Environments](/202603/13/2603.04595v1-a-late-fusion-multimodal-ai-framework-for-privacy-preserving-deduplication-in-national-healthcare-data-environments)  
-   标签：评分：7.0/10、query:llm-memory
-   evidence：医疗数据中保护隐私的多模态AI
-9. [Coordinated Semantic Alignment and Evidence Constraints for Retrieval-Augmented Generation with Large Language Models](/202603/13/2603.04647v1-coordinated-semantic-alignment-and-evidence-constraints-for-retrieval-augmented-generation-with-large-language-models)  
-   标签：评分：7.0/10、query:llm-memory
-   evidence：RAG的语义对齐与证据约束
-10. [iAgentBench: Benchmarking Sensemaking Capabilities of Information-Seeking Agents on High-Traffic Topics](/202603/13/2603.04656v1-iagentbench-benchmarking-sensemaking-capabilities-of-information-seeking-agents-on-high-traffic-topics)  
+   evidence：用于长文本处理的记忆感知重排序框架
+7. [Counting on Consensus: Selecting the Right Inter-annotator Agreement Metric for NLP Annotation and Evaluation](/202603/15/2603.06865v1-counting-on-consensus-selecting-the-right-inter-annotator-agreement-metric-for-nlp-annotation-and-evaluation)  
    标签：评分：7.0/10、query:hci-ai
-   evidence：通过自然问题对信息寻求代理进行基准测试
-11. [Stan: An LLM-based thermodynamics course assistant](/202603/13/2603.04657v1-stan-an-llm-based-thermodynamics-course-assistant)  
-   标签：评分：7.0/10、query:hci-ai
-   evidence：基于大语言模型的学生与教师课程助手
-12. [RoboMME: Benchmarking and Understanding Memory for Robotic Generalist Policies](/202603/13/2603.04639v1-robomme-benchmarking-and-understanding-memory-for-robotic-generalist-policies)  
-   标签：评分：6.0/10、query:llm-memory
-   evidence：机器人通用策略的记忆基准测试
-13. [Behaviour Driven Development Scenario Generation with Large Language Models](/202603/13/2603.04729v1-behaviour-driven-development-scenario-generation-with-large-language-models)  
-   标签：评分：6.0/10、query:hci-ai
-   evidence：大语言模型生成BDD场景的评估
-14. [DARE: Aligning LLM Agents with the R Statistical Ecosystem via Distribution-Aware Retrieval](/202603/13/2603.04743v1-dare-aligning-llm-agents-with-the-r-statistical-ecosystem-via-distribution-aware-retrieval)  
-   标签：评分：6.0/10、query:hci-ai
-   evidence：使大模型代理与统计工具检索对齐
-15. [Evaluating the Search Agent in a Parallel World](/202603/13/2603.04751v1-evaluating-the-search-agent-in-a-parallel-world)  
-   标签：评分：6.0/10、query:hci-ai
-   evidence：交互式搜索智能体的评估方法
-16. [Beyond Linear LLM Invocation: An Efficient and Effective Semantic Filter Paradigm](/202603/13/2603.04799v1-beyond-linear-llm-invocation-an-efficient-and-effective-semantic-filter-paradigm)  
+   evidence：评估NLP中人工标注和主观判断的方法论
+8. [Distributed Legal Infrastructure for a Trustworthy Agentic Web](/202603/15/2603.06884v1-distributed-legal-infrastructure-for-a-trustworthy-agentic-web)  
+   标签：评分：7.0/10、query:llm-bias
+   evidence：AI智能体的法律基础设施与问责制
+9. [Resource-Adaptive Federated Text Generation with Differential Privacy](/202603/15/2603.07027v1-resource-adaptive-federated-text-generation-with-differential-privacy)  
+   标签：评分：7.0/10、query:llm-personalization
+   evidence：领域偏移下LLM的自适应联邦文本生成
+10. [Monetizing Generative AI: YouTubers' Collective Knowledge on Earning from Generative AI Content](/202603/15/2603.07036v1-monetizing-generative-ai-youtubers-collective-knowledge-on-earning-from-generative-ai-content)  
+   标签：评分：7.0/10、query:social-computing
+   evidence：数字平台上的集体知识和社区实践
+11. [Monetizing Generative AI: YouTubers' Collective Knowledge on Earning from Generative AI Content](/202603/15/2603.07036v2-monetizing-generative-ai-youtubers-collective-knowledge-on-earning-from-generative-ai-content)  
+   标签：评分：7.0/10、query:social-computing
+   evidence：社交平台上生成式AI变现的集体知识与社区实践
+12. [Characterizing Faults in Agentic AI: A Taxonomy of Types, Symptoms, and Root Causes](/202603/15/2603.06847v1-characterizing-faults-in-agentic-ai-a-taxonomy-of-types-symptoms-and-root-causes)  
+   标签：评分：6.0/10、query:llm-bias
+   evidence：智能体AI系统中的故障分类与可靠性挑战
+13. [A Dynamic Self-Evolving Extraction System](/202603/15/2603.06915v1-a-dynamic-self-evolving-extraction-system)  
    标签：评分：6.0/10、query:llm-personalization
-   evidence：用于高效LLM调用的自适应语义过滤器
+   evidence：能够适应术语变化的动态自进化提取系统
+14. [AutoChecklist: Composable Pipelines for Checklist Generation and Scoring with LLM-as-a-Judge](/202603/15/2603.07019v1-autochecklist-composable-pipelines-for-checklist-generation-and-scoring-with-llm-as-a-judge)  
+   标签：评分：6.0/10、query:hci-ai
+   evidence：评估交互式AI系统的方法论
+15. [Animating Petascale Time-varying Data on Commodity Hardware with LLM-assisted Scripting](/202603/15/2603.07053v1-animating-petascale-time-varying-data-on-commodity-hardware-with-llm-assisted-scripting)  
+   标签：评分：6.0/10、query:hci-ai
+   evidence：大模型辅助脚本用于科学可视化工作流
+16. [Exploring the Reasoning Depth of Small Language Models in Software Architecture: A Multidimensional Evaluation Framework Towards Software Engineering 2.0](/202603/15/2603.07091v1-exploring-the-reasoning-depth-of-small-language-models-in-software-architecture-a-multidimensional-evaluation-framework-towards-software-engineering-20)  
+   标签：评分：6.0/10、query:hci-ai
+   evidence：智能代理与人类工程师协作
 
 
 <div class="dpr-home-promo-card">
