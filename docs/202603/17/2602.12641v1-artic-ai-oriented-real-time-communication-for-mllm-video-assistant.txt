@@ -1,0 +1,427 @@
+Title: Artic: AI-oriented Real-time Communication for MLLM Video Assistant
+
+URL Source: https://arxiv.org/pdf/2602.12641v1
+
+Published Time: Mon, 16 Feb 2026 01:32:16 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Artic: AI-oriented Real-time Communication for MLLM Video Assistant 
+
+# Jiangkai Wu, Zhiyuan Ren, Junquan Zhong, Liming Liu, Xinggong Zhang 
+
+Peking University 
+
+## ABSTRACT 
+
+AI Video Assistant emerges as a new paradigm for Real-time Communication (RTC), where one peer is a Multimodal Large Language Model (MLLM) deployed in the cloud. This makes interaction between humans and AI more intuitive, akin to chatting with a real person. However, a fundamental mismatch exists between current RTC frameworks and AI Video Assistants, stemming from the drastic shift in Quality of Experience (QoE) and more challenging networks. Mea-surements on our production prototype also confirm that current RTC fails, causing latency spikes and accuracy drops. To address these challenges, we propose Artic , an AI-oriented RTC framework for MLLM Video Assistants, ex-ploring the shift from "humans watching video" to "AI un-derstanding video." Specifically, Artic proposes: (1) Response Capability-aware Adaptive Bitrate, which utilizes MLLM ac-curacy saturation to proactively cap bitrate, reserving band-width headroom to absorb future fluctuations for latency re-duction; (2) Zero-overhead Context-aware Streaming, which allocates limited bitrate to regions most important for the re-sponse, maintaining accuracy even under ultra-low bitrates; and (3) Degraded Video Understanding Benchmark, the first benchmark evaluating how RTC-induced video degradation affects MLLM accuracy. Prototype experiments using real-world uplink traces show that compared with existing meth-ods, Artic significantly improves accuracy by 15.12% and reduces latency by 135.31 ms. We will release the benchmark and codes at https://github.com/pku-netvideo/DeViBench. 
+
+## 1 INTRODUCTION 
+
+AI Video Assistant [ 1 –5 , 7 , 19 – 21 ] is a new paradigm for Real-time Communication (RTC). Powered by Multimodal Large Language Models (MLLMs) [ 6, 35 , 52 , 53 , 60 , 61 , 70 ], these systems accept video and audio inputs directly, en-abling intuitive interactions akin to chatting with a real hu-man assistant [ 31 ]. Beyond basic question answering, mod-ern assistants are evolving towards complex and agentic capabilities (§2.1), such as proactive response [ 3, 11 , 13 ] and visual memory [ 1 , 3, 5 –7 , 16 ]. However, MLLMs require high-performance computing resources (e.g., 8 ×A100 GPUs [ 48 ]) to support real-time inference. Since AI Video Assistants are increasingly accessed via lightweight portable devices (e.g., smart glasses [ 8 , 10 , 14 , 17 , 18 ]) that cannot meet these 
+
+Figure 1: AI Video Assistant is a new paradigm for real-time communication. The user sends video and audio to the AI for thinking. The AI feeds back audio. 
+
+demands, MLLMs are inevitably deployed on the server, rely-ing on RTC to connect with the client. As shown in Figure 1, the client streams high-bitrate video and audio to the server while receiving low-bitrate audio and text responses. However, a fundamental mismatch exists between cur-rent RTC frameworks [ 30 ] and AI Video Assistants, severely degrading the user Quality of Experience (QoE). First, the QoE objective has shifted from human perceptual quality (e.g., VMAF, stalling rate) to MLLM response accuracy and stricter latency constraints (§2.2). Second, the usage sce-nario has evolved from sedentary applications (e.g., video conferencing) to "on-the-go" assistance (e.g., outdoor navi-gation [ 3 , 63 ]), where mobility and unconstrained user be-haviors induce drastic bandwidth fluctuations [ 33 , 40 , 47 ]. Third, the traffic pattern becomes uplink-dominant, making the system distinctively vulnerable to limited uplink capac-ity [ 33 , 36 , 37 , 39 , 42 , 51 ] compared to traditional downlink-heavy (e.g., cloud gaming, remote desktop) or symmetric (e.g., video calls) services. Crucially, measurements on our production prototype confirm that traditional human-oriented RTC fails in the wild, causing latency spikes and accuracy drops (§2.3) that shatter the user’s illusion of interacting with a "real person." Is it possible to guarantee consistently low latency and ro-bust high accuracy for AI Video Assistants via RTC design ?
+
+Realizing this vision allows us to approach the "holy grail" [ 31 ]of AI research from a network systems perspective: making AI interact like a real human. 
+
+To achieve this, we identify three key challenges: 
+
+First, Congestion Control (CC) becomes counterpro-ductive upon accuracy saturation. In traditional RTC, CC algorithms continuously increase video bitrate when band-width is available (Figure 2, left), as they are optimized for 
+
+> 1
+> arXiv:2602.12641v1 [cs.NI] 13 Feb 2026
+
+, , Jiangkai Wu et al. 
+
+human eyes where higher bitrates consistently improve per-ceptual quality. In contrast, MLLMs exhibit a fundamentally different behavior: once video quality reaches a sufficient level (e.g., the 968 Kbps in Figure 3), further increasing bitrate yields negligible accuracy gains. Upon saturation, the tradi-tional strategy of maximizing bitrate to fill the bandwidth is not only wasteful but dangerous; it occupies the bandwidth headroom, significantly increasing the risk of high latency when bandwidth fluctuates (e.g., frames 500–600 in Figure 2). 
+
+Second, context-agnostic encoding is inefficient. Low bandwidth compels RTC to encode video at low bitrates, which inevitably leads to video quality degradation and causes response errors (e.g., Figure 3(c)). We observe that to answer a specific question, MLLMs typically require high fidelity only in local regions. For instance, in Figure 3, when the request is "Please help me check the products I am re-stocking", only the products near the user’s hands need to be legible; clarity in other areas has no impact on accuracy. However, existing context-agnostic encoding distributes bits indiscriminately, causing critical details to be blurred. While traditional Region of Interest (ROI) encoding can prioritize specific areas (e.g., faces in video conferencing), it relies on predefined targets. In contrast, an MLLM’s focus is dictated by the current conversation context—which is highly dy-namic and cannot be predetermined. 
+
+Third, no existing benchmark evaluates how video degradation in RTC affects MLLM accuracy. Traditional video streaming benchmarks focus on human perceptual quality (e.g., VMAF, stalling rate) rather than accuracy. Al-though some MLLM benchmarks evaluate response quality in streaming video scenarios (e.g., StreamingBench [ 44 ]), they aim primarily to test MLLM intelligence; thus, all input videos are ideally high-bitrate (e.g., 4000 Kbps). This ren-ders existing QA samples too simple and high-level, requir-ing only coarse-grained video content to answer correctly. For instance, our tests on StreamingBench reveal that only 8% of QA samples are degradation-sensitive (i.e., answered correctly at high bitrates but incorrectly at low bitrates). This fails to represent real-world scenarios, where detail-rich queries are highly susceptible to quality degradation. As shown in Figure 3, for the question "What is the text on the product?", even slight blurriness leads to incorrect responses. To address these challenges, we propose Artic , an AI-oriented real-ti me communication system for MLLM Video Assistants, exploring the shift in network requirements from "humans watching video" to "AI understanding video." Artic fundamentally redesigns the RTC pipeline—spanning bitrate adaptation, video encoding, feedback control, benchmark construction, and QoE evaluation—to align network trans-mission with the MLLM’s cognitive state. Overall, the system design of Artic entails three core contributions: 
+
+• Response Capability-aware Adaptive Bitrate. Instead of blindly following CC, Artic incorporates the MLLM’s response capability into bitrate adaptation. Specifically, Artic utilizes confidence feedback from the MLLM to de-termine if the current response capability is saturated. If so, Artic proactively caps the bitrate even when bandwidth is ample. This strategy reserves bandwidth headroom to absorb network fluctuations, minimizing latency spikes. 
+
+• Zero-overhead Context-aware Streaming. Instead of context-agnostic encoding, Artic proposes allocating lim-ited bitrate to regions most important to the current con-versation context. Specifically, Artic instructs the MLLM to feed back regions essential for the response in real-time. Upon receiving the regions, the client adaptively adjusts encoding Quantization Parameters (QP), thereby ensuring the MLLM captures critical visual semantics even under ultra-low bandwidth. This MLLM-driven feedback avoids the overhead of client-side importance identification while offering more native and accurate context awareness. 
+
+• Degraded Video Understanding Benchmark. Artic in-troduces the first benchmark evaluating how RTC-induced video degradation affects MLLM accuracy. Instead of man-ual annotation, Artic constructs an automated pipeline to generate "degradation-sensitive samples." Leveraging this pipeline, Artic produces 1,968 samples, totaling 88,680 sec-onds of video across 6*2 scene categories. This benchmark features a test and validation split, enabling not only QoE evaluation for AI Video Assistants but also hyperparame-ter tuning for the system and in-context learning for the MLLM. We will open-source it. 
+
+We prototyped and evaluated Artic with real-world mobile uplink traces. Compared to existing frameworks, Artic sig-nificantly improves accuracy by 15.12% and reduces latency by 135.31 ms. We also validate Artic’s generalizability and robustness. Furthermore, we demonstrate that Artic incurs minimal computation, bandwidth, and monetary overhead. 
+
+## 2 MOTIVATION 2.1 AI Video Assistant Background 
+
+AI Video Assistants have rapidly emerged (e.g., Grok [ 7], Gemini Live [ 5 ], ChatGPT [ 1 ], Copilot [ 2 ] and Doubao [ 3]). Powered by Multimodal Large Language Models (MLLMs) [ 6 ,35 , 52 , 53 , 60 , 61 , 70 ], these systems accept direct video and audio inputs rather than text prompts. The MLLM processes these inputs to generate responses, providing feedback to the user. This enables natural interactions comparable to human assistants. Beyond basic visual question answering, they are evolving towards more complex, agentic capabilities: 
+
+Proactive Response. Unlike early turn-based interactions responding only to explicit queries, modern assistants (e.g., Google Project Astra [ 11 ], Doubao [ 3], raven-0 [ 13 ]) support 
+
+> 2
+
+Artic: AI-oriented Real-time Communication for MLLM Video Assistant , , 
+
+Table 1: Comparison of QoE Objectives Scenario Traditional RTC AI Video Assistant QoE factors Fidelity 
+
+> (e.g., PSNR, SSIM, VMAF)
+
+Accuracy 
+
+> (MLLM responses)
+
+Fluency 
+
+> (e.g., FPS, stalling rate)
+
+Consistency 
+
+> (e.g., quality fluctuations)
+
+Latency 
+
+> (More budget allowed)
+
+Latency 
+
+> (Less budget allowed)
+
+full-duplex interactions. They proactively decide when to respond by analyzing environmental changes and user intent. For instance, if a user instructs "watch the game with me and shout ’goal’ when a score occurs," the assistant continuously monitors the stream and responds timely upon the event. 
+
+Visual Memory. In contrast to early stateless interactions, current leading assistants (e.g., Gemini live [ 5], ChatGPT [ 1 ], Replika [ 16 ]) incorporate memory capabilities. This ensures consistency across multi-round conversations. Furthermore, it enables the assistant to recall visual information from previous frames. For example, if a user asks, "I lost my phone, please tell me where I left it," the assistant can identify the phone in historical video frames and infer where it was lost. 
+
+Lightweight & Portable Clients. AI Assistants are tran-sitioning from stationary desktop platforms to mobile ap-plications (e.g., Grok [ 7], Doubao [ 3 ]) and wearable devices (e.g., smart glasses [ 8, 10 , 14 , 17 , 18 ]). This shift drives the deployment towards lightweight, portable terminals. These capabilities necessitate RTC for AI Video Assis-tants. First, MLLMs require high-performance computing resources (e.g., 8 ×A100 GPUs [ 48 ]) to support real-time infer-ence. However, lightweight client devices cannot meet these computational and power demands. Consequently, MLLMs are inevitably deployed in the cloud, where the client trans-mits user video and audio for inference. Furthermore, to support proactive responsiveness, the system must maintain continuous RTC sessions lasting minutes to hours, rather than transmitting sparse images or short clips. Thus, the AI Video Assistant represents a novel scenario for RTC. 
+
+## 2.2 Differences between AI Video Assistant and traditional RTC 
+
+The unique characteristics of AI Video Assistants introduce novel network requirements for RTC, differing from human-centric communication. We analyze these shifts below. 
+
+QoE changes from human perceptual quality to MLLM response accuracy and latency. In traditional RTC, QoE is centered on the human visual system. To satisfy human eyes, RTC systems optimize for Fidelity (using metrics like PSNR [ 68 , 69 ], SSIM [ 32 , 34 , 62 ] or VMAF [ 22 ] to ensure clar-ity), Fluency (maintaining high FPS [ 46 , 50 , 68 , 69 ] and mini-mizing stalling [ 32 , 50 , 68 , 69 ]), and Consistency (avoiding frequent quality fluctuations [ 69 ]). However, in AI Video As-sistants, the video consumer shifts from a human to an MLLM. Consequently, strict adherence to perception-related metrics is no longer necessary; instead, the primary optimization ob-jective becomes the accuracy of the MLLM’s responses. This elevates RTC’s tolerance to the semantic level. For example, as long as accuracy is maintained, visual degradations such as blurriness are acceptable (e.g., Figure 3(b)). 
+
+Although QoE requirements have relaxed in the above as-pects, latency remains critical. Since modern assistants [ 3 , 11 ,13 ] are designed to proactively respond the moment a target event occurs, any delay in frame delivery directly translates to a delay in the assistant’s response. Furthermore, AI Assis-tants impose even stricter constraints on latency. To ensure a fluent interactive experience, the response latency needs to remain below 300 ms [ 43 ]. In traditional RTC, the human peer on the other side can respond instantly, meaning the latency budget is largely available for RTC. However, MLLMs gener-ate responses in a time-consuming autoregressive manner. Even with audio-only input, computational latency reaches at least 232 ms [ 41 ]. To keep the total response latency under 300 ms, the budget left for RTC is at most 68 ms, which is difficult to guarantee. Therefore, minimizing frame latency becomes the other primary objective alongside accuracy. We summarize these QoE factors in Table 1. 
+
+High mobility and user behavior exacerbate bandwidth fluctuations. The portability of AI Video Assistants (e.g., smart glasses [ 8, 10 , 14 , 17 , 18 ]) necessitates "on-the-go" us-age, introducing significant stability challenges to RTC. Phys-ical mobility inherently degrades link quality. Whether on Wi-Fi or 5G, continuous movement triggers frequent signal attenuation and handovers [ 33 , 40 , 47 ], resulting in drastic bandwidth fluctuations exceeding static connections. 
+
+More critically, user behavior becomes unconstrained. For example, in traditional video conferencing, users are often cooperative; they proactively seek locations with stable con-nectivity and remain stationary to ensure network quality. In contrast, AI Video Assistants are used "in the wild." Users ex-pect seamless interaction while navigating complex environ-ments—such as entering elevators or subways—subjecting the RTC session to drastic bandwidth drops and outages that are rarely encountered in static settings. 
+
+Uplink is more pressing than Downlink. Traditional RTC scenarios typically exhibit downlink-heavy or symmetric traffic patterns. In 1v1 video calls, traffic is symmetric as each peer acts as both a video sender and receiver. In video conferencing, most participants (except the active speaker) face higher downlink pressure, receiving multiple streams while sending only one. Similarly, in interactive video like 
+
+> 3
+
+, , Jiangkai Wu et al. 
+
+Figure 2: Latency measurement study. When bandwidth is sufficient, the video bitrate continuously increases, as driven by the CC. However, influenced by mobility and user behaviors, bandwidth suffers sudden drops (e.g., frame 525). The lag in bitrate reduction causes network congestion, resulting in severe latency spikes (e.g., 1,389 ms). 
+
+cloud gaming or remote desktop, clients transmit low-bitrate control signals while receiving high-quality video, making the traffic heavily downlink-dominant. These patterns align well with current network infrastructures (e.g., 5G), where downlink bandwidth is designed to be significantly higher than uplink [33, 36, 37, 39, 42, 51], such as 4.8x–6.5x [33]. 
+
+In contrast, AI Video Assistants rely on unidirectional uplink transmission. The client acts exclusively as the video sender, continuously streaming high-bitrate video to the MLLM, while the MLLM returns feedback only via low-bitrate audio or text. This traffic pattern runs contrary to the asymmetric design of modern networks. Consequently, the bottleneck shifts entirely to the uplink, imposing greater challenges on QoE compared to traditional RTC scenarios. 
+
+## 2.3 Measurement study: Real-world Network Impair Assistant QoE 
+
+To empirically demonstrate how real-world network limi-tations impair the AI Assistant experience, we conducted a measurement study in this section. Next, we will first de-scribe the measurement setup and then present the analysis. To capture the network challenges in §2.2, we collected real-world network traces that reflect realistic traffic pat-terns. We established a testbed using an iPhone 17 on a commercial 5G network, generating uplink UDP traffic via iperf [ 25 ] to a production linux server. We logged the re-ceiving throughput to estimate the available bandwidth. To rigorously isolate the impact of mobility from other factors, we employed two specific strategies. First, we conducted tests at 2:45 AM to minimize cross-traffic contention. Sec-ond, we capped the sending rate at 5 Mbps—a rate the link could easily sustain when static—to eliminate internet-side bottlenecks. This ensures that any observed fluctuations are attributable to physical environment changes rather than ex-ternal network congestion. As for user behavior, we selected taking an elevator, a ubiquitous scenario in daily life. We implemented an AI Video Assistant prototype follow-ing OpenAI’s AI video call standards [ 26 ]. The frontend is a web-based AI assistant acting as the RTC sender, capturing user audio and video. The backend runs on a production linux server as the RTC receiver, invoking the MLLM for responses. Specifically, we utilized the commercial Agora SDK [ 27 ] for RTC and Google Gemini Live API [ 5] for the MLLM. To control network conditions, we routed the sender’s traffic through a custom pipe that dynamically limits bandwidth to replay the collected traces. We visualize the bandwidth trace, video bitrate, frame size, and frame latency in Figure 2, and accuracy examples in Figure 3. Based on these results, we make the following observations: 
+
+Challenging network conditions are the norm. As shown in the Figure 2, when the user is static, the available band-width consistently saturates the 5 Mbps limit, confirming a stable, sufficient link under ideal conditions. However, at frame 525, when the user enters the elevator, the available bandwidth rapidly collapses to 1.23 Mbps. This demonstrates that for "on-the-go" AI Video Assistants, network quality is dictated by routine user behaviors and physical environments ,shifting from excellent to poor within 1.5 seconds. 
+
+High bandwidth fluctuations lead to latency spikes. In RTC systems, bitrate is typically adapted by CC algorithms (e.g., GCC [ 30 ], BBR [ 29 ]). When latency or packet loss does not increase, the CC algorithm ramps up the bitrate to probe for available bandwidth. However, when the aforementioned sudden bandwidth drop occurs, CC algorithm exhibits an adap-tation lag (approximately 1.17 seconds) . Consequently, the bitrate exceeding the bandwidth leads to severe packet accu-mulation, resulting in a latency as high as 1,389 ms. 
+
+Low bandwidth degrades accuracy. In response to high latency and packet loss, the CC algorithm eventually slashes the bitrate. However, as illustrated in Figure 3, this low bitrate results in severe blurring, which directly causes incorrect responses from the MLLM. To verify that these errors stem from video degradation rather than model’s limited intelli-gence, we replaced the Gemini Live model with the Gemini 3 Pro [ 24 ] model processing the same degraded frames. The 
+
+> 4
+
+Artic: AI-oriented Real-time Communication for MLLM Video Assistant , , 
+
+Figure 3: Accuracy measurement study. (a)(b) Accuracy exhibits saturation. The MLLM remains consistently accurate as the bitrate increases. (c) Low bitrates cause MLLM errors. (d) Errors persist even with the more powerful Pro model, demonstrating that errors stem from video degradation rather than model capability. 
+
+Pro model persisted in making the same errors, confirming that the accuracy drop is rooted in the RTC-induced visual artifacts rather than the model’s capability .
+
+## 2.4 Key Insights and Potential Gains 
+
+Driven by the measurements above, our goal is to optimize AI Assistant QoE from an RTC perspective, particularly under challenging network conditions. This section presents three key insights derived from the differences between human and MLLM perception, followed by potential gains: 
+
+The saturation of MLLM accuracy allows for latency reduction during bandwidth fluctuations. Traditional RTC algorithms aggressively increase video bitrate when bandwidth is sufficient, optimized for human eyes where higher bitrates consistently improve perceptual quality (e.g., enabling 8K@120FPS). However, as observed in our measure-ments (Figure 3), MLLMs exhibit a fundamentally different behavior: Once the video quality reaches a sufficient level (e.g., 968 Kbps), the model’s answers always remain correct. In this saturation regime, further increasing bitrate yields no gains in accuracy. Instead, it occupies the bandwidth head-room, significantly increasing the risk of high latency when bandwidth fluctuates. Instead of blindly increasing bitrate, we incorporate the model’s response capability into the bitrate decision loop. If the MLLM can respond correctly at the current bitrate, we stop increasing bitrate even with ample bandwidth (e.g., frames 0–500 in Figure 2). This strategy deliberately main-tains a bitrate "maximum margin," reserving headroom to absorb future bandwidth fluctuations (as seen at frame 525). 
+
+Context-aware coding improves accuracy under low bandwidth. In video coding, a trade-off between bitrate and distortion always exists. Low bitrate causes degradation like blurriness and blocking artifacts. In traditional RTC, a viable solution is to allocate more bitrate to the Region of Inter-est (ROI) for human eyes (e.g., faces in video conferencing), sacrificing other areas to preserve the key regions. We observe that this concept is equally critical for AI Video Assistants, but the importance of different regions depends on the current conversation context rather than human gaze. For example, in Figure 3, given the query "Please help me check the products I am restocking", the MLLM only needs to focus on the regions of products near the user’s hands, while the rest is irrelevant. Thus, rather than coding in a context-agnostic manner, the video should be context-aware. More bitrate should be allocated to response-important regions, and less to irrelevant ones. 
+
+The first benchmark evaluates how video streaming quality affects MLLM accuracy. According to §2.2, QoE metrics in AI Video Assistant change from perception to accuracy. Existing video streaming benchmarks are inap-plicable, as they focus on perceptual quality and do not involve response accuracy. In the MLLM field, there are some benchmarks targeting Streaming Video Understand-ing tasks [ 56 , 64 ], such as StreamingBench [ 44 ]. In these benchmarks, each video includes several Question-Answer (QA) samples for evaluating the response accuracy. However, these benchmarks aim to test the MLLM’s intelligence, so all the input videos are ideally high-bitrate (e.g., 4000 Kbps). To evaluate how video streaming quality affects accuracy, we transcode videos from StreamingBench to 200 Kbps. We test on these low-bitrate videos with the original QA samples. The results show that only 8% of QA samples are answered incorrectly at low bitrate and correctly at high bitrate. This is because the QA samples in StreamingBench are too simple and high-level, requiring only coarse-grained video content to answer correctly. However, in real-world scenarios, there are often many detail-rich questions that are very sensitive to video quality. For example, in Figure 3, when the question is "What is the text on the product?", even slight blurriness will prevent correct answers. So it is necessary to establish a more challenging benchmark to reflect the real-world impact of video degradation on MLLM accuracy. 
+
+> 5
+
+, , Jiangkai Wu et al. 
+
+Figure 4: Artic overview 
+
+## 3 OVERVIEW 
+
+Based on the above insights, we propose Artic , an AI-oriented 
+
+real-ti me communication system for Video Assistants. As shown in Figure 4, Artic comprises three core modules: Re-sponse Capability-aware Adaptive Bitrate (§4), Zero-overhead Context-aware Streaming (§5), and the Degraded Video Un-derstanding Benchmark (§6). Its workflow is as follows: 
+
+ReCapABR (Re sponse Cap ability-aware Adaptive Bit rate) determines the video bitrate by bridging network CC with the MLLM’s cognitive state. It utilizes the confidence score fed back from the MLLM to assess whether the model’s cur-rent response capability is saturated. Unlike traditional ABR, ReCapABR introduces a retention mechanism: if the CC sug-gests increasing the bitrate (due to available bandwidth) but the MLLM indicates it is already performing well at the current quality, ReCapABR overrides the CC to maintain the current bitrate. This strategy reserves bandwidth head-room to absorb future fluctuations. In other cases—such as when the MLLM struggles to answer accurately or band-width declines—ReCapABR follows the CC’s target bitrate to maximize video quality while avoiding congestion. 
+
+ZeCoStream (Ze ro-overhead Co ntext-aware Stream ing) op-timizes spatial bitrate allocation. Under normal network con-ditions, the bitrate determined by ReCapABR is fed into a standard video encoder. However, when the bitrate drops to a critical level where the MLLM struggles to answer accu-rately, and the bandwidth does not permit a higher bitrate, ZeCoStream is triggered. Based on the feedback from the MLLM, ZeCoStream becomes aware of "response-important" regions without introducing extra overhead. Then, it directs the encoder to perform QP-adaptive encoding, such that the limited bitrate is allocated almost exclusively to these regions. This ensures that the MLLM captures critical vi-sual semantics even under ultra-low bandwidth constraints. ZeCoStream is disabled by default, as the degradation of response-irrelevant regions leads to incomplete memory, po-tentially compromising future conversational contexts. Thus, it is triggered only in the necessary cases described above. 
+
+DeViBench (De graded Vi deo Understanding Bench mark) serves as the evaluation foundation. We construct DeViBench to quantitatively evaluate how RTC-induced degradation im-pacts MLLM accuracy. It comprises a test set and a validation set. The test set is used to evaluate the QoE of the Artic system, while the validation set facilitates the hyperparam-eter tuning of ReCapABR and ZeCoStream, as well as the in-context learning of the MLLM. 
+
+## 4 RESPONSE CAPABILITY-AWARE ADAPTIVE BITRATE 
+
+In this section, we propose ReCapABR . We first analyze factors affecting MLLM accuracy under different bitrates. Sec-ond, we explore how to achieve response capability aware-ness. Third, we present the confidence-based bitrate control. 
+
+## 4.1 What factors affect MLLM accuracy under different bitrates? 
+
+Unlike human perception, degrading with bitrate, MLLM understanding exhibits "saturation". We identify three key factors determining MLLM accuracy at low bitrates: 
+
+Prior Knowledge vs. Out-of-Distribution (OOD) Con-tent. MLLMs are pre-trained on massive datasets, embedding vast internal knowledge. When visual inputs align with this prior knowledge, the model can infer the correct result even with degraded inputs. For example, when watching a World Cup match, if the MLLM detects a specific jersey color and a number, it can infer the player’s identity (e.g., "Messi") based on its internal knowledge, even if the face is completely un-recognizable due to low bitrate blur. Conversely, for OOD content, the model cannot rely on priors and strictly requires high visual fidelity to extract features. 
+
+Memory of Seen vs. Unseen Content. As discussed in §2.1, current MLLMs maintain visual memory for a period. If content has been captured clearly in the past, the model can "recall" its attributes from memory, reducing the dependency on the current frame’s quality. For example, if a user holds up a medicine bottle and the camera captures a clear frame of the label, the MLLM stores this information. Minutes later, even if the video becomes blurry due to a network drop, the MLLM can still answer questions about the dosage by retrieving from its memory, whereas newly appeared content would require immediate high quality to be recognized. 
+
+Low vs. High Information Density. The density of se-mantic information within the frame dictates the impact of compression artifacts. Scenes with sparse semantic informa-tion are resilient, while dense scenes are fragile. For example, 
+
+> 6
+
+Artic: AI-oriented Real-time Communication for MLLM Video Assistant , , 
+
+a scene showing an outdoor lawn and sky remains semanti-cally unchanged even when blurry, as the information loss does not alter the fundamental understanding of the scene. In contrast, a text-heavy document or a screen filled with code relies on high-frequency details. These details are the first to be smoothed out by video codecs at low bitrates, leading directly to incorrect recognition or hallucinations. 
+
+## 4.2 Response capability awareness 
+
+To achieve response capability awareness, the most straight-forward approach is to construct a mathematical model map-ping bitrate and the above influencing factors to MLLM accu-racy, similar to traditional QoE modeling [ 38 , 57 ]. However, explicitly establishing such a mapping model poses signifi-cant challenges in the context of AI Video Assistants: 
+
+Generalization. MLLMs exhibit extreme heterogeneity. Dif-ferent model families (e.g., ChatGPT vs. Gemini) and param-eter sizes (e.g., 7B vs. 70B) result in vastly different sensitivi-ties to video degradation. A regression model trained on one MLLM is unlikely to transfer effectively to another. In addi-tion, frequent commercial MLLM updates rapidly invalidate offline-trained predictors. 
+
+Complexity. As analyzed above, the relationship between visual quality and response accuracy is highly non-linear and content-dependent (e.g., relying on prior knowledge or memory), making lightweight fitting functions ineffective. To address these challenges, we bypass external model-ing and leverage the MLLM’s intrinsic capabilities. Since the cloud-side MLLM already possesses strong video under-standing and reasoning abilities, a feasible approach is to let it directly evaluate and feedback its response capability under current bitrates. Specifically, we employ in-context learning to establish a real-time feedback loop. By designing a specific system prompt, we instruct the MLLM to assess the information sufficiency of the currently received video. The MLLM then outputs a Response Confidence Score 𝐶 𝑡 ∈ [ 0, 1]
+
+for the current timestamp 𝑡 , which is fed back to the client. 
+
+## 4.3 Confidence-based bitrate control 
+
+Based on the real-time confidence feedback 𝐶 𝑡 , we design a bitrate control algorithm to maintain the bitrate at a level just sufficient for the MLLM to respond, thereby reserving bandwidth headroom to absorb bandwidth fluctuations. We first quantify the difference between the current perfor-mance and the target. Let 𝜏 be the confidence threshold (we set 𝜏 = 0.8 by the validation set §6.2), which represents the confidence level required for the MLLM to respond correctly. We define the normalized confidence gap as 𝛿 𝑡 = (𝜏 − 𝐶 𝑡 )/ 𝜏 .A positive 𝛿 𝑡 indicates that the MLLM struggles to recog-nize video details, requiring higher quality, while a negative 
+
+𝛿 𝑡 suggests that the MLLM can already respond well with the current bitrate. To map this gap to the control logic, we compute a weight 𝑤 𝑡 using a sensitivity parameter 𝛾 :
+
+𝑤 𝑡 = 𝛿 𝑡 · | 𝛿 𝑡 |𝛾 −1 (1) We set 𝛾 = 2 by validation set §6.2. This quadratic scaling allows the algorithm to react aggressively when the confi-dence is significantly low to restore accuracy quickly, while performing fine-grained adjustments as 𝐶 𝑡 approaches 𝜏 .Finally, we employ 𝑤 𝑡 to update the bitrate. Let ˆ𝐵𝑡 be the estimated bandwidth from the CC algorithms. The next-step bitrate 𝑅 𝑡 +1 is calculated as: 
+
+𝑅 𝑡 +1 = min 
+
+ ˆ𝐵 𝑡 , 𝑅 𝑡 + 𝑤 𝑡 ·
+
+ ˆ𝐵 𝑡 − 𝑅 𝑡 
+
+ 
+
+(2) If congestion occurs ( ˆ𝐵 𝑡 < 𝑅 𝑡 ), the bitrate is immediately capped by ˆ𝐵 𝑡 . Conversely, when bandwidth is sufficient ( ˆ𝐵 𝑡 ≥
+
+𝑅 𝑡 ), the algorithm adjusts based on 𝑤 𝑡 . If 𝐶 𝑡 > 𝜏 , 𝑤 𝑡 becomes negative, causing the bitrate to voluntarily decrease to save bandwidth. When 𝐶 𝑡 ≈ 𝜏 , 𝑤 𝑡 approaches zero, maintaining the bitrate at a stable equilibrium. This mechanism creates a "need-based" transmission pattern, where bandwidth is consumed only when necessary for understanding, leaving a safety margin for bandwidth fluctuations. 
+
+## 5 ZERO-OVERHEAD CONTEXT-AWARE STREAMING 
+
+In this section, we propose ZeCoStream . We first describe how to identify response-important regions with zero over-head. Second, we address the challenge of region expiration caused by feedback latency. Third, we present a context-aware bitrate allocation strategy. 
+
+## 5.1 How to achieve context awareness with zero overhead? 
+
+To identify response-important regions, a straightforward approach is to deploy lightweight models (e.g., CLIP [ 54 ]) on the client to correlate the conversation context and differ-ent video regions. However, as discussed in §2.1, clients for AI Video Assistants often suffer from limited computation power and battery life (e.g., smart glasses [ 8, 10 , 14 , 18 ]), mak-ing it difficult to support local model inference. Although ex-isting solutions propose offloading computation from wear-ables to paired smartphones, on-device inference on phones still introduces non-negligible computational latency [54]. How can we achieve context awareness with zero over-head? We observe that most state-of-the-art MLLMs inher-ently possess real-time grounding capabilities [ 3 , 5, 52 , 65 ,66 ]. As illustrated in Figure 5, the MLLM can accurately localize relevant regions based on the input prompt. For in-stance, when the conversation context is “Keep an eye on the right side. Is that truck about to turn left?”, the truck on the right is precisely localized. Beyond single objects, this 
+
+> 7
+
+, , Jiangkai Wu et al. 
+
+Figure 5: How to identify response-important regions? Modern MLLMs inherently possess real-time grounding capabilities, enabling them to accurately localize relevant regions (green box) based on the conversational context. Beyond single objects, this capability extends to multiple objects, scene-level contexts, and temporal contexts. 
+
+Figure 6: To offset feedback latency, we instruct the MLLM not only to ground the current important regions (green box) but also to predict their future trajectories (red box) over a short horizon. Details can be found in §5.2. 
+
+capability extends to multiple objects, scene-level contexts, and temporal contexts. Therefore, like ReCapABR, we lever-age the server-side MLLM to feed back the bounding boxes of response-important regions to the client in real time. 
+
+## 5.2 Handling Feedback Latency via Grounding-then-Prediction 
+
+However, the feedback regions cannot be directly used for video encoding. This is because these regions are inherently outdated, corresponding to frames captured at least one round-trip time plus the MLLM inference time ago. While this latency is negligible for static objects (e.g., a parked car), it becomes critical for dynamic objects. For instance, a mov-ing vehicle may have shifted out of the outdated bounding box, rendering the feedback useless for the current frame. To address this, we instruct the MLLM not only to ground the current important regions but also to predict their future trajectories over a short horizon. As shown in Figure 6, based solely on the past 1.5 seconds of video frames, the MLLM can accurately predict the region’s bounding box for the next 1.5 seconds. Thus, a sequence of predicted bounding boxes for multiple future timestamps is sent back to the client. The client then matches the current timestamp with the corre-sponding prediction to guide video encoding. A key question remains: how long of the latency must the prediction cover? We conducted measurements on a commercial AI Video As-sistant (Doubao APP [ 3 ]) and found that the total latency from frame capture to receiving the prediction results ranges from 1.20 seconds to 1.52 seconds. Since Figure 6 demon-strates that the MLLM maintains high prediction accuracy within a 1.5-second window, our approach can effectively compensate for the feedback latency. 
+
+## 5.3 Context-aware bitrate allocation 
+
+With the predicted bounding boxes fed back from the MLLM, the client allocates the limited bitrate to different video re-gions based on their importance to the response. We divide each video frame ( 𝑊 × 𝐻 ) into a grid of non-overlapping patches (e.g., 64 ×64 pixels). Let K𝑡 denote the set of predicted bounding boxes for frame 𝑡 . We calculate the Contextual Im-portance score 𝜌 𝑖,𝑗 ∈ [ 0, 1] for the patch at (𝑖, 𝑗 ) as: 
+
+𝜌 𝑖,𝑗 = max 0, 1 − 𝑑 𝑖,𝑗 
+
+𝜇 · √𝑊 2 + 𝐻 2
+
+!
+
+(3) where 𝑑 𝑖,𝑗 is the Euclidean distance from the patch center to the nearest boundary of any box in K𝑡 (𝑑 𝑖,𝑗 = 0 if inside). We normalize this distance by the frame’s diagonal length, scaled by a coefficient 𝜇 = 0.5. It indicates the importance decays to zero when the distance exceeds half of the diagonal. We then map this score to the Quantization Parameter (QP) for video encoding. The QP controls the compression level: a larger value reduces bitrate but introduces blurriness, while a smaller value preserves details. Let 𝑄 𝑚𝑖𝑛 and 𝑄 𝑚𝑎𝑥 
+
+denote the lower and upper bounds of the QP range (e.g., 
+
+𝑄 𝑚𝑖𝑛 = 20 , 𝑄 𝑚𝑎𝑥 = 51 ). We adopt a non-linear mapping: 
+
+𝑄 𝑖,𝑗 = 𝑄 min + ( 𝑄 max − 𝑄 min ) ·  1 − 𝜌 𝑖,𝑗 
+
+2 (4) 
+
+> 8
+
+Artic: AI-oriented Real-time Communication for MLLM Video Assistant , , 
+
+Figure 7: DeViBench’s pipeline for automatic QA sam-ple construction. Details can be found in §6.1. 
+
+In this formulation, patches within the important regions (𝜌 𝑖,𝑗 = 1) are assigned 𝑄 𝑚𝑖𝑛 to ensure maximum fidelity. As the distance increases, the QP rises quadratically towards 
+
+𝑄 𝑚𝑎𝑥 . This forces the encoder to aggressively compress ir-relevant regions, ensuring the scarce bitrate budget is con-centrated on the content critical for the MLLM’s reasoning. 
+
+## 6 DEGRADED VIDEO UNDERSTANDING BENCHMARK 
+
+This section proposes DeViBench . We first detail the auto-matic QA construction, then summarize the benchmark. 
+
+## 6.1 Automatic QA construction pipeline 
+
+As described in §2.4, we need to construct QA samples that are sensitive to video quality. For this, the most straightfor-ward way is to hire volunteers to ask tricky questions about degraded videos. However, this is too expensive and ineffi-cient, hindering the scale-up of the dataset. So we ask: Can QA samples be constructed automatically and cheaply? 
+
+Rethinking the background of AI Video Assistant, MLLMs are already capable of understanding videos and giving re-sponses. So we leverage MLLMs to replace human volunteers and develop an automatic QA sample construction pipeline. As illustrated in Figure 7, this pipeline consists of 5 steps: 
+
+Video Collection. We first collect videos to ask questions. To align with the domain and scale of existing MLLM bench-marks [44], we directly use their videos (discarding QA). 
+
+Video Preprocessing. To allow MLLMs to understand the quality degradation caused by low bitrates, we transcode the original videos to low-bitrate versions (200 Kbps) using x265 from ffmpeg version N-118035-gc1e3d55f99. The low-bitrate video and the original video are horizontally concatenated into one video. Then this concatenated video will be input to the MLLM for understanding and QA generation. 
+
+QA Generation. To enable MLLMs to generate QA samples based on the concatenated video, we carefully designed a prompt with guidance from persona, context, core task, exe-cution steps, constraints, and output format, as detailed in the Appendix (Figure 16). This prompt ensures that MLLMs can recognize quality differences and generate quality-sensitive QA samples. Initially, we experimented with generating multiple-choice questions, but observed that they are inher-ently less challenging. On one hand, the options embedded in the prompt provide implicit hints to the MLLMs. On the other hand, even when the video quality is severely degraded, MLLMs can still guess from the four candidate options, guar-anteeing a baseline accuracy of at least 25%. Consequently, we shifted to generating free-response questions. Qwen3-VL-plus [12] is adopted as the generator. 
+
+QA Filtering. The generated QA pairs will be filtered. We separately input the original video and the low bitrate video into the MLLM and use the generated QA pairs for ques-tioning. If the answer from the original video is correct and the answer from the low bitrate video is wrong, we accept this QA pair. Note that since the questions are free-response, exact string matching is inapplicable for assessing correct-ness. Instead, we employ a separate MLLM as a judge to evaluate the semantic consistency between the response and the answer. In practice, Qwen2.5 Omni [ 60 ] is used as the filter, while Qwen-Flash [ 49 ] acts as the judge. In this step, 
+
+25.25% of the QA pairs can be accepted. 
+
+Cross Verification. Since the answer generated by genera-tor may also be incorrect, this cannot be filtered out through the above testing. Hence, we utilize another MLLM for cross-verification. We feed the above accepted question into an-other MLLM, and if the new answer is consistent with the above accepted answer, we finally approve this QA pair. In our experiments, GLM-4.6V [ 65 ] is adopted as the verifier and 
+
+89.37% of the accepted QA pairs can pass cross-verification. Considering all the above validations together, finally 22.57% 
+
+of the generated QA pairs are valid. 
+
+## 6.2 Benchmark Summary 
+
+Finally, we produce 1,968 QA samples, with details sum-marized in Table 2, including QA types, total duration, to-tal money spent, and total time cost. We also analyze the distribution of different QA types, as shown in Figure 8. In terms of categories, there are text-rich understanding (81.86%), attribute perception (11.53%), object perception (3.56%), counting (2.54%), action perception (0.36%) and spa-tial understanding (0.15%). In terms of temporal dependency, 
+
+> 9
+
+, , Jiangkai Wu et al. 
+
+Table 2: Benchmark summary Number of QA samples 1,968 
+
+QA sample types 6*2 
+
+Total duration (s) 88,680 
+
+Total money spent ($) 48.06 
+
+Total time cost (s) 102,704 
+
+Figure 8: Distribution of our generated QA samples. Outer ring: QA categories. Inner ring: Whether the question requires inter-frame information to answer. 
+
+8.28% of the questions necessitate inter-frame information (multiple frames) for answering, whereas 91.72% are answer-able with intra-frame information (single frame). The imbal-anced data distribution is justifiable, as different questions exhibit varying sensitivities to video degradation. This vari-ation is influenced not only by the question type but also by the dependency on temporal or spatial information. To confirm whether these MLLM-generated QA samples are usable, we spot-check 100 QA samples for manual an-swering. Among them, 96% of the generated questions are answerable by humans, and 93% of the generated answers are correct. This also proves the effectiveness of our auto-matic QA construction pipeline. The 100 spot-checked QA samples are designated as the validation set, while the re-maining samples constitute the test set. The validation set is used for the hyperparameter tuning of ReCapABR (e.g., 
+
+𝜏, 𝛾 ) and ZeCoStream (e.g., 𝜇 ), as well as for MLLM feedback in-context learning. The test set is used for evaluation (§7.1). 
+
+## 7 EVALUATION 7.1 Experimental Setup 
+
+We built a prototype of Artic in C++ and Python. Here, we describe implementation details and experimental setups. 
+
+Baselines. Artic is primarily compared against the tradi-tional human-centric WebRTC, which employs standard video codecs (e.g., H.265 [ 59 ]) and conventional CC algo-rithms (e.g., GCC [ 30 ], BBR [ 29 ]). We also establish several strawman baselines to isolate component contributions, in-cluding WebRTC+ZeCoStream, WebRTC+ReCapABR. 
+
+Metrics. The QoE objectives for AI Video Assistants consist of response accuracy and latency (Table 1, §2.2). For accu-racy, we calculate the ratio of correctly answered samples to the total number of samples on DeViBench (§6). Note that the validation samples used for hyperparameter tuning are excluded from the calculation. Latency denotes the dura-tion from the client-side encoder to the MLLM-side decoder, termed as frame latency. Frame latency directly contributes to the MLLM’s end-to-end response latency. We do not use the full end-to-end latency since it is dominated by MLLM inference time, which is orthogonal to the RTC design. 
+
+Test Videos. We conduct evaluations using videos from De-ViBench, the scale of which is summarized in Table 2. To achieve fine-grained QP control, we adopt the H.265 encoder implemented by Kvazaar [ 55 ] for both our approach (Ze-CoStream) and the baselines (standard encoding). We align the bitrate, resolution, and frame rate configurations with 
+
+industry settings [23 ]. For decoding, both our method and the baselines utilize x265 via decord 0.6.0 , maintaining identical decoding parameters to ensure consistency. 
+
+Test MLLMs. We evaluate accuracy using GLM-4.6V-Flash (9B) [ 66 ]. To avoid circularity , this model is distinct from the filter (Qwen2.5-Omni [ 60 ]) used to construct DeViBench (§6). Both the code and the model are frozen prior to test-ing. We adhere to the default settings (including the same random seed, system prompt, and officially recommended configurations) without any tuning for the QA test set (§6.2). 
+
+Network Traces. To match the traffic pattern of AI Video As-sistants, we use a dataset of 5G uplink bandwidth traces [ 37 ], along with our collected traces (§2.3). To reproduce the band-width fluctuations caused by user mobility and behavior, we select traces from driving and walking scenarios, filter-ing segments with significant bandwidth fluctuation. These traces are looped to match the duration of the test videos. 
+
+Network Simulation. Building on Razor [ 15 ], we devel-oped a WebRTC-based unidirectional video transmission system that supports both GCC and BBR. We employed Mahimahi [ 9 ] to dynamically limit the sender’s uplink band-width by replaying the traces described above. We set the queue length to 60 packets and adopted the drop-tail strategy. 
+
+## 7.2 Latency gains from ReCapABR 
+
+This section demonstrates the latency gains achieved by Re-CapABR. We compare ReCapABR against WebRTC (GCC) un-der various bandwidth fluctuation frequencies. We randomly switch the bandwidth among several industry-standard lev-els [ 23 ] and define fluctuation frequency as the number of switches (fluctuations) per minute. Figures 9a and 9b show the average latency and the CDF, respectively. 
+
+ReCapABR effectively reduces latency under band-width fluctuations. First, ReCapABR consistently reduces 
+
+> 10
+
+Artic: AI-oriented Real-time Communication for MLLM Video Assistant , ,  
+
+> (a) Average latency (b) Latency Distribution
+
+Figure 9: ReCapABR significantly reduces latency under bandwidth fluctua-tions, especially as fluctuations become more frequent. Details in §7.2. 
+
+Figure 10: Robustness of ReCa-pABR to Confidence Errors. 
+
+average latency across various bandwidth fluctuation fre-quencies. Second, the more frequent the bandwidth fluctu-ations, the greater the latency reduction. Figure 9a shows that with 1 bandwidth fluctuation per minute, ReCapABR reduces latency by 23.7 ms compared to the baseline. At 4 fluctuations per minute, the reduction expands to 148.4 ms. This is because under intense fluctuations, the baseline, which follows the CC, is more prone to over-transmission. In contrast, by capping the bandwidth estimated by the CC, ReCapABR reserves more headroom to absorb sudden band-width drops. Third, ReCapABR significantly increases the proportion of low-latency frames. For example, as illustrated in Figure 9b, at a frequency of 4 fluctuations per minute, only 65.5% of frames in the baseline have a latency below 200 ms, whereas ReCapABR achieves 82.5%. This improvement is also attributed to the headroom mechanism of ReCapABR. 
+
+Robustness to confidence errors. ReCapABR relies on the confidence scores from MLLM feedback. Ideally, these scores indicate whether the model can provide correct responses at the current bitrate. Figure 10 illustrates the relationship between confidence scores and actual accuracy. The results show that the confidence scores generally align with the accuracy. Thus, using a conservative capping strategy, Re-CapABR remains robust to confidence errors. 
+
+## 7.3 Accuracy gains from ZeCoStream 
+
+This section proves the accuracy gains of ZeCoStream. Specif-ically, we compare the accuracy of ZeCoStream against context-agnostic standard encoding across various bitrates (standard industry settings [ 23 ]). The results are presented in Figure 11. 
+
+ZeCoStream greatly improves accuracy under bandwidth-constrained conditions. First, in low-bandwidth scenar-ios, ZeCoStream effectively preserves accuracy. For example, at a low bitrate of 290 Kbps, the baseline accuracy is only 0.39, whereas ZeCoStream maintains it at 0.60. Second, Ze-CoStream substantially reduces the bandwidth for high accu-racy. For instance, to attain an accuracy of 0.9, the baseline 
+
+Figure 11: ZeCoStream significantly improves accuracy under bandwidth-constrained conditions and reduces the bandwidth required to achieve high accuracy. 
+
+Figure 12: (a) Encoded with default settings. (b) En-coded with ZeCoStream. (c) The QP from MLLM feed-back. The results show that ZeCoStream allocates more bits to important regions (e.g., purple circles) and fewer bits to irrelevant regions (e.g., yellow circles). 
+
+requires a bitrate exceeding 3171.37 Kbps, while ZeCoStream achieves this with only 907.60 Kbps. These gains are attrib-uted to ZeCoStream’s ability to allocate limited bitrates to the regions most critical for the response, ensuring that ev-ery bit contributes directly to accuracy. Figure 12 visualizes two sampled frames fed into the MLLM. Even with similar bi-trates (414 Kbps vs. 404 Kbps), ZeCoStream preserves higher fidelity in response-important regions (e.g., purple circles) while allowing more blur in response-irrelevant regions (e.g., yellow circles), thus improving MLLM accuracy. 
+
+> 11
+
+, , Jiangkai Wu et al.  
+
+> (a) upon BBR (b) upon GCC
+
+Figure 13: The overall performance gains under real-world network traces. Artic improves accuracy by 15.12% and reduce latency by 135.31 ms. 
+
+Figure 14: Artic effectively reduces band-width overhead by 69.77%. 
+
+## 7.4 Trace-driven simulation 
+
+This section demonstrates the end-to-end performance gains under real-world network traces. We compare Artic against three baselines, testing with both GCC and BBR as the un-derlying CC algorithms. The results are shown in Figure 13. 
+
+Overall performance gains. First, Artic improves both accuracy and latency. For instance, with BBR (Figure 13a), Artic boosts the average accuracy from 79.62% to 84.80% compared to WebRTC, while reducing the average latency by 135.31 ms. Second, ZeCoStream effectively compensates for the accuracy drop introduced by ReCapABR. For example, with GCC, although WebRTC+ReCapABR reduces latency from 568.13 ms to 477.49 ms compared to WebRTC, it incurs a 4.27% loss in accuracy (Figure 13b). Notably, by integrating ZeCoStream, Artic delivers a 19.39% accuracy gain, surpass-ing WebRTC by 15.12%. 
+
+Generalization. First, Artic achieves gains in both latency and accuracy across GCC and BBR. Second, we observe that different underlying CC algorithms influence the trade-off between latency and accuracy in Artic. For instance, Artic achieves a 9.94% higher accuracy gain with GCC compared to BBR, but a 46.82 ms lower latency gain. This is because GCC tends to be conservative and underestimates bandwidth under fluctuations. At low bandwidth estimates, ReCapABR is more likely to CC-based adaptation, resulting in reduced latency gains. Conversely, at lower bitrates, ZeCoStream allocates the limited bitrate to response-important regions, making the accuracy gains more substantial. 
+
+## 7.5 Overhead 
+
+In this section, we analyze the overhead of Artic compared to WebRTC for the AI Video Assistant. 
+
+Bandwidth Overhead. As discussed in §2.2, the bandwidth pressure of the AI Video Assistant lies entirely on the uplink. Artic not only avoids increasing this burden but actually re-duces uplink bandwidth overhead via ReCapABR. Figure 14 shows Artic reduces bandwidth usage by 46.84% and 69.77% 
+
+Figure 15: Artic increases monetary cost by 27.13%. 
+
+(GCC/BBR) vs. WebRTC. This reduction is attributed to the bitrate capping of ReCapABR. On the downlink, feedback overhead is negligible due to minimal data volume (e.g., con-fidence scores and region coordinates). Furthermore, since there is no video streaming on the downlink, bandwidth is abundant, making the feedback overhead negligible. 
+
+Computational Overhead. Artic introduces negligible com-putational overhead on the client side, as its algorithms pri-marily rely on feedback from the server-side MLLM (e.g., confidence scores in ReCapABR and important regions in ZeCoStream). Only simple numerical calculations, such as mapping regions to QP and confidence scores to target bi-trates, are performed locally; the cost of these operations is negligible. Regarding server-side overhead, since modern MLLMs are typically accessed via APIs and billed based on token usage, we quantify this overhead using monetary cost. 
+
+Monetary Cost. How much additional cost does Artic im-pose on the AI Video Assistant? Based on actual experi-mental expenditure, we estimated the cost per minute for each component, as shown in Figure 15. For a standard AI Video Assistant, the primary costs arise from the MLLM API ($0.303/min) [ 67 ] and the RTC API ($0.01/min) [ 27 , 45 ]. Ar-tic’s ZeCoStream and ReCapABR introduce additional costs of $0.071/min and $0.0137/min [ 28 ], respectively. Conse-quently, Artic increases the total cost from the baseline’s 
+
+> 12
+
+Artic: AI-oriented Real-time Communication for MLLM Video Assistant , , 
+
+$0.3126/min to $0.3974/min, a rise of 27.13%. Given the bene-fits of a 135.31 ms reduction in latency and a 15.12% improve-ment in accuracy (§7.4), justifying the cost. 
+
+## 8 CONCLUSION 
+
+This paper proposes Artic, an AI-oriented RTC framework for Video Assistants. We design: (1) ReCapABR to absorb bandwidth fluctuations for latency reduction; (2) ZeCoStream to maintain accuracy under low bandwidth; and (3) De-ViBench to evaluate how RTC-induced degradation affects MLLM accuracy. Prototype experiments show that compared with existing methods, Artic greatly improves accuracy by 15.12% and reduces latency by 135.31 ms. This work does not raise any ethical issues. 
+
+Acknowledgements. This paper is an extended version of our earlier work published in HotNets 2025 [ 58 ]. Com-pared to the workshop version, this version includes: (a) A new measurement study (§2.3). (b) The entirely new core contribution, ReCapABR (§4). (c) A redesigned ZeCoStream, which features zero-overhead capabilities (§5). (d) The refac-toring and expansion of DeViBench (§6). (e) An entirely new evaluation section (§7). 
+
+## REFERENCES 
+
+[1] 2025. ChatGPT. (2025). https://chatgpt.com/. [2] 2025. Copilot Vision. (2025). https://support.microsoft.com/en-us/to pic/using-copilot-vision-with-microsoft-copilot-3c67686f-fa97-40f 6-8a3e-0e45265d425f. [3] 2025. Doubao. (2025). https://www.doubao.com/. [4] 2025. Duolingo Max. (2025). https://www.duolingo.com/help/what-i s-duolingo-max/. [5] 2025. Gemini Live. (2025). https://gemini.google/overview/gemini-liv e/. [6] 2025. GLM-RealTime. (2025). https://zhipu-ef7018ed.mintlify.app/cn/ guide/models/sound-and-video/glm-realtime. [7] 2025. Grok. (2025). https://grok.com/. [8] 2025. INMO. (2025). https://inmolens.com/. [9] 2025. Mahimahi. (2025). http://mahimahi.mit.edu. [10] 2025. Omi Glass Dev Kit. (2025). https://www.omi.me/products/om i-glass-dev-kit. [11] 2025. Project-Astra. (2025). https://deepmind.google/models/project -astra/. [12] 2025. Qwen3-VL-Plus. (2025). https://www.alibabacloud.com/help/en /model-studio/models#11b9e47081cwz. [13] 2025. Raven-0. (2025). https://docs.tavus.io/sections/models#raven-p erception-model. [14] 2025. Ray-Ban Meta AI glasses. (2025). https://www.meta.com/ai-gla sses/social/. [15] 2025. Razor. (2025). https://github.com/yuanrongxi/razor. [16] 2025. Replika. (2025). https://replika.com/. [17] 2025. Samsung Galaxy XR. (2025). https://www.samsung.com/us/xr/ galaxy-xr/galaxy-xr/. [18] 2025. SOLO-Airgo. (2025). https://solosglasses.com/blogs/news/solo s-airgo-v2-modular-smart-glasses-with-camera-and-accessible-ai. [19] 2025. Soulfan AI. (2025). https://soulfunai.com/. [20] 2025. Tavus. (2025). https://www.tavus.io/. [21] 2025. Tencent Yuanbao. (2025). https://yuanbao.tencent.com/. [22] 2025. VMAF. (2025). https://github.com/Netflix/vmaf. [23] 2026. Agora Video SDK 3.7.0 API Reference: VideoEncoderConfigura-tion. (2026). https://api-ref.agora.io/en/video-sdk/electron/3.x/interf aces/videoencoderconfiguration.html. [24] 2026. Google Gemini 3 Pro. (2026). https://deepmind.google/models /gemini/pro/. [25] 2026. Hurricane Electric Network Tools. (2026). https://networktools .he.net/. [26] 2026. Realtime API with WebRTC. (2026). https://platform.openai.co m/docs/guides/realtime-webrtc. [27] Agora. 2026. Agora’s flexible pricing model. (2026). https://www.agor a.io/en/pricing/ [Accessed: February 6, 2026]. [28] byteplus. 2026. ModelArk API Document. (2026). https://docs.byteplu s.com/en/docs/ModelArk/ [Accessed: February 6, 2026]. [29] Neal Cardwell, Yuchung Cheng, C Stephen Gunn, Soheil Hassas Yeganeh, and Van Jacobson. 2017. BBR: Congestion-based conges-tion control. Commun. ACM 60, 2 (2017), 58–66. [30] Gaetano Carlucci, Luca De Cicco, Stefan Holmer, and Saverio Mas-colo. 2016. Analysis and design of the Google congestion control for web real-time communication (WebRTC). In Proceedings of the 7th International Conference on Multimedia Systems . 1–12. [31] Joya Chen, Zhaoyang Lv, Shiwei Wu, Kevin Qinghong Lin, Chenan Song, Difei Gao, Jia-Wei Liu, Ziteng Gao, Dongxing Mao, and Mike Zheng Shou. 2024. VideoLLM-Online: Online video large lan-guage model for streaming video. In Proceedings of the IEEE/CVF Con-ference on Computer Vision and Pattern Recognition . 18407–18418. [32] Yihua Cheng, Ziyi Zhang, Hanchen Li, Anton Arapin, Yue Zhang, Qizheng Zhang, Yuhan Liu, Kuntai Du, Xu Zhang, Francis Y Yan, et al . 2024. GRACE: Loss-Resilient Real-Time video through neural codecs. In 21st USENIX Symposium on Networked Systems Design and Implementation (NSDI 24) . 509–531. [33] Yufei Feng, Phuc Dinh, Moinak Ghoshal, Eduardo Baena, Hamza Bouchebbah, and Dimitrios Koutsonikolas. 2025. Vivisecting Beam Management in Operational 5G mmWave Networks. Proceedings of the ACM on Networking 3, CoNEXT2 (2025), 1–26. [34] Sadjad Fouladi, John Emmons, Emre Orbay, Catherine Wu, Riad S Wahby, and Keith Winstein. 2018. Salsify: {Low-Latency } network video through tighter integration between a video codec and a trans-port protocol. In 15th USENIX Symposium on Networked Systems Design and Implementation (NSDI 18) . 267–282. [35] Chaoyou Fu, Haojia Lin, Xiong Wang, Yi-Fan Zhang, Yunhang Shen, Xiaoyu Liu, Haoyu Cao, Zuwei Long, Heting Gao, Ke Li, et al . 2025. Vita-1.5: Towards GPT-4o level real-time vision and speech interaction. 
+
+arXiv preprint arXiv:2501.01957 (2025). [36] Moinak Ghoshal, Omar Basit, Sizhe Wang, Phuc Dinh, Imran Khan, Yufei Feng, Zhekun Yu, Y Charlie Hu, and Dimitrios Koutsonikolas. 2025. A First Large-Scale Study of Operational 5G Standalone Net-works. Proceedings of the ACM on Networking 3, CoNEXT4 (2025), 1–21. [37] Moinak Ghoshal, Z. Jonny Kong, Qiang Xu, Zixiao Lu, Shivang Aggar-wal, Imran Khan, Yuanjie Li, Y. Charlie Hu, and Dimitrios Koutsoniko-las. 2022. An In-Depth Study of Uplink Performance of 5G mmWave Networks. In In Proceedings of 2nd ACM SIGCOMM Workshop on 5G and Beyond Network Measurements, Modeling, and Use Cases (5G-MeMU) .[38] Yu Guan, Chengyuan Zheng, Xinggong Zhang, Zongming Guo, and Junchen Jiang. 2019. Pano: Optimizing 360 video streaming with a better understanding of quality perception. In Proceedings of the ACM Special Interest Group on Data Communication . 394–407. [39] Yuting Guo, Sizhe Wang, Moinak Ghoshal, Y Charlie Hu, and Dimitrios Koutsonikolas. 2023. The Power of Asynchronous SLAM in Multi-User AR over Cellular Networks: A Measurement Study. In Proceedings of the 2023 Workshop on Emerging Multimedia Systems . 34–40. 13 , , Jiangkai Wu et al. 
+
+[40] Jiahai Hu, Lin Wang, Jing Wu, Qiangyu Pei, Fangming Liu, and Bo Li. 2025. A comparative measurement study of cross-layer 5G per-formance under different mobility scenarios. Computer Networks 257 (2025), 110952. [41] Aaron Hurst, Adam Lerer, Adam P Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Welihinda, Alan Hayes, Alec Radford, et al . 2024. GPT-4o system card. arXiv preprint arXiv:2410.21276 (2024). [42] Imran Khan, Moinak Ghoshal, Joana Angjo, Sigrid Dimce, Mushahid Hussain, Paniz Parastar, Yenchia Yu, Xueting Deng, Sumit Hawal, Shirui Huang, et al . 2025. How mature is 5G deployment? A cross-sectional, year-long study of 5G uplink performance. Computer Com-munications 237 (2025), 108153. [43] Zeqi Lai, Weisen Liu, Qian Wu, Hewu Li, Jingxi Xu, and Jianping Wu. 2022. SpaceRTC: Unleashing the low-latency potential of mega-constellations for real-time communications. In IEEE INFOCOM 2022-IEEE Conference on Computer Communications . IEEE, 1339–1348. [44] Junming Lin, Zheng Fang, Chi Chen, Zihao Wan, Fuwen Luo, Peng Li, Yang Liu, and Maosong Sun. 2024. Streamingbench: Assessing the gap for MLLMs to achieve streaming video understanding. arXiv preprint arXiv:2411.03628 (2024). [45] LiveKit. 2026. LiveKit Subscription Page. (2026). https://livekit.io/pri cing [Accessed: February 6, 2026]. [46] Zili Meng, Yaning Guo, Chen Sun, Bo Wang, Justine Sherry, Hongqiang Harry Liu, and Mingwei Xu. 2022. Achieving consistent low latency for wireless real-time communications with the shortest control loop. In Proceedings of the ACM SIGCOMM 2022 Conference .193–206. [47] Arvind Narayanan, Eman Ramadan, Rishabh Mehta, Xinyue Hu, Qingxu Liu, Rostand AK Fezeu, Udhaya Kumar Dayalan, Saurabh Verma, Peiqi Ji, Tao Li, et al . 2020. Lumos5G: Mapping and predict-ing commercial mmWave 5G throughput. In Proceedings of the ACM internet measurement conference . 176–193. [48] Haoran Qiu, Anish Biswas, Zihan Zhao, Jayashree Mohan, Alind Khare, Esha Choukse, Íñigo Goiri, Zeyu Zhang, Haiying Shen, Chetan Bansal, Ramachandran Ramjee, and Rodrigo Fonseca. 2025. Mod-Serve: Modality- and Stage-Aware Resource Disaggregation for Scal-able Multimodal Model Serving. (2025). arXiv:cs.DC/2502.00937 https://arxiv.org/abs/2502.00937 [49] Qwen. 2026. Qwen-Flash. (2026). https://www.alibabacloud.com/h elp/en/model-studio/models#qwenflashintl [Accessed: February 6, 2026]. [50] Michael Rudow, Francis Y Yan, Abhishek Kumar, Ganesh Anantha-narayanan, Martin Ellis, and KV Rashmi. 2023. Tambur: Efficient loss recovery for videoconferencing via streaming codes. In 20th USENIX Symposium on Networked Systems Design and Implementation (NSDI 23) . 953–971. [51] Hendrik Schippers, Melina Geis, Stefan Böocker, and Christian Wiet-feld. 2025. DoNext: An Open-Access Measurement Dataset for Machine Learning-Driven 5G Mobile Network Analysis. IEEE Transactions on Machine Learning in Communications and Networking (2025). [52] Gemini Team, Petko Georgiev, Ving Ian Lei, Ryan Burnell, Libin Bai, Anmol Gulati, Garrett Tanzer, Damien Vincent, Zhufeng Pan, Shibo Wang, et al . 2024. Gemini 1.5: Unlocking multimodal understanding across millions of tokens of context. arXiv preprint arXiv:2403.05530 
+
+(2024). [53] Wenwen Tong, Hewei Guo, Dongchuan Ran, Jiangnan Chen, Jiefan Lu, Kaibin Wang, Keqiang Li, Xiaoxu Zhu, Jiakui Li, Kehan Li, et al .2025. Interactiveomni: A unified omni-modal model for audio-visual multi-turn dialogue. arXiv preprint arXiv:2510.13747 (2025). [54] Pavan Kumar Anasosalu Vasu, Hadi Pouransari, Fartash Faghri, Raviteja Vemulapalli, and Oncel Tuzel. 2024. Mobileclip: Fast image-text models through multi-modal reinforced training. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .15963–15974. [55] Marko Viitanen, Ari Koivula, Ari Lemmetti, Arttu Ylä-Outinen, Jarno Vanne, and Timo D. Hämäläinen. 2016. Kvazaar: Open-Source HEVC/H.265 Encoder. In Proceedings of the 24th ACM International Conference on Multimedia . http://doi.acm.org/10.1145/2964284.2973796 [56] Yuxuan Wang, Yueqian Wang, Bo Chen, Tong Wu, Dongyan Zhao, and Zilong Zheng. 2025. OmniMMI: A Comprehensive Multi-modal Interaction Benchmark in Streaming Video Contexts. In Proceedings of the Computer Vision and Pattern Recognition Conference . 18925–18935. [57] Jiangkai Wu, Yu Guan, Qi Mao, Yong Cui, Zongming Guo, and Xing-gong Zhang. 2023. ZGaming: Zero-latency 3D cloud gaming by image prediction. In Proceedings of the ACM SIGCOMM 2023 Conference . 710– 723. [58] Jiangkai Wu, Zhiyuan Ren, Liming Liu, and Xinggong Zhang. 2025. Chat with ai: The surprising turn of real-time video communication from human to ai. In Proceedings of the 24th ACM Workshop on Hot Topics in Networks . 402–410. [59] x265. 2024. H.265. (2024). https://www.itu.int/rec/T-REC-H.265 [Accessed: December 1, 2025]. [60] Jin Xu, Zhifang Guo, Jinzheng He, Hangrui Hu, Ting He, Shuai Bai, Keqin Chen, Jialin Wang, Yang Fan, Kai Dang, et al . 2025. Qwen2.5-Omni technical report. arXiv preprint arXiv:2503.20215 (2025). [61] Jin Xu, Zhifang Guo, Hangrui Hu, Yunfei Chu, Xiong Wang, Jinzheng He, Yuxuan Wang, Xian Shi, Ting He, Xinfa Zhu, Yuanjun Lv, Yongqi Wang, Dake Guo, He Wang, Linhan Ma, Pei Zhang, Xinyu Zhang, Hongkun Hao, Zishan Guo, Baosong Yang, Bin Zhang, Ziyang Ma, Xipin Wei, Shuai Bai, Keqin Chen, Xuejing Liu, Peng Wang, Mingkun Yang, Dayiheng Liu, Xingzhang Ren, Bo Zheng, Rui Men, Fan Zhou, Bowen Yu, Jianxin Yang, Le Yu, Jingren Zhou, and Junyang Lin. 2025. Qwen3-Omni Technical Report. (2025). arXiv:cs.CL/2509.17765 https: //arxiv.org/abs/2509.17765 [62] Francis Y Yan, Hudson Ayers, Chenzhi Zhu, Sadjad Fouladi, James Hong, Keyi Zhang, Philip Levis, and Keith Winstein. 2020. Learning in situ: a randomized experiment in video streaming. In 17th USENIX Symposium on Networked Systems Design and Implementation (NSDI 20) . 495–511. [63] Jingkang Yang, Shuai Liu, Hongming Guo, Yuhao Dong, Xiamengwei Zhang, Sicheng Zhang, Pengyun Wang, Zitang Zhou, Binzhu Xie, Ziyue Wang, Bei Ouyang, Zhengyu Lin, Marco Cominelli, Zhongang Cai, Yuanhan Zhang, Peiyuan Zhang, Fangzhou Hong, Joerg Widmer, Francesco Gringoli, Lei Yang, Bo Li, and Ziwei Liu. 2026. EgoLife: Towards Egocentric Life Assistant. (2026). arXiv:cs.CV/2503.03803 https://arxiv.org/abs/2503.03803 [64] Zhenyu Yang, Yuhang Hu, Zemin Du, Dizhan Xue, Shengsheng Qian, Jiahong Wu, Fan Yang, Weiming Dong, and Changsheng Xu. [n. d.]. SVBench: A Benchmark with Temporal Multi-Turn Dialogues for Streaming Video Understanding. In The Thirteenth International Con-ference on Learning Representations .[65] Z.ai. 2026. GLM-4.6V. (2026). https://docs.z.ai/guides/vlm/glm-4.6v [Accessed: February 6, 2026]. [66] Z.ai. 2026. GLM-4.6V-Flash. (2026). https://huggingface.co/zai-org/G LM-4.6V-Flash [Accessed: February 6, 2026]. [67] Z.ai. 2026. GLM-Realtime API Document. (2026). https://docs.bigmo del.cn/cn/guide/models/sound-and-video/glm-realtime [Accessed: February 6, 2026]. [68] Huanhuan Zhang, Anfu Zhou, Yuhan Hu, Chaoyue Li, Guangping Wang, Xinyu Zhang, Huadong Ma, Leilei Wu, Aiyun Chen, and 14 Artic: AI-oriented Real-time Communication for MLLM Video Assistant , , 
+
+Changhui Wu. 2021. Loki: improving long tail performance of learning-based real-time video adaptation by fusing rule-based models. In Pro-ceedings of the 27th Annual International Conference on Mobile Com-puting and Networking . 775–788. [69] Huanhuan Zhang, Anfu Zhou, Jiamin Lu, Ruoxuan Ma, Yuhan Hu, Cong Li, Xinyu Zhang, Huadong Ma, and Xiaojiang Chen. 2020. OnRL: Improving mobile video telephony via online reinforcement learning. In Proceedings of the 26th Annual International Conference on Mobile Computing and Networking . 1–14. [70] Pan Zhang, Xiaoyi Dong, Yuhang Cao, Yuhang Zang, Rui Qian, Xilin Wei, Lin Chen, Yifei Li, Junbo Niu, Shuangrui Ding, et al . 2024. InternLM-XComposer2.5-OmniLive: A comprehensive multimodal system for long-term streaming video and audio interactions. arXiv preprint arXiv:2412.09596 (2024). 
+
+## A APPENDIX A.1 Prompt used 
+
+Figure 16 illustrates the prompt used for QA generation. 
+
+Figure 16: Our prompt for QA Sample Generation. 
+
+15

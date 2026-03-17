@@ -1,0 +1,174 @@
+Title: A Hierarchical End-of-Turn Model with Primary Speaker Segmentation for Real-Time Conversational AI
+
+URL Source: https://arxiv.org/pdf/2603.13379v1
+
+Published Time: Tue, 17 Mar 2026 00:13:11 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+# A Hierarchical End-of-Turn Model with Primary Speaker Segmentation for Real-Time Conversational AI 
+
+Karim Helwani, Hoang Do, James Luan, and Sriram Srinivasan Meta, Menlo Park, CA, USA Email: {karimhelwani, hdo, jamesluan, sriramsri}@meta.com 
+
+Abstract —We present a real-time front-end for voice-based conversational AI to enable natural turn-taking in two-speaker scenarios by combining primary speaker segmentation with hierarchical End-of-Turn (EOT) detection. To operate robustly in multi-speaker environments, the system continuously identifies and tracks the primary user, ensuring that downstream EOT decisions are not confounded by background conversations. The tracked activity segments are fed to a hierarchical, causal EOT model that predicts the immediate conversational state by independently analyzing per-speaker speech features from both the primary speaker and the bot. Simultaneously, the model anticipates near-future states ( t+10 /20 /30 ms) through probabilistic predictions that are aware of the conversation partner’s speech. Task-specific knowledge distillation compresses wav2vec 2.0 representations (768 D) into a compact MFCC-based student (32 D) for efficient deployment. The system achieves 82% multi-class frame-level F1 and 70.6% F1 on Backchannel detection, with 69.3% F1 on a binary Final vs. Others task. On an end-to-end turn-detection benchmark, our model reaches 87.7% recall vs. 58.9% for Smart Turn v3 while keeping a median detection latency of 36 ms versus 800–1300 ms. Despite using only 1.14 M parameters, the proposed model matches or exceeds transformer-based baselines while substantially reducing latency and memory footprint, making it suitable for edge deployment 1.
+
+I. I NTRODUCTION 
+
+The growing popularity of voice assistants has accelerated the adoption of voice as an intuitive front-end for LLM-powered conversational AI systems. This shift presents the significant challenge of supporting natural turn-taking in conversations, requiring systems to be responsive to user interruptions while remaining robust against background speakers and environmental noise, and to accurately interpret backchannels (such as "mm-hmm" or "uh-huh") and other natural user reactions that do not indicate the end of a con-versational turn, all without depending on explicit keywords that can disrupt the conversational flow. Speaker diarization, determining “who spoke when”, has advanced rapidly with deep learning [1]. While hybrid pipelines that segment au-dio, extract speaker embeddings, and cluster them, using encoders such as x-vectors and ECAPA-TDNN with modern 
+
+> 1
+
+Paper accepted for presentation at the IEEE Conference on Artificial Intelligence 2026. 
+
+clustering like VBx [2], [3] are effective in single-speaker or low-overlap conditions, performance in conditions with substantial overlap remains challenging. End-to-end neural diarization (EEND) predicts multi-speaker activity directly and handles overlap via permutation-invariant training [4]. Target-speaker voice activity detection (TS-VAD) further improves robustness in practical scenarios by conditioning on speaker-specific embeddings [5]. Recent work has also emphasized augmentation and consistency learning for robust audio classification [6], as well as latent disentanglement for structured acoustic scenes [7]. 
+
+Contributions: Motivated by these recent developments, we present an approach that integrates a streaming primary speaker segmentation module with a hierarchical end-of-turn (EOT) detector. Compared to prior diarization, endpointing, and turn-taking work, this paper makes the following contri-butions: (i) streaming primary-speaker segmentation that extracts disentangled multi-speaker embeddings in real-time and performs online clustering to reliably track the active user even in the presence of background speech, without requiring prior enrollment, and ensuring that only the primary user’s activity is forwarded to the chatbot. (ii) Hierarchical EOT architecture with integrated backchannel detection. The EOT model operates across multiple horizons: it enforces strict causality at horizon 0 by relying exclusively on self-features, while also making predictions that are aware of the conversation partner (i.e., the other speaker) for near-future states ( t+10 /20 /30 ms). This architecture is explicitly designed to prevent the use of the partner’s speech onset as a shortcut for predicting turn ends in conversational datasets. (iii) anti-shortcut data augmentation for turn-taking, includ-ing label time-shift jitter and random channel dropout, which prevent the model from trivially memorizing conversation dynamics such as “A ends exactly when B starts”. (iv) task-specific distillation from wav2vec 2.0’s 768-D rep-resentation to a compact MFCC-based student, enabling a 32-D per-speaker representation with only 1.14 M parameters and ≈111 MMAC/s. (v) experiments on a benchmark dataset showing our sys-
+
+> arXiv:2603.13379v1 [cs.LG] 10 Mar 2026
+
+tem achieves higher turn-end recall with substantially lower latency and smaller model size than transformer baselines. II. R ELATED WORK 
+
+A. Endpointing and Turn-taking 
+
+Endpointing indicates the end of a user prompt that the chatbot can process once a user has finished speaking, traditionally using VAD-style trailing-silence rules or learned 
+
+neural endpointers . Acoustic GLDNN/CLDNN endpointers for streaming ASR [8] and end-to-end endpoint detectors that integrate acoustic and language modeling knowledge [9] have been widely adopted. More recent work folds endpoint-ing into end-to-end recognizers, e.g., joint endpointing and decoding or EOS tokens in RNN-T models, to improve the latency–WER trade-off [10], [11]. These approaches optimize utterance termination but do not explicitly model the mutual interaction cues that govern turn-taking. Predictive turn-taking models instead forecast near-future activity of inter-locutors. Voice Activity Projection (VAP) [12] learns future voice-activity windows and captures turn-shift/backchannel patterns; subsequent work extends VAP to multilingual di-alogue and investigates prosodic cues [13]. In our exper-iments we benchmark against Smart Turn v3, an open-source “semantic VAD” that predicts turn completion from raw audio [14]. Unlike VAP or our hierarchical approach, Smart Turn does not explicitly model bi-speaker future ac-tivity or multi-horizon causal structure, making it a strong baseline but not a predictive turn-taking model per se. 
+
+B. Diarization and Primary Speaker Tracking 
+
+Diarization pipelines commonly combine frame-level seg-mentation, embedding extraction (x-vector, ECAPA), and clustering (PLDA/AHC, VBx) [1]–[3]. EEND [4] predicts overlapped activities jointly using PIT loss, while TS-VAD [5] conditions on target embeddings to improve de-tection. Our focus is an online, streaming variant tailored to conversational AI: the goal is not complete diarization, but reliable filtering of non-primary talkers so the downstream EOT model operates on the intended speaker only. We adopt causal convolutions for streaming, multi-condition augmen-tation and consistency learning [6], [15], and a lightweight disentanglement-inspired peeling mechanism to obtain mul-tiple concurrent speaker embeddings [7]. 
+
+C. Relation to VAP and Smart Turn 
+
+Voice Activity Projection (VAP) [12] predicts future joint voice-activity trajectories for both speakers and can be used to derive turn-shift and backchannel events. In its original form, VAP processes bi-speaker audio jointly through ashared encoder, so the model leverages the instantaneous activity of the conversation partner as a strong cue for turn-ends; this is natural for offline analysis, but in a real-time system where turn-end decisions trigger the partner’s response, it risks learning a non-causal shortcut (“A has finished because B has started”). Our architecture instead enforces that horizon-0 decisions for each speaker use only that speaker’s features, with partner information entering only in later horizons and through explicit anti-shortcut augmentation. Smart Turn v3 [14] is a compact “semantic VAD” that operates directly on the waveform and pre-dicts turn completion at the utterance level. It serves as a strong engineering baseline in our experiments, but un-like our model it does not (i) track a primary speaker in multi-talker mixtures, (ii) model multi-horizon turn states (Initial/Speech/Interim/Final/Backchannel), or (iii) provide strictly causal frame-level predictions suitable for sub-50 ms turn-taking. III. P RIMARY SPEAKER SEGMENTATION 
+
+A. Motivation 
+
+In multi-speaker environments, while a VAD is effective in rejecting ambient background noise, it cannot separate the engaged user from other background talkers. Without explicit primary user filtering, EOT triggers on irrelevant speech, causing spurious handovers. We therefore segment and track the primary user online and pass only their activity to the EOT detector. 
+
+B. Feature Encoder (Backbone) 
+
+Input audio is converted to 32-D MFCCs with a20 ms window, 10 ms hop, and causal framing (100 Hz). A linear projection maps frames to 128 D, followed by 
+
+L Multi-Scale Causal Convolution (MSCC) blocks. Each block applies 1-D convolutions at multiple dilations ( d ∈{1, 4}) with left padding (k−1) d for causality and fuses branches via a 1×1 convolution and dropout: h(ℓ) 
+
+> t
+
+=ReLU  BN  Conv1D ℓ(x) . Stacking such blocks yields a lightweight causal encoder reminiscent of ECAPA-TDNN [3] but optimized for streaming speaker tracking. 
+
+C. Peeling-based Multi-speaker Embedding Extraction 
+
+To handle overlapping speakers, we iteratively extract 
+
+K disentangled embedding sequences {z1, . . . , z K } via a “peeling” mechanism inspired by latent block-wise disentan-glement [7]. Let r0 denote the encoder output after passing a fully connected layer serving as a residual projection layer. For iteration i ∈ { 1, . . . , K }:
+
+hi = tanh( Weri−1), gi = σ(Wg ri−1), (1) 
+
+zi = SoftQuant  128 ( gi ⊙ hi)/128 , (2) 
+
+si = σ(Wsri−1), ri = ri−1 − zi, (3) where zi is the i-th speaker embedding sequence, si is a stop signal that informs the number of speakers in a given frame, 
+
+ri the residual signal, We, W g , W s refer to the weights of the embedding, gate, and stop signal heads respectively. The residual update encourages successive peels to model distinct sources. After K iterations we obtain Z = {z1, . . . , z K }.
+
+D. Online Primary Speaker Clustering 
+
+The centroid for the primary speaker is updated online using a momentum-based moving average whenever the Conv1d Dilated Conv1d BatchNorm BatchNorm Conv1d Multiscale Conv Layer ... MFCC FC Residual Proj. Extractor Layer Gating Layer Multiscale Conv Layer Soft Quant. Peeled Embedding Stop Head Stop Signal Fig. 1: Detailed overview of the primary speaker segmentation unit. The embeddings are extracted recursively, the gating layer decides how much of the residual signal ri to be used for a speaker’ embedding, the number of speakers in a frame is informed through the stop signal si. The embeddings are quantized using a soft quantizer into 128 discrete levels. cosine similarity between the incoming embedding zt and the current centroid cprim exceeds a threshold: 
+
+ρt = cos( zt, c prim ), (4) if ρt > θ : cprim ← αc prim + (1 − α)zt, (5) with threshold θ=0 .7 and momentum α=0 .9 determined empirically. The centroid initializes on the first active frames observed from the engaged user (e.g., after first talker speech activity following agent prompt) and adapts smoothly, maintaining robustness to brief background intrusions. Only frames whose peel-embeddings are closest to cprim (and pass VAD) are forwarded to the EOT module. 
+
+E. Training Objectives and Augmentation 
+
+We combine permutation-invariant supervision for over-lapped peels, margin-based discrimination, and consistency regularization:  
+
+> •
+
+PIT binary cross-entropy over peels and reference masks (EEND-style) to ensure permutation robust-ness [4].  
+
+> •
+
+CosFace margin loss to separate speakers angu-larly [16].  
+
+> •
+
+Supervised contrastive loss to pull same-speaker frames together and push different speakers apart [17].  
+
+> •
+
+VAD-masked triplet consistency between clean and mixture embeddings, aligning mixture peels with clean references.  
+
+> •
+
+Peel diversity loss penalizing high cosine similarity between different peels, reducing redundancy.  
+
+> •
+
+AugMix-style prediction consistency across augmen-tations using Jensen–Shannon divergence [6], [15]. We employ multi-condition augmentation: additive noise/music (SNR 10–15 dB), RIR reverberation with areverberation time ( T60 100–800 ms), PSTN downsample/ μ-law upsampling, Wiener AEC artifacts, and overlap simulation by mixing two speakers with random ratio 
+
+α ∈ [0 .3, 0.7] . A Silero VAD masks non-speech frames during training [18]. 
+
+F. Performance Evaluation and Model Complexity 
+
+On mixtures with varying signal-to-inference-ratios (SIRs), the primary segmentation achieves an average equal error rate (EER) of ≈10%, improving to < 8% for SIR >10 dB 
+
+Fig. 2: Equal error rate (EER) vs. signal-to-interference ratio (SIR) for primary speaker segmentation. Average EER is 
+
+≈10%, improving as SIR increases. and degrading gracefully at low SIRs (Fig. 2). This effec-tively filters background speech prior to EOT, reducing false triggers from non-primary talkers. The online clustering, and feature and embedding extractions have a median end-to-end detection latency from the speech onset of 50 ms. The primary segmentation model is light weight requiring ≈ 137 kMACs. IV. H IERARCHICAL END -OF -T URN MODEL 
+
+We perform per-frame (100 Hz) EOT state classification for two speakers. Each 10 ms frame contains 46 features: 40 MFCCs (20 per speaker), 4 pitch features (2 per speaker), and 2 voice-activity indicators (1 per speaker). The model predicts five classes per speaker: Initial ; representing the silent frames before a turn starts, Speech for talker speech activity frames, Interim ; for pauses the speaker makes within a turn, Final ; representing the end of a turn, and Backchannel ;representing non-interrupting conversational cues. We assess performance using both frame-level classification metrics (in-cluding multi-class F1 and accuracy, as well as binary F1 for distinguishing Final versus Others) and turn-level detection metrics, which are computed by applying a threshold to the aggregated Final probability across conversational segments. In the following sub-sections, we describe the labeled dataset we use, the teacher-student model architecture, and discuss the computational complexity of the model. 
+
+A. Datasets and Labels 
+
+We use ∼350 hours of human annotated proprietary dataset of segment/(turn)-level diarized English conversa-tional speech for training, which we convert to frame-level (100 Hz) labels. Each frame is assigned one of five classes per speaker: Initial , Speech , Interim , Final , or Backchannel .Speech frames inside an annotated segment are labeled as 
+
+Speech ; pauses within a segment (turn) (audio VAD is 0) are labeled as Interim . Backchannels are detected via lexical and durational heuristics applied to the transcription (e.g. short utterances such as “mm-hm”, “yeah”, “right”), and the corresponding frames are labeled as Backchannel . To obtain frame-level Final labels, we work at turn level. A complete turn is annotated by a human labeler. For each turn, let tend 
+
+be the frame index of the last speech frame of that turn. We then assign the label Final to a fixed window of 10 frames (100 ms at 100 Hz) starting at tend , i.e. frames [tend , t end + 9] 
+
+for that speaker. All other frames remain in their respective classes ( Initial , Speech , Interim , Backchannel ). This provides a frame-level approximation of the turn-end region suitable for multi-class training. The dataset contains both conversa-tions and single-speaker segments. However, single-speaker segments used primarily to pre-train the distillation student, encouraging self-conditioned Final predictions. 
+
+B. Model Overview 
+
+Stereo audio at 16 kHz is converted to frame-level fea-tures at 100 Hz. For each speaker we compute 20 MFCCs, pitch (F0 and voicing probability), and 1-D voice-activity indicators. During training we compute wav2vec 2.0 fea-tures [19] for each speaker and pass them through a small compression (teacher) network (768 →32 D) using an MLP with residual skip (768 →32) and layer normalization. Com-pression is applied per speaker. A shared student network maps each speaker’s 20-D MFCCs to a 32 D task-specific compressed representation using multiscale causal convolu-tions and residual connections. The student’s 32 D MFCC features are matched to the compressed teacher via a loss combining L1, L2, and cosine similarity with weights (0.5, 0.3, 0.2). Teacher targets are detached to prevent gradients flowing into the compression module from the distillation term. To mitigate train–test mismatch, we gradually mix teacher and student compressed features via a cosine decay schedule, transitioning from 100% teacher to pure student over a warm-up window. Subsequent EOT heads consume the mixed features during training; inference uses only the student. For each speaker, the base features (23 D: MFCC 20 + pitch 1 + voicing 1 + VAD 1) are concatenated with the 32 D compressed features (55 D total) and mapped via a 55 →256 →128 MLP with ReLU and dropout. The 55 D feature vector is passed to the EOT head, which is a 2-layer LSTM (hidden 128, dropout 0.1) that models temporal dynamics with state caching for streaming. The EOT head consumes either teacher (training) or student (inference) features. Horizon-0 heads predict immediate states using only self-features, taking the speaker’s LSTM output and predicting 5-class logits (causal) corresponding to the five classes per speaker: Initial , Speech , Interim , Final , and 
+
+Backchannel . Future heads ( h1 − h3) incorporate adapted partner features and self horizon-0 logits, enabling anticipa-tion while constraining cross-speaker influence. They receive a concatenation of self LSTM output (128 D), adapted partner features (32 →8 D, dropout 0.2), and self horizon-0 logits (5 D). A 141 →15 linear layer outputs logits for horizons 
+
+h1 − h3 (3 ×5), reshaped to [T, 3, 5] . Per speaker, horizons 
+
+[h0, h 1, h 2, h 3] are concatenated into [T, 4, 5] and truncated to valid positions to respect the prediction lookahead. Outputs are stacked across speakers to form an [2 , T, 4, 5] tensor. For training we use a Toeplitz-style loss that unfolds the per-horizon predictions into overlapping windows and computes cross-entropy with shifted labels, so that each frame predicts its own state and three future frames. The overall system overview is depicted in Fig. 3. 
+
+C. Computational Complexity 
+
+At 100 Hz, feature extraction requires roughly 720 k MACs per frame (dominated by FFT and mel filtering). The neural forward pass adds ≈392.6 k MACs per frame across both speakers, totaling ≈1.11 M MACs/frame (≈111 MMIPS). Weight memory is ≈1.14 M parameters ( ≈4.56 MB, fp32), and typical streaming activations are < 200 kB. On modern CPUs, per-frame latency is 1.5–2.0 ms, leaving ample head-room under a 10 ms budget. V. E XPERIMENTS 
+
+A. Training Setup 
+
+We train on a 350-hour proprietary dataset with frame-level labels, dropout 0.1 in standard layers and 0.2 in the partner adapter, and cepstral mean normalization for MFCCs. Pitch features are log-normalized. The distillation weight is 0.15 relative to the EOT loss. We train using AdamW with warmup, gradient clipping, and a cosine learning-rate schedule. The classification loss at each time step is cross-entropy loss with horizon weighting that prioritizes immediate predictions (t0 = ×1, t0 + 10 ms = ×0.5,
+
+t0 + 20 ms = ×0.25 , t0 + 30 ms = ×0.1), ground truth labels are converted to sliding windows to match each horizon and class weights are calculated to address imbalance between frequent (speech) and rare (Final, Backchannel) classes. To reduce the risk of non-causal shortcuts, we apply two turn-taking-specific augmentations: 
+
+Label time-shift jitter. For a random subset of training segments we jitter the annotated EOT boundaries by a small random offset within a 0–1 s window. This prevents the model from relying on a trivial deterministic pattern such as “speaker A always ends exactly at the onset of speaker B”, and encourages it to use speaker-internal cues like prosody, silence duration, and hesitation patterns. 
+
+Channel dropout. Independently for each speaker chan-nel, with small probability we zero out the entire feature stream for that speaker in a training segment. This forces the model to remain robust when one channel is missing or corrupted and, crucially, discourages it from depending exclusively on the partner channel to predict turn ends. These augmentations are applied on top of the signal-level multi-condition augmentation used for the primary speaker seg-mentation module (noise, reverberation, telephony, overlap simulation). Fig. 3: System Overview. TABLE I: Comparison between hierarchical EOT and Smart Turn v3 on 357 samples. Detection latency is measured end-to-end.                         
+
+> Model Params Latency Prec. Rec. F1 Acc. Hierarchical EOT 1.14M 36 ms 57.2% 87.7% 69.3% 62.4% Smart Turn v3 [14] 8–12M 900 ms 68.4% 58.9% 63.3% 69.7% Advantage ∼8–10 ×∼25 ×–+28.8 pp ––
+
+B. Results on EOT Detection 
+
+We report frame-level multi-class accuracy and F1, with emphasis on Final detection, and include a binary Final vs. non-Final metric to compare to endpoint-detection baselines. The model prediction we use for evaluation are based on majority voting of the different available horizons at a given frame. For turn-level detection, we define the detection la-tency for a given turn as the time difference between the true turn-end time tend (obtained from the frame-level labels) and the first time tdet ≥ tend at which the model’s Final score crosses a fixed decision threshold. Latency is thus 
+
+tdet − tend , and we report the median over all turn ends. Table I summarizes turn-level detection performance on 357 conversation samples. Our hierarchical EOT model achieves 87.7% recall vs. 58.9% for Smart Turn (+28.8 pp). High recall is desirable in real-time interaction, where missing a turn end is more detrimental than occasional false positives; Smart Turn is more precision-oriented. Overall multi-class average F1 is 82%. Backchannel detection achieves 70.6% F1, reducing false turn-switches when a decision policy suppresses switches under high Backchannel probability. On the binary task, Final vs. Others, the proposed model reaches 69.3% F1, comparable to transformer-based Smart Turn (63.3%) while operating at substantially lower latency and parameter count. Our model provides frame-level predictions with median delay ≈36 ms on samples with clear endpoints. Smart Turn v3 operates on fixed-length waveform segments and produces a single turn-completion score per segment, rather than frame-level predictions. To evaluate it fairly on our test set, we apply it to overlapping windows of 8 s duration with a hop of 10 frames (100 ms). Each window’s score is assigned to the timestamp of its end (i.e., 8 s after the window start). We then align these scores to our 100 Hz frame grid by treating the score from each 8 s window as the Final score at its end time. For a given turn with true end time tend , the detection time tdet for Smart Turn is defined as the end time of the first window whose end satisfies 
+
+tdet ≥ tend and whose score exceeds the Final threshold. De-tection latency for Smart Turn is then computed as tdet − tend 
+
+according to the generic definition in Section V-B, allowing a direct comparison with our frame-based hierarchical EOT model. The observed median detection latency for Smart Turn was 900 ms. This substantial reduction enables responsive turn-taking. Despite its smaller size (1.14 M vs. 8–12 M parameters) and streaming operation, our model maintains comparable overall F1 (69.3% vs. 63.3%) while delivering lower latency and memory footprints suitable for edge de-ployment. While Smart Turn attains higher overall accuracy (69.7% vs. 62.4%), it does so with markedly lower recall and much higher latency; our model is deliberately recall-oriented and low-latency to better support responsive conversational agents. VI. C ONCLUSION 
+
+We introduced a hierarchical, causal, and compact EOT model with explicit Backchannel modeling and multi-horizon prediction, coupled with a streaming primary speaker seg-mentation module. The segmentation module disentangles and clusters speaker embeddings online to forward only the primary user’s activity. Task-specific distillation yields a 32-D MFCC-based student that matches compressed wav2vec 2.0 features while remaining lightweight. The system reaches strong accuracy at ≈111 MMIPS, with ≈1.14 M parameters and <200 kB streaming activations, enabling real-time edge deployment. Future work includes multi-lingual extensions, integration with text-based signals from ASR and LLMs, and tighter coupling between EOT and endpoint-only detectors for hybrid turn-taking strategies. ACKNOWLEDGMENT 
+
+This work made use of generative AI tools (LLAMA 4 Maverick [20] to assist with language editing and phrasing; all technical content, experiments, and conclusions are the authors’ own. REFERENCES [1] T. J. Park, N. Kanda, D. Dimitriadis, K. J. Han, S. Watanabe, and S. Narayanan, “A review of speaker diarization: Recent advances with deep learning,” Computer Speech & Language , vol. 72, p. 101317, 2022. [2] F. Landini, J. Profant, M. Diez, and L. Burget, “Bayesian HMM clustering of x-vector sequences (VBx) in speaker diarization: Theory, implementation and analysis,” Speech Communication , vol. 141, pp. 11–26, 2022. [3] B. Desplanques, J. Thienpondt, and K. Demuynck, “ECAPA-TDNN: Emphasized channel attention, propagation and aggregation in TDNN-based speaker verification,” in Proc. Interspeech , 2020, pp. 3830–3834. [4] Y. Fujita, N. Kanda, S. Horiguchi, S. Watanabe, and K. Nagamatsu, “End-to-end neural speaker diarization with permutation-free objec-tives,” in Proc. Interspeech , 2019, pp. 4300–4304. [5] I. Medennikov, M. Korenevsky, T. Prisyach, V. Korneev, Y. Khokhlov, T. Timofeeva, I. Sorokin, A. Romanenko, A. Andrusenko, I. Podluzhny, and A. Laptev, “Target-speaker voice activity detection: A novel approach for multi-speaker diarization in a dinner party scenario,” in 
+
+Proc. Interspeech , 2020, pp. 274–278. [6] T. Iqbal, K. Helwani, A. Krishnaswamy, and W. Wang, “Enhancing audio augmentation methods with consistency learning,” in Proc. IEEE ICASSP , 2021, pp. 646–650. [7] K. Helwani, M. M. Goodwin, and P. Smaragdis, “Sound source separation using latent variational block-wise disentanglement,” in 
+
+Proc. IEEE ICASSP Workshops (ICASSPW) , 2024, pp. 750–754. [8] S.-Y. Chang, B. Li, T. N. Sainath, G. Simko, and C. Parada, “Endpoint detection using grid long short-term memory networks for streaming speech recognition,” in Proc. Interspeech , 2017, pp. 3812–3816. [9] I. Hwang, Y. Kim, and J.-H. Chang, “End-to-end speech endpoint detection utilizing acoustic and language modeling knowledge for online low-latency speech recognition,” IEEE Access , vol. 8, pp. 202 952–202 963, 2020. [10] S.-Y. Chang, R. Prabhavalkar, Y. He, T. N. Sainath, and G. Simko, “Joint endpointing and decoding with end-to-end models,” in Proc. IEEE ICASSP , 2019, pp. 5626–5630. [11] L. Lu, J. Li, and Y. Gong, “Endpoint detection for streaming end-to-end multi-talker ASR,” in Proc. IEEE ICASSP , 2022, pp. 6757–6761. [12] E. Ekstedt and G. Skantze, “Voice activity projection: Self-supervised learning of turn-taking events,” in Proc. Interspeech , 2022, pp. 5190– 5194. [13] K. Inoue, B. Jiang, E. Ekstedt, T. Kawahara, and G. Skantze, “Multi-lingual turn-taking prediction using voice activity projection,” in Proc. LREC-COLING , 2024, pp. 11 777–11 787. [14] Pipecat AI, “Smart turn v3: Open-source semantic voice activ-ity detection for turn detection,” https://huggingface.co/pipecat-ai/ smart-turn-v3, 2025, accessed 2025-11-30. [15] D. Hendrycks, N. Mu, E. D. Cubuk, B. Zoph, J. Gilmer, and B. Laksh-minarayanan, “Augmix: A simple data processing method to improve robustness and uncertainty,” in Proc. ICLR , 2020. [16] H. Wang, Y. Wang, Z. Zhou, X. Ji, D. Gong, J. Zhou, Z. Li, and W. Liu, “CosFace: Large margin cosine loss for deep face recognition,” in Proc. IEEE/CVF CVPR , 2018, pp. 5265–5274. [17] P. Khosla, P. Teterwak, C. Wang, A. Sarna, Y. Tian, P. Isola, A. Maschinot, C. Liu, and D. Krishnan, “Supervised contrastive learn-ing,” in Advances in Neural Information Processing Systems (NeurIPS) ,2020. [18] Silero AI Team, “Silero VAD: Pre-trained enterprise-grade voice ac-tivity detector,” https://github.com/snakers4/silero-vad, 2021, accessed 2025-11-30. [19] A. Baevski, H. Zhou, A. Mohamed, and M. Auli, “wav2vec 2.0: A framework for self-supervised learning of speech representations,” in 
+
+Advances in Neural Information Processing Systems (NeurIPS) , 2020. [20] Meta AI, “Llama 4: Open foundation language model,” https://github.com/meta-llama/llama-models/blob/main/models/ llama4/MODEL_CARD.md, 2026, accessed: 2026-02-15.
