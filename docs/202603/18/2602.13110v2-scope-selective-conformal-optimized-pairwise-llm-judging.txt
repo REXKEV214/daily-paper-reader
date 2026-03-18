@@ -1,0 +1,764 @@
+Title: SCOPE: Selective Conformal Optimized Pairwise LLM Judging
+
+URL Source: https://arxiv.org/pdf/2602.13110v2
+
+Published Time: Fri, 20 Feb 2026 01:50:30 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# SCOPE: Selective Conformal Optimized Pairwise LLM Judging 
+
+Sher Badshah 1 Ali Emami 2 Hassan Sajjad 1
+
+## Abstract 
+
+Large language models (LLMs) are increasingly used as judges to replace costly human pref-erence labels in pairwise evaluation. Despite their practicality, LLM judges remain prone to miscalibration and systematic biases. This pa-per proposes SCOPE (Selective Conformal Opti-mized Pairwise Evaluation), a framework for se-lective pairwise judging with finite-sample statis-tical guarantees. Under exchangeability, SCOPE calibrates an acceptance threshold such that the error rate among non-abstained judgments is at most a user-specified level α. To provide SCOPE with a bias-neutral uncertainty signal, we introduce Bidirectional Preference Entropy (BPE), which queries the judge under both re-sponse positions, aggregates the implied pref-erence probabilities to enforce invariance to re-sponse order, and converts the aggregated prob-ability into an entropy-based uncertainty score. Across MT-Bench, RewardBench, and Chatbot Arena, BPE improves uncertainty quality over standard confidence proxies, providing a stronger selection signal that enables SCOPE to consis-tently meet the target risk level while retaining good coverage across judge scales. In particu-lar, at α = 0 .10 , S COPE consistently satisfies the risk bound across all benchmarks and judge scales (empirical risk ≈ 0.097 to 0.099 ), while retaining substantial coverage, reaching 0.89 on RewardBench with Qwen-14B and 0.98 on Re-wardBench with Qwen-32B. Compared to na¨ ıve baselines, S COPE accepts up to 2.4× more judg-ments on MT-Bench with Qwen-7B under the same target risk constraint, demonstrating that BPE enables reliable and high-coverage LLM-based evaluation. 
+
+> 1
+
+Faculty of Computer Science, Dalhousie University, Canada 
+
+> 2
+
+Department of Computer Science, Emory University, Atlanta, USA. Correspondence to: Sher Badshah <sh545346@dal.ca >.
+
+Preprint. February 20, 2026. 
+
+## 1. Introduction 
+
+Large language models (LLMs) are increasingly used as judges to scale evaluation in modern AI workflows, from reinforcement learning to automated benchmarking and leaderboards (Zheng et al., 2023; Lambert et al., 2025). By replacing costly human preference labels with model-based pairwise comparisons, LLM-as-a-judge enables rapid eval-uation. At the same time, once a model’s preferences sub-stitute for human judgments, reliability becomes a first-class requirement: even a small, systematic rate of wrong pairwise decisions can distort rankings and the training sig-nals derived from them. What is missing is a principled way to decide when an LLM judgment should be trusted, together with an explicit, user-specified bound on the error rate among the judgments that are actually accepted. Selective prediction provides a natural abstraction. Rather than forcing a decision on every instance, the judge abstains when uncertainty is high and returns a judgment only when sufficiently confident (Geifman & El-Yaniv, 2017; Chen et al., 2023). Yet applying selective prediction to pairwise LLM judging exposes two fundamental obstacles. First, thresholding confidence scores offers no finite-sample sta-tistical guarantee that a target accepted-set error will be re-spected at deployment; thresholds tuned to match valida-tion behavior can exceed the desired risk on new samples. Second, uncertainty proxies are contaminated by nuisance variation (Wang et al., 2025c). Pairwise judges exhibit systematic biases such as position bias (Shi et al., 2025; Wang et al., 2025d), and these effects can produce highly confident but incorrect judgments. As a result, naive con-fidence thresholding can fail to abstain precisely when it should, violating a user’s reliability constraint even when average calibration looks reasonable. Conversely, methods that do provide statistical guarantees often rely on conser-vative confidence bounds such as Clopper-Pearson (Clop-per & Pearson, 1934; Wang et al., 2025b) and fixed se-quence testing (Bauer, 1991; Jung et al., 2025), which sat-isfy the constraint by rejecting a large fraction of queries and thereby sacrificing coverage (Wang et al., 2025b). This work proposes SCOPE (Selective Conformal 
+
+Optimized Pairwise Evaluation), a framework for selective pairwise judging with finite-sample statistical guaran-tees. SCOPE builds on selective conformal prediction 1
+
+> arXiv:2602.13110v2 [cs.CL] 19 Feb 2026 SCOPE: Selective Conformal Optimized Pairwise LLM Judging
+
+and risk control methods (Angelopoulos & Bates, 2023; Angelopoulos et al., 2024; Wang et al., 2025a) to calibrate an acceptance threshold such that the error rate among accepted judgments is at most a user-specified level α
+
+under exchangeability. Unlike heuristic thresholding or naive empirical tuning, S COPE enforces a finite-sample validity condition on the non-abstained judgments. Guarantees alone, however, are only useful when the threshold responds to genuine ambiguity in the preference rather than presentation bias. To equip S COPE with a bias-neutral uncertainty signal, we introduce Bidirectional Pref-erence Entropy (BPE). BPE queries the judge under both orderings of the response pair, aligns the two outputs to the same underlying preference, and then aggregates the resulting preference probabilities. An entropy-based score is then applied to this aggregated probability: uncertainty is highest when the judge is close to evenly split between the two responses, and lowest when one response is strongly preferred. By enforcing permutation invariance with re-spect to response order, BPE mitigates position effects with only two forward passes per pair, yielding uncertainty es-timates that better reflect the underlying difficulty of the preference decision. Empirically, BPE improves calibra-tion and discrimination over standard confidence proxies, and S COPE leverages these scores to accept more judg-ments while meeting the target risk level across bench-marks and model scales. 
+
+Contributions. Our contributions are twofold: • S COPE : a conformal-based method for selective LLM-based pairwise evaluation, with a finite-sample guarantee that the error rate among accepted judg-ments is at most α under exchangeability. • BPE: a bidirectional, permutation-invariant uncer-tainty estimator that mitigates position effects and im-proves uncertainty quality over standard confidence proxies. 
+
+## 2. Methodology 
+
+We formalize S COPE for pairwise judging with statistical guarantees of alignment with human preferences. 
+
+2.1. Problem Formulation 
+
+Let X denote the space of evaluation instances, where each 
+
+x ∈ X consists of a user instruction q and a pair of can-didate responses (rA, r B ). Let Y = {A, B } be the label space, where y = A indicates that rA is preferred and 
+
+y = B indicates that rB is preferred. We assume access to samples from a joint distribution D over X × Y , repre-senting ground-truth human preferences. 
+
+Selective prediction. An LLM judge defines a distribu-tion Pθ (y | x) over labels Y. Rather than always com-mitting to a prediction, we adopt selective prediction: the model outputs a judgment only when sufficiently confi-dent (Geifman & El-Yaniv, 2017; Chen et al., 2023). We define an uncertainty scoring function s : X → R,where higher values indicate greater uncertainty. Given a threshold λ, the selective judge accepts predictions with uncertainty below the threshold: 
+
+fλ(x) = 
+
+(
+
+ˆy if s(x) ≤ λ, 
+
+⊥ otherwise ,
+
+where ˆy = arg max y Pθ (y | x) and ⊥ denotes abstention. 
+
+FDR Control. Our objective is to calibrate ˆλ such that the error rate among the accepted LLM judgments is sta-tistically bounded. Let y∗ denote the ground truth label. We define the selection indicator S(x, λ ) = I(s(x) ≤ λ)
+
+and the error indicator E(x) = I(ˆ y̸ = y∗). To control the test-time FDR marginally, we bound the ratio of expected errors to expected selections: FDR (λ) = E[S(x, λ )E(x)] 
+
+E[S(x, λ )] = P  ˆy̸ = y∗ | s(x) ≤ λ ≤ α. 
+
+(1) This formulation guarantees that the judge model maintains a guaranteed error rate (e.g., ≤ 5% error for α = 0 .05 )across the distribution of queries. Crucially, this statistical validity holds regardless of the model’s intrinsic capability as long as the calibration and test data are exchangeable. 
+
+2.2. Bidirectional Preference Entropy 
+
+To calibrate λ, the scoring function s(x) must reflect true uncertainty. However, existing uncertainty methods are of-ten miscalibrated for pairwise judging (Jung et al., 2025). For instance, standard predictive probability becomes un-reliable when the model systematically favors a particular position (Zheng et al., 2023). To prevent such systematic biases from contaminating 
+
+s(x), we propose Bidirectional Preference Entropy (BPE), where we aggregate predictions across both positions. Let 
+
+xfwd = ( q, r A, r B ) denote the original position and xrev =(q, r B , r A) the swapped position. We compute the proba-bility that the model prefers rA under each position: 
+
+pfwd = Pθ (rA ≻ rB | xfwd ) = Pθ (y = A | xfwd ),prev = Pθ (rA ≻ rB | xrev ) = Pθ (y = B | xrev ).
+
+Importantly, selecting rA corresponds to predicting label A
+
+in the forward prompt and label B in the reverse prompt. 2SCOPE: Selective Conformal Optimized Pairwise LLM Judging             
+
+> Figure 1. Overview of the SCOPE Framework. (1) Pairwise Judging: An LLM judge evaluates two responses ( rA, r B) for a user query
+> q. (2) Bidirectional Preference Entropy (BPE): To neutralize position bias, the judge evaluates the pair in both forward and reverse orders. The probabilities are aggregated into a bias-neutral preference ¯pand converted into an entropy-based uncertainty score s(x). (3) SCOPE: The user sets a target risk level α(e.g., 0.10). Using conformal calibration on labeled data, the system calculates an optimized threshold ˆλ. If the uncertainty s(x)≤ˆλ, the judgment is accepted with a statistical guarantee that the error rate is controlled at α.
+
+Intuitively, a reliable judge should assign a similar prefer-ence probability to rA regardless of whether it appears first or second; disagreement across permutations is a strong in-dicator of systematic bias rather than true confidence. We therefore aggregate both by averaging: 
+
+¯p = 12
+
+
+
+pfwd + prev 
+
+
+
+. (2) Since the task is binary, the probability of preferring rB is simply (1 − ¯p). Because binary entropy is symmetric (i.e., 
+
+H(p) = H(1 − p)), computing uncertainty with respect to 
+
+rA suffices without loss of generality. We derive the final prediction ˆy from ¯p and define the BPE score as: 
+
+s(x) = − [¯ p log ¯ p + (1 − ¯p) log(1 − ¯p)] . (3) The uncertainty score s(x) reaches its maximum when the model provides inconsistent predictions across permuta-tions (see Appendix B.1 for details). 
+
+2.3. S COPE Calibration 
+
+Given a calibration set Dcal = {(xi, y ∗ 
+
+> i
+
+)}ni=1 with ground-truth labels, we seek the threshold ˆλ that maximizes cov-erage while ensuring the marginal FDR does not exceed a target α.
+
+Linearization. Directly controlling the ratio in Eq. 1 is difficult on finite samples: when few predictions are ac-cepted, the denominator E[S] is small and the ratio be-comes unstable. Following Wang et al. (2025a) and Wang et al. (2024b), we reformulate the constraint using a lin-earized loss for pairwise judging: 
+
+L(x, λ ) = S(x, λ ) · (E(x) − α). (4) 3SCOPE: Selective Conformal Optimized Pairwise LLM Judging 
+
+The key observation is that E[L(x, λ )] ≤ 0 implies marginal FDR (λ) ≤ α. This reframes risk control (An-gelopoulos et al., 2024) as a budgeting problem where each correct accepted prediction contributes −α to a cumulative sum (building a safety margin), and each incorrect accepted prediction contributes +(1 − α) (depleting the margin). 
+
+Finite-sample calibration. To guarantee validity on un-seen test data, we enforce a finite-sample sufficient con-dition derived from the theory of linear expectation con-straints (Wang et al., 2025a). Specifically, we require the cumulative linearized loss on the calibration set to satisfy: 
+
+> n
+
+X
+
+> i=1
+
+S(xi, λ ) · (E(xi) − α) ≤ − 1. (5) This finite-sample correction ensures statistical validity un-der exchangeability. 
+
+Coverage maximization. Because newly admitted sam-ples may contribute either −α or (1 − α), the feasibility of Eq. 5 need not be monotone in λ. We thus select the largest feasible threshold to maximize coverage: 
+
+ˆλ = sup 
+
+(
+
+λ :
+
+> n
+
+X
+
+> i=1
+
+S(xi, λ ) · (E(xi) − α) ≤ − 1
+
+)
+
+. (6) If no such λ exists (i.e., the set is empty), we set ˆλ = −∞ 
+
+and abstain on all instances. This ensures that S COPE max-imizes the number of evaluated instances without violating the risk guarantee. 
+
+Theorem 2.1. Let calibration and test samples be ex-changeable (Angelopoulos & Bates, 2023). For any α ∈
+
+(0 , 1) , the threshold ˆλ derived in Eq. 6 guarantees that the marginal test-time FDR satisfies: 
+
+E[E(xn+1 ) · S(xn+1 , ˆλ)] 
+
+E[S(xn+1 , ˆλ)] ≤ α, (7) 
+
+where the expectation is taken over the joint randomness of the calibration set and the test sample. 
+
+At test time, for a new instance x, we obtain the judge’s pairwise evaluation ˆy with uncertainty s(x). We accept ˆy
+
+if and only if s(x) ≤ ˆλ; otherwise, we abstain. See Ap-pendix A for the complete proof. 
+
+## 3. Experiments 
+
+Our experiments address two questions: (1) Does BPE pro-vide better uncertainty estimates than existing methods? (2) Does S COPE maintain valid risk control while maxi-mizing coverage? 
+
+Datasets. We evaluate on human-annotated pairwise preferences from three benchmarks: MT-Bench (Zheng et al., 2023), RewardBench (Lambert et al., 2025), and Chatbot Arena (Chiang et al., 2024). The stated bench-marks span diverse evaluation settings: MT-Bench reflects instruction-following and multi-turn assistant quality, Re-wardBench captures reward-model-style preference signals across heterogeneous sources, and Chatbot Arena repre-sents large-scale crowdsourced user comparisons in open-domain settings. Following Jung et al. (2025), we exclude tie outcomes to align with our binary formulation ( Y = {A, B }). After fil-tering, we randomly sample N = 2 ,000 non-tied instances to standardize evaluation size and keep the computational cost manageable across our repeated random splits. 
+
+Models. Our judge models span a range of scales: Qwen-2.5-7B-Instruct, Qwen2.5-14B-Instruct, Qwen2.5-32B-Instruct (Yang et al., 2024a), and Llama-3.1-70B-Instruct (Grattafiori et al., 2024). 
+
+Uncertainty quantification. For BPE, we compute pfwd 
+
+and prev from the softmax-normalized logits over predic-tions “A” and “B”, requiring two forward passes per in-stance. For evaluation metrics that expect confidence rather than uncertainty (i.e., ECE, AUROC), we convert BPE into a confidence score via c(x) = max(¯ p, 1 − ¯p). Note that the bidirectional aggregation can alter the final prediction when ¯p differs from pfwd , which explains the accuracy dif-ferences reported in Table 1. 
+
+Baselines. We benchmark against two categories of base-lines. First, for uncertainty quantification, we compare BPE against: • Predictive probability 1, defined as the maximum soft-max probability of the zero-shot preference predic-tion; • Verbalized confidence (Tian et al., 2023), obtained by prompting the judge to directly output a numerical confidence score; and • Simulated annotators (Jung et al., 2025), which esti-mates confidence via the agreement rate among N =5 in-context simulated personas, each conditioned on 
+
+K = 5 few-shot demonstrations sampled from a pool of 50 examples. Following prior work, we use majority-vote agreement as the final confidence es-timate. Since simulated annotators require multiple generations per instance and are computationally ex-
+
+> 1We utilize predictive probability for the heuristic and na¨ ıve baselines.
+
+4SCOPE: Selective Conformal Optimized Pairwise LLM Judging                                                                                                                                                                    
+
+> Table 1. Uncertainty estimation quality. Comparison of BPE against baselines. Bold indicates the best result per model/dataset. BPE achieves superior calibration (ECE ↓) and discrimination (AUPRC) in most settings.
+> MT-Bench RewardBench Chatbot Arena Method Accuracy ECE ↓ROC PRC Accuracy ECE ↓ROC PRC Accuracy ECE ↓ROC PRC
+> Qwen2.5-7B-Instruct
+> Predictive Probability 0.731 0.239 0.658 0.824 0.757 0.210 0.727 0.891 0.751 0.218 0.709 0.865 Verbalized Confidence 0.731 0.146 0.497 0.737 0.757 0.128 0.496 0.765 0.751 0.129 0.477 0.747 BPE (Ours) 0.738 0.143 0.685 0.855 0.807 0.104 0.744 0.926 0.766 0.138 0.711 0.884
+> Qwen2.5-14B-Instruct
+> Predictive Probability 0.752 0.234 0.704 0.851 0.850 0.140 0.739 0.924 0.779 0.207 0.697 0.866 Verbalized Confidence 0.752 0.114 0.450 0.736 0.850 0.090 0.502 0.865 0.779 0.114 0.476 0.779 BPE (Ours) 0.766 0.174 0.777 0.932 0.874 0.103 0.809 0.970 0.790 0.169 0.744 0.927
+> Qwen2.5-32B-Instruct
+> Predictive Probability 0.783 0.198 0.706 0.886 0.881 0.107 0.799 0.957 0.781 0.201 0.732 0.892 Verbalized Confidence 0.783 0.189 0.457 0.777 0.881 0.213 0.477 0.896 0.781 0.201 0.483 0.785 BPE (Ours) 0.784 0.172 0.729 0.908 0.894 0.071 0.822 0.975 0.792 0.151 0.742 0.919
+> Llama-3.1-70B-Instruct
+> Predictive Probability 0.755 0.185 0.741 0.887 0.866 0.092 0.752 0.947 0.802 0.138 0.735 0.913 Verbalized Confidence 0.755 0.096 0.484 0.761 0.866 0.059 0.485 0.873 0.802 0.073 0.472 0.809 BPE (Ours) 0.767 0.145 0.744 0.894 0.880 0.062 0.761 0.957 0.810 0.112 0.736 0.919
+
+pensive, we restrict this comparison to Qwen-7B and Qwen-14B judges. Second, we compare S COPE against: • Vanilla prediction, where the model answers all queries without abstention, yielding full coverage but no reliability control; • Heuristic thresholding, a simple confidence-based rule that accepts predictions whenever the uncertainty score exceeds 1 − α, without any calibration guaran-tee; and • Na¨ ıve calibration, which selects thresholds based on empirical risk measured on held-out data, but does not apply any finite-sample correction and can therefore violate the target risk constraint. 
+
+Evaluation metrics. We evaluate performance across two dimensions: uncertainty estimation quality and statis-tical validity of risk control. To assess the performance of uncertainty metrics, we report Accuracy, Expected Cal-ibration Error (ECE) (Naeini et al., 2015), Area Under the ROC Curve (AUROC), and Area Under the Precision-Recall Curve (AUPRC) (see Appendix B). To validate the selective evaluation framework, we mea-sure the empirical risk (i.e., FDR) on the test set. This value must consistently remain below the target α. Finally, we evaluate efficiency via coverage which is defined as the percentage of test queries for which the model returns a prediction rather than abstaining. 
+
+Correctness criteria. We evaluate the correctness of the LLM judge by comparing its predicted preference against the ground truth human label. For all datasets, a predic-tion is considered correct if and only if the judge’s selected response matches the human-preferred response. 
+
+Protocol. We utilize a 50/50 split for calibration and test data. To ensure statistical robustness, all reported results are averaged over 1000 independent random splits of the dataset. We evaluate performance across different risk lev-els α ∈ { 0.05 , 0.10 , 0.15 , 0.20 , 0.25 }.
+
+## 4. Results 
+
+4.1. Uncertainty Estimation Quality 
+
+The prerequisite for valid risk control is a scoring function 
+
+s(x) that effectively ranks judgments by their probability of error. In Table 1, we compare our proposed s(x) against commonly used methods. Across all benchmarks, BPE mostly achieves the highest AUROC and AUPRC, demon-strating capability in distinguishing correct judgments from errors. While we randomize the preference order for all methods to mitigate aggregate position bias, unidirectional metrics such as predictive probability and verbalized confi-dence remain vulnerable to instance-level overconfidence. BPE also yields lower ECE than predictive probability and verbalized confidence across most configurations, indicat-5SCOPE: Selective Conformal Optimized Pairwise LLM Judging Llama-70B  
+
+> Qwen-32B
+> Qwen-14B
+> Qwen-7B 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> Risk Level (  )
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Coverage
+> 0.072
+> 0.543
+> 0.790
+> 0.950
+> 1.000
+> 0.193
+> 0.502
+> 0.807
+> 0.988
+> 1.000
+> 0.464
+> 0.504
+> 0.746
+> 0.938
+> 0.999
+> 0.018
+> 0.246
+> 0.556
+> 0.802
+> 0.991
+
+(a) MT-Bench Llama-70B   
+
+> Qwen-32B
+> Qwen-14B
+> Qwen-7B 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> Risk Level (  )
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Coverage
+> 0.574
+> 0.935
+> 1.000
+> 1.000
+> 1.000
+> 0.782
+> 0.983
+> 0.999
+> 0.999
+> 0.999
+> 0.621
+> 0.892
+> 1.000
+> 1.000
+> 1.000
+> 0.353
+> 0.594
+> 0.863
+> 0.998
+> 0.999
+
+(b) RewardBench Llama-70B   
+
+> Qwen-32B
+> Qwen-14B
+> Qwen-7B 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> Risk Level (  )
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Coverage
+> 0.284
+> 0.583
+> 0.836
+> 0.995
+> 0.999
+> 0.235
+> 0.551
+> 0.773
+> 0.961
+> 0.999
+> 0.409
+> 0.466
+> 0.723
+> 0.946
+> 1.000
+> 0.052
+> 0.430
+> 0.633
+> 0.845
+> 0.998
+
+(c) Chatbot Arena 
+
+Figure 2. Coverage vs. target risk level α for S COPE . Coverage increases as the risk budget is relaxed, and larger judges sustain higher coverage at strict tolerances. 
+
+Table 2. Uncertainty estimation quality. BPE outperforms Simu-lated Annotators (S.A.) in calibration (ECE ↓) and discrimination (AUROC/AUPRC). 
+
+Model / Dataset Method ECE ↓ ROC / PRC Qwen2.5-7B-Instruct 
+
+MT-Bench S.A. 0.174 0.594 / 0.790 BPE 0.143 0.685 / 0.855 
+
+RewardBench S.A. 0.103 0.689 / 0.886 BPE 0.104 0.744 / 0.926 
+
+Chatbot Arena S.A. 0.158 0.646 / 0.804 BPE 0.138 0.711 / 0.884 Qwen2.5-14B-Instruct 
+
+MT-Bench S.A. 0.182 0.600 / 0.792 BPE 0.174 0.777 / 0.932 
+
+RewardBench S.A. 0.130 0.627 / 0.880 BPE 0.103 0.809 / 0.970 
+
+Chatbot Arena S.A. 0.176 0.608 / 0.788 BPE 0.169 0.744 / 0.927 
+
+ing better-calibrated confidence estimates. Table 2 compares BPE against simulated annotators, a strong baseline that estimates uncertainty through multi-persona agreement. Unlike simulated annotators, which require multiple model generations per instance and are therefore costly to deploy at scale, BPE provides an effi-cient alternative that achieves stronger uncertainty ranking with only two forward passes. Despite requiring only a single bidirectional probability computation, BPE consis-tently matches or improves calibration and achieves sub-stantially stronger discrimination across benchmarks. In particular, BPE yields large gains in AUROC and AUPRC over simulated annotators on both MT-Bench and Chat-bot Arena (e.g., AUROC improving from 0.59 to 0.69 for Qwen-7B, and from 0.60 to 0.78 for Qwen-14B), indi-cating a more reliable ranking of error-prone judgments. While simulated annotators can provide competitive cali-bration in some cases (e.g., RewardBench with Qwen-7B), it remains weaker in separating correct decisions from fail-ures. 
+
+4.2. S COPE : Statistical Validity and Coverage 
+
+We evaluate whether S COPE enables selective pairwise evaluation at a user-specified target risk level, i.e., whether the empirical accepted-set error remains below α while re-taining as much coverage as possible. 
+
+Baselines violate the risk constraint. As depicted in Ta-ble 3, across given benchmarks, Vanilla prediction (i.e., no abstention) achieves full coverage but substantially exceeds the risk budget (e.g., MT-Bench risk ranges from 0.217 –
+
+0.269 across models at α = 0.10 ). Similarly, Heuris-tic thresholding retains high coverage (e.g., 0.809 –0.958 )yet still violates the constraint in most setting (e.g., MT-Bench risk 0.184 –0.251 ). This gap highlights that raw con-fidence scores are not reliably calibrated for selective pair-wise judging. The Na¨ ıve baseline, which tunes a threshold to match the empirical mean on the calibration split, often operates near the boundary and can fail under finite sam-ples: it exceeds α on MT-Bench for Qwen-7B ( 0.116 ) and Qwen-14B ( 0.124 ), and on Chatbot Arena for Qwen-14B (0.114 ). Even when Na¨ ıve remains below the bound in some places, it frequently does so by affecting the cover-age. 
+
+SCOPE maintains valid risk control while preserving coverage. Figure 2 shows that S COPE reliably tracks the target line across α ∈ { 0.05 , 0.10 , 0.15 , 0.20 , 0.25 }, keep-ing empirical risk below α for every dataset and model. At 6SCOPE: Selective Conformal Optimized Pairwise LLM Judging                                                                                                                
+
+> Table 3. Risk control with S COPE . Coverage and empirical risk at α= 0 .10 , averaged over 1,000 splits. Values exceeding the risk bound ( >0.10 ) indicate failure. S COPE consistently satisfies the risk bound while maximizing coverage.
+> Qwen-7B Qwen-14B Qwen-32B Llama-70B
+> Coverage Risk Coverage Risk Coverage Risk Coverage Risk
+> MT-Bench
+> Vanilla 1.000 0.269 1.000 0.248 1.000 0.217 1.000 0.245 Heuristic 0.907 0.251 0.953 0.231 0.933 0.200 0.809 0.184 Na¨ ıve 0.102 0.116 0.566 0.124 0.426 0.103 0.396 0.102 SCOPE 0.246 0.097 0.504 0.098 0.502 0.099 0.543 0.098
+> RewardBench
+> Vanilla 1.000 0.243 1.000 0.150 1.000 0.120 1.000 0.134 Heuristic 0.894 0.211 0.968 0.140 0.964 0.103 0.845 0.094 Na¨ ıve 0.430 0.101 0.827 0.101 0.957 0.101 0.872 0.101 SCOPE 0.594 0.099 0.892 0.099 0.983 0.098 0.935 0.099
+> Chatbot Arena
+> Vanilla 1.000 0.249 1.000 0.221 1.000 0.219 1.000 0.198 Heuristic 0.903 0.224 0.958 0.204 0.937 0.201 0.815 0.145 Na¨ ıve 0.297 0.103 0.530 0.114 0.532 0.102 0.565 0.101 SCOPE 0.430 0.099 0.466 0.097 0.551 0.099 0.583 0.099
+
+α = 0 .10 in Table 3, S COPE achieves risks tightly concen-trated around the target (typically 0.097 –0.099 ) while de-livering substantially higher coverage than Na¨ ıve on chal-lenging benchmarks. For MT-Bench, S COPE more than doubles coverage for Qwen-7B ( 0.246 vs. 0.102 ) and im-proves coverage for the larger judges as well, all while stay-ing below the 0.10 bound. Overall, S COPE converts uncer-tainty estimates into selective judgments that meet the de-sired risk level, and it does so with higher coverage than empirical thresholding. 
+
+Coverage scales smoothly with the risk budget and model strength. The coverage-risk curves further il-lustrate how SCOPE trades off utility against strict-ness. As the budget relaxes, coverage increases rapidly and approaches full evaluation for stronger judges. For MT-Bench, SCOPE increases coverage from (0 .018 , 0.246 , 0.556 , 0.802 , 0.991) for Qwen-7B to 
+
+(0 .072 , 0.543 , 0.790 , 0.950 , 1.000) for Llama-70B as α
+
+ranges from 0.05 to 0.25 (Figure 2a). On Chatbot Arena, the same trend holds, with Qwen-7B moving from 0.052 
+
+coverage at α = 0 .05 to 0.998 at α = 0 .25 , and Llama-70B achieving high coverage even at strict levels (Figure 2c). This monotone behavior at the system level is notable given that feasibility of Eq. 5 need not be monotone in λ; em-pirically, the largest-feasible-threshold rule in Eq. 6 yields stable and interpretable tradeoffs. 
+
+Stability across random splits. Figure 3 reveals how sensitive selective evaluation is to the particular cali-bration/test split. The shaded bands ( ±1σ) are consis-tently widest for the weakest judge (Qwen-7B), indicating higher variance in accepted-set error across random splits, whereas stronger judges such as Qwen-32B show much tighter bands and more stable behavior. This split-to-split variability is most pronounced at larger α, where higher coverage admits more borderline instances and the result-ing error rate depends more on which examples fall into the calibration set. Importantly, even in these higher-variance regimes, the mean risk curves remain stable and track the target closely, suggesting that S COPE is not maintaining validity by being overly conservative; instead, it yields a predictable risk profile even when calibration noise is non-negligible. In other words, S COPE closely tracks the target risk level α, fully utilizing the user-specified risk budget to maximize coverage rather than abstaining too conserva-tively. 
+
+## 5. Related Work 
+
+LLM-as-a-judge. The high cost of human annotation has driven the adoption of LLMs as scalable surrogates for evaluation (Zheng et al., 2023; Chiang et al., 2023). This paradigm is now widespread in both benchmark-style leaderboards (e.g., MT-Bench) and live preference plat-forms (e.g., Chatbot Arena) (Chiang et al., 2024). Be-yond pairwise win-rates, recent work also uses LLM judges as general-purpose reference-free metrics for generation quality, often decomposing evaluation into criteria with chain-of-thought or scoring templates (e.g., G-Eval) (Liu et al., 2023). However, a growing body of evidence shows that LLM judges can be systematically unreliable. Doc-umented failure modes include position bias (Wang et al., 2024a; Shi et al., 2025), verbosity/length bias (Zheng et al., 7SCOPE: Selective Conformal Optimized Pairwise LLM Judging 0.05 0.10 0.15 0.20 0.25            
+
+> Risk Level ( α)
+> 0.00
+> 0.05
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> Empirical Risk (FDR)
+> α
+> MT-Bench
+> 0.05 0.10 0.15 0.20 0.25
+> Risk Level ( α)
+> α
+> RewardBench
+> 0.05 0.10 0.15 0.20 0.25
+> Risk Level ( α)
+> α
+> Chatbot Arena
+> Qwen-7B Qwen-14B Qwen-32B Llama-70B
+
+Figure 3. Statistical validity of S COPE across benchmarks. We report the empirical risk (FDR) against the user-specified target risk level 
+
+α. The dashed diagonal line ( y = x) indicates the theoretical safety limit; curves remaining below this boundary demonstrate valid risk control. Solid lines represent the mean risk over 1000 trials, while shaded regions denote the standard deviation ( ±1σ). S COPE 
+
+consistently satisfies the risk constraint across judges and tasks. 
+
+2023; Saito et al., 2023), and self-preference or familiar-ity biases that favor low-perplexity outputs or the judge’s own stylistic priors (Zheng et al., 2023; Panickssery et al., 2024). These issues can distort model rankings and incen-tivize “judge gaming,” especially when benchmarks are op-timized against a fixed judge. While mitigation techniques such as swapping positions (Zheng et al., 2023), chain-of-thought prompting (Wei et al., 2022), debate-style judg-ing (Chan et al., 2024), and ensembling or multi-judge ag-gregation (Badshah et al., 2025; Badshah & Sajjad, 2025) improve empirical agreement, they remain heuristic and do not provide formal reliability guarantees. This naturally shifts attention to uncertainty estimation: an LLM judge should assess when its prediction is likely to be correct and abstain on instances where uncertainty is high. 
+
+Uncertainty estimation for LLM judges. Several re-cent works study how to quantify uncertainty in LLM-based evaluations. Xie et al. (2025) conduct a large em-pirical study of uncertainty in model-based LLM evalua-tion including pairwise comparison using token probabil-ities as a proxy for an evaluator’s internal confidence and showing that evaluation confidence varies across model families/sizes and is sensitive to distribution shift. Com-plementarily, Yang et al. (2024b) study verbalized confi-dence scores, analyzing when self-reported confidence can be reliable and how prompt formulations strongly affect calibration. Most closely related to our baselines, Jung et al. (2025) introduce simulated annotators, where mul-tiple pairwise annotations are sampled and agreement is used as a confidence proxy. These lines of work moti-vate the baseline uncertainty signals used in our experi-ments. However, without a formal reliability guarantees, these confidence metrics remain heuristic proxies: im-provements in calibration or discrimination do not translate into finite-sample, distribution-free guarantees that the er-ror rate among accepted judgments is controlled at a target risk level. 
+
+Conformal prediction and risk control. Motivated by the above reliability gaps and the lack of formal guaran-tees, a natural direction is to replace heuristic “confidence” with finite-sample valid uncertainty quantification. Confor-mal prediction provides a distribution-free framework that converts any scoring function into statistically valid sets via calibration (Vovk et al., 2005; Angelopoulos & Bates, 2023). While classical conformal methods target marginal coverage, recent advances generalize to risk control: in-stead of guaranteeing set coverage, they guarantee that an error rate on the accepted set is below a user-specified level with high probability (Bates et al., 2021; Angelopoulos et al., 2024). This has enabled selective prediction with rig-orous guarantees, where a model abstain to ensure reliabil-ity on the non-abstained instances, and more broadly sup-ports controlling discovery-style errors such as false dis-coveries among accepted decisions (Bates et al., 2021). In the LLM setting, selective prediction have been adapted to reliability in QA and generation, including calibrated ab-stention and hallucination detection (Gui et al., 2024; Niu et al., 2024; Wang et al., 2025b). Our work builds on this line by adapting conformal risk control (Angelopoulos et al., 2024) and selective predic-tion methods such as linear expectation theory (Wang et al., 2025a) to pairwise LLM evaluation, where the objective is not coverage over labels but guaranteeing that the er-ror rate among accepted judgments remains below a tar-get risk level. Prior work typically relies on unidirectional confidence proxies (Wang et al., 2025b), such as maximum softmax probability or sample consistency which can be systematically misaligned with true judging errors due to positional and preference biases (Wang et al., 2025c). We complement conformal risk control with a bias-neutral un-8SCOPE: Selective Conformal Optimized Pairwise LLM Judging 
+
+certainty estimator that aggregates preferences under both response positions. This combination enables S COPE to move beyond heuristic abstention and provides a principled framework for reliable pairwise evaluation, where statisti-cal guarantees are paired with an uncertainty signal tailored to the known failure modes of LLM-based judges. 
+
+## 6. Limitations 
+
+While SCOPE provides a statistically grounded frame-work for reliable pairwise LLM judging, several limita-tions remain. First, our guarantees rely on the standard ex-changeability assumption between the calibration set and future evaluation queries. In practice, distribution shifts across benchmarks, prompt variations, or strategic model behaviors may weaken the validity of selective guaran-tees (Tibshirani et al., 2020; Joshi et al., 2025). Second, BPE requires bidirectional evaluation of each comparison, incurring approximately two forward passes per instance and thus modest computational overhead relative to single-shot confidence heuristics. Moreover, BPE is a white-box uncertainty measure that relies on access to model proba-bilities or logits, and may not be directly applicable in fully black-box or API-only evaluator settings without approxi-mation. Third, our formulation focuses on binary pairwise judgments; extending selective guarantees to richer evalua-tor settings, such as multi-response ranking or open-ended critique-based scoring, is an important direction for future work. Finally, although BPE mitigates positional bias by enforcing permutation invariance, other sources of system-atic bias in LLM-based evaluators may persist and require complementary mitigation strategies. 
+
+## 7. Conclusion 
+
+As LLMs increasingly serve as judges in many applica-tions, ensuring their reliability is paramount. In this work, we presented S COPE , a framework that provides rigor-ous statistical guarantees for LLM-based pairwise eval-uation. By neutralizing judges preference bias via our proposed BPE uncertainty estimator and enabling selec-tive evaluation at a user-specified target risk level, S COPE 
+
+produces judgments that come with finite-sample guaran-tees on the accepted set. Across multiple benchmarks and model scales, our results show that BPE improves calibra-tion and discrimination, and that S COPE uses these sig-nals to accept more judgments while meeting the desired risk level. More broadly, our results suggest that combin-ing bias-neutral uncertainty estimation with conformal risk control provides a promising foundation for trustworthy au-tomated evaluation at scale. We hope S COPE and BPE help move LLM-based judging from heuristic practice to sta-tistically grounded evaluation protocols as it becomes in-creasingly central to model development and governance. Looking forward, our framework opens several promising directions. Extending selective guarantees beyond binary pairwise settings to richer evaluation paradigms, such as multi-response ranking, rubric-based scoring, or interactive critique, would further broaden the applicability of reliable LLM judges. In addition, adapting uncertainty estimators such as BPE to fully black-box evaluator settings remains an important challenge for real-world deployment. More broadly, we believe that incorporating statistical reliability constraints into automated evaluation pipelines will be es-sential as LLM-based judges are increasingly used not only for benchmarking, but also for alignment, reinforcement learning, and high-stakes decision support. Ultimately, we view S COPE as a step toward principled and trustworthy evaluator systems that can support the next generation of scalable and accountable model assessment. 9SCOPE: Selective Conformal Optimized Pairwise LLM Judging 
+
+## Impact Statement 
+
+This work advances the reliability of automated model evaluation by introducing a statistically grounded frame-work for LLM-as-a-judge. By shifting pairwise judging from heuristic confidence scores to formal risk control , SCOPE enables researchers and practitioners to deploy scalable, low-cost evaluators without sacrificing trustwor-thiness. Furthermore, the proposed BPE metric actively mitigates position bias, promoting fairer comparisons be-tween models. As LLMs increasingly serve as supervisors for alignment and reinforcement learning , ensuring their judgments come with finite-sample guarantees is a critical step toward accountable and transparent AI development. 
+
+## Acknowledgements 
+
+We acknowledge the support and funding of CIFAR, the Natural Sciences and Engineering Research Council of Canada (NSERC), the Canada Foundation for Innovation (CFI), and Research Nova Scotia. Advanced computing resources are provided by ACENET, the regional partner in Atlantic Canada, the Digital Research Alliance of Canada, the Research Computing Services group at the University of Calgary, and the Denvr Dataworks platform. 
+
+## References 
+
+Angelopoulos, A. N. and Bates, S. A gentle introduction to conformal prediction and distribution-free uncertainty quantification. Foundations and Trends® in Machine Learning , 16(4):494–591, 2023. Angelopoulos, A. N., Bates, S., Fisch, A., Lei, L., and Schuster, T. Conformal risk control. In The Twelfth International Conference on Learning Representations ,2024. URL https://openreview.net/forum? id=33XGfHLtZg .Badshah, S. and Sajjad, H. Reference-guided verdict: LLMs-as-judges in automatic evaluation of free-form QA. In Zhang, C., Allaway, E., Shen, H., Miculi-cich, L., Li, Y., M’hamdi, M., Limkonchotiwat, P., Bai, R. H., T.y.s.s., S., Han, S. S., Thapa, S., and Rim, W. B. (eds.), Proceedings of the 9th Widening NLP Work-shop , pp. 251–267, Suzhou, China, November 2025. Association for Computational Linguistics. ISBN 979-8-89176-351-7. doi: 10.18653/v1/2025.winlp-main. 37. URL https://aclanthology.org/2025. winlp-main.37/ .Badshah, S., Moustafa, M., and Sajjad, H. CLEV: LLM-based evaluation through lightweight efficient voting for free-form question-answering. In Inui, K., Sakti, S., Wang, H., Wong, D. F., Bhattacharyya, P., Baner-jee, B., Ekbal, A., Chakraborty, T., and Singh, D. P. (eds.), Proceedings of the 14th International Joint Con-ference on Natural Language Processing and the 4th Conference of the Asia-Pacific Chapter of the Associ-ation for Computational Linguistics , pp. 1513–1531, Mumbai, India, December 2025. The Asian Federation of Natural Language Processing and The Association for Computational Linguistics. ISBN 979-8-89176-303-6. URL https://aclanthology.org/2025. findings-ijcnlp.93/ .Bates, S., Angelopoulos, A., Lei, L., Malik, J., and Jor-dan, M. Distribution-free, risk-controlling prediction sets. Journal of the ACM (JACM) , 68(6):1–34, 2021. Bauer, P. Multiple testing in clinical trials. Statistics in medicine , 10(6):871–890, 1991. Chan, C.-M., Chen, W., Su, Y., Yu, J., Xue, W., Zhang, S., Fu, J., and Liu, Z. Chateval: Towards better LLM-based evaluators through multi-agent debate. In The Twelfth International Conference on Learning Representations ,2024. URL https://openreview.net/forum? id=FQepisCUWu .Chen, J., Yoon, J., Ebrahimi, S., Arik, S., Pfister, T., and Jha, S. Adaptation with self-evaluation to improve selec-tive prediction in LLMs. In Bouamor, H., Pino, J., and Bali, K. (eds.), Findings of the Association for Compu-tational Linguistics: EMNLP 2023 , pp. 5190–5213, Sin-gapore, December 2023. Association for Computational Linguistics. doi: 10.18653/v1/2023.findings-emnlp. 345. URL https://aclanthology.org/2023. findings-emnlp.345/ .Chiang, W.-L., Li, Z., Lin, Z., Sheng, Y., Wu, Z., Zhang, H., Zheng, L., Zhuang, S., Zhuang, Y., Gonzalez, J. E., et al. Vicuna: An open-source chatbot impressing gpt-4 with 90%* chatgpt quality. See https://vicuna. lmsys. org (accessed 14 April 2023) , 2(3):6, 2023. Chiang, W.-L., Zheng, L., Sheng, Y., Angelopoulos, A. N., Li, T., Li, D., Zhu, B., Zhang, H., Jordan, M. I., Gonza-lez, J. E., and Stoica, I. Chatbot arena: an open platform for evaluating llms by human preference. In Proceedings of the 41st International Conference on Machine Learn-ing , ICML’24. JMLR.org, 2024. Clopper, C. J. and Pearson, E. S. The use of confi-dence or fiducial limits illustrated in the case of the binomial. Biometrika , 26(4):404–413, 1934. ISSN 00063444, 14643510. URL http://www.jstor. org/stable/2331986 .Geifman, Y. and El-Yaniv, R. Selective classification for deep neural networks. In Guyon, I., Luxburg, U. V., Bengio, S., Wallach, H., Fergus, R., Vishwanathan, S., and Garnett, R. (eds.), Advances in Neural Information 
+
+10 SCOPE: Selective Conformal Optimized Pairwise LLM Judging 
+
+Processing Systems , volume 30. Curran Associates, Inc., 2017. URL https://proceedings.neurips. cc/paper_files/paper/2017/file/ 4a8423d5e91fda00bb7e46540e2b0cf1-Paper. pdf .Grattafiori, A. et al. The llama 3 herd of models, 2024. URL https://arxiv.org/abs/2407.21783 .Gui, Y., Jin, Y., and Ren, Z. Conformal alignment: Know-ing when to trust foundation models with guarantees. In The Thirty-eighth Annual Conference on Neural In-formation Processing Systems , 2024. URL https: //openreview.net/forum?id=YzyCEJlV9Z .Joshi, S., Kiyani, S., Pappas, G. J., Dobriban, E., and Has-sani, H. Conformal inference under high-dimensional covariate shifts via likelihood-ratio regularization. In 
+
+The Thirty-ninth Annual Conference on Neural Infor-mation Processing Systems , 2025. URL https:// openreview.net/forum?id=2bgwni6Ber .Jung, J., Brahman, F., and Choi, Y. Trust or esca-late: LLM judges with provable guarantees for human agreement. In The Thirteenth International Conference on Learning Representations , 2025. URL https:// openreview.net/forum?id=UHPnqSTBPO .Lambert, N., Pyatkin, V., Morrison, J., Miranda, L., Lin, B. Y., Chandu, K., Dziri, N., Kumar, S., Zick, T., Choi, Y., Smith, N. A., and Hajishirzi, H. RewardBench: Evaluating reward models for language modeling. In Chiruzzo, L., Ritter, A., and Wang, L. (eds.), Find-ings of the Association for Computational Linguistics: NAACL 2025 , pp. 1755–1797, Albuquerque, New Mex-ico, April 2025. Association for Computational Linguis-tics. ISBN 979-8-89176-195-7. doi: 10.18653/v1/2025. findings-naacl.96. URL https://aclanthology. org/2025.findings-naacl.96/ .Liu, Y., Iter, D., Xu, Y., Wang, S., Xu, R., and Zhu, C. G-eval: NLG evaluation using gpt-4 with better human alignment. In Bouamor, H., Pino, J., and Bali, K. (eds.), 
+
+Proceedings of the 2023 Conference on Empirical Meth-ods in Natural Language Processing , pp. 2511–2522, Singapore, December 2023. Association for Computa-tional Linguistics. doi: 10.18653/v1/2023.emnlp-main. 153. URL https://aclanthology.org/2023. emnlp-main.153/ .Naeini, M. P., Cooper, G. F., and Hauskrecht, M. Ob-taining well calibrated probabilities using bayesian bin-ning. Proceedings of the AAAI Conference on Artifi-cial Intelligence. AAAI Conference on Artificial Intelli-gence , 2015:2901–2907, 2015. URL https://api. semanticscholar.org/CorpusID:6292807 .Niu, M., Li, H., Shi, J., Haddadi, H., and Mo, F. Miti-gating hallucinations in large language models via self-refinement-enhanced knowledge retrieval. In The Sec-ond Workshop on Generative Information Retrieval ,2024. URL https://openreview.net/forum? id=H6Kz3tRugR .Panickssery, A., Bowman, S. R., and Feng, S. LLM evaluators recognize and favor their own generations. In The Thirty-eighth Annual Conference on Neural In-formation Processing Systems , 2024. URL https: //openreview.net/forum?id=4NJBV6Wp0h .Saito, K., Wachi, A., Wataoka, K., and Akimoto, Y. Ver-bosity bias in preference labeling by large language models, 2023. URL https://arxiv.org/abs/ 2310.10076 .Shi, L., Ma, C., Liang, W., Diao, X., Ma, W., and Vosoughi, S. Judging the judges: A systematic study of position bias in LLM-as-a-judge. In Inui, K., Sakti, S., Wang, H., Wong, D. F., Bhattacharyya, P., Baner-jee, B., Ekbal, A., Chakraborty, T., and Singh, D. P. (eds.), Proceedings of the 14th International Joint Con-ference on Natural Language Processing and the 4th Conference of the Asia-Pacific Chapter of the Associa-tion for Computational Linguistics , pp. 292–314, Mum-bai, India, December 2025. The Asian Federation of Natural Language Processing and The Association for Computational Linguistics. ISBN 979-8-89176-298-5. URL https://aclanthology.org/2025. ijcnlp-long.18/ .Tian, K., Mitchell, E., Zhou, A., Sharma, A., Rafailov, R., Yao, H., Finn, C., and Manning, C. Just ask for cal-ibration: Strategies for eliciting calibrated confidence scores from language models fine-tuned with human feedback. In Bouamor, H., Pino, J., and Bali, K. (eds.), 
+
+Proceedings of the 2023 Conference on Empirical Meth-ods in Natural Language Processing , pp. 5433–5442, Singapore, December 2023. Association for Computa-tional Linguistics. doi: 10.18653/v1/2023.emnlp-main. 330. URL https://aclanthology.org/2023. emnlp-main.330/ .Tibshirani, R. J., Barber, R. F., Candes, E. J., and Ramdas, A. Conformal prediction under covariate shift, 2020. URL https://arxiv.org/abs/1904.06019 .Vovk, V., Gammerman, A., and Shafer, G. Algorithmic learning in a random world . Springer, 2005. Wang, P., Li, L., Chen, L., Cai, Z., Zhu, D., Lin, B., Cao, Y., Kong, L., Liu, Q., Liu, T., and Sui, Z. Large language models are not fair evaluators. In Ku, L.-W., Martins, A., and Srikumar, V. (eds.), Proceedings of the 62nd Annual 
+
+11 SCOPE: Selective Conformal Optimized Pairwise LLM Judging 
+
+Meeting of the Association for Computational Linguis-tics (Volume 1: Long Papers) , pp. 9440–9450, Bangkok, Thailand, August 2024a. Association for Computa-tional Linguistics. doi: 10.18653/v1/2024.acl-long. 511. URL https://aclanthology.org/2024. acl-long.511/ .Wang, Z., Duan, J., Cheng, L., Zhang, Y., Wang, Q., Shi, X., Xu, K., Shen, H. T., and Zhu, X. ConU: Conformal uncertainty in large language mod-els with correctness coverage guarantees. In Al-Onaizan, Y., Bansal, M., and Chen, Y.-N. (eds.), Find-ings of the Association for Computational Linguis-tics: EMNLP 2024 , pp. 6886–6898, Miami, Florida, USA, November 2024b. Association for Computational Linguistics. doi: 10.18653/v1/2024.findings-emnlp. 404. URL https://aclanthology.org/2024. findings-emnlp.404/ .Wang, Z., Aniri, Chen, T., Zhang, Y., Shen, H. T., Shi, X., and Xu, K. Lec: Linear expectation constraints for false-discovery control in selective prediction and rout-ing systems, 2025a. URL https://arxiv.org/ abs/2512.01556 .Wang, Z., Duan, J., Wang, Q., Zhu, X., Chen, T., Shi, X., and Xu, K. Coin: Uncertainty-guarding selective question answering for foundation models with provable risk guarantees, 2025b. URL https://arxiv.org/ abs/2506.20178 .Wang, Z., Wang, Q., Zhang, Y., Chen, T., Zhu, X., Shi, X., and Xu, K. SConU: Selective conformal uncer-tainty in large language models. In Che, W., Nabende, J., Shutova, E., and Pilehvar, M. T. (eds.), Proceed-ings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Pa-pers) , pp. 19052–19075, Vienna, Austria, July 2025c. Association for Computational Linguistics. ISBN 979-8-89176-251-0. doi: 10.18653/v1/2025.acl-long. 934. URL https://aclanthology.org/2025. acl-long.934/ .Wang, Z., Zhang, H., Li, X., Huang, K.-H., Han, C., Ji, S., Kakade, S. M., Peng, H., and Ji, H. Eliminat-ing position bias of language models: A mechanistic approach. In The Thirteenth International Conference on Learning Representations , 2025d. URL https: //openreview.net/forum?id=fvkElsJOsN .Wei, J., Wang, X., Schuurmans, D., Bosma, M., Ichter, B., Xia, F., Chi, E. H., Le, Q. V., and Zhou, D. Chain-of-thought prompting elicits reasoning in large language models. In Proceedings of the 36th International Confer-ence on Neural Information Processing Systems , NIPS ’22, Red Hook, NY, USA, 2022. Curran Associates Inc. ISBN 9781713871088. Wolf, T., Debut, L., Sanh, V., Chaumond, J., Delangue, C., Moi, A., Cistac, P., Rault, T., Louf, R., Funtowicz, M., Davison, J., Shleifer, S., von Platen, P., Ma, C., Jer-nite, Y., Plu, J., Xu, C., Scao, T. L., Gugger, S., Drame, M., Lhoest, Q., and Rush, A. M. Transformers: State-of-the-art natural language processing. In Proceedings of the 2020 Conference on Empirical Methods in Natu-ral Language Processing: System Demonstrations , pp. 38–45, Online, October 2020. Association for Compu-tational Linguistics. URL https://www.aclweb. org/anthology/2020.emnlp-demos.6 .Xie, Q., Li, Q., Yu, Z., Zhang, Y., Zhang, Y., and Yang, L. An empirical analysis of uncertainty in large language model evaluations. In The Thirteenth In-ternational Conference on Learning Representations ,2025. URL https://openreview.net/forum? id=J4xLuCt2kg .Yang, A. et al. Qwen2 technical report, 2024a. URL 
+
+https://arxiv.org/abs/2407.10671 .Yang, D., Tsai, Y.-H. H., and Yamada, M. On verbal-ized confidence scores for llms, 2024b. URL https: //arxiv.org/abs/2412.14737 .Zheng, L., Chiang, W.-L., Sheng, Y., Zhuang, S., Wu, Z., Zhuang, Y., Lin, Z., Li, Z., Li, D., Xing, E., Zhang, H., Gonzalez, J. E., and Stoica, I. Judging llm-as-a-judge with mt-bench and chatbot arena. In Oh, A., Naumann, T., Globerson, A., Saenko, K., Hardt, M., and Levine, S. (eds.), Advances in Neural Information Processing Systems , volume 36, pp. 46595–46623. Curran Asso-ciates, Inc., 2023. URL https://openreview. net/forum?id=uccHPGDlao .12 SCOPE: Selective Conformal Optimized Pairwise LLM Judging 
+
+## A. Proofs of Validity 
+
+A.1. Proof of Theorem 2.1 Theorem 2.1 (restated). Let calibration and test samples be exchangeable. For any α ∈ (0 , 1) , the threshold ˆλ defined in Eq. 6 guarantees that the test-time conditional error among accepted predictions satisfies 
+
+E
+
+h
+
+E(xn+1 ) S(xn+1 , ˆλ)
+
+i
+
+E
+
+h
+
+S(xn+1 , ˆλ)
+
+i ≤ α, (8) 
+
+where the expectation is over the joint randomness of the calibration set and the test sample. Proof. Let Zi = ( xi, y ∗ 
+
+> i
+
+) denote a labeled example. For any threshold λ, recall the selection indicator S(x, λ ) = I(s(x) ≤
+
+λ) and the error indicator E(x) = I(ˆ y̸ = y∗). Define the joint indicator 
+
+Z(x, λ ) ≜ S(x, λ ) E(x) ∈ { 0, 1}, (9) and the linearized loss (as in Eq. 5) 
+
+L(Z, λ ) ≜ S(x, λ ) ( E(x) − α) = Z(x, λ ) − αS (x, λ ). (10) Whenever E[S(xn+1 , ˆλ)] > 0, the test-time conditional error rate (our “FDR”) can be written as 
+
+Pr  E(xn+1 ) = 1 | S(xn+1 , ˆλ) = 1  =
+
+E
+
+h
+
+Z(xn+1 , ˆλ)
+
+i
+
+E
+
+h
+
+S(xn+1 , ˆλ)
+
+i . (11) Thus it suffices to show 
+
+E
+
+h
+
+L(Zn+1 , ˆλ)
+
+i
+
+= E
+
+h
+
+Z(xn+1 , ˆλ) − αS (xn+1 , ˆλ)
+
+i
+
+≤ 0, (12) because then rearranging yields E[Z(xn+1 , ˆλ)] /E[S(xn+1 , ˆλ)] ≤ α, which combined with Eq. 11 proves the claim. 
+
+Key exchangeability step. Consider the joint sample (Z1, . . . , Z n, Z n+1 ), where Z1: n are the calibration examples and 
+
+Zn+1 is the test example. By assumption, these n + 1 examples are exchangeable. The calibrated threshold ˆλ is a (measurable) function of the calibration set Z1: n via Eq. 6. Following the standard LEC argument, exchangeability implies that the expectation of the linearized loss on the test point equals the expectation of the average linearized loss over all 
+
+n + 1 points evaluated at the same (random) threshold ˆλ:
+
+E
+
+h
+
+L(Zn+1 , ˆλ)
+
+i
+
+= E
+
+"
+
+1
+
+n + 1 
+
+> n+1
+
+X
+
+> i=1
+
+L(Zi, ˆλ)
+
+#
+
+. (13) (See Wang et al. (2025a) for the identical step in the single-model proof.) 
+
+Use the calibration constraint. By construction of ˆλ (Eq. 6), the calibration sum satisfies the finite-sample sufficient condition (Eq. 5): nX
+
+> i=1
+
+L(Zi, ˆλ) ≤ − 1. (14) Substituting Eq. 14 into Eq. 13 yields 
+
+E
+
+h
+
+L(Zn+1 , ˆλ)
+
+i
+
+≤ E
+
+"
+
+−1 + L(Zn+1 , ˆλ)
+
+n + 1 
+
+#
+
+. (15) 13 SCOPE: Selective Conformal Optimized Pairwise LLM Judging 
+
+Bound the linearized loss. Finally, note that since S ∈ { 0, 1} and E ∈ { 0, 1}, the quantity 
+
+L(Z, λ ) = S(x, λ )( E(x) − α) = Z(x, λ ) − αS (x, λ )
+
+is always strictly less than 1. Indeed, the maximum occurs when S = 1 and E = 1 , in which case L = 1 − α < 1 (since 
+
+α > 0). Therefore, 
+
+−1 + L(Zn+1 , ˆλ) ≤ − 1 + (1 − α) = −α < 0. (16) Substituting into Eq. 15 yields 
+
+E[L(Zn+1 , ˆλ)] ≤ − αn + 1 < 0,
+
+which completes the argument. 
+
+Degenerate case. If E[S(xn+1 , ˆλ)] = 0 , then the judge abstains almost surely under ˆλ, and the risk constraint is trivially satisfied (no accepted predictions). This completes the proof. 
+
+## B. Experimental Details 
+
+B.1. Bidirectional Preference Entropy (BPE) 
+
+We utilize BPE in two distinct forms depending on the downstream application: as an uncertainty score for risk control, and as a confidence score for evaluation benchmarking. 
+
+1. BPE as uncertainty (for S COPE calibration). The core of our risk control framework requires a score s(x) where lower values indicate safety and higher values indicate risk. We define this as the binary entropy (in nats) of the bias-neutralized probability ¯p:
+
+s(x) = Entropy (¯ p) = − [¯ p ln ¯ p + (1 − ¯p) ln(1 − ¯p)] .
+
+For example, if ¯p = 0 .95 , then s(x) = −(0 .95 ln 0 .95 + 0 .05 ln 0 .05) ≈ 0.20 , indicating low uncertainty. This formulation ensures that when the model is maximally uncertain ( ¯p = 0 .5), the score is maximized ( s(x) ≈ 0.693 ), triggering abstention during the calibration process. 
+
+2. BPE as confidence (for metrics). Standard evaluation metrics such as AUROC and ECE are designed to evaluate 
+
+confidence scores. To benchmark BPE against baselines like predictive probability, we convert the entropy back into a probability-scale confidence score: 
+
+cBPE (x) = max(¯ p, 1 − ¯p).
+
+This maps the uncertainty range [0 .693 , 0.0] to the confidence range [0 .5, 1.0] . A score of 1.0 indicates absolute certainty (low entropy), while 0.5 indicates a random guess (max entropy). This transformation preserves the rank-ordering of samples, ensuring that AUROC and AUPRC values remain valid comparisons. 
+
+B.2. Evaluation metrics 
+
+We employ four standard metrics to evaluate the quality of uncertainty estimation: 
+
+Accuracy (Acc). The raw proportion of instances where the judge’s selected response ( ˆy) matches the ground truth preference ( y∗): Acc = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+I(ˆ yi = y∗ 
+
+> i
+
+).
+
+Expected Calibration Error (ECE) (Naeini et al., 2015). Measures the alignment between the model’s confidence and its actual accuracy. We bin samples by their confidence score c(x) into M = 10 uniform bins. For each bin Bm, we compute the average confidence and average accuracy: ECE =
+
+> M
+
+X
+
+> m=1
+
+|Bm|
+
+N |acc (Bm) − conf (Bm)| .
+
+Lower ECE indicates that the model’s confidence effectively predicts its probability of being correct. 14 SCOPE: Selective Conformal Optimized Pairwise LLM Judging 
+
+Area Under the ROC Curve (AUROC). Measures the ability of the confidence score to distinguish between correct and incorrect predictions, independent of the decision threshold. An AUROC of 1.0 indicates perfect discrimination, while 0.5 indicates random guessing. 
+
+Area Under the Precision-Recall Curve (AUPRC). Measures the trade-off between precision (correctness) and recall (coverage) as the confidence threshold varies. This is particularly important for selective prediction, as it directly reflects the system’s ability to maintain high accuracy at high coverage levels. 
+
+B.3. Implementation details 
+
+To ensure reproducibility, we detail the prompting formats, logit extraction methods, and baseline configurations used in our experiments. B.3.1. P ROMPT TEMPLATES 
+
+We adopt the standard pairwise evaluation template widely used in MT-Bench and Chatbot Arena (Zheng et al., 2023). The model is instructed to act as an impartial judge and output only the label of the preferred response. 
+
+Prompt Template for Pairwise Evaluation 
+
+[System] 
+
+Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants to the user question displayed below. You should choose the assistant that follows the user’s instructions and answers the user’s question better. Your evaluation should consider factors such as the helpfulness, relevance, accuracy, depth, creativity, and level of detail of their responses. Avoid any position biases and ensure that the order in which the responses were presented does not influence your decision. Do not allow the length of the responses to influence your evaluation. Do not favor certain names of the assistants. Be as objective as possible. Output your final verdict by strictly following this format: ”[[A]]” if assistant A is better, ”[[B]]” if assistant B is better. 
+
+[User Question] 
+
+{question }
+
+[The Start of Assistant A’s Answer] 
+
+{answer a }
+
+[The End of Assistant A’s Answer] [The Start of Assistant B’s Answer] 
+
+{answer b }
+
+[The End of Assistant B’s Answer]  
+
+> Figure 4. Pairwise evaluation prompt. The system instruction used for all judge models. Note that instructions requesting an explana-tion/reasoning trace were removed to enable direct logit extraction (or greedy decoding) of the preference token.
+
+For BPE, we generate the reverse input xrev by swapping {response A } and {response B } in the prompt. B.3.2. L OGIT EXTRACTION 
+
+For all models, we compute the uncertainty deterministically. We decode the first token of the response and extract the raw logits corresponding to the tokenizer IDs for “A” and “B”. We apply the softmax function exclusively over these two logits to obtain the normalized preference probabilities. This isolates the preference decision from the rest of the vocabulary space. All inference is conducted at temperature T = 0 .0 (greedy decoding). B.3.3. B ASELINE CONFIGURATIONS 
+
+Verbalized confidence: As illustrated in the Figure 5, we append the following instruction to the base prompt: “Provide a score between 0.0 (total guess) and 1.0 (absolute certainty).” The numerical output is parsed directly as the confidence score. 15 SCOPE: Selective Conformal Optimized Pairwise LLM Judging 
+
+Prompt Template for Verbalized Confidence 
+
+[System] 
+
+Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants to the user question displayed below. You should choose the assistant that follows the user’s instructions and answers the user’s question better. Your evaluation should consider factors such as the helpfulness, relevance, accuracy, depth, creativity, and level of detail of their responses. Avoid any position biases and ensure that the order in which the responses were presented does not influence your decision. Do not allow the length of the responses to influence your evaluation. Do not favor certain names of the assistants. Be as objective as possible. Output your final verdict by strictly following this format: ”[[A]]” if assistant A is better, ”[[B]]” if assistant B is better. Provide a score between 0.0 (total guess) and 1.0 (absolute certainty). 
+
+[User Question] 
+
+{question }
+
+[The Start of Assistant A’s Answer] 
+
+{answer a }
+
+[The End of Assistant A’s Answer] [The Start of Assistant B’s Answer] 
+
+{answer b }
+
+[The End of Assistant B’s Answer]  
+
+> Figure 5. Verbalized confidence prompt. As detailed in Appendix B.3.3, the instruction “Provide a score between 0.0 (total guess) and 1.0 (absolute certainty)” is appended to the standard pairwise evaluation prompt to elicit a numerical confidence estimate.
+
+Simulated Annotators (Jung et al., 2025): We implement in-context learning ensembles to estimate uncertainty via agreement. For each query, we run the model N = 5 times. Each run is conditioned on a distinct annotator persona defined by K = 5 few-shot demonstrations, which are sampled from a larger pool of 50 examples. The final confidence score is calculated as the majority agreement ratio among these N personas (see Figure 6 for example prompt). B.3.4. I NFRASTRUCTURE 
+
+All experiments with open-weights models were conducted using the HuggingFace Transformers library (Wolf et al., 2020) on 2 ×NVIDIA A100 (80GB) GPUs. To ensure statistical robustness, all risk control metrics (i.e., FDR and coverage) are averaged over 1, 000 random 50 /50 calibration-test splits, seeded for deterministic reproducibility. 16 SCOPE: Selective Conformal Optimized Pairwise LLM Judging 
+
+Prompt Template for Simulated Annotators ( i-th run) 
+
+[System] 
+
+Please act as an impartial judge and evaluate the quality of the responses provided by two AI assistants to the user question displayed below. You should choose the assistant that follows the user’s instructions and answers the user’s question better... [Standard System Instruction] ... Output your final verdict by strictly following this format: ”[[A]]” if assistant A is better, ”[[B]]” if assistant B is better. 
+
+[Few-Shot Demonstrations (Persona i)] 
+
+% K = 5 examples sampled randomly from the pool of 50 
+
+[User Question] 
+
+{example q1 }
+
+[The Start of Assistant A’s Answer] 
+
+{example a1 } ... 
+
+[The End of Assistant A’s Answer] [The Start of Assistant B’s Answer] 
+
+{example b1 } ... 
+
+[The End of Assistant B’s Answer] Verdict: [[A]] 
+
+... (Repeated for 5 examples) ... 
+
+[Target User Question] 
+
+{question }
+
+[The Start of Assistant A’s Answer] 
+
+{answer a }
+
+[The End of Assistant A’s Answer] [The Start of Assistant B’s Answer] 
+
+{answer b }
+
+[The End of Assistant B’s Answer]        
+
+> Figure 6. Simulated Annotator Prompt. As implemented in the baselines, uncertainty is estimated by agreement. For each query, the model is run N= 5 times. Each run is conditioned on a distinct set of K= 5 few-shot demonstrations sampled from a pool of 50 examples. To ensure consistency, reasoning traces are omitted, and the few-shot examples follow the exact formatting of the target query.
+
+17
